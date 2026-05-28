@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Dashboard</title>
+
+<link rel="icon" type="image/png" href="../icon.png">
+<link rel="alternate icon" type="image/x-icon" href="../icon.ico">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Cormorant+Infant:ital,wght@0,300;1,300&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<nav>
+  <a href="../" class="nav-logo">
+    <img src="../icon.png" alt="Inkwell Logo">
+    <span>Inkwell</span>
+  </a>
+  <div class="nav-right">
+    <button id="btn-open-login" class="nav-dl" title="Zur Startseite" style="padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-radius: 20px; cursor: pointer;">
+      <svg class="nav-icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display: none;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      <svg class="nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      <span data-i18n="dash_home">Zur Startseite</span>
+    </button>
+    <div class="lang-sw">
+      <button class="lb active" onclick="setLang('de')">DE</button>
+      <button class="lb" onclick="setLang('en')">EN</button>
+      <button class="lb" onclick="setLang('it')">IT</button>
+    </div>
+    <div class="lang-sw-mobile-custom" style="display: none; position: relative;">
+      <button id="lang-btn-mobile" onclick="toggleMobileLangMenu(event)" style="background: transparent; border: 0.5px solid var(--gold); color: var(--gold-light); font-family: 'Jost', sans-serif; font-size: 11px; padding: 6px 12px; text-transform: uppercase; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; height: 36px; letter-spacing: 0.14em;">
+        <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; display: inline !important;">DE</span>
+      </button>
+      <div id="lang-dropdown-mobile" style="display: none; position: absolute; top: 42px; right: 0; background: var(--navy-card); border: 0.5px solid var(--navy-border); box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-radius: 4px; padding: 4px; z-index: 1000; min-width: 60px;">
+        <button class="lb" onclick="setLang('de'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">DE</button>
+        <button class="lb" onclick="setLang('en'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">EN</button>
+        <button class="lb" onclick="setLang('it'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">IT</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- Web App Dashboard -->
+<div id="webapp-dashboard" style="display: block; padding: 120px 40px 100px; max-width: 1000px; margin: 0 auto; min-height: 100vh;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; flex-wrap: wrap; gap: 20px;">
+    <div>
+      <h2 style="font-family: 'Cormorant Garamond', serif; font-size: 42px; font-style: italic; font-weight: 300; margin: 0;" data-i18n="dash_title">Meine Notebooks</h2>
+      <div id="last-sync-time" style="font-family: 'Jost', sans-serif; font-size: 13px; color: var(--text-muted); margin-top: 4px;"></div>
+    </div>
+    <div style="display: flex; gap: 12px;">
+      <button id="logout-btn" class="btn-m" style="color: #d9534f; border-color: rgba(217,83,79,0.3);" data-i18n="dash_logout">Abmelden</button>
+    </div>
+  </div>
+  <div id="dashboard-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">
+  </div>
+</div>
+
+<!-- Web App Viewer -->
+<div id="webapp-viewer" style="display: none; padding: 100px 20px 40px; min-height: 100vh;">
+  <div style="margin-bottom: 24px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; max-width: 1180px; margin: 0 auto 24px; gap: 12px;">
+    <button id="viewer-back" type="button" aria-label="Zurück zur Übersicht" title="Zurück zur Übersicht" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0.5px solid var(--navy-border); background: rgba(255,255,255,0.03); color: var(--gold-light); border-radius: 999px; font-size: 16px; line-height: 1; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.18);">←</button>
+    <h3 id="viewer-title" style="font-family: 'Cormorant Garamond', serif; font-size: 32px; font-style: italic; margin: 0; text-align: center;">Notebook</h3>
+    <span id="viewer-page-num-top" style="font-family: 'Jost', sans-serif; font-size: 13px; color: var(--gold-light); justify-self: end; white-space: nowrap;">0 Seiten</span>
+  </div>
+  <div id="viewer-pages" style="display: grid; gap: 28px; justify-items: center; align-items: start; max-width: 1180px; margin: 0 auto;">
+  </div>
+</div>
+
+<footer>
+  <p>© 2026 Inkwell · Anvi</p>
+  <div class="fl">
+    <a href="https://github.com/manuel0anvi/Inkwell" target="_blank">GitHub</a>
+    <a href="../community/" data-i18n="nav_community">Community</a>
+    <a href="../datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
+  </div>
+</footer>
+
+<!-- Scripts -->
+<script src="../js/i18n.js"></script>
+<script src="../js/common.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

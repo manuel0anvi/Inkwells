@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<script>
+  // Clean path script
+  (function() {
+    const path = window.location.pathname;
+    if (path.includes('webseite-') || path.includes('webseite%20')) {
+      const cleanPath = path.replace(/webseite-?\s*index\.html/i, 'index.html');
+      window.location.replace(window.location.origin + cleanPath + window.location.search + window.location.hash);
+    }
+  })();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Digitales Notizbuch</title>
+
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="alternate icon" type="image/x-icon" href="icon.ico">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Cormorant+Infant:ital,wght@0,300;1,300&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-logo">
+    <img src="icon.png" alt="Inkwell Logo">
+    <span>Inkwell</span>
+  </a>
+  <div class="nav-right">
+    <button id="btn-open-login" class="nav-dl" title="Web-App / Login" style="padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-radius: 20px; cursor: pointer;">
+      <svg class="nav-icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      <svg class="nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display: none;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      <span data-i18n="nav_login">Anmelden</span>
+    </button>
+    <a href="#download" class="nav-dl" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display: none; flex-shrink: 0;" class="dl-icon-mobile"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span data-i18n="nav_dl_btn">Herunterladen</span>
+    </a>
+    <div class="lang-sw">
+      <button class="lb active" onclick="setLang('de')">DE</button>
+      <button class="lb" onclick="setLang('en')">EN</button>
+      <button class="lb" onclick="setLang('it')">IT</button>
+    </div>
+    <div class="lang-sw-mobile-custom" style="display: none; position: relative;">
+      <button id="lang-btn-mobile" onclick="toggleMobileLangMenu(event)" style="background: transparent; border: 0.5px solid var(--gold); color: var(--gold-light); font-family: 'Jost', sans-serif; font-size: 11px; padding: 6px 12px; text-transform: uppercase; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; height: 36px; letter-spacing: 0.14em;">
+        <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; display: inline !important;">DE</span>
+      </button>
+      <div id="lang-dropdown-mobile" style="display: none; position: absolute; top: 42px; right: 0; background: var(--navy-card); border: 0.5px solid var(--navy-border); box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-radius: 4px; padding: 4px; z-index: 1000; min-width: 60px;">
+        <button class="lb" onclick="setLang('de'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">DE</button>
+        <button class="lb" onclick="setLang('en'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">EN</button>
+        <button class="lb" onclick="setLang('it'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">IT</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div id="landing-content">
+<section class="hero">
+  <div class="hero-badge" data-i18n="hero_badge">Digitales Notizbuch für Windows</div>
+  <div class="hero-icon">
+    <img src="icon.png" alt="Inkwell Logo">
+  </div>
+  <h1><span>Ink</span>well</h1>
+  <p class="hero-tagline" data-i18n="hero_tagline">Text und Handschrift vereint in einem eleganten, digitalen Notizbuch.</p>
+  <div class="hero-actions">
+    <a id="hero-dl" href="#" class="btn-p" download="Inkwell-Setup.exe">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span data-i18n="hero_dl">Download für Windows</span>
+    </a>
+    <a href="https://github.com/manuel0anvi/Inkwell" target="_blank" class="btn-g">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
+      <span data-i18n="hero_github">GitHub ansehen</span>
+    </a>
+  </div>
+  <p class="hero-meta"><span id="hv">v1.0.0</span><span>·</span><span data-i18n="hero_platform">Windows x64</span><span>·</span><span data-i18n="hero_free">Kostenlos</span></p>
+</section>
+
+<div class="ornament">— ✦ —</div>
+
+<section class="features" id="features">
+  <p class="sec-label" data-i18n="feat_label">Funktionen</p>
+  <h2 class="sec-title" data-i18n="feat_title">Alles in einem Notizbuch</h2>
+  <div class="feat-grid">
+    <div class="fc"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><h3 data-i18n="f1_t">Text & Handschrift</h3><p data-i18n="f1_d">Klassische Textnotizen und handschriftliche Zeichnungen in einer einzigen Oberfläche vereint.</p></div>
+    <div class="fc"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg><h3 data-i18n="f2_t">Mehrere Hefte</h3><p data-i18n="f2_d">Organisiere deine Notizen in separaten Heften mit eigenen Farben und Hintergründen.</p></div>
+    <div class="fc"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><h3 data-i18n="f3_t">PDF-Unterstützung</h3><p data-i18n="f3_d">PDFs direkt in der App öffnen, anzeigen und mit Notizen oder Markierungen versehen.</p></div>
+    <div class="fc"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><h3 data-i18n="f4_t">Auto-Speicherung</h3><p data-i18n="f4_d">Notizen werden automatisch im Hintergrund gespeichert — kein manuelles Speichern nötig.</p></div>
+    <div class="fc"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M12 2v2M12 20v2M4.93 4.93l1.41 1.41M18.66 18.66l1.41 1.41M2 12h2M20 12h2"/></svg><h3 data-i18n="f5_t">Zeichenwerkzeuge</h3><p data-i18n="f5_d">Stift, Marker, Radierer und mehr — optimiert für Stifteingabe und Touch-Bedienung.</p></div>
+    <div class="fc"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg><h3 data-i18n="f6_t">Automatische Updates</h3><p data-i18n="f6_d">Die App prüft beim Start auf neue Versionen und aktualisiert sich mit einem Klick.</p></div>
+  </div>
+</section>
+
+<section class="dl-section" id="download">
+  <div class="ver-badge" id="vbadge">Version 1.0.0</div>
+  <h2 data-i18n="dl_title">Bereit zum Schreiben?</h2>
+  <p data-i18n="dl_sub">Lade Inkwell kostenlos herunter und starte noch heute mit deinen ersten digitalen Notizen.</p>
+  <div class="dl-box">
+    <div class="dl-plat">
+      <div class="pl-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg></div>
+      <div class="pl-info"><strong>Windows</strong><span data-i18n="dl_info">Windows 10 / 11 · x64 · NSIS Installer</span></div>
+    </div>
+    <a id="main-dl" href="#" class="btn-p" style="width:100%;justify-content:center;" download="Inkwell-Setup.exe">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span data-i18n="dl_btn">Inkwell-Setup.exe herunterladen</span>
+    </a>
+    <div class="dl-meta"><span id="dm-ver">Version 1.0.0</span><span data-i18n="dl_free">Kostenlos &amp; Open Source</span></div>
+  </div>
+</section>
+
+<section class="ver-section" id="versions">
+  <h3 data-i18n="ver_title">Alle Versionen</h3>
+  <p data-i18n="ver_sub">Ältere Versionen können direkt hier heruntergeladen werden.</p>
+  <div id="ver-list" class="ver-list">
+    <div class="v-loading" data-i18n="ver_loading">Versionen werden geladen…</div>
+  </div>
+</section>
+
+<footer>
+  <p>© 2026 Inkwell · Anvi</p>
+  <div class="fl">
+    <a href="https://github.com/manuel0anvi/Inkwell" target="_blank">GitHub</a>
+    <a href="community/" data-i18n="nav_community">Community</a>
+    <a href="datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
+  </div>
+</footer>
+</div>
+
+<!-- Login Modal -->
+<div id="login-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <div class="modal-kicker" data-i18n="nav_login">Anmelden</div>
+    <h4 data-i18n="login_title">Cloud Login</h4>
+    <p data-i18n="login_sub">Melde dich an, um deine Notizbücher im Web anzusehen.</p>
+    <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 12px;">
+      <button id="login-google-btn" class="btn-m" style="display:flex; justify-content:center; align-items:center; gap:8px; border-color:var(--navy-border);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.344-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0 5.611 0 0 5.372 0 12s5.611 12 12.24 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg>
+        <span data-i18n="login_google">Mit Google anmelden</span>
+      </button>
+      <div style="text-align:center; font-size:11px; color:var(--text-muted); margin:4px 0;" data-i18n="login_or">ODER</div>
+      <input type="email" id="login-email" data-i18n-ph="login_email" placeholder="E-Mail" style="padding: 12px; background: rgba(0,0,0,0.2); border: 0.5px solid var(--navy-border); color: var(--cream); border-radius: 4px; font-family: 'Jost', sans-serif;">
+      <input type="password" id="login-pass" data-i18n-ph="login_pass" placeholder="Passwort" style="padding: 12px; background: rgba(0,0,0,0.2); border: 0.5px solid var(--navy-border); color: var(--cream); border-radius: 4px; font-family: 'Jost', sans-serif;">
+      <div id="login-error" style="color: #d9534f; font-size: 13px; display: none;"></div>
+      <div class="modal-actions" style="margin-top: 10px;">
+        <button id="login-cancel" class="btn-m" type="button" data-i18n="downgrade_cancel">Abbrechen</button>
+        <button id="login-submit" class="btn-m" style="background: var(--gold-dim); border-color: var(--gold-light); color: var(--gold-light);" type="button" data-i18n="nav_login">Anmelden</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Downgrade Modal -->
+<div id="downgrade-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="downgrade-title">
+    <div class="modal-kicker" data-i18n="downgrade_kicker">Kompatibilitaets-Warnung</div>
+    <h4 id="downgrade-title" data-i18n="downgrade_title">Aeltere Version installieren?</h4>
+    <span id="downgrade-version" class="modal-version">Version</span>
+    <p data-i18n="downgrade_body_1">Beim Downgrade koennen Datenmigrationen neuerer Versionen fehlen. Dadurch koennen Notizbuecher, Einstellungen oder Dateiformate inkompatibel werden.</p>
+    <p data-i18n="downgrade_body_2">Bitte erstelle vor dem Fortfahren ein Backup deiner aktuellen Daten und installiere nur, wenn du den Downgrade bewusst moechtest.</p>
+    <p class="modal-note" data-i18n="downgrade_body_3">Hinweis: Falls danach in der App ein Hinweis auf eine neuere Version erscheint, kannst du diesen einfach ignorieren.</p>
+    <div class="modal-actions">
+      <button id="downgrade-cancel" class="btn-m" type="button" data-i18n="downgrade_cancel">Abbrechen</button>
+      <button id="downgrade-confirm" class="btn-m warn" type="button" data-i18n="downgrade_confirm">Trotzdem herunterladen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="js/i18n.js"></script>
+<script src="js/common.js"></script>
+<script>
+const GH_USER = 'manuel0anvi';
+const GH_REPO = 'Inkwell';
+const SUPABASE_URL = 'https://sdplctlpigzrscaepatk.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9gAsGOmApJIB8gKeJzwPRg_L1dslM0V';
+
+let releases = [];
+let pendingDowngrade = null;
+const loginModal = document.getElementById('login-modal');
+
+// Hook into translation updates specifically for releases & downloads
+addLangChangeListener(() => {
+  updateDownloadButtonText();
+  renderVersions();
+  if (pendingDowngrade?.version) {
+    const versionLabel = document.getElementById('downgrade-version');
+    if (versionLabel) versionLabel.textContent = tf('downgrade_version', { version: pendingDowngrade.version });
+  }
+});
+
+function updateDownloadButtonText() {
+  if (releases.length > 0) {
+    const asset = releases[0].assets.find(a => a.name.endsWith('.exe'));
+    if (asset) {
+      const btnSpan = document.querySelector('#main-dl span');
+      if (btnSpan) {
+        btnSpan.textContent = `${asset.name} ${t('dl_btn')}`;
+      }
+    }
+  }
+}
+
+function fmtDate(iso){
+  return new Date(iso).toLocaleDateString(lang==='de'?'de-AT':lang==='it'?'it-IT':'en-GB',{year:'numeric',month:'short',day:'numeric'});
+}
+
+function renderVersions(){
+  const c = document.getElementById('ver-list');
+  if(!releases.length){ c.innerHTML = `<div class="v-error">${t('ver_error')}</div>`; return; }
+  
+  c.innerHTML = releases.map((r,i)=>{
+    const asset = r.assets.find(a=>a.name.endsWith('.exe'));
+    const url = asset ? asset.browser_download_url : null;
+    const isNew = i===0;
+    
+    return `<div class="vr${isNew?' latest':''}">
+      <span class="v-tag">${r.tag_name}</span>
+      <span class="v-date">${fmtDate(r.published_at)}</span>
+      ${url
+        ? `<button type="button" class="v-dl" data-old-version="${isNew ? 'false' : 'true'}" data-asset-name="${asset.name}" data-version-tag="${r.tag_name}" data-download-url="${url}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>${t('ver_dl')}</button>`
+        : `<span style="font-size:11px;color:var(--text-muted)">${t('ver_noexe')}</span>`}
+    </div>`;
+  }).join('');
+}
+
+function triggerDownload(url, filename) {
+  const link = document.createElement('a');
+  link.href = url;
+  if (filename) link.setAttribute('download', filename);
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function closeDowngradeModal(){
+  const modal = document.getElementById('downgrade-modal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  pendingDowngrade = null;
+}
+
+function openDowngradeModal(url, filename, version){
+  pendingDowngrade = { url, filename, version };
+  const modal = document.getElementById('downgrade-modal');
+  const versionLabel = document.getElementById('downgrade-version');
+  if (!modal || !versionLabel) return;
+
+  versionLabel.textContent = tf('downgrade_version', { version: version || '-' });
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function setupDowngradeGuard(){
+  document.addEventListener('click', (event) => {
+    const control = event.target.closest('button.v-dl');
+    if (!control) return;
+
+    const url = control.getAttribute('data-download-url');
+    const filename = control.getAttribute('data-asset-name');
+    const isOldVersion = control.getAttribute('data-old-version') === 'true';
+
+    if (!url) return;
+
+    event.preventDefault();
+
+    if (isOldVersion) {
+      openDowngradeModal(url, filename, control.getAttribute('data-version-tag'));
+      return;
+    }
+
+    triggerDownload(url, filename);
+  });
+
+  const cancelBtn = document.getElementById('downgrade-cancel');
+  const confirmBtn = document.getElementById('downgrade-confirm');
+  const modal = document.getElementById('downgrade-modal');
+
+  cancelBtn?.addEventListener('click', closeDowngradeModal);
+  modal?.addEventListener('click', (event) => {
+    if (event.target === modal) closeDowngradeModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeDowngradeModal();
+  });
+
+  confirmBtn?.addEventListener('click', () => {
+    if (!pendingDowngrade) return;
+    triggerDownload(pendingDowngrade.url, pendingDowngrade.filename);
+    closeDowngradeModal();
+  });
+}
+
+async function loadReleases(){
+  try{
+    const r = await fetch(`https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases`);
+    if(!r.ok) throw new Error();
+    releases = await r.json();
+    if(releases.length){
+      const tag = releases[0].tag_name;
+      document.getElementById('hv').textContent = tag;
+      document.getElementById('vbadge').textContent = 'Version '+tag;
+      document.getElementById('dm-ver').textContent = 'Version '+tag;
+      
+      const asset = releases[0].assets.find(a=>a.name.endsWith('.exe'));
+      if(asset){
+        const mainDl = document.getElementById('main-dl');
+        const heroDl = document.getElementById('hero-dl');
+        
+        mainDl.href = asset.browser_download_url;
+        heroDl.href = asset.browser_download_url;
+        
+        mainDl.setAttribute('download', asset.name);
+        heroDl.setAttribute('download', asset.name);
+        
+        updateDownloadButtonText();
+      }
+    }
+    renderVersions();
+  }catch{
+    document.getElementById('ver-list').innerHTML=`<div class="v-error">${t('ver_error')}</div>`;
+  }
+}
+
+setupDowngradeGuard();
+loadReleases();
+
+// --- Auth Handling ---
+const btnOpenLogin = document.getElementById('btn-open-login');
+
+btnOpenLogin.addEventListener('click', () => {
+  const savedToken = localStorage.getItem('inkwell_web_token');
+  if (!savedToken) {
+    // If not logged in, trigger login modal
+    loginModal.classList.add('open');
+    loginModal.setAttribute('aria-hidden', 'false');
+  }
+});
+
+// Check if loaded with ?login=true query param
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('login') === 'true') {
+  loginModal.classList.add('open');
+  loginModal.setAttribute('aria-hidden', 'false');
+  // Clean up URL parameter cleanly
+  const cleanUrl = window.location.pathname;
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+// Check OAuth Hash Redirect
+const hash = window.location.hash;
+if (hash && hash.includes('access_token')) {
+  document.getElementById('landing-content').style.display = 'none';
+  const params = new URLSearchParams(hash.substring(1));
+  const accessToken = params.get('access_token');
+  const providerToken = params.get('provider_token');
+  if (accessToken) {
+    fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` }
+    }).then(res => res.json()).then(data => {
+      localStorage.setItem('inkwell_web_token', accessToken);
+      localStorage.setItem('inkwell_web_uid', data.id);
+      if (providerToken) {
+        localStorage.setItem('inkwell_gdrive_token', providerToken);
+      }
+      // Clean up hash and redirect directly to dashboard
+      window.location.replace('dashboard/');
+    }).catch(err => {
+      console.error('OAuth processing error:', err);
+      document.getElementById('landing-content').style.display = 'block';
+    });
+  }
+} else {
+  // If already logged in, redirect directly to dashboard unless explicitly navigating home
+  const urlParams = new URLSearchParams(window.location.search);
+  const isHomeOverride = urlParams.get('home') === 'true';
+  const savedToken = localStorage.getItem('inkwell_web_token');
+  
+  if (savedToken && !isHomeOverride) {
+    window.location.replace('dashboard/');
+  }
+}
+
+document.getElementById('login-google-btn').addEventListener('click', () => {
+  let currentUrl = window.location.origin + window.location.pathname;
+  if (!window.location.origin || window.location.origin === 'null' || window.location.protocol === 'file:') {
+    currentUrl = 'https://manuel0anvi.github.io/Inkwell/';
+  }
+  const url = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(currentUrl)}&prompt=consent%20select_account&scopes=https://www.googleapis.com/auth/drive.file`;
+  window.location.href = url;
+});
+
+document.getElementById('login-cancel').addEventListener('click', () => {
+  loginModal.classList.remove('open');
+  loginModal.setAttribute('aria-hidden', 'true');
+});
+
+document.getElementById('login-submit').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || 'Login fehlgeschlagen');
+    
+    localStorage.setItem('inkwell_web_token', data.access_token);
+    localStorage.setItem('inkwell_web_uid', data.user.id);
+    
+    loginModal.classList.remove('open');
+    window.location.href = 'dashboard/';
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>

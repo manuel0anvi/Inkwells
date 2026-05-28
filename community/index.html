@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Forum</title>
+
+<link rel="icon" type="image/png" href="../icon.png">
+<link rel="alternate icon" type="image/x-icon" href="../icon.ico">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Cormorant+Infant:ital,wght@0,300;1,300&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+.forum-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gold-dim);
+  border: 0.5px solid var(--gold-light);
+  color: var(--gold-light);
+  padding: 10px 22px;
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s, transform .1s;
+  margin-bottom: 30px;
+}
+.forum-new-btn:hover {
+  background: rgba(201,162,39,0.25);
+  transform: translateY(-1px);
+}
+.forum-form-card {
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  padding: 30px;
+  border-radius: 8px;
+  margin-bottom: 40px;
+  display: none;
+  animation: fu .4s ease forwards;
+}
+.forum-form-card.open {
+  display: block;
+}
+.forum-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.forum-input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+.forum-input-group label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.forum-input-group input, .forum-input-group select, .forum-input-group textarea {
+  padding: 12px;
+  background: rgba(0,0,0,0.25);
+  border: 0.5px solid var(--navy-border);
+  color: var(--cream);
+  border-radius: 4px;
+  font-family: 'Jost', sans-serif;
+  font-size: 14px;
+  width: 100%;
+}
+.forum-input-group input:focus, .forum-input-group select:focus, .forum-input-group textarea:focus {
+  border-color: var(--gold);
+  outline: none;
+}
+.forum-author-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.forum-author-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.forum-author-toggle input {
+  width: auto;
+  accent-color: var(--gold-light);
+}
+.forum-form-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-top: -6px;
+}
+.forum-char-counter {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.forum-limit-note {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.forum-filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 30px;
+  border-bottom: 0.5px solid var(--navy-border);
+  padding-bottom: 14px;
+  flex-wrap: wrap;
+}
+.forum-filter-btn {
+  background: transparent;
+  border: 0.5px solid transparent;
+  color: var(--text-muted);
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+.forum-filter-btn:hover {
+  color: var(--gold-light);
+}
+.forum-filter-btn.active {
+  border-color: var(--gold-light);
+  color: var(--gold-light);
+  background: var(--gold-dim);
+}
+.post-item-card {
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  border-radius: 8px;
+  padding: 26px 30px;
+  margin-bottom: 24px;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .2s;
+}
+.post-item-card:hover {
+  border-color: rgba(201,162,39,0.35);
+}
+.post-item-card.question {
+  border-left: 4px solid var(--gold);
+}
+.post-item-card.bug {
+  border-left: 4px solid #d9534f;
+}
+.post-meta-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.post-badge {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.post-badge.question {
+  background: var(--gold-dim);
+  color: var(--gold-light);
+  border: 0.5px solid rgba(201,162,39,0.3);
+}
+.post-badge.bug {
+  background: rgba(217,83,79,0.12);
+  color: #ffd289;
+  border: 0.5px solid rgba(217,83,79,0.25);
+}
+.post-author-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.post-author-time strong {
+  color: var(--gold-light);
+  font-weight: 400;
+}
+.post-item-card h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--cream);
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+.post-body-text {
+  font-size: 14px;
+  color: var(--text-body);
+  line-height: 1.7;
+  margin-bottom: 20px;
+  white-space: pre-wrap;
+}
+.replies-section {
+  border-top: 0.5px solid var(--navy-border);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.replies-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.replies-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.reply-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0.5px solid var(--gold);
+  color: var(--gold-light);
+  padding: 5px 14px;
+  font-family: 'Jost', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s;
+}
+.reply-toggle-btn:hover {
+  background: var(--gold-dim);
+}
+.reply-item {
+  background: rgba(0,0,0,0.15);
+  border: 0.5px solid rgba(255,255,255,0.03);
+  padding: 14px 18px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.reply-item:last-child {
+  margin-bottom: 0;
+}
+.reply-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.reply-meta strong {
+  color: var(--gold-light);
+  font-weight: 400;
+}
+.reply-text {
+  color: var(--text-body);
+  line-height: 1.6;
+}
+.reply-form {
+  margin-top: 18px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  animation: fu .3s ease forwards;
+}
+.reply-form.open {
+  display: flex;
+}
+.reply-form-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.reply-form input {
+  flex: 1;
+  min-width: 140px;
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.2);
+  border: 0.5px solid var(--navy-border);
+  color: var(--cream);
+  border-radius: 4px;
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+}
+.reply-form textarea {
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.2);
+  border: 0.5px solid var(--navy-border);
+  color: var(--cream);
+  border-radius: 4px;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  resize: vertical;
+  width: 100%;
+}
+.reply-form input:focus, .reply-form textarea:focus {
+  border-color: var(--gold);
+  outline: none;
+}
+.reply-submit-btn {
+  background: transparent;
+  border: 0.5px solid var(--gold);
+  color: var(--gold-light);
+  padding: 7px 16px;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s;
+  align-self: flex-end;
+}
+.reply-submit-btn:hover {
+  background: var(--gold-dim);
+}
+.forum-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.forum-error {
+  text-align: center;
+  padding: 40px 20px;
+  color: #d9534f;
+  font-size: 13px;
+  background: var(--navy-card);
+  border: 0.5px solid rgba(217,83,79,0.25);
+  border-radius: 8px;
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="../" class="nav-logo">
+    <img src="../icon.png" alt="Inkwell Logo">
+    <span>Inkwell</span>
+  </a>
+  <div class="nav-right">
+    <button id="btn-open-login" class="nav-dl" title="Web-App / Login" style="padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-radius: 20px; cursor: pointer;">
+      <svg class="nav-icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      <svg class="nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display: none;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      <span data-i18n="nav_login">Anmelden</span>
+    </button>
+    <div class="lang-sw">
+      <button class="lb active" onclick="setLang('de')">DE</button>
+      <button class="lb" onclick="setLang('en')">EN</button>
+      <button class="lb" onclick="setLang('it')">IT</button>
+    </div>
+    <div class="lang-sw-mobile-custom" style="display: none; position: relative;">
+      <button id="lang-btn-mobile" onclick="toggleMobileLangMenu(event)" style="background: transparent; border: 0.5px solid var(--gold); color: var(--gold-light); font-family: 'Jost', sans-serif; font-size: 11px; padding: 6px 12px; text-transform: uppercase; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; height: 36px; letter-spacing: 0.14em;">
+        <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; display: inline !important;">DE</span>
+      </button>
+      <div id="lang-dropdown-mobile" style="display: none; position: absolute; top: 42px; right: 0; background: var(--navy-card); border: 0.5px solid var(--navy-border); box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-radius: 4px; padding: 4px; z-index: 1000; min-width: 60px;">
+        <button class="lb" onclick="setLang('de'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">DE</button>
+        <button class="lb" onclick="setLang('en'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">EN</button>
+        <button class="lb" onclick="setLang('it'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">IT</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-container">
+  <div class="page-header">
+    <h1 class="page-title" data-i18n="community_title">Inkwell Forum</h1>
+    <p class="page-subtitle" data-i18n="community_subtitle">Stelle Fragen, diskutiere Ideen oder melde Fehler direkt an den Entwickler.</p>
+  </div>
+
+  <div style="text-align: left;">
+    <button onclick="togglePostForm()" class="forum-new-btn">
+      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span data-i18n="community_new_post">Neuen Beitrag erstellen</span>
+    </button>
+
+    <div id="post-form-card" class="forum-form-card">
+      <h3 style="font-family: 'Cormorant Garamond', serif; font-size: 28px; font-style: italic; color: var(--gold-light); margin-bottom: 20px;" data-i18n="community_new_post">Neuen Beitrag erstellen</h3>
+      <form id="new-post-form" onsubmit="handleCreatePost(event)">
+        <div class="forum-input-group">
+          <div class="forum-input-header">
+            <label for="post-title" data-i18n="community_post_title">Titel</label>
+            <span class="forum-char-counter" id="post-title-counter">120 übrig von 120</span>
+          </div>
+          <input type="text" id="post-title" maxlength="120" required oninput="updateForumCounter('post-title', 120)">
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+          <div class="forum-input-group">
+            <label for="post-type" data-i18n="community_post_type">Kategorie</label>
+            <select id="post-type">
+              <option value="question" data-i18n="community_type_question">Frage / Diskussion</option>
+              <option value="bug" data-i18n="community_type_bug">Fehler melden (Bug)</option>
+            </select>
+          </div>
+          <div class="forum-input-group">
+            <label for="post-author" data-i18n="community_post_author">Dein Name / Pseudonym</label>
+            <div class="forum-author-row">
+              <input type="text" id="post-author" maxlength="60" placeholder="Name oder Pseudonym" oninput="syncForumAuthorDraft('post')" required>
+              <label class="forum-author-toggle" for="post-author-anonymous">
+                <input type="checkbox" id="post-author-anonymous" onchange="toggleForumAnonymous('post')">
+                <span data-i18n="community_author_anonymous">Anonym posten</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="forum-input-group" style="margin-top: 10px;">
+          <div class="forum-input-header">
+            <label for="post-content" data-i18n="community_post_content">Beschreibung / Details</label>
+            <span class="forum-char-counter" id="post-content-counter">2000 übrig von 2000</span>
+          </div>
+          <textarea id="post-content" rows="5" maxlength="2000" required oninput="updateForumCounter('post-content', 2000)"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 14px; margin-top: 10px;">
+          <button type="button" onclick="togglePostForm()" class="btn-m" data-i18n="downgrade_cancel">Abbrechen</button>
+          <button type="submit" class="btn-m" style="background: var(--gold-dim); border-color: var(--gold-light); color: var(--gold-light);" data-i18n="community_publish_btn">Beitrag veröffentlichen</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="forum-filter-bar">
+      <button id="filter-all" onclick="setFilter('all')" class="forum-filter-btn active" data-i18n="community_filter_all">Alle Beiträge</button>
+      <button id="filter-question" onclick="setFilter('question')" class="forum-filter-btn" data-i18n="community_filter_questions">Fragen & Diskussionen</button>
+      <button id="filter-bug" onclick="setFilter('bug')" class="forum-filter-btn" data-i18n="community_filter_bugs">Fehlerberichte</button>
+    </div>
+
+    <div id="forum-feed-list">
+      <div class="forum-loading">Lade Beiträge...</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>© 2026 Inkwell · Anvi</p>
+  <div class="fl">
+    <a href="https://github.com/manuel0anvi/Inkwell" target="_blank">GitHub</a>
+    <a href="#" data-i18n="nav_community">Community</a>
+    <a href="../datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
+  </div>
+</footer>
+
+<script src="../js/i18n.js"></script>
+<script src="../js/common.js"></script>
+<script>
+const SUPABASE_URL = 'https://sdplctlpigzrscaepatk.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9gAsGOmApJIB8gKeJzwPRg_L1dslM0V';
+const SB_HEADERS = {
+  apikey: SUPABASE_KEY,
+  'Content-Type': 'application/json',
+  Prefer: 'return=representation'
+};
+
+let posts = [];
+let currentFilter = 'all';
+let forumIdentity = {
+  loaded: false,
+  loggedIn: false,
+  displayName: '',
+  email: ''
+};
+let forumIdentityPromise = null;
+
+function togglePostForm() {
+  const card = document.getElementById('post-form-card');
+  card.classList.toggle('open');
+  if (card.classList.contains('open')) {
+    syncForumAuthorField('post');
+  }
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.forum-filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('filter-' + filter).classList.add('active');
+  renderFeed();
+}
+
+function toggleReplyForm(postId) {
+  const form = document.getElementById('reply-form-' + postId);
+  if (form) {
+    form.classList.toggle('open');
+    if (form.classList.contains('open')) {
+      syncForumAuthorField('reply-' + postId);
+    }
+  }
+}
+
+function getForumAnonymousName() {
+  return t('community_anonymous_name') || 'Anonym';
+}
+
+function getForumGuestName() {
+  return t('community_guest_name') || 'Gast';
+}
+
+function extractForumAuthorName(user) {
+  const meta = user && user.user_metadata ? user.user_metadata : {};
+  const candidates = [
+    meta.full_name,
+    meta.name,
+    meta.display_name,
+    meta.username,
+    user && user.email ? user.email.split('@')[0] : ''
+  ];
+  const resolved = candidates.find(value => typeof value === 'string' && value.trim());
+  return resolved ? resolved.trim() : getForumGuestName();
+}
+
+function getForumStoredAuthorName() {
+  return localStorage.getItem('inkwell_forum_author_name') || localStorage.getItem('inkwell_forum_name') || '';
+}
+
+function getForumPreferredAuthorName() {
+  const storedName = getForumStoredAuthorName();
+  if (storedName && storedName !== getForumAnonymousName()) return storedName;
+  if (forumIdentity.loggedIn && forumIdentity.displayName) return forumIdentity.displayName;
+  return '';
+}
+
+function getForumActiveAuthorName() {
+  if (isForumAnonymous()) return getForumAnonymousName();
+  if (forumIdentity.loggedIn) return forumIdentity.displayName || getForumPreferredAuthorName() || '';
+  return getForumPreferredAuthorName();
+}
+
+function isForumAnonymous() {
+  return localStorage.getItem('inkwell_forum_author_anonymous') === 'true';
+}
+
+function syncForumAuthorField(kind) {
+  const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
+  const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
+  if (!input || !checkbox) return;
+
+  const anonymous = isForumAnonymous();
+  checkbox.checked = anonymous;
+  if (anonymous) {
+    input.dataset.previousValue = getForumStoredAuthorName() || forumIdentity.displayName || '';
+    input.value = getForumAnonymousName();
+    input.disabled = true;
+    input.required = false;
+    updateForumAuthorState(kind, true);
+    return;
+  }
+
+  if (forumIdentity.loggedIn) {
+    input.value = forumIdentity.displayName || getForumPreferredAuthorName();
+    input.disabled = true;
+    input.required = false;
+    updateForumAuthorState(kind, false);
+    return;
+  }
+
+  input.disabled = false;
+  input.required = true;
+  input.value = getForumPreferredAuthorName();
+  updateForumAuthorState(kind, false);
+}
+
+function syncForumAuthorDraft(kind) {
+  const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
+  const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
+  if (!input || !checkbox || input.disabled || checkbox.checked) return;
+
+  const trimmed = input.value.trim();
+  if (trimmed) {
+    localStorage.setItem('inkwell_forum_author_name', trimmed);
+    localStorage.setItem('inkwell_forum_name', trimmed);
+    localStorage.setItem('inkwell_forum_author_anonymous', 'false');
+  }
+}
+
+function toggleForumAnonymous(kind) {
+  const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
+  const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
+  if (!input || !checkbox) return;
+
+  if (checkbox.checked) {
+    input.dataset.previousValue = input.value.trim() || getForumStoredAuthorName() || forumIdentity.displayName || '';
+    input.value = getForumAnonymousName();
+    input.disabled = true;
+    input.required = false;
+    localStorage.setItem('inkwell_forum_author_anonymous', 'true');
+    return;
+  }
+
+  input.disabled = false;
+  localStorage.setItem('inkwell_forum_author_anonymous', 'false');
+
+  const restored = input.dataset.previousValue || getForumPreferredAuthorName();
+  input.value = forumIdentity.loggedIn ? (forumIdentity.displayName || restored) : restored;
+  input.disabled = forumIdentity.loggedIn;
+  input.required = !forumIdentity.loggedIn;
+  if (!forumIdentity.loggedIn && restored && restored !== getForumAnonymousName()) {
+    localStorage.setItem('inkwell_forum_author_name', restored);
+    localStorage.setItem('inkwell_forum_name', restored);
+  }
+}
+
+function updateForumAuthorState(kind, anonymous) {
+  const stateEl = document.getElementById(kind === 'post' ? 'post-author-state' : `reply-author-state-${kind.split('-').slice(1).join('-')}`);
+  if (!stateEl) return;
+}
+
+function updateForumCounter(inputId, max) {
+  const input = document.getElementById(inputId);
+  const counter = document.getElementById(inputId + '-counter');
+  if (!input || !counter) return;
+
+  const remaining = Math.max(0, max - (input.value || '').length);
+  counter.textContent = tf('community_chars_left_of', { left: remaining, max });
+}
+
+function updateForumReplyCounters(postId) {
+  updateForumCounter(`reply-content-${postId}`, 500);
+}
+
+async function ensureForumIdentity() {
+  if (forumIdentityPromise) return forumIdentityPromise;
+
+  forumIdentityPromise = (async () => {
+    const token = localStorage.getItem('inkwell_web_token');
+    if (!token) {
+      forumIdentity = {
+        loaded: true,
+        loggedIn: false,
+        displayName: '',
+        email: ''
+      };
+      return forumIdentity;
+    }
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('login unavailable');
+      const user = await res.json();
+      forumIdentity = {
+        loaded: true,
+        loggedIn: true,
+        displayName: extractForumAuthorName(user),
+        email: user && user.email ? user.email : ''
+      };
+    } catch (err) {
+      forumIdentity = {
+        loaded: true,
+        loggedIn: false,
+        displayName: '',
+        email: ''
+      };
+    }
+
+    return forumIdentity;
+  })();
+
+  return forumIdentityPromise;
+}
+
+function toggleRepliesList(postId) {
+  const list = document.getElementById('replies-list-' + postId);
+  const icon = document.getElementById('replies-icon-' + postId);
+  if (list) {
+    if (list.style.display === 'none') {
+      list.style.display = 'flex';
+      if (icon) icon.textContent = '▲';
+    } else {
+      list.style.display = 'none';
+      if (icon) icon.textContent = '▼';
+    }
+  }
+}
+
+function getFormattedDate(isoString) {
+  const date = new Date(isoString);
+  const locale = lang === 'de' ? 'de-DE' : lang === 'it' ? 'it-IT' : 'en-GB';
+  return date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// --- Supabase API ---
+
+async function loadPosts() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/community_posts?select=*&order=created_at.desc`,
+      { headers: { apikey: SUPABASE_KEY } }
+    );
+    if (!res.ok) throw new Error('Fehler beim Laden der Beiträge');
+    const dbPosts = await res.json();
+
+    // Load all replies
+    const resReplies = await fetch(
+      `${SUPABASE_URL}/rest/v1/community_replies?select=*&order=created_at.asc`,
+      { headers: { apikey: SUPABASE_KEY } }
+    );
+    const dbReplies = resReplies.ok ? await resReplies.json() : [];
+
+    // Combine posts with their replies
+    posts = dbPosts.map(post => ({
+      ...post,
+      replies: dbReplies.filter(r => r.post_id === post.id)
+    }));
+
+    renderFeed();
+  } catch (err) {
+    console.error('Forum load error:', err);
+    document.getElementById('forum-feed-list').innerHTML =
+      `<div class="forum-error">${err.message}</div>`;
+  }
+}
+
+async function handleCreatePost(event) {
+  event.preventDefault();
+
+  const title = document.getElementById('post-title').value.trim();
+  const type = document.getElementById('post-type').value;
+  const authorInput = document.getElementById('post-author');
+  const anonymous = document.getElementById('post-author-anonymous').checked;
+  const author = anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName()));
+  const content = document.getElementById('post-content').value.trim();
+
+  if (!title || !content) return;
+
+  localStorage.setItem('inkwell_forum_author_anonymous', anonymous ? 'true' : 'false');
+  if (!anonymous) {
+    localStorage.setItem('inkwell_forum_author_name', author);
+    localStorage.setItem('inkwell_forum_name', author);
+  }
+
+  const submitBtn = event.target.querySelector('[type="submit"]');
+  submitBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/community_posts`, {
+      method: 'POST',
+      headers: SB_HEADERS,
+      body: JSON.stringify({ type, title, author, content })
+    });
+    if (!res.ok) throw new Error('Beitrag konnte nicht gespeichert werden.');
+
+    document.getElementById('new-post-form').reset();
+    syncForumAuthorField('post');
+    togglePostForm();
+    await loadPosts();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function handleCreateReply(event, postId) {
+  event.preventDefault();
+
+  const form = event.target;
+  const authorInput = form.querySelector('.reply-author-input');
+  const anonymous = form.querySelector('.reply-author-anonymous').checked;
+  const author = anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName()));
+  const content = form.querySelector('.reply-content-input').value.trim();
+  if (!content) return;
+
+  localStorage.setItem('inkwell_forum_author_anonymous', anonymous ? 'true' : 'false');
+  if (!anonymous) {
+    localStorage.setItem('inkwell_forum_author_name', author);
+    localStorage.setItem('inkwell_forum_name', author);
+  }
+
+  const submitBtn = form.querySelector('.reply-submit-btn');
+  submitBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/community_replies`, {
+      method: 'POST',
+      headers: SB_HEADERS,
+      body: JSON.stringify({ post_id: postId, author, content })
+    });
+    if (!res.ok) throw new Error('Antwort konnte nicht gespeichert werden.');
+
+    await loadPosts();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// --- Rendering ---
+
+function renderFeed() {
+  const container = document.getElementById('forum-feed-list');
+  container.innerHTML = '';
+
+  const filtered = posts.filter(p => currentFilter === 'all' || p.type === currentFilter);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="v-loading" style="border:0.5px solid var(--navy-border); background:var(--navy-card);" data-i18n="community_no_posts">${t('community_no_posts')}</div>`;
+    return;
+  }
+
+  const savedName = getForumPreferredAuthorName();
+  const savedAnonymous = isForumAnonymous();
+  const activeAuthorName = getForumActiveAuthorName();
+
+  filtered.forEach(post => {
+    const card = document.createElement('div');
+    card.className = `post-item-card ${post.type}`;
+
+    const badgeText = post.type === 'question' ? t('community_type_question') : t('community_type_bug');
+    const replyCount = post.replies ? post.replies.length : 0;
+    const isAnonPost = ['Anonym', 'Anonymous', 'Anonimo'].includes(post.author);
+
+    let html = `
+      <div class="post-meta-line">
+        <span class="post-badge ${post.type}">${badgeText}</span>
+        <span class="post-author-time">${isAnonPost ? '' : `von <strong>${escapeHtml(post.author)}</strong> `}am ${getFormattedDate(post.created_at)}</span>
+      </div>
+      <h3>${escapeHtml(post.title)}</h3>
+      <div class="post-body-text">${escapeHtml(post.content)}</div>
+      <div class="replies-section">
+        <div class="replies-header">
+          <span class="replies-title" style="cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:4px;" onclick="toggleRepliesList('${post.id}')">
+            ${replyCount} ${t('community_replies')}
+            ${replyCount > 0 ? `<span id="replies-icon-${post.id}">▼</span>` : ''}
+          </span>
+          <button type="button" class="reply-toggle-btn" onclick="toggleReplyForm('${post.id}')">
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            ${t('community_reply_btn')}
+          </button>
+        </div>`;
+
+    if (replyCount > 0) {
+      html += `<div id="replies-list-${post.id}" style="display:none; flex-direction:column; gap:8px; margin-bottom:14px;">`;
+      post.replies.forEach(reply => {
+        const isAnonReply = ['Anonym', 'Anonymous', 'Anonimo'].includes(reply.author);
+        html += `
+          <div class="reply-item">
+            <div class="reply-meta">
+              ${isAnonReply ? '' : `<strong>${escapeHtml(reply.author)}</strong>`}
+              <span>${getFormattedDate(reply.created_at)}</span>
+            </div>
+            <div class="reply-text">${escapeHtml(reply.content)}</div>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Hidden reply form — shown only after clicking the button
+    html += `
+        <form id="reply-form-${post.id}" class="reply-form" onsubmit="handleCreateReply(event, '${post.id}')">
+          <div class="reply-form-row">
+            <input type="text" id="reply-author-${post.id}" class="reply-author-input" maxlength="60" ${savedAnonymous || forumIdentity.loggedIn ? '' : 'required'} placeholder="${t('community_post_author')}" value="${escapeHtml(savedAnonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? activeAuthorName : savedName))}" ${savedAnonymous || forumIdentity.loggedIn ? 'disabled' : ''} oninput="syncForumAuthorDraft('reply-${post.id}')">
+            <label class="forum-author-toggle" for="reply-author-anonymous-${post.id}" style="align-self:center; white-space:nowrap;">
+              <input type="checkbox" class="reply-author-anonymous" id="reply-author-anonymous-${post.id}" ${savedAnonymous ? 'checked' : ''} onchange="toggleForumAnonymous('reply-${post.id}')">
+              <span data-i18n="community_author_anonymous">Anonym posten</span>
+            </label>
+            <div class="forum-input-group" style="margin:0; width:100%;">
+              <div class="forum-input-header">
+                <label for="reply-content-${post.id}" data-i18n="community_add_reply">Antwort verfassen...</label>
+                <span class="forum-char-counter" id="reply-content-${post.id}-counter">${tf('community_chars_left_of', { left: 500, max: 500 })}</span>
+              </div>
+              <textarea id="reply-content-${post.id}" class="reply-content-input" rows="2" maxlength="500" required placeholder="${t('community_add_reply')}" oninput="updateForumCounter('reply-content-${post.id}', 500)"></textarea>
+            </div>
+          </div>
+          <button type="submit" class="reply-submit-btn">${t('community_reply_btn')}</button>
+        </form>
+      </div>`;
+
+    card.innerHTML = html;
+    container.appendChild(card);
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+// --- Init ---
+
+document.addEventListener('DOMContentLoaded', () => {
+  (async () => {
+    await ensureForumIdentity();
+    syncForumAuthorField('post');
+    updateForumCounter('post-title', 120);
+    updateForumCounter('post-content', 2000);
+
+    if (typeof addLangChangeListener === 'function') {
+      addLangChangeListener(() => {
+        syncForumAuthorField('post');
+        updateForumCounter('post-title', 120);
+        updateForumCounter('post-content', 2000);
+        renderFeed();
+      });
+    }
+
+    loadPosts();
+  })();
+});
+</script>
+</body>
+</html>
