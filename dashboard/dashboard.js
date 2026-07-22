@@ -46,7 +46,7 @@ async function showDashboard() {
   try {
     const gToken = localStorage.getItem('inkwell_gdrive_token');
     if (!gToken) {
-        throw new Error('Google Drive Zugriff fehlt. Bitte erneut anmelden.');
+        throw new Error(t('dash_drive_missing') || 'Google Drive Zugriff fehlt. Bitte erneut anmelden.');
     }
     
     // 1. Get Folder ID
@@ -55,7 +55,7 @@ async function showDashboard() {
         headers: { Authorization: `Bearer ${gToken}` }
     });
     if (!folderRes.ok) {
-        if (folderRes.status === 401) throw new Error('Sitzung abgelaufen. Bitte erneut anmelden.');
+        if (folderRes.status === 401) throw new Error(t('dash_session_expired') || 'Sitzung abgelaufen. Bitte erneut anmelden.');
         throw new Error('Drive error');
     }
     const folderData = await folderRes.json();

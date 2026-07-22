@@ -59,6 +59,8 @@ const T = {
     viewer_back: 'Zurück zur Übersicht',
     viewer_watermark: 'Leseansicht (nur Seite 1)',
     dash_err: 'Fehler:',
+    dash_drive_missing: 'Google Drive Zugriff fehlt. Bitte erneut anmelden.',
+    dash_session_expired: 'Sitzung abgelaufen. Bitte erneut anmelden.',
     page: 'Seite',
     pages: 'Seiten',
     

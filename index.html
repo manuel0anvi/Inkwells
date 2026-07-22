@@ -133,19 +133,14 @@
   <div class="modal-card" role="dialog" aria-modal="true">
     <div class="modal-kicker" data-i18n="nav_login">Anmelden</div>
     <h4 data-i18n="login_title">Cloud Login</h4>
-    <p data-i18n="login_sub">Melde dich an, um deine Notizbücher im Web anzusehen.</p>
+    <p data-i18n="login_sub">Melde dich mit Google an, um deine Notizbücher auf Google Drive im Web anzusehen.</p>
     <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 12px;">
-      <button id="login-google-btn" class="btn-m" style="display:flex; justify-content:center; align-items:center; gap:8px; border-color:var(--navy-border);">
+      <button id="login-google-btn" class="btn-m" style="display:flex; justify-content:center; align-items:center; gap:8px; border-color:var(--navy-border); padding: 12px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.344-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0 5.611 0 0 5.372 0 12s5.611 12 12.24 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg>
         <span data-i18n="login_google">Mit Google anmelden</span>
       </button>
-      <div style="text-align:center; font-size:11px; color:var(--text-muted); margin:4px 0;" data-i18n="login_or">ODER</div>
-      <input type="email" id="login-email" data-i18n-ph="login_email" placeholder="E-Mail" style="padding: 12px; background: rgba(0,0,0,0.2); border: 0.5px solid var(--navy-border); color: var(--cream); border-radius: 4px; font-family: 'Jost', sans-serif;">
-      <input type="password" id="login-pass" data-i18n-ph="login_pass" placeholder="Passwort" style="padding: 12px; background: rgba(0,0,0,0.2); border: 0.5px solid var(--navy-border); color: var(--cream); border-radius: 4px; font-family: 'Jost', sans-serif;">
-      <div id="login-error" style="color: #d9534f; font-size: 13px; display: none;"></div>
       <div class="modal-actions" style="margin-top: 10px;">
         <button id="login-cancel" class="btn-m" type="button" data-i18n="downgrade_cancel">Abbrechen</button>
-        <button id="login-submit" class="btn-m" style="background: var(--gold-dim); border-color: var(--gold-light); color: var(--gold-light);" type="button" data-i18n="nav_login">Anmelden</button>
       </div>
     </div>
   </div>
@@ -396,32 +391,6 @@ document.getElementById('login-google-btn').addEventListener('click', () => {
 document.getElementById('login-cancel').addEventListener('click', () => {
   loginModal.classList.remove('open');
   loginModal.setAttribute('aria-hidden', 'true');
-});
-
-document.getElementById('login-submit').addEventListener('click', async () => {
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  errEl.style.display = 'none';
-  
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error_description || 'Login fehlgeschlagen');
-    
-    localStorage.setItem('inkwell_web_token', data.access_token);
-    localStorage.setItem('inkwell_web_uid', data.user.id);
-    
-    loginModal.classList.remove('open');
-    window.location.href = 'dashboard/';
-  } catch(e) {
-    errEl.textContent = e.message;
-    errEl.style.display = 'block';
-  }
 });
 </script>
 </body>
