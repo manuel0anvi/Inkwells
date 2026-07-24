@@ -80,7 +80,7 @@ async function showDashboard() {
 
       const filesData = await filesRes.json();
       const fileEntries = Array.isArray(filesData.files) ? filesData.files : [];
-      const notebookFiles = fileEntries.filter((file) => file.name?.endsWith('.json') || file.appProperties?.inkwellId || file.mimeType === 'application/json');
+      const notebookFiles = fileEntries.filter((file) => file.name?.endsWith('.jrnl') || file.name?.endsWith('.json') || file.appProperties?.inkwellId || file.mimeType === 'application/json');
 
       if (notebookFiles.length === 0) {
         continue;
@@ -97,7 +97,10 @@ async function showDashboard() {
             continue;
           }
           const json = await fRes.json();
-          notebooks.push(json);
+          const notebook = Array.isArray(json?.notebooks) ? json.notebooks[0] : json;
+          if (notebook) {
+            notebooks.push(notebook);
+          }
         } catch (e) {
           console.warn('Could not parse notebook', file.name, e);
         }
