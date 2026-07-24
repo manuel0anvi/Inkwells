@@ -1,4 +1,5 @@
 let session = null;
+console.log('[Dashboard] script loaded');
 
 // Auth Guard Check
 function checkAuth() {
@@ -190,6 +191,8 @@ async function showDashboard() {
       grid.innerHTML = `<p style="color:var(--text-muted); padding:20px;">${t('dash_gdrive_empty') || 'Keine Notizbücher im Inkwell-Ordner gefunden.'}</p>`;
       return;
     }
+
+    console.log('[Dashboard] notebook count after fetch', notebooks.length);
     
     grid.innerHTML = '';
     
