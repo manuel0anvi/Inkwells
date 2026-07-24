@@ -1,3 +1,7 @@
+// Centralized Supabase Configuration
+const SUPABASE_URL = 'https://sdplctlpigzrscaepatk.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9gAsGOmApJIB8gKeJzwPRg_L1dslM0V';
+
 // Custom mobile language menu toggling
 function toggleMobileLangMenu(event) {
   if (event) event.stopPropagation();

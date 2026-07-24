@@ -50,7 +50,14 @@
       <h2 style="font-family: 'Cormorant Garamond', serif; font-size: 42px; font-style: italic; font-weight: 300; margin: 0;" data-i18n="dash_title">Meine Notebooks</h2>
       <div id="last-sync-time" style="font-family: 'Jost', sans-serif; font-size: 13px; color: var(--text-muted); margin-top: 4px;"></div>
     </div>
-    <div style="display: flex; gap: 12px;">
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button id="auth-connect-drive-web" class="btn btn-outline" style="font-size:14px; margin-left:auto;">
+        <span data-i18n="connectDrive">Connect with Drive</span>
+      </button>
+      <div id="drive-connected-indicator" style="display: none; align-items: center; gap: 6px; font-size: 14px; color: var(--gold); border: 1px solid var(--gold); padding: 6px 12px; border-radius: 4px; pointer-events: none;">
+        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        Drive Verbunden
+      </div>
       <button id="logout-btn" class="btn-m" style="color: #d9534f; border-color: rgba(217,83,79,0.3);" data-i18n="dash_logout">Abmelden</button>
     </div>
   </div>

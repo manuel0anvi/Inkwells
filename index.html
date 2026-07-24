@@ -1,16 +1,6 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<script>
-  // Clean path script
-  (function() {
-    const path = window.location.pathname;
-    if (path.includes('webseite-') || path.includes('webseite%20')) {
-      const cleanPath = path.replace(/webseite-?\s*index\.html/i, 'index.html');
-      window.location.replace(window.location.origin + cleanPath + window.location.search + window.location.hash);
-    }
-  })();
-</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inkwell — Digitales Notizbuch</title>
@@ -133,9 +123,9 @@
   <div class="modal-card" role="dialog" aria-modal="true">
     <div class="modal-kicker" data-i18n="nav_login">Anmelden</div>
     <h4 data-i18n="login_title">Cloud Login</h4>
-    <p data-i18n="login_sub">Melde dich mit Google an, um deine Notizbücher auf Google Drive im Web anzusehen.</p>
+    <p data-i18n="login_sub">Melde dich mit Google an, um deine Notizbücher in Google Drive anzusehen.</p>
     <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 12px;">
-      <button id="login-google-btn" class="btn-m" style="display:flex; justify-content:center; align-items:center; gap:8px; border-color:var(--navy-border); padding: 12px;">
+      <button id="login-google-btn" class="btn-m" style="display:flex; justify-content:center; align-items:center; gap:8px; border-color:var(--navy-border);">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.344-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0 5.611 0 0 5.372 0 12s5.611 12 12.24 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg>
         <span data-i18n="login_google">Mit Google anmelden</span>
       </button>
@@ -168,8 +158,6 @@
 <script>
 const GH_USER = 'manuel0anvi';
 const GH_REPO = 'Inkwell';
-const SUPABASE_URL = 'https://sdplctlpigzrscaepatk.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_9gAsGOmApJIB8gKeJzwPRg_L1dslM0V';
 
 let releases = [];
 let pendingDowngrade = null;
@@ -384,7 +372,7 @@ document.getElementById('login-google-btn').addEventListener('click', () => {
   if (!window.location.origin || window.location.origin === 'null' || window.location.protocol === 'file:') {
     currentUrl = 'https://manuel0anvi.github.io/Inkwell/';
   }
-  const url = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(currentUrl)}&prompt=consent%20select_account&scopes=https://www.googleapis.com/auth/drive.file`;
+  const url = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(currentUrl)}&prompt=consent%20select_account&scopes=https://www.googleapis.com/auth/drive.file%20https://www.googleapis.com/auth/drive.appdata`;
   window.location.href = url;
 });
 

@@ -2,20 +2,21 @@
 :root{
   --gold:#c9a227;
   --gold-light:#d4a857;
+  --gold-dark:#9c7c1b;
   --gold-dim:rgba(201,162,39,0.15);
   --navy:#0c0e18;
   --navy-card:#151724;
   --navy-border:rgba(201,162,39,0.15);
   --cream:#faf8f3;
-  --text-muted:rgba(250,248,243,0.45);
-  --text-body:rgba(250,248,243,0.78)
+  --text-muted:rgba(250,248,243,0.65);
+  --text-body:rgba(250,248,243,0.85)
 }
 html{scroll-behavior:smooth}
 body{background:var(--navy);color:var(--cream);font-family:'Jost',sans-serif;font-weight:300;line-height:1.7;overflow-x:hidden}
 
 nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:18px 56px;background:rgba(12,14,24,0.97);backdrop-filter:blur(8px);border-bottom:0.5px solid var(--navy-border)}
 .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;color:var(--gold-light);letter-spacing:0.06em}
-.nav-logo svg{width:26px;height:26px}
+.nav-logo svg, .nav-logo img{width:26px;height:26px;object-fit:contain}
 .nav-right{display:flex;align-items:center;gap:16px}
 .nav-dl{background:transparent;border:0.5px solid var(--gold);color:var(--gold-light);padding:7px 18px;font-family:'Jost',sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;transition:background .2s}
 .nav-dl:hover{background:var(--gold-dim)}
@@ -59,14 +60,15 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 30%,rgba(201,162,39,.07) 0%,transparent 70%),radial-gradient(ellipse 40% 60% at 20% 80%,rgba(201,162,39,.04) 0%,transparent 60%);pointer-events:none}
 .hero-badge{display:inline-block;border:0.5px solid var(--navy-border);color:var(--gold);font-size:11px;letter-spacing:.2em;text-transform:uppercase;padding:6px 18px;margin-bottom:40px;opacity:0;animation:fu .7s .1s forwards}
 .hero-icon{width:84px;height:84px;margin-bottom:34px;opacity:0;animation:fu .7s .2s forwards}
+.hero-icon img{width:100%;height:100%;object-fit:contain}
 .hero h1{font-family:'Cormorant Garamond',serif;font-size:clamp(68px,10vw,120px);font-weight:300;font-style:italic;line-height:.9;color:var(--cream);margin-bottom:26px;opacity:0;animation:fu .7s .3s forwards}
 .hero h1 span{color:var(--gold-light)}
 .hero-tagline{font-family:'Cormorant Infant',serif;font-style:italic;font-size:21px;font-weight:300;color:var(--text-body);max-width:500px;margin:0 auto 52px;opacity:0;animation:fu .7s .4s forwards}
-.hero-actions{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center;opacity:0;animation:fu .7s .55s forwards}
-.btn-p{display:inline-flex;align-items:center;gap:10px;background:var(--gold);color:#0c0e18;text-decoration:none;font-family:'Jost',sans-serif;font-size:12px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;padding:15px 34px;transition:background .2s,transform .15s;cursor:pointer;border:none}
-.btn-p:hover{background:var(--gold-light);transform:translateY(-1px)}
-.btn-g{display:inline-flex;align-items:center;gap:8px;color:var(--text-muted);text-decoration:none;font-size:12px;letter-spacing:.1em;text-transform:uppercase;transition:color .2s;cursor:pointer}
-.btn-g:hover{color:var(--cream)}
+.hero-actions{display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;opacity:0;animation:fu .7s .55s forwards;margin:20px 0}
+.btn-p{display:inline-flex;align-items:center;gap:12px;background:var(--gold);color:var(--navy);text-decoration:none;font-family:'Jost',sans-serif;font-size:14px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:18px 46px;transition:background .2s,transform .15s;cursor:pointer;border:none}
+.btn-p:hover, .btn-p:active, .btn-p:focus{background:var(--cream);color:var(--navy);transform:translateY(-2px);outline:none;box-shadow:0 6px 20px rgba(201,162,39,0.3)}
+.btn-g{display:inline-flex;align-items:center;gap:8px;color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;transition:color .2s;cursor:pointer;padding:18px 24px}
+.btn-g:hover, .btn-g:active, .btn-g:focus{color:var(--gold);outline:none}
 .hero-meta{margin-top:52px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);opacity:0;animation:fu .7s .7s forwards}
 .hero-meta span{color:var(--gold);margin:0 5px}
 
@@ -79,14 +81,14 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .fc{padding:38px 34px;background:var(--navy-card);border:0.5px solid transparent;transition:border-color .3s,background .3s;text-align:left}
 .fc:hover{border-color:var(--navy-border);background:rgba(201,162,39,.04)}
 .fi{width:34px;height:34px;color:var(--gold);margin-bottom:18px}
-.fc h3{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:400;font-style:italic;color:var(--cream);margin-bottom:9px}
-.fc p{font-size:14px;color:var(--text-body);line-height:1.65}
+.fc h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;font-style:italic;color:var(--cream);margin-bottom:9px}
+.fc p{font-size:16px;color:var(--text-body);line-height:1.65}
 
 .dl-section{max-width:720px;margin:0 auto;padding:80px 40px 80px;text-align:center;position:relative}
 .dl-section::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:0.5px;height:56px;background:linear-gradient(to bottom,transparent,var(--gold))}
-.ver-badge{display:inline-block;border:0.5px solid var(--navy-border);color:var(--gold);font-size:11px;letter-spacing:.18em;text-transform:uppercase;padding:5px 15px;margin-bottom:30px}
+.ver-badge{display:inline-block;border:0.5px solid var(--navy-border);color:var(--gold);font-size:12px;letter-spacing:.18em;text-transform:uppercase;padding:5px 15px;margin-bottom:30px}
 .dl-section h2{font-family:'Cormorant Garamond',serif;font-size:clamp(32px,5vw,50px);font-weight:300;font-style:italic;margin-bottom:14px;color:var(--cream)}
-.dl-section>p{font-size:14px;color:var(--text-body);margin-bottom:44px;max-width:440px;margin-left:auto;margin-right:auto}
+.dl-section>p{font-size:16px;color:var(--text-body);margin-bottom:44px;max-width:440px;margin-left:auto;margin-right:auto}
 .dl-box{background:var(--navy-card);border:0.5px solid var(--navy-border);padding:36px}
 .dl-plat{display:flex;align-items:center;gap:14px;margin-bottom:24px}
 .pl-icon{width:42px;height:42px;background:var(--gold-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--gold-light)}

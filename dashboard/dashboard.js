@@ -1,6 +1,3 @@
-const SUPABASE_URL = 'https://sdplctlpigzrscaepatk.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_9gAsGOmApJIB8gKeJzwPRg_L1dslM0V';
-
 let session = null;
 
 // Auth Guard Check
@@ -45,43 +42,75 @@ async function showDashboard() {
   
   try {
     const gToken = localStorage.getItem('inkwell_gdrive_token');
-    if (!gToken) {
-        throw new Error(t('dash_drive_missing') || 'Google Drive Zugriff fehlt. Bitte erneut anmelden.');
-    }
-    
-    // 1. Get Folder ID
-    const q1 = encodeURIComponent("name='Inkwell' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-    const folderRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q1}&spaces=drive`, {
-        headers: { Authorization: `Bearer ${gToken}` }
-    });
-    if (!folderRes.ok) {
-        if (folderRes.status === 401) throw new Error(t('dash_session_expired') || 'Sitzung abgelaufen. Bitte erneut anmelden.');
-        throw new Error('Drive error');
-    }
-    const folderData = await folderRes.json();
-    if (!folderData.files || folderData.files.length === 0) {
-        // No notebooks yet
-        grid.innerHTML = `<p style="color:var(--text-muted); padding:20px;">Keine Notizbücher in Google Drive gefunden.</p>`;
-        return;
-    }
-    const folderId = folderData.files[0].id;
-    
-    // 2. Fetch Files
-    const q2 = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-    const filesRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,appProperties)&spaces=drive`, {
-        headers: { Authorization: `Bearer ${gToken}` }
-    });
-    const filesData = await filesRes.json();
-    
     const notebooks = [];
-    if (filesData.files) {
-        for (const f of filesData.files) {
-            if (!f.appProperties || !f.appProperties.inkwellId) continue;
-            try {
-                const nbReq = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, { headers: { Authorization: `Bearer ${gToken}` }});
-                if (nbReq.ok) notebooks.push(await nbReq.json());
-            } catch (err) {}
+    if (!gToken) {
+      grid.innerHTML = `<p style="color:var(--text-muted); padding:20px;">${t('login_sub') || 'Melde dich mit Google an, um deine Notizbücher in Google Drive anzusehen.'}</p>`;
+      return;
+    }
+
+    document.getElementById('auth-connect-drive-web').style.display = 'none';
+    document.getElementById('drive-connected-indicator').style.display = 'flex';
+
+    const folderQuery = encodeURIComponent("name='Inkwell' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+    const folderRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${folderQuery}&fields=files(id,name,modifiedTime)&spaces=drive&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${gToken}` }
+    });
+
+    if (!folderRes.ok) {
+      if (folderRes.status === 401 || folderRes.status === 403) {
+        localStorage.removeItem('inkwell_gdrive_token');
+      }
+      throw new Error(`Google Drive konnte nicht gelesen werden (${folderRes.status}).`);
+    }
+
+    const folderData = await folderRes.json();
+    const folders = Array.isArray(folderData.files) ? folderData.files : [];
+
+    let selectedFolder = null;
+    for (const folder of folders) {
+      const fileQuery = encodeURIComponent(`'${folder.id}' in parents and trashed=false`);
+      const filesRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${fileQuery}&fields=files(id,name,mimeType,modifiedTime,appProperties)&orderBy=modifiedTime desc&spaces=drive&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true`, {
+        headers: { Authorization: `Bearer ${gToken}` }
+      });
+
+      if (!filesRes.ok) {
+        console.warn('Drive file listing failed for folder', folder.id, filesRes.status);
+        continue;
+      }
+
+      const filesData = await filesRes.json();
+      const fileEntries = Array.isArray(filesData.files) ? filesData.files : [];
+      const notebookFiles = fileEntries.filter((file) => file.name?.endsWith('.json') || file.appProperties?.inkwellId || file.mimeType === 'application/json');
+
+      if (notebookFiles.length === 0) {
+        continue;
+      }
+
+      selectedFolder = folder;
+      for (const file of notebookFiles) {
+        try {
+          const fRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`, {
+            headers: { Authorization: `Bearer ${gToken}` }
+          });
+          if (!fRes.ok) {
+            console.warn('Could not load notebook file', file.name, fRes.status);
+            continue;
+          }
+          const json = await fRes.json();
+          notebooks.push(json);
+        } catch (e) {
+          console.warn('Could not parse notebook', file.name, e);
         }
+      }
+
+      if (notebooks.length > 0) {
+        break;
+      }
+    }
+
+    if (!selectedFolder) {
+      grid.innerHTML = `<p style="color:var(--text-muted); padding:20px;">${t('dash_gdrive_empty') || 'Keine Notizbücher im Inkwell-Ordner gefunden.'}</p>`;
+      return;
     }
     
     grid.innerHTML = '';
@@ -92,7 +121,8 @@ async function showDashboard() {
     const dateOpts = { year: 'numeric', month: '2-digit', day: '2-digit' };
     const timeOpts = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
     const datetimeStr = `${now.toLocaleDateString(locale, dateOpts)} ${now.toLocaleTimeString(locale, timeOpts)}`;
-    document.getElementById('last-sync-time').innerHTML = tf('dash_last_sync', { datetime: datetimeStr });
+    const sourceStr = 'Google Drive';
+    document.getElementById('last-sync-time').innerHTML = tf('dash_last_sync', { datetime: datetimeStr }) + ` &bull; Quelle: <span style="color:var(--gold-light)">${sourceStr}</span>`;
     
     if (notebooks.length === 0) {
       grid.innerHTML = `<p style="color:var(--text-muted)" data-i18n="dash_empty">${t('dash_empty') || 'Keine Notebooks gefunden.'}</p>`;
@@ -299,6 +329,12 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   localStorage.removeItem('inkwell_web_uid');
   session = null;
   window.location.replace('../');
+});
+
+document.getElementById('auth-connect-drive-web').addEventListener('click', () => {
+  const currentUrl = window.location.origin + window.location.pathname;
+  const url = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(currentUrl)}&prompt=consent%20select_account&scopes=https://www.googleapis.com/auth/drive.file%20https://www.googleapis.com/auth/drive.appdata`;
+  window.location.href = url;
 });
 
 // Configure Home redirection click for the home button
