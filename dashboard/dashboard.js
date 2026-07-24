@@ -75,14 +75,24 @@ function getNotebookPages(notebook) {
 }
 
 function normalizeNotebookRecord(row) {
-  const raw = row?.notebook_json
+  let raw = row?.notebook_json
     ? (typeof row.notebook_json === 'string' ? JSON.parse(row.notebook_json) : row.notebook_json)
     : row;
-  const notebook = Array.isArray(raw?.notebooks)
-    ? raw.notebooks[0]
-    : Array.isArray(raw)
-      ? raw[0]
-      : raw;
+
+  if (!raw || typeof raw !== 'object') return null;
+
+  let notebook = raw;
+  if (Array.isArray(raw?.notebooks)) {
+    notebook = raw.notebooks[0] || null;
+  } else if (Array.isArray(raw?.data)) {
+    notebook = raw.data[0] || null;
+  } else if (raw?.notebook) {
+    notebook = raw.notebook;
+  } else if (raw?.notebook_json) {
+    notebook = raw.notebook_json;
+  } else if (Array.isArray(raw)) {
+    notebook = raw[0] || null;
+  }
 
   if (!notebook || typeof notebook !== 'object') return null;
 
@@ -157,10 +167,12 @@ async function showDashboard() {
             continue;
           }
           const json = await fRes.json();
+          console.log('[Dashboard] Raw Drive payload for', file.name, json);
           const notebook = normalizeNotebookRecord({
             ...file,
             notebook_json: json
           });
+          console.log('[Dashboard] Normalized notebook for', file.name, notebook);
           if (notebook) {
             notebooks.push(notebook);
           }
