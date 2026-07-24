@@ -33,6 +33,66 @@ function fmtDate(iso){
   return new Date(iso).toLocaleDateString(lang==='de'?'de-AT':lang==='it'?'it-IT':'en-GB',{year:'numeric',month:'short',day:'numeric'});
 }
 
+function getNotebookPages(notebook) {
+  if (!notebook || typeof notebook !== 'object') return [];
+
+  if (Array.isArray(notebook.pages) && notebook.pages.length) {
+    return notebook.pages.filter(Boolean);
+  }
+
+  const pagesById = new Map();
+  if (Array.isArray(notebook.pages)) {
+    for (const page of notebook.pages) {
+      if (page && page.id) pagesById.set(page.id, page);
+    }
+  }
+
+  const collected = [];
+  const seen = new Set();
+  const sections = Array.isArray(notebook.sections) ? notebook.sections : [];
+
+  for (const section of sections) {
+    if (Array.isArray(section?.pages)) {
+      for (const page of section.pages) {
+        if (!page || !page.id || seen.has(page.id)) continue;
+        seen.add(page.id);
+        collected.push(page);
+      }
+      continue;
+    }
+
+    if (Array.isArray(section?.pgIds)) {
+      for (const pageId of section.pgIds) {
+        const page = pagesById.get(pageId);
+        if (!page || !page.id || seen.has(page.id)) continue;
+        seen.add(page.id);
+        collected.push(page);
+      }
+    }
+  }
+
+  return collected;
+}
+
+function normalizeNotebookRecord(row) {
+  const raw = row?.notebook_json
+    ? (typeof row.notebook_json === 'string' ? JSON.parse(row.notebook_json) : row.notebook_json)
+    : row;
+  const notebook = Array.isArray(raw?.notebooks)
+    ? raw.notebooks[0]
+    : Array.isArray(raw)
+      ? raw[0]
+      : raw;
+
+  if (!notebook || typeof notebook !== 'object') return null;
+
+  const normalized = JSON.parse(JSON.stringify(notebook));
+  normalized.name = normalized.name || normalized.title || normalized.notebookName || row?.title || 'Untitled';
+  normalized.updatedAt = normalized.updatedAt || normalized.updated_at || row?.updated_at || row?.modifiedTime || row?.modified_time || new Date().toISOString();
+  normalized.pages = getNotebookPages(normalized);
+  return normalized;
+}
+
 async function showDashboard() {
   webappViewer.style.display = 'none';
   webappDashboard.style.display = 'block';
@@ -97,7 +157,10 @@ async function showDashboard() {
             continue;
           }
           const json = await fRes.json();
-          const notebook = Array.isArray(json?.notebooks) ? json.notebooks[0] : json;
+          const notebook = normalizeNotebookRecord({
+            ...file,
+            notebook_json: json
+          });
           if (notebook) {
             notebooks.push(notebook);
           }
@@ -133,7 +196,8 @@ async function showDashboard() {
     }
 
     notebooks.forEach(row => {
-      const nb = row.notebook_json ? (typeof row.notebook_json === 'string' ? JSON.parse(row.notebook_json) : row.notebook_json) : row;
+      const nb = normalizeNotebookRecord(row);
+      if (!nb) return;
       const card = document.createElement('div');
       card.className = 'fc'; // reuse feature card style
       card.style.cursor = 'pointer';
@@ -153,12 +217,12 @@ async function showDashboard() {
       spine.style.boxShadow = '1px 0 6px rgba(0,0,0,0.4)';
       card.appendChild(spine);
       
-      const pageCount = (nb.pages || []).length;
+      const pageCount = getNotebookPages(nb).length;
       const pageLabel = pageCount !== 1 ? (t('pages') || 'Seiten') : (t('page') || 'Seite');
       
       const contentContainer = document.createElement('div');
-      contentContainer.innerHTML = `<h3 style="margin-bottom:4px;">${nb.name || row.title}</h3>`
-        + `<p style="font-size:12px;opacity:0.6;margin-bottom:8px;">${new Date(row.updated_at).toLocaleDateString()}</p>`
+      contentContainer.innerHTML = `<h3 style="margin-bottom:4px;">${nb.name}</h3>`
+        + `<p style="font-size:12px;opacity:0.6;margin-bottom:8px;">${fmtDate(nb.updatedAt)}</p>`
         + `<p style="font-size:11px;color:var(--gold);letter-spacing:0.05em;text-transform:uppercase;margin:0;">${pageCount} ${pageLabel}</p>`;
       card.appendChild(contentContainer);
       
@@ -293,17 +357,20 @@ async function renderNotebookPage(page, pageNumber, totalPages) {
 }
 
 function renderNotebook(nb) {
-  currentNotebook = nb;
+  const notebook = normalizeNotebookRecord(nb);
+  if (!notebook) return;
+
+  currentNotebook = notebook;
   webappDashboard.style.display = 'none';
   webappViewer.style.display = 'block';
   const viewerTitle = document.getElementById('viewer-title');
-  viewerTitle.textContent = nb.name || 'Untitled';
-  viewerTitle.style.borderBottom = `3px solid ${nb.color || 'var(--gold)'}`;
+  viewerTitle.textContent = notebook.name || 'Untitled';
+  viewerTitle.style.borderBottom = `3px solid ${notebook.color || 'var(--gold)'}`;
   viewerTitle.style.paddingBottom = '4px';
   viewerTitle.style.display = 'inline-block';
   viewerPages.innerHTML = '';
 
-  const pages = Array.isArray(nb.pages) ? nb.pages : [];
+  const pages = getNotebookPages(notebook);
   const pageLabel = pages.length === 1 ? (t('page') || 'Seite') : (t('pages') || 'Seiten');
   viewerPageCountTop.textContent = `${pages.length} ${pageLabel}`;
 
