@@ -1,14 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════
    FIREBASE / CLOUD FIRESTORE  ―  Datenbank des Community-Forums
 
-   Löst die frühere Supabase-Anbindung ab (Tabellen community_posts /
-   community_replies). Statt zweier Tabellen mit Fremdschlüssel liegt jetzt
-   ein Dokumentenmodell zugrunde:
+   Zugrunde liegt ein Dokumentenmodell, keine Tabellen mit Fremdschlüssel:
 
      community_posts/{postId}                 ← ein Beitrag
      community_posts/{postId}/replies/{id}    ← seine Antworten
 
-   Dadurch entfällt das Feld `post_id`: die Zugehörigkeit steckt im Pfad.
+   Die Zugehörigkeit einer Antwort steckt damit im Pfad; ein Feld wie
+   `post_id` braucht es nicht.
 
    ── Warum eine ES-Modul-Datei? ──────────────────────────────────────
    Das Firebase v9+ SDK ist modular. Die Website hat keinen Bundler
@@ -108,7 +107,7 @@ const db = getFirestore(app);
  *  · null                 – direkt nach dem Anlegen, solange serverTimestamp()
  *                           vom Server noch nicht bestätigt wurde
  *  · { seconds, … }       – einfaches Objekt, etwa aus einem Export
- *  · ISO-Zeichenkette     – Altbestand aus der Supabase-Zeit
+ *  · ISO-Zeichenkette     – Altbestand aus einer früheren Fassung
  *
  * @param {unknown} value
  * @returns {Date|null}

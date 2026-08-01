@@ -16,14 +16,18 @@
 <link rel="stylesheet" href="../css/style.css">
 <link rel="stylesheet" href="../css/notebook.css">
 <style>
+.share-wrap {
+  display: none;
+  padding: 100px 20px 60px;
+  min-height: 100vh;
+}
 .share-head {
   max-width: 1180px;
   margin: 0 auto 24px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 0 20px;
 }
 .share-title {
   font-family: 'Cormorant Garamond', serif;
@@ -68,7 +72,37 @@
   color: var(--cream);
   margin: 0 0 12px;
 }
-.share-actions { display: flex; gap: 8px; align-items: center; }
+.share-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Hinweis, dass Bearbeiten nur in der App geht. Im Browser bleibt ein
+   geteiltes Dokument immer schreibgeschützt – auch mit Bearbeitungsrecht. */
+.share-edit-hint {
+  max-width: 1180px;
+  margin: 0 auto 20px;
+  padding: 10px 14px;
+  border: 0.5px solid var(--navy-border);
+  border-radius: 8px;
+  background: rgba(224, 166, 58, .08);
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+/* Auf schmalen Bildschirmen passen Titel und Aktionen nicht nebeneinander:
+   dann untereinander, mit den Knöpfen über die volle Breite. */
+@media (max-width: 700px) {
+  .share-wrap { padding: 92px 12px 40px; }
+  .share-head { grid-template-columns: minmax(0, 1fr); }
+  .share-title { font-size: 25px; }
+  .share-actions { justify-content: flex-start; }
+  .share-actions .btn-m { flex: 1 1 auto; text-align: center; }
+  .share-state { margin: 56px auto; }
+}
+@media (max-width: 480px) {
+  .share-wrap { padding: 88px 8px 32px; }
+  .share-title { font-size: 22px; }
+}
 </style>
 </head>
 <body>
@@ -79,7 +113,12 @@
     <span>Inkwell</span>
   </a>
   <div class="nav-right">
-    <a href="../" class="nav-dl" style="padding: 6px 14px; border-radius: 20px; text-decoration: none;" data-i18n="share_get_inkwell">Inkwell holen</a>
+    <!-- Beschriftung im <span>, damit die Regel für schmale Bildschirme sie
+         ausblenden kann; ohne das quoll der Text aus dem runden Knopf. -->
+    <a href="../" class="nav-dl" style="padding: 6px 14px; border-radius: 20px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Inkwell holen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display:none; flex-shrink:0;" class="dl-icon-mobile"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span data-i18n="share_get_inkwell">Inkwell holen</span>
+    </a>
     <div class="lang-sw">
       <button class="lb active" onclick="setLang('de')">DE</button>
       <button class="lb" onclick="setLang('en')">EN</button>
@@ -98,20 +137,26 @@
   <p id="share-error-text" data-i18n="share_gone_text">Der Link ist ungültig oder wurde vom Besitzer aufgehoben.</p>
 </div>
 
-<div id="share-view" style="display:none; padding: 100px 20px 60px; min-height: 100vh;">
+<div id="share-view" class="share-wrap">
   <div class="share-head">
     <div>
       <h1 id="share-title" class="share-title">Notizbuch</h1>
       <div id="share-meta" class="share-sub"></div>
     </div>
     <div class="share-actions">
-      <span class="share-badge" data-i18n="share_readonly">Nur lesen</span>
+      <span class="share-badge" id="share-role-badge" data-i18n="share_readonly">Nur lesen</span>
+      <!-- Bearbeitet wird ausschließlich in der App: im Browser bleibt ein
+           geteiltes Dokument immer schreibgeschützt. -->
+      <a id="share-open-app" class="btn-m" style="display:none; padding:6px 12px; font-size:12px; text-decoration:none;" data-i18n="share_open_app">In Inkwell öffnen</a>
       <button id="share-pdf" class="btn-m" style="padding:6px 12px; font-size:12px;" data-i18n="dash_pdf">Als PDF</button>
     </div>
   </div>
 
+  <!-- Hinweis für Empfänger mit Bearbeitungsrecht -->
+  <p id="share-edit-hint" class="share-edit-hint" style="display:none"></p>
+
   <!-- Seiten werden 1:1 wie in der App gerendert (css/notebook.css) -->
-  <div id="viewer-pages" class="ink" style="display: grid; gap: 28px; justify-items: center; align-items: start; max-width: 860px; margin: 0 auto;"></div>
+  <div id="viewer-pages" class="ink viewer-pages"></div>
 </div>
 
 <footer>
@@ -126,6 +171,9 @@
 <script src="../js/i18n.js"></script>
 <!-- Dieselbe Seitendarstellung wie im Dashboard -->
 <script src="../js/viewer.js"></script>
+<!-- Export als PDF oder Word – dieselben Bausteine wie im Dashboard -->
+<script src="../js/docx.js"></script>
+<script src="../js/export-ui.js"></script>
 <!-- Firestore-Zugriff; Modul, läuft nach den klassischen Scripts -->
 <script type="module" src="../js/share.js"></script>
 
@@ -207,36 +255,11 @@ function renderShared(notebook, meta) {
   requestAnimationFrame(rescaleAllPages);
 }
 
-/* Druck/PDF: identisch zum Dashboard – die Seiten liegen bereits im
-   A4-Verhältnis vor, der Browser übernimmt "Als PDF speichern". */
-function printShared() {
-  if (!sharedNotebook) return;
-
-  const previousTitle = document.title;
-  document.title = (sharedNotebook.name || 'Inkwell').replace(/[\\/:*?"<>|]/g, '_');
-
-  for (const { scaler, pageEl, width, height } of pageScalers) {
-    pageEl.style.transform = 'none';
-    scaler.style.width = width + 'px';
-    scaler.style.height = height + 'px';
-  }
-  document.body.classList.add('printing');
-
-  const cleanup = () => {
-    document.body.classList.remove('printing');
-    document.title = previousTitle;
-    rescaleAllPages();
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup);
-
-  setTimeout(() => {
-    window.print();
-    setTimeout(() => { if (document.body.classList.contains('printing')) cleanup(); }, 1000);
-  }, 60);
-}
-
-document.getElementById('share-pdf').addEventListener('click', printShared);
+/* Export: identisch zum Dashboard (js/export-ui.js). PDF läuft über den
+   Druckdialog des Browsers, Word über js/docx.js. */
+document.getElementById('share-pdf').addEventListener('click', () => {
+  if (sharedNotebook) InkwellExport.open(sharedNotebook);
+});
 
 if (typeof addLangChangeListener === 'function') {
   addLangChangeListener(() => {
@@ -244,15 +267,78 @@ if (typeof addLangChangeListener === 'function') {
   });
 }
 
+/* ── Ein geteiltes Dokument (?d=<linkId>) ──────────────────────────────
+   Neben der alten, eingefrorenen Lesekopie (?id=<shareId>) gibt es seit
+   den geteilten Dokumenten den Weg über eine Link-Kennung. Der Ablauf:
+
+     1. Link-Kennung nachschlagen -> Dokumentkennung
+     2. Ist ein Konto angemeldet, trägt es sich selbst ein. Danach steht
+        das Dokument im Tab „Geteilte Dokumente" und der Link wird nicht
+        mehr gebraucht.
+     3. Anzeigen – immer schreibgeschützt. Bearbeitet wird nur in der App.
+   ─────────────────────────────────────────────────────────────────── */
+async function openSharedDocument(api, linkId) {
+  const { docId } = await api.resolveLink(linkId);
+  if (!docId) throw new Error('SHARE_NOT_FOUND');
+
+  // Angemeldet? Dann selbst eintragen. Ohne Konto wird nur gelesen.
+  let joined = 'anonymous';
+  try {
+    await api.whenIdentityReady();
+    joined = await api.joinViaLink(docId);
+  } catch (err) {
+    console.warn('[Share] Selbsteintrag übersprungen:', err?.message || err);
+  }
+  if (joined === 'blocked') { showError('share_blocked_title', 'share_blocked_text'); return; }
+
+  const { notebook, head } = await api.loadDocument(docId);
+  sharedNotebook = normalizeNotebookRecord(notebook);
+  if (!sharedNotebook) { showError('share_broken_title', 'share_broken_text'); return; }
+
+  window.__shareMeta = { title: head.title, mode: head.linkMode, updatedAt: head.updatedAt };
+  renderShared(sharedNotebook, window.__shareMeta);
+
+  // „In Inkwell öffnen" führt über das Protokoll inkwell://share/<linkId>.
+  // Der Browser fragt dann selbst, ob die App gestartet werden soll.
+  const openApp = document.getElementById('share-open-app');
+  if (openApp) {
+    openApp.href = api.appUrlFor(linkId);
+    openApp.style.display = 'inline-flex';
+  }
+
+  const me = api.currentIdentity();
+  const role = head.roleFor(me?.email || '');
+  const badge = document.getElementById('share-role-badge');
+  const hint = document.getElementById('share-edit-hint');
+
+  if (role === 'edit') {
+    // Auf der Website bleibt es trotzdem beim Lesen – so ist es entschieden.
+    if (badge) { badge.textContent = t('share_may_edit'); badge.removeAttribute('data-i18n'); }
+    if (hint) { hint.textContent = t('share_edit_in_app'); hint.style.display = 'block'; }
+  } else if (joined === 'joined' && hint) {
+    hint.textContent = t('share_added_to_tab');
+    hint.style.display = 'block';
+  }
+}
+
 (async () => {
-  const shareId = new URLSearchParams(window.location.search).get('id');
-  if (!shareId) {
+  const params = new URLSearchParams(window.location.search);
+  const linkId = params.get('d');
+  const shareId = params.get('id');
+
+  if (!linkId && !shareId) {
     showError('share_missing_title', 'share_missing_text');
     return;
   }
 
   try {
     const api = await whenShareReady();
+
+    if (linkId) {
+      await openSharedDocument(api, linkId);
+      return;
+    }
+
     const { notebook, title, mode, updatedAt } = await api.loadSharedNotebook(shareId);
 
     sharedNotebook = normalizeNotebookRecord(notebook);

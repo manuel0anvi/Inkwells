@@ -345,6 +345,37 @@
   border: 0.5px solid rgba(217,83,79,0.25);
   border-radius: 8px;
 }
+
+/* ── Schmale Bildschirme ──────────────────────────────────────────────
+   Die großzügigen Innenabstände der Karten fressen auf einem Handy die
+   halbe Textbreite. Zeilen, die aus zwei Enden bestehen (Autor + Zeit,
+   Überschrift + Knopf), dürfen umbrechen statt sich zu quetschen. */
+@media (max-width: 768px) {
+  .forum-form-card { padding: 20px 16px; }
+  .post-item-card { padding: 20px 18px; margin-bottom: 18px; }
+  .post-item-card h3 { font-size: 21px; }
+  .forum-new-btn { width: 100%; justify-content: center; margin-bottom: 24px; }
+
+  .forum-input-header { flex-wrap: wrap; gap: 4px; align-items: baseline; }
+  .forum-filter-bar { gap: 8px; }
+  .forum-filter-btn { padding: 6px 10px; font-size: 11px; }
+
+  .replies-header { flex-wrap: wrap; gap: 8px; }
+  .reply-meta { flex-wrap: wrap; gap: 4px 10px; }
+  .reply-form-row { flex-direction: column; }
+  .reply-form input { min-width: 0; }
+  .reply-submit-btn { align-self: stretch; }
+
+  /* Die Knopfreihe des Beitragsformulars */
+  #new-post-form > div:last-child { flex-wrap: wrap; }
+  #new-post-form > div:last-child .btn-m { flex: 1; text-align: center; }
+}
+
+@media (max-width: 480px) {
+  .post-item-card { padding: 16px 14px; }
+  .post-item-card h3 { font-size: 19px; }
+  .reply-item { padding: 12px 14px; }
+}
 </style>
 </head>
 <body>
@@ -459,7 +490,7 @@
 <script src="../js/providers.js"></script>
 <script src="../js/common.js"></script>
 
-<!-- Datenbank des Forums: Cloud Firestore (löst Supabase ab).
+<!-- Datenbank des Forums: Cloud Firestore.
      Als ES-Modul, weil das Firebase v9+ SDK modular ist. Module laufen
      immer nach den klassischen Scripts – deshalb wartet die Seite unten
      auf das Ereignis "inkwell-forum-ready". -->

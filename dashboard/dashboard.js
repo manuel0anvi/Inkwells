@@ -15,13 +15,21 @@
 
 let session = null;
 
+/* Zurück zur Anmeldung. Wer schon einmal angemeldet war (gemerkte E-Mail),
+   ist nicht "nicht angemeldet", sondern wurde abgemeldet – die Startseite
+   sagt das dann auch, statt wortlos das Login-Fenster zu zeigen. */
+function redirectToLogin() {
+  const wasSignedIn = typeof getRememberedEmail === 'function' && !!getRememberedEmail();
+  window.location.replace('../?login=true' + (wasSignedIn ? '&expired=1' : ''));
+}
+
 // Beim Öffnen erst eine stille Erneuerung versuchen, bevor zur
 // Anmeldeseite geschickt wird – sonst landet man nach einer Stunde
 // Pause grundlos wieder beim Login.
 async function checkAuth() {
   session = await ensureFreshToken();
   if (!session) {
-    window.location.replace('../?login=true');
+    redirectToLogin();
     return false;
   }
   return true;
@@ -30,8 +38,8 @@ async function checkAuth() {
 async function requireSession() {
   session = await ensureFreshToken();
   if (!session) {
+    redirectToLogin();
     clearInkwellSession();
-    window.location.replace('../?login=true');
     return false;
   }
   return true;
@@ -246,7 +254,7 @@ async function showDashboard() {
     openNotebookFromUrl();
   } catch (err) {
     if (err.message === 'SESSION_EXPIRED') {
-      window.location.replace('../?login=true');
+      redirectToLogin();
       return;
     }
     grid.innerHTML = `<p style="color:#d9534f">${t('dash_err') || 'Fehler:'} ${err.message}</p>`;
@@ -613,46 +621,15 @@ document.getElementById('viewer-back').addEventListener('click', () => {
   history.replaceState({}, document.title, window.location.pathname);
 });
 
-/* ── PDF-Ausgabe ──────────────────────────────────────────────────────
-   Kein eigener PDF-Erzeuger nötig: die Seiten liegen bereits exakt im
-   A4-Verhältnis (794×1123 px = A4 bei 96 dpi) im Dokument. Für den Druck
-   wird alles außer den Seiten ausgeblendet und die Skalierung aufgehoben,
-   dann übernimmt "Als PDF speichern" im Druckdialog des Browsers.
+/* ── Export ───────────────────────────────────────────────────────────
+   Format und Seitenumfang wählt js/export-ui.js; der PDF-Weg läuft
+   weiterhin über den Druckdialog des Browsers (die Seiten liegen bereits
+   exakt im A4-Verhältnis vor), der Word-Weg über js/docx.js.
    ─────────────────────────────────────────────────────────────────── */
 
-function printNotebook() {
-  if (!currentNotebook) return;
-
-  const previousTitle = document.title;
-  // Der Browser schlägt den Dokumenttitel als Dateinamen vor
-  document.title = (currentNotebook.name || 'Inkwell').replace(/[\\/:*?"<>|]/g, '_');
-
-  // Für den Druck in Originalgröße darstellen
-  for (const { scaler, pageEl, width, height } of pageScalers) {
-    pageEl.style.transform = 'none';
-    scaler.style.width = width + 'px';
-    scaler.style.height = height + 'px';
-  }
-
-  document.body.classList.add('printing');
-
-  const cleanup = () => {
-    document.body.classList.remove('printing');
-    document.title = previousTitle;
-    rescaleAllPages();
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup);
-
-  // Kurz warten, damit das Layout vor dem Druckdialog steht
-  setTimeout(() => {
-    window.print();
-    // Sicherheitsnetz, falls afterprint ausbleibt (manche Browser)
-    setTimeout(() => { if (document.body.classList.contains('printing')) cleanup(); }, 1000);
-  }, 60);
-}
-
-document.getElementById('viewer-pdf').addEventListener('click', printNotebook);
+document.getElementById('viewer-pdf').addEventListener('click', () => {
+  if (currentNotebook) InkwellExport.open(currentNotebook);
+});
 
 /* ── Heft freigeben ───────────────────────────────────────────────────
    Der frühere Knopf kopierte nur "?nb=<id>" – ein Link, der ohne
@@ -664,6 +641,8 @@ document.getElementById('viewer-pdf').addEventListener('click', printNotebook);
 
 // Merkt sich je Heft die zuletzt erzeugte Freigabe, damit „aktualisieren"
 // und „aufheben" nach einem Seitenwechsel weiter funktionieren.
+//   neu :  { [nbId]: { docId, linkId, url, linkMode } }
+//   alt :  { [nbId]: { shareId, url, mode } }   – eingefrorene Lesekopie
 const SHARE_STORE_KEY = 'inkwell_shares';
 
 function loadShareRegistry() {
@@ -673,7 +652,16 @@ function loadShareRegistry() {
 
 function rememberShare(notebookId, entry) {
   const all = loadShareRegistry();
-  if (entry) all[notebookId] = entry; else delete all[notebookId];
+  if (entry) all[notebookId] = { ...(all[notebookId] || {}), ...entry };
+  else delete all[notebookId];
+  try { localStorage.setItem(SHARE_STORE_KEY, JSON.stringify(all)); } catch (e) {}
+}
+
+function forgetShare(notebookId, keys) {
+  const all = loadShareRegistry();
+  if (!all[notebookId]) return;
+  for (const key of keys) delete all[notebookId][key];
+  if (!Object.keys(all[notebookId]).length) delete all[notebookId];
   try { localStorage.setItem(SHARE_STORE_KEY, JSON.stringify(all)); } catch (e) {}
 }
 
@@ -692,97 +680,323 @@ function whenShareReady() {
   });
 }
 
-function openShareDialog() {
+function describeShareError(err) {
+  const msg = err?.message || '';
+  if (msg === 'SHARE_NOT_OWNED') return t('share_not_owned');
+  if (msg === 'SHARE_OFFLINE') return t('share_offline');
+  if (msg === 'NEEDS_ACCOUNT') return t('share_needs_account');
+  if (msg === 'BAD_EMAIL') return t('share_bad_email');
+  if (msg === 'OWN_EMAIL') return t('share_own_email');
+  if (msg === 'SHARE_NOT_FOUND') return t('shared_gone');
+  return tf('share_failed', { msg: msg || 'unbekannt' });
+}
+
+// Der zuletzt gelesene Kopf des offenen Dokuments
+let shareHead = null;
+
+function shareEl(id) { return document.getElementById(id); }
+
+function selectedLinkMode() {
+  const checked = document.querySelector('input[name="share-link-mode"]:checked');
+  return checked ? checked.value : 'off';
+}
+
+function setLinkModeRadio(mode) {
+  const radio = document.querySelector(`input[name="share-link-mode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+}
+
+async function openShareDialog() {
   if (!currentNotebook) return;
 
-  const overlay = document.getElementById('share-overlay');
-  const existing = shareFor(currentNotebook.id);
+  shareHead = null;
+  const overlay = shareEl('share-overlay');
+  const entry = shareFor(currentNotebook.id);
 
-  document.getElementById('share-dlg-title').textContent = t('share_title');
-  document.getElementById('share-dlg-intro').textContent = t('share_intro');
-  document.getElementById('share-dlg-warning').textContent = t('share_warning');
-  document.getElementById('share-dlg-status').textContent = existing ? t('share_active') : '';
+  shareEl('share-dlg-title').textContent = t('share_title');
+  shareEl('share-dlg-intro').textContent = t('share_intro');
+  shareEl('share-dlg-warning').textContent = t('share_warning');
+  shareEl('share-dlg-status').textContent = '';
+  shareEl('share-dlg-people').innerHTML = '';
+  shareEl('share-dlg-link-row').style.display = 'none';
+  shareEl('share-dlg-link').value = '';
+  shareEl('share-dlg-revoke').style.display = 'none';
+  shareEl('share-dlg-create').textContent = t('share_create');
+  setLinkModeRadio(entry?.linkMode || 'off');
 
-  // Modus vorbelegen: bestehende Freigabe behält ihren, sonst eingefroren
-  const mode = existing?.mode === 'live' ? 'live' : 'frozen';
-  document.querySelector(`input[name="share-mode"][value="${mode}"]`).checked = true;
+  overlay.style.display = 'flex';
 
-  const linkRow = document.getElementById('share-dlg-link-row');
-  const linkInput = document.getElementById('share-dlg-link');
-  if (existing) {
+  // Ohne echte Firebase-Kennung geht nichts davon.
+  const me = await inkwellIdentityReady();
+  const needs = shareEl('share-dlg-needs-account');
+  needs.textContent = t('share_needs_account');
+  needs.style.display = me ? 'none' : 'block';
+  shareEl('share-dlg-link-section').style.display = me ? '' : 'none';
+  shareEl('share-dlg-people-section').style.display = me ? '' : 'none';
+  shareEl('share-dlg-create').disabled = !me;
+  if (!me) return;
+
+  if (entry?.docId) await loadShareHead(entry.docId);
+}
+
+async function loadShareHead(docId) {
+  const status = shareEl('share-dlg-status');
+  try {
+    const api = await whenShareReady();
+    shareHead = await api.loadDocumentHead(docId);
+    renderShareHead();
+  } catch (err) {
+    if (err?.message === 'SHARE_NOT_FOUND') {
+      shareHead = null;
+      forgetShare(currentNotebook.id, ['docId', 'linkId', 'url', 'linkMode']);
+      status.textContent = t('shared_gone');
+      return;
+    }
+    status.textContent = describeShareError(err);
+  }
+}
+
+function renderShareHead() {
+  if (!shareHead) return;
+
+  setLinkModeRadio(shareHead.linkMode);
+  shareEl('share-dlg-create').textContent = t('share_update');
+  shareEl('share-dlg-revoke').style.display = 'inline-block';
+  shareEl('share-dlg-status').textContent = t('share_active');
+
+  const linkRow = shareEl('share-dlg-link-row');
+  const linkInput = shareEl('share-dlg-link');
+  if (shareHead.linkMode !== 'off' && shareHead.linkId) {
     linkRow.style.display = 'flex';
-    linkInput.value = existing.url;
+    linkInput.value = window.InkwellShare.docUrlFor(shareHead.linkId);
   } else {
     linkRow.style.display = 'none';
     linkInput.value = '';
   }
 
-  document.getElementById('share-dlg-create').textContent = existing ? t('share_update') : t('share_create');
-  document.getElementById('share-dlg-revoke').style.display = existing ? 'inline-block' : 'none';
+  renderSharePeople();
+}
 
-  overlay.style.display = 'flex';
+function renderSharePeople() {
+  const box = shareEl('share-dlg-people');
+  box.innerHTML = '';
+  if (!shareHead) return;
+
+  const rows = window.InkwellShare.listMembers(shareHead);
+
+  if (!rows.length && !shareHead.blockedEmails.length) {
+    const empty = document.createElement('p');
+    empty.className = 'share-people-empty';
+    empty.textContent = t('share_people_empty');
+    box.appendChild(empty);
+    return;
+  }
+
+  for (const person of rows) {
+    const row = document.createElement('div');
+    row.className = 'share-person';
+
+    const mail = document.createElement('span');
+    mail.className = 'share-person-mail';
+    mail.textContent = person.email;
+    mail.title = person.email;
+
+    const via = document.createElement('span');
+    via.className = 'share-person-via';
+    via.textContent = person.via === 'link' ? t('share_via_link') : t('share_via_invite');
+
+    const select = document.createElement('select');
+    for (const value of ['view', 'edit']) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value === 'edit' ? t('role_edit') : t('role_view');
+      if (person.role === value) option.selected = true;
+      select.appendChild(option);
+    }
+    select.addEventListener('change', () => changeShareRole(person.email, select.value));
+
+    const remove = document.createElement('button');
+    remove.className = 'share-person-remove';
+    remove.type = 'button';
+    remove.textContent = '✕';
+    remove.title = t('share_remove_person');
+    remove.addEventListener('click', () => removeSharePerson(person.email));
+
+    row.append(mail, via, select, remove);
+    box.appendChild(row);
+  }
+
+  // Gesperrte Adressen sichtbar machen, sonst wundert man sich, warum
+  // jemand über den Link nicht mehr hereinkommt.
+  for (const email of shareHead.blockedEmails) {
+    const row = document.createElement('div');
+    row.className = 'share-person blocked';
+
+    const mail = document.createElement('span');
+    mail.className = 'share-person-mail';
+    mail.textContent = email;
+
+    const via = document.createElement('span');
+    via.className = 'share-person-via';
+    via.textContent = t('share_blocked');
+
+    const undo = document.createElement('button');
+    undo.className = 'share-person-remove';
+    undo.type = 'button';
+    undo.textContent = '↺';
+    undo.title = t('share_unblock');
+    undo.addEventListener('click', () => unblockSharePerson(email));
+
+    row.append(mail, via, undo);
+    box.appendChild(row);
+  }
 }
 
 function closeShareDialog() {
   document.getElementById('share-overlay').style.display = 'none';
+  shareHead = null;
 }
 
 async function submitShare() {
   if (!currentNotebook) return;
 
-  const btn = document.getElementById('share-dlg-create');
-  const status = document.getElementById('share-dlg-status');
-  const mode = document.querySelector('input[name="share-mode"]:checked')?.value === 'live' ? 'live' : 'frozen';
-  const existing = shareFor(currentNotebook.id);
+  const btn = shareEl('share-dlg-create');
+  const status = shareEl('share-dlg-status');
+  const entry = shareFor(currentNotebook.id);
 
   btn.disabled = true;
   status.textContent = t('share_working');
 
   try {
     const api = await whenShareReady();
-    const result = await api.publishNotebook(currentNotebook, {
-      mode,
-      shareId: existing?.shareId
+    const result = await api.shareDocument(currentNotebook, {
+      docId: entry?.docId,
+      linkMode: selectedLinkMode()
     });
 
-    rememberShare(currentNotebook.id, { shareId: result.shareId, url: result.url, mode: result.mode });
+    rememberShare(currentNotebook.id, {
+      docId: result.docId,
+      linkId: result.linkId,
+      url: result.url,
+      linkMode: result.linkMode
+    });
 
-    document.getElementById('share-dlg-link-row').style.display = 'flex';
-    document.getElementById('share-dlg-link').value = result.url;
-    document.getElementById('share-dlg-revoke').style.display = 'inline-block';
-    btn.textContent = t('share_update');
-    status.textContent = existing ? t('share_updated_ok') : t('share_done');
+    await loadShareHead(result.docId);
+    status.textContent = entry?.docId ? t('share_updated_ok') : t('share_done');
   } catch (err) {
     console.error('[Share]', err);
-    status.textContent = err.message === 'SHARE_NOT_OWNED'
-      ? t('share_not_owned')
-      : tf('share_failed', { msg: err.message || 'unbekannt' });
+    status.textContent = describeShareError(err);
   } finally {
     btn.disabled = false;
   }
 }
 
-async function revokeCurrentShare() {
-  if (!currentNotebook) return;
-  const existing = shareFor(currentNotebook.id);
-  if (!existing) return;
-  if (!window.confirm(t('share_revoke_confirm'))) return;
+/** Nur das Linkrecht umstellen, ohne den Inhalt neu hochzuladen. */
+async function applyShareLinkMode() {
+  if (!shareHead) return;
+  const wanted = selectedLinkMode();
+  if (wanted === shareHead.linkMode) return;
 
-  const status = document.getElementById('share-dlg-status');
   try {
     const api = await whenShareReady();
-    await api.revokeShare(existing.shareId);
-    rememberShare(currentNotebook.id, null);
+    await api.setLinkMode(shareHead.docId, wanted);
+    rememberShare(currentNotebook.id, { linkMode: wanted });
+    await loadShareHead(shareHead.docId);
+  } catch (err) {
+    shareEl('share-dlg-status').textContent = describeShareError(err);
+  }
+}
 
-    document.getElementById('share-dlg-link-row').style.display = 'none';
-    document.getElementById('share-dlg-revoke').style.display = 'none';
-    document.getElementById('share-dlg-create').textContent = t('share_create');
+async function renewShareLink() {
+  if (!shareHead || !shareHead.linkId) return;
+  if (!window.confirm(t('share_renew_confirm'))) return;
+
+  try {
+    const api = await whenShareReady();
+    const result = await api.rotateLink(shareHead.docId);
+    rememberShare(currentNotebook.id, { linkId: result.linkId, url: result.url });
+    await loadShareHead(shareHead.docId);
+    shareEl('share-dlg-status').textContent = t('share_renewed');
+  } catch (err) {
+    shareEl('share-dlg-status').textContent = describeShareError(err);
+  }
+}
+
+async function addSharePerson() {
+  const status = shareEl('share-dlg-status');
+  if (!shareHead) { status.textContent = t('share_create_first'); return; }
+
+  const input = shareEl('share-dlg-mail');
+  const role = shareEl('share-dlg-role').value === 'edit' ? 'edit' : 'view';
+
+  try {
+    const api = await whenShareReady();
+    await api.setMember(shareHead.docId, input.value, role);
+    const mail = api.normalizeEmail(input.value);
+    input.value = '';
+    await loadShareHead(shareHead.docId);
+    status.textContent = tf('share_invited', { mail });
+  } catch (err) {
+    status.textContent = describeShareError(err);
+  }
+}
+
+async function changeShareRole(email, role) {
+  if (!shareHead) return;
+  try {
+    const api = await whenShareReady();
+    await api.setMember(shareHead.docId, email, role);
+    await loadShareHead(shareHead.docId);
+  } catch (err) {
+    shareEl('share-dlg-status').textContent = describeShareError(err);
+  }
+}
+
+async function removeSharePerson(email) {
+  if (!shareHead) return;
+  if (!window.confirm(tf('share_remove_confirm', { mail: email }))) return;
+  try {
+    const api = await whenShareReady();
+    await api.removeMember(shareHead.docId, email);
+    await loadShareHead(shareHead.docId);
+    shareEl('share-dlg-status').textContent = tf('share_removed', { mail: email });
+  } catch (err) {
+    shareEl('share-dlg-status').textContent = describeShareError(err);
+  }
+}
+
+async function unblockSharePerson(email) {
+  if (!shareHead) return;
+  try {
+    const api = await whenShareReady();
+    await api.unblockMember(shareHead.docId, email);
+    await loadShareHead(shareHead.docId);
+  } catch (err) {
+    shareEl('share-dlg-status').textContent = describeShareError(err);
+  }
+}
+
+async function revokeCurrentShare() {
+  if (!currentNotebook || !shareHead) return;
+  if (!window.confirm(t('share_revoke_confirm'))) return;
+
+  const status = shareEl('share-dlg-status');
+  try {
+    const api = await whenShareReady();
+    await api.unshareDocument(shareHead.docId);
+    forgetShare(currentNotebook.id, ['docId', 'linkId', 'url', 'linkMode']);
+
+    shareHead = null;
+    shareEl('share-dlg-link-row').style.display = 'none';
+    shareEl('share-dlg-link').value = '';
+    shareEl('share-dlg-revoke').style.display = 'none';
+    shareEl('share-dlg-create').textContent = t('share_create');
+    shareEl('share-dlg-people').innerHTML = '';
+    setLinkModeRadio('off');
     status.textContent = t('share_revoked');
   } catch (err) {
     console.error('[Share]', err);
-    status.textContent = err.message === 'SHARE_NOT_OWNED'
-      ? t('share_not_owned')
-      : tf('share_failed', { msg: err.message || 'unbekannt' });
+    status.textContent = describeShareError(err);
   }
 }
 
@@ -807,9 +1021,193 @@ document.getElementById('share-dlg-close').addEventListener('click', closeShareD
 document.getElementById('share-dlg-create').addEventListener('click', submitShare);
 document.getElementById('share-dlg-revoke').addEventListener('click', revokeCurrentShare);
 document.getElementById('share-dlg-copy').addEventListener('click', copyShareLink);
+document.getElementById('share-dlg-renew').addEventListener('click', renewShareLink);
+document.getElementById('share-dlg-add').addEventListener('click', addSharePerson);
+document.getElementById('share-dlg-mail').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addSharePerson(); }
+});
+document.querySelectorAll('input[name="share-link-mode"]').forEach(radio => {
+  radio.addEventListener('change', applyShareLinkMode);
+});
 document.getElementById('share-overlay').addEventListener('click', (e) => {
   if (e.target === document.getElementById('share-overlay')) closeShareDialog();
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   TAB „GETEILTE DOKUMENTE"
+
+   Die Liste kommt aus genau EINER Abfrage in Firestore:
+       where('memberEmails', 'array-contains', meineAdresse)
+   Es gibt bewusst keine zweite Datenhaltung. Nimmt der Besitzer jemanden
+   heraus, verschwindet das Dokument hier von selbst.
+
+   Auf der Website bleibt ein geteiltes Dokument IMMER schreibgeschützt –
+   auch mit Bearbeitungsrecht. Dafür steht dort ein Knopf, der es in der
+   Inkwell-App öffnet.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const SHARED_SEEN_KEY = 'inkwell_shared_seen_at';
+
+let sharedDocs = [];
+let unwatchShared = null;
+let dashTab = 'own';
+
+function sharedLastSeen() {
+  return Number(localStorage.getItem(SHARED_SEEN_KEY) || 0);
+}
+
+function markSharedSeen() {
+  try { localStorage.setItem(SHARED_SEEN_KEY, String(Date.now())); } catch (e) {}
+  renderSharedBadge();
+}
+
+function newSharedDocs() {
+  const since = sharedLastSeen();
+  if (!since) return sharedDocs.slice();     // erster Besuch: alles ist neu
+  return sharedDocs.filter(d => {
+    const at = d.sharedAt || d.updatedAt;
+    return at instanceof Date && at.getTime() > since;
+  });
+}
+
+function renderSharedBadge() {
+  const badge = document.getElementById('dash-shared-count');
+  if (!badge) return;
+  const count = newSharedDocs().length;
+  badge.textContent = String(count);
+  badge.style.display = count > 0 ? 'inline-block' : 'none';
+}
+
+function switchDashTab(which) {
+  dashTab = which === 'shared' ? 'shared' : 'own';
+
+  document.getElementById('dash-tab-own').classList.toggle('active', dashTab === 'own');
+  document.getElementById('dash-tab-shared').classList.toggle('active', dashTab === 'shared');
+
+  const ownVisible = dashTab === 'own';
+  document.getElementById('dashboard-grid').style.display = ownVisible ? '' : 'none';
+  document.querySelector('.dash-search').style.display = ownVisible ? '' : 'none';
+  document.getElementById('dashboard-search-results').style.display = 'none';
+  document.getElementById('dashboard-shared').style.display = ownVisible ? 'none' : '';
+
+  if (!ownVisible) {
+    renderSharedDocs();
+    markSharedSeen();
+  }
+}
+
+function renderSharedDocs() {
+  const grid = document.getElementById('shared-grid');
+  const hint = document.getElementById('shared-hint');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const api = window.InkwellShare;
+  if (!api || !api.hasRealIdentity()) {
+    hint.textContent = t('shared_needs_account');
+    return;
+  }
+
+  if (!sharedDocs.length) {
+    hint.textContent = t('shared_empty');
+    return;
+  }
+  hint.textContent = t('shared_hint');
+
+  const myMail = api.currentIdentity()?.email || '';
+
+  for (const head of sharedDocs) {
+    const role = head.roleFor(myMail) === 'edit' ? 'edit' : 'view';
+
+    const card = document.createElement('div');
+    card.className = 'nb-card';
+    card.style.setProperty('--nb-color', head.color);
+
+    const spine = document.createElement('div');
+    spine.className = 'nb-card-spine';
+    spine.style.background = head.color;
+
+    const body = document.createElement('div');
+    body.className = 'nb-card-body';
+
+    const name = document.createElement('div');
+    name.className = 'nb-card-name';
+    name.textContent = head.title || '?';
+
+    const badge = document.createElement('span');
+    badge.className = 'nb-card-role' + (role === 'edit' ? ' can-edit' : '');
+    badge.textContent = role === 'edit' ? t('role_edit') : t('role_view');
+
+    const meta = document.createElement('div');
+    meta.className = 'nb-card-meta';
+    const parts = [head.ownerName || head.ownerEmail || '?'];
+    if (head.updatedAt) parts.push(fmtDate(head.updatedAt.toISOString()));
+    meta.textContent = parts.join(' · ');
+
+    body.append(name, badge, meta);
+    card.append(spine, body);
+    card.addEventListener('click', () => openSharedDoc(head));
+    grid.appendChild(card);
+  }
+}
+
+async function openSharedDoc(head) {
+  const hint = document.getElementById('shared-hint');
+  try {
+    const api = await whenShareReady();
+    const { notebook, head: fresh } = await api.loadDocument(head.docId);
+
+    const record = normalizeNotebookRecord(notebook);
+    if (!record) throw new Error('SHARE_BROKEN');
+
+    // Der Betrachter zeigt ohnehin nur an – hier braucht es keine Sperre,
+    // wohl aber den Hinweis, dass Bearbeiten in der App passiert.
+    renderNotebook(record);
+
+    const myMail = api.currentIdentity()?.email || '';
+    if (fresh.roleFor(myMail) === 'edit' && fresh.linkId) {
+      const bar = document.querySelector('.viewer-bar-actions');
+      if (bar && !document.getElementById('viewer-open-app')) {
+        const link = document.createElement('a');
+        link.id = 'viewer-open-app';
+        link.className = 'btn-m';
+        link.style.textDecoration = 'none';
+        link.textContent = t('share_open_app');
+        link.href = api.appUrlFor(fresh.linkId);
+        bar.insertBefore(link, bar.firstChild);
+      }
+    }
+  } catch (err) {
+    console.error('[SharedDocs]', err);
+    if (hint) hint.textContent = describeShareError(err);
+  }
+}
+
+async function startWatchingShared() {
+  if (unwatchShared) { unwatchShared(); unwatchShared = null; }
+
+  const me = await inkwellIdentityReady();
+  if (!me) {
+    sharedDocs = [];
+    renderSharedBadge();
+    if (dashTab === 'shared') renderSharedDocs();
+    return;
+  }
+
+  const api = window.InkwellShare;
+  unwatchShared = api.watchSharedDocs(me.email, (list) => {
+    sharedDocs = list.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
+    renderSharedBadge();
+    if (dashTab === 'shared') renderSharedDocs();
+  });
+}
+
+document.getElementById('dash-tab-own').addEventListener('click', () => switchDashTab('own'));
+document.getElementById('dash-tab-shared').addEventListener('click', () => switchDashTab('shared'));
+document.addEventListener('inkwell-identity-changed', () => {
+  startWatchingShared().catch(() => {});
+});
+startWatchingShared().catch(err => console.warn('[SharedDocs] Start:', err?.message || err));
 
 // Notizbuch aus dem Link öffnen, sobald die Liste geladen ist
 function openNotebookFromUrl() {

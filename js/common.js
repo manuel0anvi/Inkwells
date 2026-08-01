@@ -180,7 +180,7 @@ function requestToken(client, prompt, hint) {
 }
 
 /** Speichert Tokens plus Profil als Sitzung. */
-async function applyTokens(providerId, { accessToken, refreshToken, expiresIn }) {
+async function applyTokens(providerId, { accessToken, refreshToken, expiresIn, idToken, rawNonce }) {
   const provider = getCloudProvider(providerId);
   const profile = await provider.fetchProfile(accessToken);
 
@@ -195,7 +195,68 @@ async function applyTokens(providerId, { accessToken, refreshToken, expiresIn })
     expiry: Date.now() + Math.max(0, (expiresIn || 3600) - 60) * 1000
   };
   saveInkwellSession(session);
+
+  // Dieselbe Anmeldung auch gegenüber Firebase gültig machen. Bewusst ohne
+  // await: schlägt es fehl, funktioniert das Dashboard ganz normal weiter,
+  // nur eben ohne geteilte Dokumente.
+  if (idToken) linkFirebaseIdentity(providerId, idToken, rawNonce);
+
   return session;
+}
+
+/* ── Firebase-Kennung ─────────────────────────────────────────────────
+   js/share.js ist ein ES-Modul und meldet sich über das Ereignis
+   "inkwell-share-ready". Auf Seiten ohne dieses Modul passiert hier
+   schlicht nichts.
+   ─────────────────────────────────────────────────────────────────── */
+
+function whenInkwellShareReady(timeoutMs = 15000) {
+  if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), timeoutMs);
+    document.addEventListener('inkwell-share-ready', () => {
+      clearTimeout(timer);
+      if (window.InkwellShare) resolve(window.InkwellShare);
+      else reject(new Error('SHARE_OFFLINE'));
+    }, { once: true });
+  });
+}
+
+async function linkFirebaseIdentity(providerId, idToken, rawNonce) {
+  try {
+    const api = await whenInkwellShareReady();
+    await api.signInWithProviderToken({ provider: providerId, idToken, rawNonce });
+    console.log('[Auth] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
+
+    // Freigaben, die noch der anonymen Gerätekennung gehören, dem Konto
+    // zuschlagen – sonst ließen sie sich hier nicht mehr aufheben.
+    try {
+      const raw = JSON.parse(localStorage.getItem('inkwell_shares') || '{}');
+      const ids = Object.values(raw || {}).map(e => e?.shareId).filter(Boolean);
+      const claimed = await api.claimOwnShares(ids);
+      if (claimed > 0) console.log('[Auth]', claimed, 'Freigabe(n) übernommen');
+    } catch (e) { /* Merkliste kaputt – nicht schlimm */ }
+
+    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    return true;
+  } catch (err) {
+    console.warn('[Auth] Firebase-Anmeldung fehlgeschlagen:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Ist die Firebase-Kennung nutzbar? Sie hält sich von selbst über
+ * Seitenwechsel hinweg; erst wenn sie fehlt, muss neu angemeldet werden.
+ */
+async function inkwellIdentityReady() {
+  try {
+    const api = await whenInkwellShareReady(8000);
+    await api.whenIdentityReady();
+    return api.hasRealIdentity() ? api.currentIdentity() : null;
+  } catch (err) {
+    return null;
+  }
 }
 
 /**
@@ -289,27 +350,11 @@ async function startCloudLogin(returnTo, providerId) {
   const provider = getCloudProvider(id);
   const redirectUri = inkwellLoginRedirectUri();
 
-  // Google ohne Seitenwechsel versuchen; klappt das nicht, Weiterleitung
-  if (id === 'google') {
-    try {
-      const client = await getTokenClient();
-      if (client) {
-        const response = await requestToken(client, 'consent');
-        await applyTokens('google', {
-          accessToken: response.access_token,
-          expiresIn: parseInt(response.expires_in || '3600', 10)
-        });
-        window.location.replace(returnTo || 'dashboard/');
-        return;
-      }
-    } catch (err) {
-      if (err.message === 'access_denied' || err.message === 'popup_closed') {
-        console.log('[Auth] Anmeldung abgebrochen');
-        return;
-      }
-      console.warn('[Auth] GIS-Login fehlgeschlagen, nutze Weiterleitung:', err.message);
-    }
-  }
+  /* Google lief hier früher ohne Seitenwechsel über den Identity-Dienst.
+     Der gibt aber nur ein Zugriffstoken heraus, kein ID-Token – und ohne
+     das kennt Firebase den Nutzer nicht. Die erste Anmeldung geht deshalb
+     jetzt über die Weiterleitung; die stille Erneuerung danach läuft
+     weiterhin über den Identity-Dienst (ensureFreshToken). */
 
   const url = await provider.buildAuthUrl(redirectUri, {
     state: returnTo || 'dashboard/',

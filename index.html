@@ -125,6 +125,14 @@
     <div class="modal-kicker" data-i18n="nav_login">Anmelden</div>
     <h4 data-i18n="login_title">Cloud Login</h4>
     <p data-i18n="login_sub">Melde dich mit Google oder Microsoft an, um deine Notizbücher aus Google Drive bzw. OneDrive anzusehen.</p>
+
+    <!-- Sitzung im Hintergrund abgelaufen: sonst landet man wortlos wieder hier -->
+    <div id="login-expired" style="display:none; margin-top:14px; font-size:12px; line-height:1.55;
+         color:var(--text-body); border:0.5px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08);
+         border-radius:6px; padding:10px 12px;">
+      <strong id="login-expired-title" style="display:block; color:var(--gold-light); margin-bottom:3px;"></strong>
+      <span id="login-expired-text"></span>
+    </div>
     <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 12px;">
       <button id="login-google-btn" class="btn-m" style="display:flex; justify-content:center; align-items:center; gap:8px; border-color:var(--navy-border);">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.344-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0 5.611 0 0 5.372 0 12s5.611 12 12.24 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg>
@@ -333,9 +341,21 @@ loadReleases();
 // --- Auth Handling (nur Google) ---
 const btnOpenLogin = document.getElementById('btn-open-login');
 
-function openLoginModal() {
+function openLoginModal(reason) {
   loginModal.classList.add('open');
   loginModal.setAttribute('aria-hidden', 'false');
+
+  // Wer aus dem Dashboard hierher zurückgeworfen wurde, weil die Sitzung
+  // still abgelaufen ist, soll das auch erfahren.
+  const expiredBox = document.getElementById('login-expired');
+  if (expiredBox) {
+    const expired = reason === 'expired';
+    expiredBox.style.display = expired ? 'block' : 'none';
+    if (expired) {
+      document.getElementById('login-expired-title').textContent = t('login_expired_title');
+      document.getElementById('login-expired-text').textContent = t('login_expired_text');
+    }
+  }
 
   // Je Anbieter zeigen, ob er eingerichtet ist – statt still zu scheitern
   const setBtn = (id, ready) => {
@@ -394,7 +414,7 @@ btnOpenLogin.addEventListener('click', () => {
   const urlParams = new URLSearchParams(window.location.search);
 
   if (urlParams.get('login') === 'true') {
-    openLoginModal();
+    openLoginModal(urlParams.get('expired') === '1' ? 'expired' : null);
     window.history.replaceState({}, document.title, window.location.pathname);
     return;
   }

@@ -16,12 +16,23 @@ const WebGoogleProvider = {
   usesPkce: false,
 
   buildAuthUrl(redirectUri, { state, loginHint } = {}) {
+    /* response_type: „token id_token" statt nur „token".
+
+       Das Zugriffstoken allein reicht für Drive, aber nicht für Firebase –
+       dort braucht es ein ID-Token, sonst kennen die Sicherheitsregeln nur
+       eine anonyme Gerätekennung und die geteilten Dokumente sind nicht
+       durchsetzbar. Google gibt das ID-Token nur zusammen mit einer nonce
+       heraus; die muss den Seitenwechsel überleben. */
+    const nonce = randomVerifier();
+    try { sessionStorage.setItem('inkwell_auth_nonce', nonce); } catch (e) {}
+
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: redirectUri,
-      response_type: 'token',
+      response_type: 'token id_token',
       scope: GOOGLE_SCOPES,
       include_granted_scopes: 'true',
+      nonce,
       prompt: 'select_account'
     });
     if (state) params.set('state', state);
@@ -39,10 +50,20 @@ const WebGoogleProvider = {
   },
 
   async completeAuth(params) {
+    const nonce = (() => {
+      try { return sessionStorage.getItem('inkwell_auth_nonce') || ''; }
+      catch (e) { return ''; }
+    })();
+    try { sessionStorage.removeItem('inkwell_auth_nonce'); } catch (e) {}
+
     return {
       accessToken: params.get('access_token'),
       refreshToken: '',
-      expiresIn: parseInt(params.get('expires_in') || '3600', 10)
+      expiresIn: parseInt(params.get('expires_in') || '3600', 10),
+      // Für die Firebase-Anmeldung. Fehlt es, läuft alles wie bisher –
+      // nur der Tab „Geteilte Dokumente" bleibt leer.
+      idToken: params.get('id_token') || '',
+      rawNonce: nonce
     };
   },
 
@@ -141,9 +162,14 @@ const WebMicrosoftProvider = {
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
 
+    // Die nonce landet im ID-Token; Firebase prüft sie beim Anmelden gegen
+    // den mitgegebenen rawNonce und lehnt das Token ohne sie ab.
+    const nonce = randomVerifier();
+
     // Muss den Seitenwechsel überleben
     sessionStorage.setItem('inkwell_pkce_verifier', verifier);
     sessionStorage.setItem('inkwell_pkce_redirect', redirectUri);
+    sessionStorage.setItem('inkwell_auth_nonce', nonce);
 
     const params = new URLSearchParams({
       client_id: MICROSOFT_CLIENT_ID,
@@ -153,6 +179,7 @@ const WebMicrosoftProvider = {
       response_mode: 'query',
       code_challenge: challenge,
       code_challenge_method: 'S256',
+      nonce,
       prompt: 'select_account'
     });
     if (state) params.set('state', state);
@@ -171,6 +198,7 @@ const WebMicrosoftProvider = {
     const code = params.get('code');
     const verifier = sessionStorage.getItem('inkwell_pkce_verifier');
     const redirectUri = sessionStorage.getItem('inkwell_pkce_redirect');
+    const nonce = sessionStorage.getItem('inkwell_auth_nonce') || '';
     if (!verifier || !redirectUri) throw new Error('Anmeldedaten unvollständig – bitte erneut versuchen');
 
     const res = await fetch(MICROSOFT_TOKEN_ENDPOINT, {
@@ -189,6 +217,7 @@ const WebMicrosoftProvider = {
     const data = await res.json().catch(() => ({}));
     sessionStorage.removeItem('inkwell_pkce_verifier');
     sessionStorage.removeItem('inkwell_pkce_redirect');
+    sessionStorage.removeItem('inkwell_auth_nonce');
 
     if (!res.ok) {
       throw new Error(describeMicrosoftTokenError(
@@ -199,7 +228,9 @@ const WebMicrosoftProvider = {
     return {
       accessToken: data.access_token,
       refreshToken: data.refresh_token || '',
-      expiresIn: parseInt(data.expires_in || '3600', 10)
+      expiresIn: parseInt(data.expires_in || '3600', 10),
+      idToken: data.id_token || '',
+      rawNonce: nonce
     };
   },
 
