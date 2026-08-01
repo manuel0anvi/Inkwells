@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Freigegebenes Heft</title>
+
+<!-- Freigegebene Hefte gehören nicht in Suchmaschinen. Der Link ist
+     zum Weitergeben gedacht, nicht zum Gefundenwerden. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+
+<link rel="icon" type="image/png" href="../icon.png">
+<link rel="alternate icon" type="image/x-icon" href="../icon.ico">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Cormorant+Infant:ital,wght@0,300;1,300&family=Jost:wght@300;400;500&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="../css/notebook.css">
+<style>
+.share-head {
+  max-width: 1180px;
+  margin: 0 auto 24px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+}
+.share-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 32px;
+  font-style: italic;
+  margin: 0;
+  color: var(--cream);
+}
+.share-sub {
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.share-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  border: 0.5px solid var(--navy-border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+.share-state {
+  max-width: 620px;
+  margin: 80px auto;
+  text-align: center;
+  font-family: 'Jost', sans-serif;
+  color: var(--text-muted);
+  padding: 0 20px;
+  line-height: 1.7;
+}
+.share-state h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 30px;
+  font-style: italic;
+  color: var(--cream);
+  margin: 0 0 12px;
+}
+.share-actions { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="../?home=true" class="nav-logo">
+    <img src="../icon.png" alt="Inkwell Logo">
+    <span>Inkwell</span>
+  </a>
+  <div class="nav-right">
+    <a href="../" class="nav-dl" style="padding: 6px 14px; border-radius: 20px; text-decoration: none;" data-i18n="share_get_inkwell">Inkwell holen</a>
+    <div class="lang-sw">
+      <button class="lb active" onclick="setLang('de')">DE</button>
+      <button class="lb" onclick="setLang('en')">EN</button>
+      <button class="lb" onclick="setLang('it')">IT</button>
+    </div>
+  </div>
+</nav>
+
+<div id="share-loading" class="share-state">
+  <h2 data-i18n="share_loading_title">Heft wird geladen…</h2>
+  <p data-i18n="share_loading_sub">Einen Moment bitte.</p>
+</div>
+
+<div id="share-error" class="share-state" style="display:none">
+  <h2 id="share-error-title" data-i18n="share_gone_title">Diese Freigabe gibt es nicht mehr</h2>
+  <p id="share-error-text" data-i18n="share_gone_text">Der Link ist ungültig oder wurde vom Besitzer aufgehoben.</p>
+</div>
+
+<div id="share-view" style="display:none; padding: 100px 20px 60px; min-height: 100vh;">
+  <div class="share-head">
+    <div>
+      <h1 id="share-title" class="share-title">Notizbuch</h1>
+      <div id="share-meta" class="share-sub"></div>
+    </div>
+    <div class="share-actions">
+      <span class="share-badge" data-i18n="share_readonly">Nur lesen</span>
+      <button id="share-pdf" class="btn-m" style="padding:6px 12px; font-size:12px;" data-i18n="dash_pdf">Als PDF</button>
+    </div>
+  </div>
+
+  <!-- Seiten werden 1:1 wie in der App gerendert (css/notebook.css) -->
+  <div id="viewer-pages" class="ink" style="display: grid; gap: 28px; justify-items: center; align-items: start; max-width: 860px; margin: 0 auto;"></div>
+</div>
+
+<footer>
+  <p>© 2026 Inkwell · Anvi</p>
+  <div class="fl">
+    <a href="https://github.com/manuel0anvi/Inkwell" target="_blank">GitHub</a>
+    <a href="../community/" data-i18n="nav_community">Community</a>
+    <a href="../datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
+  </div>
+</footer>
+
+<script src="../js/i18n.js"></script>
+<!-- Dieselbe Seitendarstellung wie im Dashboard -->
+<script src="../js/viewer.js"></script>
+<!-- Firestore-Zugriff; Modul, läuft nach den klassischen Scripts -->
+<script type="module" src="../js/share.js"></script>
+
+<script>
+/* Öffentliche Leseansicht eines freigegebenen Hefts.
+
+   Bewusst ohne js/common.js, js/config.js und js/providers.js: hier wird
+   nichts angemeldet und nichts aus Drive bzw. OneDrive geholt. Die Seite
+   liest ausschließlich die Kopie aus Firestore. */
+
+const viewerPages = document.getElementById('viewer-pages');
+let sharedNotebook = null;
+
+function whenShareReady() {
+  if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('SHARE_OFFLINE')),
+      15000
+    );
+    document.addEventListener('inkwell-share-ready', () => {
+      clearTimeout(timer);
+      if (window.InkwellShare) resolve(window.InkwellShare);
+      else reject(new Error('SHARE_OFFLINE'));
+    }, { once: true });
+  });
+}
+
+function showError(titleKey, textKey) {
+  document.getElementById('share-loading').style.display = 'none';
+  document.getElementById('share-view').style.display = 'none';
+
+  const box = document.getElementById('share-error');
+  const title = document.getElementById('share-error-title');
+  const text = document.getElementById('share-error-text');
+  title.setAttribute('data-i18n', titleKey);
+  text.setAttribute('data-i18n', textKey);
+  title.textContent = t(titleKey);
+  text.textContent = t(textKey);
+  box.style.display = 'block';
+}
+
+function renderShared(notebook, meta) {
+  document.getElementById('share-loading').style.display = 'none';
+  document.getElementById('share-error').style.display = 'none';
+  document.getElementById('share-view').style.display = 'block';
+
+  const title = notebook.name || meta.title || 'Notizbuch';
+  document.getElementById('share-title').textContent = title;
+  document.title = `${title} — Inkwell`;
+
+  const pages = getNotebookPages(notebook);
+  const pageLabel = pages.length === 1 ? t('page') : t('pages');
+  const parts = [`${pages.length} ${pageLabel}`];
+  if (meta.updatedAt) parts.push(tf('share_updated', { date: fmtDate(meta.updatedAt.toISOString()) }));
+  document.getElementById('share-meta').textContent = parts.join(' · ');
+
+  viewerPages.innerHTML = '';
+  pageScalers.length = 0;
+
+  if (!pages.length) {
+    const empty = document.createElement('div');
+    empty.className = 'share-state';
+    empty.textContent = t('share_empty');
+    viewerPages.appendChild(empty);
+    return;
+  }
+
+  pages.forEach((page, index) => {
+    try {
+      const { pageEl, width, height } = buildPageElement(notebook, page, index);
+      viewerPages.appendChild(wrapScaled(pageEl, width, height));
+    } catch (err) {
+      console.error('Viewer render error:', err);
+    }
+  });
+
+  requestAnimationFrame(rescaleAllPages);
+}
+
+/* Druck/PDF: identisch zum Dashboard – die Seiten liegen bereits im
+   A4-Verhältnis vor, der Browser übernimmt "Als PDF speichern". */
+function printShared() {
+  if (!sharedNotebook) return;
+
+  const previousTitle = document.title;
+  document.title = (sharedNotebook.name || 'Inkwell').replace(/[\\/:*?"<>|]/g, '_');
+
+  for (const { scaler, pageEl, width, height } of pageScalers) {
+    pageEl.style.transform = 'none';
+    scaler.style.width = width + 'px';
+    scaler.style.height = height + 'px';
+  }
+  document.body.classList.add('printing');
+
+  const cleanup = () => {
+    document.body.classList.remove('printing');
+    document.title = previousTitle;
+    rescaleAllPages();
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => { if (document.body.classList.contains('printing')) cleanup(); }, 1000);
+  }, 60);
+}
+
+document.getElementById('share-pdf').addEventListener('click', printShared);
+
+if (typeof addLangChangeListener === 'function') {
+  addLangChangeListener(() => {
+    if (sharedNotebook) renderShared(sharedNotebook, window.__shareMeta || {});
+  });
+}
+
+(async () => {
+  const shareId = new URLSearchParams(window.location.search).get('id');
+  if (!shareId) {
+    showError('share_missing_title', 'share_missing_text');
+    return;
+  }
+
+  try {
+    const api = await whenShareReady();
+    const { notebook, title, mode, updatedAt } = await api.loadSharedNotebook(shareId);
+
+    sharedNotebook = normalizeNotebookRecord(notebook);
+    window.__shareMeta = { title, mode, updatedAt };
+
+    if (!sharedNotebook) { showError('share_broken_title', 'share_broken_text'); return; }
+    renderShared(sharedNotebook, window.__shareMeta);
+  } catch (err) {
+    console.error('[Share]', err);
+    if (err.message === 'SHARE_OFFLINE') showError('share_offline_title', 'share_offline_text');
+    else if (err.message === 'SHARE_BROKEN' || err.message === 'SHARE_EMPTY') showError('share_broken_title', 'share_broken_text');
+    else showError('share_gone_title', 'share_gone_text');
+  }
+})();
+</script>
+</body>
+</html>

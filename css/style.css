@@ -194,6 +194,120 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .privacy-section li{
   margin-bottom: 6px;
 }
+.privacy-section li strong{
+  color: var(--gold-light);
+  font-weight: 500;
+}
+
+/* Stand-Datum unter dem Seitentitel */
+.privacy-updated{
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 18px;
+}
+
+/* Kurzübersicht über dem Volltext */
+.privacy-summary{
+  background: var(--gold-dim);
+  border: 0.5px solid rgba(201,162,39,0.35);
+  border-radius: 8px;
+  padding: 32px 36px;
+  margin-bottom: 28px;
+}
+.privacy-summary h2{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--gold-light);
+  margin-bottom: 20px;
+}
+.privacy-summary-list{
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: 10px 28px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.privacy-summary-list dt{
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  padding-top: 3px;
+}
+.privacy-summary-list dd{
+  margin: 0;
+  color: var(--text-body);
+}
+
+/* Tabellen im Datenschutztext */
+.privacy-table-scroll{
+  overflow-x: auto;
+  margin: 8px 0 16px;
+  -webkit-overflow-scrolling: touch;
+}
+.privacy-table{
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 460px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.privacy-table th{
+  text-align: left;
+  font-family: 'Jost', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  font-weight: 500;
+  padding: 10px 14px 10px 0;
+  border-bottom: 0.5px solid var(--navy-border);
+  white-space: nowrap;
+}
+.privacy-table td{
+  color: var(--text-body);
+  padding: 11px 14px 11px 0;
+  border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  vertical-align: top;
+}
+.privacy-table tr:last-child td{
+  border-bottom: none;
+}
+
+/* Weiterführende Links */
+.privacy-links{
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+.privacy-links li{
+  margin-bottom: 8px;
+}
+.privacy-links a{
+  color: var(--gold-light);
+  text-decoration: none;
+  border-bottom: 0.5px solid rgba(201,162,39,0.4);
+  padding-bottom: 1px;
+  transition: border-color .2s;
+}
+.privacy-links a:hover{
+  border-bottom-color: var(--gold-light);
+}
+
+/* Ergänzender Hinweis am Abschnittsende */
+.privacy-note{
+  border-left: 2px solid var(--gold);
+  padding-left: 14px;
+  color: var(--text-muted) !important;
+  font-size: 13px !important;
+}
 
 /* Community Specific Layout */
 .community-gallery-title{
@@ -322,6 +436,9 @@ footer a:hover{color:var(--gold-light)}
   
   .hero,.features,.dl-section,.ver-section,.page-container{padding-left:20px;padding-right:20px}
   .privacy-content{padding: 24px 18px;}
+  .privacy-summary{padding: 22px 18px;}
+  .privacy-summary-list{grid-template-columns: 1fr; gap: 2px 0;}
+  .privacy-summary-list dd{margin-bottom: 12px;}
   .dl-box{padding:22px 16px}
   .vr{padding:16px;flex-direction:column;align-items:flex-start;gap:8px}
   .modal-card{padding:18px 16px}

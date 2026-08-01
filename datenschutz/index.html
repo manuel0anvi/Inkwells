@@ -15,7 +15,7 @@
 <body>
 
 <nav>
-  <a href="../" class="nav-logo">
+  <a href="../?home=true" class="nav-logo">
     <img src="../icon.png" alt="Inkwell Logo">
     <span>Inkwell</span>
   </a>
@@ -45,41 +45,16 @@
 
 <div class="page-container">
   <div class="page-header">
-    <h1 class="page-title" data-i18n="privacy_title">Datenschutzinformationen</h1>
-    <p class="page-subtitle" data-i18n="privacy_subtitle">Wie wir deine Daten schützen und welche Daten wir verarbeiten.</p>
+    <h1 class="page-title" id="privacy-title">Datenschutz</h1>
+    <p class="page-subtitle" id="privacy-subtitle"></p>
+    <p class="privacy-updated" id="privacy-updated"></p>
   </div>
 
-  <div class="privacy-content">
-    <!-- Intro -->
-    <section class="privacy-section">
-      <h2 data-i18n="privacy_intro_title">1. Allgemeine Hinweise</h2>
-      <p data-i18n="privacy_intro_p">Der Schutz deiner Privatsphäre ist für uns von höchster Bedeutung. Inkwell wurde mit dem Prinzip "Privacy by Design" entwickelt. Das bedeutet, dass deine persönlichen Aufzeichnungen standardmäßig so privat wie möglich bleiben.</p>
-    </section>
+  <!-- Kurzübersicht -->
+  <div class="privacy-summary" id="privacy-summary"></div>
 
-    <!-- Local Storage -->
-    <section class="privacy-section">
-      <h2 data-i18n="privacy_local_title">2. Lokale Speicherung (Standard)</h2>
-      <p data-i18n="privacy_local_p">Alle deine Notizen, Zeichnungen und importierten PDFs werden standardmäßig ausschließlich lokal auf deinem Endgerät gespeichert. Wir haben zu keinem Zeitpunkt Zugriff auf deine lokalen Notizbücher oder deine persönlichen Dateien.</p>
-    </section>
-
-    <!-- Cloud Sync -->
-    <section class="privacy-section">
-      <h2 data-i18n="privacy_sync_title">3. Optionale Cloud-Synchronisation</h2>
-      <p data-i18n="privacy_sync_p">Wenn du dich aktiv für die Cloud-Synchronisation entscheidest und ein Konto erstellst, werden deine Notizbücher auf sicheren Servern (Supabase-Infrastruktur) gespeichert, um den Zugriff über mehrere Geräte zu ermöglichen. Die Übertragung erfolgt verschlüsselt.</p>
-    </section>
-
-    <!-- OAuth -->
-    <section class="privacy-section">
-      <h2 data-i18n="privacy_oauth_title">4. Google-Anmeldung (OAuth)</h2>
-      <p data-i18n="privacy_oauth_p">Bei der Anmeldung mit Google erfassen wir ausschließlich deine E-Mail-Adresse und deine Profil-ID, um dein Konto zu verifizieren. Es werden keine weiteren Daten aus deinem Google-Profil ausgelesen oder an Dritte weitergegeben.</p>
-    </section>
-
-    <!-- Rights -->
-    <section class="privacy-section">
-      <h2 data-i18n="privacy_rights_title">5. Deine Rechte</h2>
-      <p data-i18n="privacy_rights_p">Du hast jederzeit das Recht, Auskunft über deine bei uns gespeicherten Daten zu erhalten oder dein Online-Konto sowie alle zugehörigen Daten unwiderruflich löschen zu lassen. Wende dich hierfür einfach an unser GitHub-Repository.</p>
-    </section>
-  </div>
+  <!-- Volltext, aus js/privacy-content.js gerendert -->
+  <div class="privacy-content" id="privacy-content"></div>
 </div>
 
 <footer>
@@ -93,6 +68,146 @@
 
 <!-- Scripts -->
 <script src="../js/i18n.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/providers.js"></script>
 <script src="../js/common.js"></script>
+<script src="../js/privacy-content.js"></script>
+<script>
+(function () {
+  const el = (tag, cls) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    return node;
+  };
+
+  function renderSummary(data) {
+    const box = document.getElementById('privacy-summary');
+    box.innerHTML = '';
+
+    const title = el('h2');
+    title.textContent = data.summaryTitle;
+    box.appendChild(title);
+
+    const list = el('dl', 'privacy-summary-list');
+    for (const [term, desc] of data.summary) {
+      const dt = el('dt');
+      dt.textContent = term;
+      const dd = el('dd');
+      dd.textContent = desc;
+      list.append(dt, dd);
+    }
+    box.appendChild(list);
+  }
+
+  function renderSections(data) {
+    const box = document.getElementById('privacy-content');
+    box.innerHTML = '';
+
+    for (const section of data.sections) {
+      const wrap = el('section', 'privacy-section');
+
+      const h = el('h2');
+      h.textContent = section.h;
+      wrap.appendChild(h);
+
+      const addParagraphs = (list) => {
+        for (const text of (list || [])) {
+          const p = el('p');
+          p.textContent = text;
+          wrap.appendChild(p);
+        }
+      };
+
+      addParagraphs(section.p);
+
+      if (section.ul) {
+        const ul = el('ul');
+        for (const item of section.ul) {
+          const li = el('li');
+          // Nur <strong> aus dem eigenen Text – kein Fremdinhalt
+          li.innerHTML = item;
+          ul.appendChild(li);
+        }
+        wrap.appendChild(ul);
+      }
+
+      addParagraphs(section.p2);
+
+      if (section.table) {
+        const scroll = el('div', 'privacy-table-scroll');
+        const table = el('table', 'privacy-table');
+
+        const thead = el('thead');
+        const headRow = el('tr');
+        for (const head of section.table.head) {
+          const th = el('th');
+          th.textContent = head;
+          headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = el('tbody');
+        for (const row of section.table.rows) {
+          const tr = el('tr');
+          for (const cell of row) {
+            const td = el('td');
+            td.textContent = cell;
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+
+        scroll.appendChild(table);
+        wrap.appendChild(scroll);
+      }
+
+      if (section.links) {
+        const list = el('ul', 'privacy-links');
+        for (const link of section.links) {
+          const li = el('li');
+          const a = el('a');
+          a.href = link.href;
+          a.textContent = link.label;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          li.appendChild(a);
+          list.appendChild(li);
+        }
+        wrap.appendChild(list);
+      }
+
+      if (section.note) {
+        const note = el('p', 'privacy-note');
+        note.textContent = section.note;
+        wrap.appendChild(note);
+      }
+
+      box.appendChild(wrap);
+    }
+  }
+
+  function renderPrivacy() {
+    const data = PRIVACY[lang] || PRIVACY.de;
+
+    document.getElementById('privacy-title').textContent = data.title;
+    document.getElementById('privacy-subtitle').textContent = data.subtitle;
+
+    const locale = lang === 'de' ? 'de-AT' : lang === 'it' ? 'it-IT' : 'en-GB';
+    const updated = new Date(PRIVACY_UPDATED);
+    document.getElementById('privacy-updated').textContent =
+      `${data.updatedLabel}: ${updated.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })}`;
+
+    document.documentElement.lang = lang;
+
+    renderSummary(data);
+    renderSections(data);
+  }
+
+  renderPrivacy();
+  if (typeof addLangChangeListener === 'function') addLangChangeListener(renderPrivacy);
+})();
+</script>
 </body>
 </html>
