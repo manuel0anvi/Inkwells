@@ -315,6 +315,48 @@ body.read-only #add-page-btn-wrap {
   touch-action: none
 }
 
+/* ── Karte arbeitet gerade ──────────────────────────────────────────
+   Das Verschieben in den Papierkorb dauert: die Datei wandert örtlich
+   UND in der Cloud. Vorher stand die Karte solange unverändert da und
+   verschwand erst Sekunden später – es sah aus, als sei nichts passiert
+   oder als hinge die App. Jetzt wird sie blass, nimmt keine Klicks mehr
+   an und dreht einen Kreisel, bis sie wirklich weg ist.
+   ─────────────────────────────────────────────────────────────────── */
+.nb-card-busy {
+  pointer-events: none
+}
+
+.nb-card-busy:hover {
+  transform: none;
+  box-shadow: none
+}
+
+.nb-card-busy .nb-card-body,
+.nb-card-busy .nb-card-spine {
+  opacity: .4;
+  filter: grayscale(1)
+}
+
+/* Sitzt auf der Karte, nicht im abgeblendeten Körper – sonst wäre der
+   Kreisel selbst blass und kaum zu sehen. */
+.nb-card-busy::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px solid var(--sb2);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: busy-spin .7s linear infinite
+}
+
+@keyframes busy-spin {
+  to { transform: rotate(360deg) }
+}
+
 .nb-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, .5)

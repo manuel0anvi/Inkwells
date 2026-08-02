@@ -217,6 +217,24 @@
     updateTrashCount();
   }
 
+  /* Zurückholen und endgültiges Löschen fassen beide die Cloud an und
+     brauchen ihre Zeit. Ohne Zeichen blieb die Zeile unverändert stehen,
+     als wäre der Klick ins Leere gegangen. */
+  function setRowBusy(row, busy) {
+    if (!row) return;
+    row.style.opacity = busy ? '0.45' : '';
+    row.style.pointerEvents = busy ? 'none' : '';
+    row.querySelector('.trash-row-spinner')?.remove();
+    if (!busy) return;
+
+    const spinner = document.createElement('span');
+    spinner.className = 'trash-row-spinner';
+    spinner.style.cssText = 'width:14px;height:14px;flex-shrink:0;border-radius:50%;'
+      + 'border:2px solid var(--sb2);border-top-color:var(--gold);'
+      + 'animation:busy-spin .7s linear infinite;';
+    row.appendChild(spinner);
+  }
+
   function renderTrash() {
     const entries = Trash.getAll();
     trashList.innerHTML = '';
@@ -287,9 +305,14 @@
       restore.addEventListener('click', async () => {
         if (restore.disabled) return;
         restore.disabled = true;
+        setRowBusy(row, true);
         const nb = await Trash.restore(entry.id);
         restore.disabled = false;
-        if (!nb) { toast(t('trashRestoreFailed') || 'Zurückholen fehlgeschlagen.', true); return; }
+        if (!nb) {
+          setRowBusy(row, false);
+          toast(t('trashRestoreFailed') || 'Zurückholen fehlgeschlagen.', true);
+          return;
+        }
         renderTrash();
         updateTrashCount();
         renderHomeGrid();
@@ -306,6 +329,7 @@
           || '„{name}“ endgültig löschen? Das lässt sich nicht rückgängig machen.')
           .replace('{name}', entry.name));
         if (!ok) return;
+        setRowBusy(row, true);
         await Trash.deleteForever(entry.id);
         renderTrash();
         updateTrashCount();

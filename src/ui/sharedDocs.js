@@ -141,6 +141,28 @@
   tabOwn.addEventListener('click', () => switchTab('own'));
   tabShared.addEventListener('click', () => switchTab('shared'));
 
+  /* ── Reiter nur für Angemeldete ─────────────────────────────────────
+     Ohne Anmeldung kann überhaupt nichts bei einem ankommen: die Liste
+     wird über die eigene Adresse abgefragt. Der Reiter wäre dann ein
+     leeres Versprechen und verschwindet deshalb ganz.
+
+     Sichtbar bleibt er, sobald man angemeldet ist – auch wenn Firebase
+     den Nutzer noch nicht kennt. Genau dann steht im Reiter, woran es
+     liegt und wie es zu beheben ist; das wäre sonst nicht zu finden.
+     ─────────────────────────────────────────────────────────────── */
+  function refreshTabVisibility() {
+    const signedIn = typeof window.CloudSync_?.isAuthenticated === 'function'
+      && window.CloudSync_.isAuthenticated();
+    tabShared.style.display = signedIn ? '' : 'none';
+    // Verschwindet der Reiter unter einem, zurück auf die eigenen Hefte
+    if (!signedIn && activeTab === 'shared') switchTab('own');
+  }
+
+  if (window.CloudSync_ && typeof CloudSync_.onChange === 'function') {
+    CloudSync_.onChange(refreshTabVisibility);
+  }
+  refreshTabVisibility();
+
   /* ── Liste ──────────────────────────────────────────────────────── */
 
   function myEmail() {
@@ -925,6 +947,7 @@
 
   // Nach einer Anmeldung (oder deren Verlust) die Liste neu aufbauen
   document.addEventListener('inkwell-identity-changed', () => {
+    refreshTabVisibility();
     startWatching().catch(() => {});
   });
 

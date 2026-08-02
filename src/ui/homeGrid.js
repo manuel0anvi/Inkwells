@@ -247,8 +247,18 @@ E('ctx-delete').addEventListener('click', async () => {
 
   if (!await showConfirm(warningMsg)) return;
 
+  /* Bis das Heft wirklich weg ist, vergehen Sekunden – es wandert örtlich
+     und in der Cloud in den Papierkorb. Solange bleibt die Karte stehen,
+     aber sichtbar abgeblendet und mit Kreisel (siehe css/layout.css).
+     Über den Namen gesucht statt per Selektor: eine Heft-Kennung darf
+     Zeichen enthalten, die in einem CSS-Selektor gesondert behandelt
+     werden müssten. */
+  const card = Array.from(document.querySelectorAll('.nb-card'))
+    .find(c => c.dataset.nbId === nb.id);
+  card?.classList.add('nb-card-busy');
+
   const ok = await Trash.moveToTrash(nb);
-  if (!ok) { toast(t('saveError'), true); return; }
+  if (!ok) { card?.classList.remove('nb-card-busy'); toast(t('saveError'), true); return; }
 
   S.notebooks = S.notebooks.filter(n => n.id !== nb.id);
 
