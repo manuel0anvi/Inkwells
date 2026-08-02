@@ -713,10 +713,17 @@
       const role = myRole(head);
       if (!role) { kickOut(t('sharedRevoked')); return; }
 
-      // Recht heruntergestuft: weiterlesen ja, weiterschreiben nein
+      /* Recht geändert – und zwar sofort, in beide Richtungen.
+
+         applyReadOnlyChrome allein genügte nicht: der Raum hatte sein
+         Schreibrecht beim Beitreten bekommen und behielt es. Wer
+         herabgestuft wurde, konnte deshalb weiter in den Raum schreiben;
+         wer heraufgestuft wurde, durfte laut Anzeige bearbeiten, aber
+         seine Änderungen kamen nirgends an. */
       if (role !== S.sharedDoc.role) {
         S.sharedDoc.role = role;
         applyReadOnlyChrome(role !== 'edit', S.sharedDoc);
+        if (window.Collab?.setCanWrite) window.Collab.setCanWrite(role === 'edit');
         toast(role === 'edit' ? t('sharedNowEdit') : t('sharedNowView'));
       }
       S.sharedDoc.revision = head.revision;

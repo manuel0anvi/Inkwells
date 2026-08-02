@@ -2078,8 +2078,42 @@
     try { checkCaret(); } catch (err) { console.log('[Collab] Prüfung fehlgeschlagen: ' + err.message); }
   });
 
+  /**
+   * Das Schreibrecht während der laufenden Sitzung umstellen.
+   *
+   * >>> Warum das nötig ist <<<
+   * Bisher bekam der Raum das Recht nur einmal, beim Beitreten. Änderte
+   * der Besitzer es danach, sah der andere zwar sofort die neue
+   * Beschriftung (ui/sharedDocs.js schaltet S.readOnly um), der Raum
+   * arbeitete aber mit dem alten Wert weiter:
+   *
+   *   · Herabgestuft: die Person konnte weiter in den Raum schreiben.
+   *     Firestore hätte es abgewiesen, die Live-Datenbank nicht – und
+   *     genau dort landet das gemeinsame Tippen und die Handschrift.
+   *   · Heraufgestuft: sie durfte laut Anzeige bearbeiten, ihre
+   *     Änderungen gingen aber nirgends hin. Erst ein Schließen und
+   *     erneutes Öffnen half.
+   *
+   * @param {boolean} canEdit
+   */
+  function setCanWrite(canEdit) {
+    const wanted = !!canEdit;
+    if (wanted === canWrite) return;
+    canWrite = wanted;
+
+    /* Wer gerade das Recht bekommt, hat vielleicht schon getippt, während
+       er noch nicht durfte. Damit dieser Stand nicht liegen bleibt, wird
+       einmal abgeglichen. Wer es verliert, braucht das nicht – seine
+       Eingaben waren nie für den Raum bestimmt. */
+    if (wanted && room) {
+      try { syncStructure(); } catch (err) { console.warn('[Collab] Abgleich nach Rechtewechsel:', err); }
+    }
+
+    showLiveState();
+  }
+
   window.Collab = {
-    start, stop, noteTextChange, noteStroke, notePage, noteChange,
+    start, stop, setCanWrite, noteTextChange, noteStroke, notePage, noteChange,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
     // Zeilensperre – app.js fragt vor jeder Eingabe nach
     editBlockedBy, warnLocked, lockOwner, caretOf,
