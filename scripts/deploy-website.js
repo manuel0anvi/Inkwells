@@ -50,6 +50,17 @@ const WORK = path.join(ROOT, isDefaultTarget ? '.deploy-website' : '.deploy-webs
 // Gehört zur Firebase-Einrichtung, nicht auf die Website
 const EXCLUDE = new Set(['firestore.rules', 'database.rules.json']);
 
+/* Sicherungskopien bleiben da, wo sie hingehören: auf dem eigenen Rechner.
+   website/ steht in .gitignore, deshalb sammeln sich dort mit der Zeit
+   Dateien wie share.js.alt an – die fielen bisher nicht auf und wären
+   mit der Seite veröffentlicht worden. Eine alte Fassung von share.js
+   öffentlich auszuliefern nützt niemandem und verwirrt beim Suchen. */
+const EXCLUDE_ENDINGS = ['.alt', '.bak', '.orig', '.rej', '~'];
+
+function isBackup(name) {
+  return EXCLUDE_ENDINGS.some(ending => name.endsWith(ending));
+}
+
 const dryRun = process.argv.includes('--dry-run');
 
 function git(args, opts = {}) {
@@ -137,6 +148,10 @@ function copyInto(fromDir, toDir, relative = '') {
   for (const entry of fs.readdirSync(fromDir, { withFileTypes: true })) {
     const rel = relative ? `${relative}/${entry.name}` : entry.name;
     if (EXCLUDE.has(rel)) { console.log('  übersprungen:', rel); continue; }
+    if (!entry.isDirectory() && isBackup(entry.name)) {
+      console.log('  übersprungen (Sicherungskopie):', rel);
+      continue;
+    }
 
     const from = path.join(fromDir, entry.name);
     const to = path.join(toDir, entry.name);
