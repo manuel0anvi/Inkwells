@@ -48,7 +48,8 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
-  GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut
+  GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut,
+  signInWithPopup
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
@@ -329,6 +330,38 @@ function hasRealIdentity() {
 async function signOutIdentity() {
   if (!auth.currentUser) return;
   await fbSignOut(auth);
+}
+
+/**
+ * Microsoft-Anmeldung über Firebases EIGENEN Ablauf.
+ *
+ * Der einzige Weg, der bei Microsoft funktioniert: Firebase muss die
+ * Anmeldung selbst begonnen haben (Begründung ausführlich über
+ * signInWithProviderToken). Es öffnet dafür ein Fenster auf
+ * inkwell-53ab9.firebaseapp.com; main.js gibt genau dieses frei.
+ *
+ * Das setzt voraus, dass die Oberfläche von einer erlaubten Herkunft
+ * kommt – deshalb liegt sie unter http://localhost und nicht mehr unter
+ * file:// (siehe startUiServer in main.js).
+ *
+ * Muss aus einem Klick heraus aufgerufen werden; ein Fenster ohne
+ * Zutun des Nutzers wird geblockt.
+ *
+ * @param {string} [loginHint] Adresse, die vorgeschlagen wird
+ */
+async function signInMicrosoftInteractive(loginHint = '') {
+  const provider = new OAuthProvider('microsoft.com');
+  provider.addScope('email');
+
+  /* Wie im Rest der App nur persönliche Konten (cloudConfig.js,
+     MICROSOFT_CONFIG.TENANT). Ein Geschäfts- oder Schulkonto liefe hier
+     sonst in dieselbe unerklärte Fehlerseite wie bei der Anmeldung. */
+  const params = { tenant: 'consumers' };
+  if (loginHint) params.login_hint = loginHint;
+  provider.setCustomParameters(params);
+
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
 }
 
 /**
@@ -2016,6 +2049,7 @@ const InkwellShare = {
 
   // Anmeldung
   signInWithProviderToken,
+  signInMicrosoftInteractive,
   signOutIdentity,
   currentIdentity,
   hasRealIdentity,
@@ -2072,7 +2106,7 @@ export default InkwellShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
-  signInWithProviderToken, signOutIdentity, currentIdentity, hasRealIdentity,
+  signInWithProviderToken, signInMicrosoftInteractive, signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
   setLinkMode, rotateLink,

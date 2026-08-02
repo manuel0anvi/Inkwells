@@ -179,6 +179,32 @@
     return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
   }
 
+  /* Bei Microsoft fehlt die Firebase-Kennung nicht aus Versehen: sie lässt
+     sich nur über Firebases eigenen Ablauf herstellen, und der braucht
+     einen Klick (ein Fenster ohne Zutun wird geblockt). Deshalb hier ein
+     eigener Knopf statt eines stillen Nachholers. */
+  function renderMicrosoftLinkButton() {
+    if (!sharedGrid) return;
+    if (window.CloudSync_?.getProviderId?.() !== 'microsoft') return;
+    if (!window.CloudSync_?.isAuthenticated?.()) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'settings-btn';
+    btn.style.cssText = 'margin-top:14px;padding:8px 16px;font-size:13px;';
+    btn.textContent = t('sharedLinkMicrosoft') || 'Für geteilte Dokumente anmelden';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const before = btn.textContent;
+      btn.textContent = t('shareCheckingAccount') || 'Konto wird geprüft…';
+      const ok = await CloudSync_.linkMicrosoftInteractively();
+      btn.disabled = false;
+      btn.textContent = before;
+      if (ok) { await startWatching().catch(() => {}); renderShared(); }
+      else { sharedHint.textContent = window.describeShareIdentityProblem?.() || sharedHint.textContent; }
+    });
+    sharedGrid.appendChild(btn);
+  }
+
   function renderShared() {
     if (!sharedGrid) return;
     sharedGrid.innerHTML = '';
@@ -199,6 +225,7 @@
         || (typeof window.describeShareIdentityProblem === 'function'
               ? window.describeShareIdentityProblem()
               : t('sharedNeedsAccount'));
+      renderMicrosoftLinkButton();
       return;
     }
 

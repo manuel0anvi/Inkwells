@@ -437,6 +437,21 @@ Ohne diesen Eintrag lautet der Fehler beim Anmelden sinngemäß
 >
 > Die Anmeldung bei OneDrive und die Sicherung der Hefte sind davon
 > **nicht** betroffen; nur Teilen und Empfangen bleiben aus.
+>
+> **Der Ausweg, der seit dem 02.08.2026 eingebaut ist:** Firebase macht
+> die Microsoft-Anmeldung selbst — über `signInWithPopup`. Im Reiter
+> „Geteilte Dokumente" steht dafür ein eigener Knopf; ein zweiter,
+> meist unsichtbarer Anmeldeschritt. Damit das geht, wird die
+> Oberfläche seit derselben Änderung über einen örtlichen Server unter
+> `http://localhost` ausgeliefert statt über `file://` — Firebase lässt
+> seinen Ablauf nur von erlaubten Herkünften aus zu, und `file://` hat
+> gar keine. Siehe `startUiServer()` in `main.js`.
+>
+> Die Schritte unten bleiben also nötig: Firebase braucht die
+> Anwendungs-ID und das Geheimnis, um den Tokentausch selbst zu machen.
+> Und die Weiterleitungs-URL `https://inkwell-53ab9.firebaseapp.com/__/auth/handler`
+> muss in Azure eingetragen sein — für diesen Weg wird sie **wirklich**
+> gebraucht, anders als früher hier stand.
 
 Zuerst in Azure ein Geheimnis anlegen (Firebase verlangt eines, auch wenn
 die App selbst ohne auskommt):
@@ -455,8 +470,10 @@ Dann Firebase Console → **Authentication → Sign-in method** →
 Firebase zeigt darunter eine Weiterleitungs-URL der Form
 `https://inkwell-53ab9.firebaseapp.com/__/auth/handler`. Die gehört in
 Azure unter **Authentifizierung → Plattform „Web" → Umleitungs-URIs**.
-(Für den Weg, den Inkwell nimmt, wird sie nicht gebraucht — Azure
-beschwert sich aber, wenn sie fehlt und jemand den Popup-Weg auslöst.)
+
+> **Die ist Pflicht**, nicht optional: genau über diese Adresse läuft der
+> zweite Anmeldeschritt (`signInWithPopup`). Fehlt sie, bleibt das
+> Anmeldefenster auf einer Microsoft-Fehlerseite stehen.
 
 > **Zu `email_verified`:** Microsoft liefert die Angabe bei persönlichen
 > Konten nicht verlässlich. Die Regeln lassen deshalb auch Anmeldungen

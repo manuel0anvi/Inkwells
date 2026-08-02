@@ -177,6 +177,94 @@ function configureAppStoragePaths() {
   app.disableHardwareAcceleration();
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   OBERFLÄCHE ÜBER EINEN ÖRTLICHEN SERVER
+
+   Die Oberfläche lag früher unter file://. Das hat einen Haken, der von
+   außen nicht zu sehen ist: eine file://-Seite hat die Herkunft "null",
+   und Firebase lässt seinen eigenen Anmeldeablauf nur von erlaubten
+   Herkünften aus zu (localhost, inkwell-53ab9.firebaseapp.com,
+   inkwell-53ab9.web.app). Die Anmeldung bei Microsoft ging dadurch
+   überhaupt nicht – siehe CLOUD_SETUP.md, Abschnitt C5.
+
+   Deshalb wird src/ jetzt örtlich ausgeliefert. Der Server hört
+   ausschließlich auf 127.0.0.1 und gibt nur Dateien aus src/ heraus.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let uiServer = null;
+let uiOrigin = null;
+
+const UI_ROOT = path.join(__dirname, 'src');
+
+const UI_MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json; charset=utf-8',
+  '.wasm': 'application/wasm'
+};
+
+function startUiServer() {
+  return new Promise((resolve, reject) => {
+    uiServer = http.createServer((req, res) => {
+      let rel;
+      try {
+        rel = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);
+      } catch (err) {
+        res.writeHead(400); res.end('Bad request'); return;
+      }
+      if (rel === '/') rel = '/index.html';
+
+      /* Nichts außerhalb von src/ herausgeben. path.resolve löst "..\" auf,
+         der Vergleich danach fängt jeden Ausbruch ab. */
+      const abs = path.resolve(UI_ROOT, '.' + rel);
+      if (abs !== UI_ROOT && !abs.startsWith(UI_ROOT + path.sep)) {
+        res.writeHead(403); res.end('Forbidden'); return;
+      }
+
+      fs.readFile(abs, (err, data) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('Nicht gefunden: ' + rel);
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': UI_MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream',
+          // Sonst zeigt die App nach einem Update noch die alten Dateien
+          'Cache-Control': 'no-store'
+        });
+        res.end(data);
+      });
+    });
+
+    uiServer.on('error', reject);
+
+    /* Port 0 = einen freien vom Betriebssystem. Ein fester Port würde sich
+       mit einem zweiten Exemplar (Profil) in die Quere kommen.
+
+       Gebunden wird auf "localhost", nicht auf 127.0.0.1: unter Windows
+       löst localhost oft zuerst auf ::1 auf. Wäre nur 127.0.0.1 gebunden,
+       liefe die Oberfläche ins Leere. Der Name muss außerdem localhost
+       bleiben – nur der steht in Firebases Liste erlaubter Herkünfte. */
+    uiServer.listen(0, 'localhost', () => {
+      uiOrigin = `http://localhost:${uiServer.address().port}`;
+      console.log('[UI] Oberfläche liegt unter', uiOrigin);
+      resolve(uiOrigin);
+    });
+  });
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 820, minHeight: 600,
@@ -205,8 +293,28 @@ function createWindow() {
     });
   }
 
-  win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  win.loadURL(`${uiOrigin}/index.html`);
   Menu.setApplicationMenu(null);
+
+  /* Firebase öffnet für die Anmeldung ein Fenster auf seiner eigenen
+     Adresse und redet per postMessage mit uns zurück. Electron blockt
+     window.open ohne diese Freigabe – die Anmeldung bliebe stumm hängen.
+     Freigegeben wird ausschließlich Firebases Anmeldehelfer. */
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\/[a-z0-9-]+\.firebaseapp\.com\/__\/auth\//i.test(url)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520, height: 680, autoHideMenuBar: true,
+          backgroundColor: '#12121a',
+          webPreferences: { nodeIntegration: false, contextIsolation: true }
+        }
+      };
+    }
+    // Alles andere gehört in den Standardbrowser, nicht in die App
+    shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
 
   // Start maximized/fullscreen
   win.maximize();
@@ -687,10 +795,23 @@ if (PROFILE) {
   app.setAsDefaultProtocolClient('inkwell');
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (PROFILE) console.log('[journal] Profil:', PROFILE);
   console.log('[journal] userData:', app.getPath('userData'));
   console.log('[journal] sessionData:', app.getPath('sessionData'));
+
+  /* Erst der Server, dann das Fenster – createWindow() lädt von uiOrigin.
+     Scheitert er, bleibt die App ohne Oberfläche stehen; das muss man
+     sehen, statt vor einem leeren Fenster zu sitzen. */
+  try {
+    await startUiServer();
+  } catch (err) {
+    console.error('[UI] Örtlicher Server konnte nicht starten:', err);
+    dialog.showErrorBox('Inkwell', 'Die Oberfläche konnte nicht gestartet werden:\n' + err.message);
+    app.quit();
+    return;
+  }
+
   createWindow();
   
   // If started with a file, open it after window is ready
@@ -740,7 +861,13 @@ app.on('open-url', (event, url) => {
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+app.on('activate', () => {
+  // Ohne laufenden Server gäbe es nichts zu laden (macOS: Klick aufs Symbol)
+  if (BrowserWindow.getAllWindows().length) return;
+  (uiOrigin ? Promise.resolve() : startUiServer()).then(createWindow).catch(err => {
+    console.error('[UI] Örtlicher Server konnte nicht starten:', err);
+  });
+});
 
 ipcMain.on('win-min',   () => win.minimize());
 ipcMain.on('win-max',   () => win.isMaximized() ? win.unmaximize() : win.maximize());

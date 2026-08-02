@@ -696,6 +696,44 @@ class CloudSyncManager {
     return ok;
   }
 
+  /**
+   * Zweiter Anmeldeschritt für Microsoft, aus einem Klick heraus.
+   *
+   * Firebase nimmt bei Microsoft nur eine Anmeldung an, die es selbst
+   * begonnen hat (Begründung in core/share.js). Deshalb hier ein eigener,
+   * bewusst ausgelöster Schritt statt eines stillen Nachholers.
+   *
+   * @returns {Promise<boolean>} true, wenn Firebase den Nutzer jetzt kennt
+   */
+  async linkMicrosoftInteractively() {
+    let api;
+    try {
+      api = await this._whenShareReady();
+    } catch (err) {
+      this.identityProblem = 'offline';
+      return false;
+    }
+
+    try {
+      await api.signInMicrosoftInteractive(Settings.get('cloudEmail') || '');
+      await Settings.update({ cloudIdentityMissing: false });
+      this.identityProblem = null;
+      this.identityError = '';
+      console.log('[CloudSync] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
+      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      this._notify();
+      return true;
+    } catch (err) {
+      const code = err?.code || '';
+      // Fenster zugemacht oder abgebrochen ist kein Fehler, den man melden muss
+      if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/i.test(code)) return false;
+      console.warn('[CloudSync] Microsoft-Anmeldung bei Firebase fehlgeschlagen:', code, err?.message || err);
+      this.identityError = (code ? code + ': ' : '') + (err?.message || String(err));
+      this.identityProblem = 'failed';
+      return false;
+    }
+  }
+
   /** core/share.js ist ein ES-Modul und läuft nach den klassischen Scripts. */
   _whenShareReady(timeoutMs = 15000) {
     if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
