@@ -6,6 +6,17 @@ node_modules/
 # Vorlage zum Kopieren: src/core/cloudConfig.local.example.js
 src/core/cloudConfig.local.js
 
+# ── Website ─────────────────────────────────────────────────────────
+# Gehört auf den Branch "website", nicht hierher. Dort liegt der Inhalt
+# dieses Ordners direkt im Wurzelverzeichnis, weil GitHub Pages daraus
+# inkwells.me baut.
+#
+# Der Ordner bleibt auf dem eigenen Rechner liegen und wird von
+# "npm run web" und "npm run deploy-web" weiter gebraucht. Wer den
+# app-Branch frisch klont, holt ihn sich aus dem website-Branch:
+#     git clone -b website https://github.com/manuel0anvi/Inkwell.git website
+/website/
+
 # ── Erzeugte Ordner ─────────────────────────────────────────────────
 # Arbeitsplatz von scripts/deploy-website.js (Klon des website-Branch)
 .deploy-website/

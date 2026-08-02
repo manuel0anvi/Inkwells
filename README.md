@@ -22,9 +22,19 @@ Inkwell ist eine hybride Notiz-App, die es ermöglicht, sowohl getippten Text al
 
 | Branch | Inhalt |
 | --- | --- |
-| `app` | Quellcode der Desktop-App und der Website — hier wird entwickelt |
-| `website` | nur der *Inhalt* von `website/`, daraus baut GitHub Pages inkwells.me. Wird von `npm run deploy-web` beschrieben, nicht von Hand |
+| `app` | die Desktop-App — alles außer dem Ordner `website/` |
+| `website` | ausschließlich der *Inhalt* von `website/`, direkt im Wurzelverzeichnis. Daraus baut GitHub Pages inkwells.me |
 | `main` | nur die README |
+
+Die beiden Branches sind bewusst getrennt und haben nichts gemeinsam. `website/`
+steht deshalb in `.gitignore` und liegt nur örtlich. Wer die Website bearbeiten
+will, holt sie sich dorthin:
+
+```
+git clone -b website https://github.com/manuel0anvi/Inkwell.git website
+```
+
+Danach funktionieren `npm run web` und `npm run deploy-web` wie gehabt.
 
 ## Entwicklung
 
