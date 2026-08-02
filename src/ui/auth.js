@@ -13,6 +13,9 @@
 
   const authLoggedOut = E('auth-logged-out');
   const authLoggedIn = E('auth-logged-in');
+  const authWorking = E('auth-working');
+  const authWorkingText = E('auth-working-text');
+  const authWorkingCancel = E('auth-working-cancel');
 
   const googleBtn = E('auth-google-btn');
   const microsoftBtn = E('auth-microsoft-btn');
@@ -24,7 +27,6 @@
   const userEmail = E('auth-user-email');
   const avatar = E('auth-avatar');
 
-  const cloudEnabledChk = E('auth-cloud-enabled');
   const cloudStatus = E('auth-cloud-status');
   const signoutBtn = E('auth-signout-btn');
 
@@ -62,8 +64,57 @@
     if (e.target === accountOverlay) accountOverlay.style.display = 'none';
   });
 
+  /* ── Laufende Anmeldung ───────────────────────────────────────────
+     Vom Klick auf „Mit Google anmelden" bis zum fertigen Konto vergehen
+     mehrere Sekunden: der Systembrowser geht auf, man meldet sich an,
+     kommt zurück, und erst dann holt die App Token und Profil. Solange
+     stand hier weiter die Anmeldeseite – es sah aus, als sei der Klick
+     ins Leere gegangen.
+
+     Beendet wird der Zustand vom Kontowechsel selbst: CloudSync_ meldet
+     jede Änderung, und refreshUI() räumt ihn dann weg. Zusätzlich eine
+     Zeitgrenze, falls jemand den Browser einfach zuklappt.
+     ─────────────────────────────────────────────────────────────── */
+
+  const SIGN_IN_TIMEOUT_MS = 3 * 60 * 1000;
+  let signingIn = false;
+  let signInTimer = null;
+
+  function startSignInWait(providerLabel) {
+    signingIn = true;
+    clearTimeout(signInTimer);
+    signInTimer = setTimeout(() => stopSignInWait(), SIGN_IN_TIMEOUT_MS);
+
+    if (authWorkingText) {
+      authWorkingText.textContent = t('authWorkingFor').replace('{provider}', providerLabel);
+    }
+    refreshUI();
+  }
+
+  function stopSignInWait() {
+    if (!signingIn) return;
+    signingIn = false;
+    clearTimeout(signInTimer);
+    signInTimer = null;
+    refreshUI();
+  }
+
   function refreshUI() {
     if (!window.CloudSync_) return;
+
+    // Angekommen? Dann ist das Warten vorbei, egal wodurch.
+    if (signingIn && CloudSync_.isAuthenticated()) {
+      signingIn = false;
+      clearTimeout(signInTimer);
+      signInTimer = null;
+    }
+
+    if (authWorking) authWorking.style.display = signingIn ? 'flex' : 'none';
+    if (signingIn) {
+      authLoggedOut.style.display = 'none';
+      authLoggedIn.style.display = 'none';
+      return;
+    }
 
     // Je Anbieter zeigen, ob er eingerichtet ist – statt still zu scheitern
     const googleReady = cloudProviderIsConfigured('google');
@@ -123,8 +174,12 @@
     authLoggedOut.style.display = 'none';
     authLoggedIn.style.display = 'flex';
 
-    const settings = Settings.getAll();
-    cloudEnabledChk.checked = !!settings.cloudEnabled;
+    /* Angemeldet heißt online speichern. Früher gab es dafür einen
+       Schalter; wer ihn übersah oder versehentlich umlegte, arbeitete
+       tagelang nur örtlich und merkte es erst, als das zweite Gerät
+       nichts fand. Sollte er aus einer älteren Fassung noch aus stehen,
+       wird er hier still nachgezogen. */
+    ensureCloudOn();
 
     const email = session?.userEmail || Settings.get('cloudEmail') || 'Benutzer';
     const name = session?.userName || email;
@@ -315,23 +370,38 @@
     if (accountOverlay.style.display === 'flex') refreshUI();
   });
 
-  cloudEnabledChk.addEventListener('change', async () => {
-    await Settings.update({ cloudEnabled: cloudEnabledChk.checked });
-    if (cloudEnabledChk.checked) {
-      await CloudSync_.init();
-      syncNow();
-    }
-    refreshUI();
-  });
+  /* Einmalig nachziehen, wenn eine ältere Fassung den Schalter aus
+     gelassen hat. Bewusst ohne await im Aufrufer: refreshUI() zeichnet
+     nur, und der Abgleich startet von selbst, sobald er darf. */
+  let cloudFixRunning = false;
+  function ensureCloudOn() {
+    if (cloudFixRunning) return;
+    if (!CloudSync_.isAuthenticated() || Settings.get('cloudEnabled')) return;
+
+    cloudFixRunning = true;
+    Settings.update({ cloudEnabled: true })
+      .then(() => CloudSync_.init())
+      .then(() => syncNow())
+      .catch(err => console.warn('[Auth] Cloud-Speicher nicht eingeschaltet:', err))
+      .finally(() => { cloudFixRunning = false; });
+  }
 
   async function signIn(providerId) {
+    const label = providerId === 'microsoft' ? 'Microsoft' : 'Google';
+    startSignInWait(label);
+
     try {
       await CloudSync_.signInWithOAuth(providerId);
       toast(t('authBrowserWait') || t('authGoogleWait'));
     } catch (err) {
+      stopSignInWait();
       toast(t('updateError') + ' ' + err.message, true);
     }
   }
+
+  // Der Browser bleibt offen – hier wird nur das Warten beendet, damit
+  // man wieder an die Knöpfe kommt.
+  authWorkingCancel?.addEventListener('click', stopSignInWait);
 
   googleBtn?.addEventListener('click', () => { if (!googleBtn.disabled) signIn('google'); });
 

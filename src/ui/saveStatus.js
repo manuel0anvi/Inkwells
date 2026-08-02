@@ -8,13 +8,42 @@
 
   let currentState = 'saved';
 
+  /* ── Wartet dieses Heft noch auf die Cloud? ───────────────────────
+     Nur wenn die Cloud-Sicherung überhaupt eingeschaltet ist. Wer nicht
+     angemeldet ist, soll kein blaues „noch nicht oben" sehen – bei ihm
+     ist örtlich gespeichert das Ziel und nicht die halbe Strecke.
+
+     Zwei Anzeichen, und es genügt eines:
+       · das Heft steht in der Warteschlange
+       · der zuletzt hochgeladene Stand ist älter als der jetzige
+     Das zweite fängt die Zeit ab, in der ohne Netz gearbeitet wurde –
+     danach ist die Warteschlange zwar gefüllt, aber ein Neustart
+     dazwischen hat sie schon einmal überlebt.
+     ─────────────────────────────────────────────────────────────── */
+  function waitingForCloud(nbId) {
+    if (!nbId) return false;
+    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return false;
+    if (!Settings.get('cloudEnabled') || !CloudSync_.isAuthenticated()) return false;
+
+    // Ein fremdes Dokument bekommt keine Datei und keinen Cloud-Upload –
+    // es lebt im Raum und wird von ui/sharedDocs.js gesichert.
+    if (typeof isSharedNotebook === 'function' && isSharedNotebook(nbId)) return false;
+
+    if ((CloudSync_.syncQueue || []).includes(nbId)) return true;
+
+    const nb = getNb(nbId);
+    if (!nb) return false;
+    if (!nb.syncedAt) return true;
+    return Date.parse(nb.updatedAt || 0) > Date.parse(nb.syncedAt);
+  }
+
   // Update save status display
   function updateSaveStatus() {
     if (!saveStatusBtn) return;
-    
+
     // Remove all state classes
-    saveStatusBtn.classList.remove('saved', 'unsaved', 'error');
-    
+    saveStatusBtn.classList.remove('saved', 'unsaved', 'error', 'local-only');
+
     let displayState = 'saved';
     let icon = '✓';
     let text = t('saved');
@@ -27,6 +56,11 @@
       icon = '●';
       text = t('unsaved');
       title = t('unsaved');
+    } else if (waitingForCloud(S.activeNbId)) {
+      displayState = 'local-only';
+      icon = '●';
+      text = t('savedLocalOnly');
+      title = t('savedLocalOnlyHint');
     }
 
     saveStatusBtn.classList.add(displayState);
@@ -83,6 +117,13 @@
   Settings.onChange(() => {
     updateSaveStatus();
   });
+
+  // Der Weg von „örtlich gesichert" nach „auch oben" geht an AutoSave
+  // vorbei – ohne diesen Hörer bliebe der blaue Punkt stehen, bis das
+  // nächste Mal etwas getippt wird.
+  if (window.CloudSync_ && typeof CloudSync_.onChange === 'function') {
+    CloudSync_.onChange(() => updateSaveStatus());
+  }
 
   // Update on active notebook change
   const originalOpenNb = window.openNotebook;

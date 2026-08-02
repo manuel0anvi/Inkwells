@@ -436,6 +436,13 @@
   color: #c87a2a; /* Orange */
 }
 
+/* Örtlich gesichert, aber noch nicht in der Cloud. Ohne eigene Farbe stand
+   hier das grüne Häkchen, obwohl das zweite Gerät noch nichts davon weiß –
+   genau das soll man sehen können. */
+.save-status.local-only .save-icon {
+  color: #3d7bd6; /* Blau */
+}
+
 .save-status.error .save-icon {
   color: #c04040; /* Red */
 }
