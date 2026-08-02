@@ -1220,8 +1220,10 @@ function openNotebookFromUrl() {
   if (nb) renderNotebook(nb);
 }
 
-document.getElementById('logout-btn').addEventListener('click', () => {
-  inkwellLogout();
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  // Erst abwarten, dann wechseln: inkwellLogout() meldet auch bei Firebase
+  // ab, und die Navigation würde das sonst abschneiden.
+  await inkwellLogout();
   session = null;
   window.location.replace('../');
 });

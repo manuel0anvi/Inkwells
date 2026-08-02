@@ -36,7 +36,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
-  GoogleAuthProvider, OAuthProvider, onAuthStateChanged
+  GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
@@ -195,6 +195,23 @@ function currentOwnerId() {
  *   Anmeldeaufruf. Ohne sie lehnt Firebase das Token ab.
  * @returns {Promise<object>} der angemeldete Firebase-Nutzer
  */
+/**
+ * Liest die Adresse aus einem id_token, ohne es zu prüfen – das macht
+ * Firebase. Hier geht es allein um die Frage, ob schon DASSELBE Konto
+ * angemeldet ist. Gibt '' zurück, wenn sich nichts ablesen lässt.
+ */
+function emailFromIdToken(idToken) {
+  try {
+    const payload = String(idToken).split('.')[1];
+    if (!payload) return '';
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(json);
+    return normalizeEmail(claims.email || claims.preferred_username || '');
+  } catch (err) {
+    return '';
+  }
+}
+
 async function signInWithProviderToken({ provider, idToken, rawNonce } = {}) {
   if (!idToken) throw new Error('NO_ID_TOKEN');
 
@@ -203,10 +220,22 @@ async function signInWithProviderToken({ provider, idToken, rawNonce } = {}) {
     : GoogleAuthProvider.credential(idToken);
 
   const existing = auth.currentUser;
+  const wanted = emailFromIdToken(idToken);
 
-  // Schon angemeldet mit demselben Konto? Dann nichts tun – ein zweiter
-  // Anmeldeversuch würde nur eine neue Sitzung anlegen.
-  if (existing && !existing.isAnonymous && normalizeEmail(existing.email)) {
+  /* Schon mit DERSELBEN Adresse angemeldet? Dann nichts tun – ein zweiter
+     Anmeldeversuch würde nur eine neue Sitzung anlegen.
+
+     >>> Der Vergleich der Adresse ist der Kern <<<
+     Vorher genügte es, dass überhaupt irgendein echtes Konto angemeldet
+     war. Nach einem Wechsel – abmelden, mit einer anderen Adresse
+     anmelden – blieb die ALTE Firebase-Sitzung dadurch bestehen, und die
+     geteilten Dokumente wurden weiter unter der alten Adresse gesucht.
+
+     Lässt sich die Adresse nicht ablesen, wird neu angemeldet. Das kostet
+     eine Anfrage, ist aber richtig – die Kennung stammt dann sicher aus
+     dem Token, das gerade hereingereicht wurde. */
+  if (existing && !existing.isAnonymous && wanted
+      && normalizeEmail(existing.email) === wanted) {
     return existing;
   }
 
@@ -251,6 +280,19 @@ function currentIdentity() {
 function hasRealIdentity() {
   const me = currentIdentity();
   return !!(me && !me.anonymous && me.email);
+}
+
+/**
+ * Auch bei Firebase abmelden. Wird von inkwellLogout() aufgerufen.
+ *
+ * Ohne das blieb die Firebase-Sitzung nach dem Abmelden bestehen. Wer sich
+ * danach mit einer anderen Adresse anmeldete, bekam die geteilten Dokumente
+ * weiterhin für die alte gesucht – die Anmeldung bei Google bzw. Microsoft
+ * und die bei Firebase sind zwei verschiedene Dinge.
+ */
+async function signOutIdentity() {
+  if (!auth.currentUser) return;
+  await fbSignOut(auth);
 }
 
 /**
@@ -1815,6 +1857,7 @@ const InkwellShare = {
 
   // Anmeldung
   signInWithProviderToken,
+  signOutIdentity,
   currentIdentity,
   hasRealIdentity,
   onIdentityChanged,
@@ -1870,7 +1913,7 @@ export default InkwellShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
-  signInWithProviderToken, currentIdentity, hasRealIdentity,
+  signInWithProviderToken, signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
   setLinkMode, rotateLink,

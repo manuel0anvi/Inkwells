@@ -253,7 +253,22 @@ async function inkwellIdentityReady() {
   try {
     const api = await whenInkwellShareReady(8000);
     await api.whenIdentityReady();
-    return api.hasRealIdentity() ? api.currentIdentity() : null;
+    if (!api.hasRealIdentity()) return null;
+
+    /* >>> Kennt Firebase noch jemand ANDEREN? <<<
+       Eine Sitzung, die von einem früheren Konto stehen geblieben ist,
+       würde die geteilten Dokumente dauerhaft unter der alten Adresse
+       suchen. Sie wird weggeräumt; die Anmeldung mit der richtigen
+       Adresse holt linkFirebaseIdentity() danach nach. */
+    const known = api.currentIdentity();
+    const wanted = api.normalizeEmail(getRememberedEmail() || '');
+    if (wanted && known.email !== wanted) {
+      console.warn('[Auth] Firebase kennt noch', known.email, '– erwartet wird', wanted);
+      try { await api.signOutIdentity(); } catch (e) { /* ohne Netz: beim nächsten Mal */ }
+      return null;
+    }
+
+    return known;
   } catch (err) {
     return null;
   }
@@ -425,6 +440,20 @@ function inkwellLogout() {
       mode: 'no-cors'
     }).catch(() => {});
   }
+
+  /* >>> Auch bei Firebase abmelden <<<
+     Die Anmeldung bei Google bzw. Microsoft und die bei Firebase sind zwei
+     verschiedene Dinge. Blieb die Firebase-Sitzung stehen, wurden die
+     geteilten Dokumente danach weiter unter der ALTEN Adresse gesucht –
+     auch nachdem man sich längst mit einer anderen angemeldet hatte.
+
+     Gibt ein Promise zurück, auf das der Aufrufer warten MUSS, bevor er
+     die Seite wechselt: sonst schneidet die Navigation das Abmelden ab
+     und die alte Kennung bleibt doch stehen. */
+  return whenInkwellShareReady(3000)
+    .then(api => api.signOutIdentity())
+    .then(() => document.dispatchEvent(new CustomEvent('inkwell-identity-changed')))
+    .catch(err => console.warn('[Auth] Firebase-Abmeldung übersprungen:', err?.message || err));
 }
 
 /* ── Navigation / Sprachmenü ──────────────────────────────────────── */
