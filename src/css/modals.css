@@ -519,6 +519,24 @@
   margin-top: 10px
 }
 
+/* Schließkreuz in Hinweisfeldern (etwa der abgelaufenen Sitzung) */
+.notice-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin: -1px -2px 0 0;
+  color: var(--lo);
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: color .12s
+}
+
+.notice-close:hover {
+  color: var(--hi)
+}
+
 .toasts {
   position: fixed;
   bottom: 20px;

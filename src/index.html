@@ -50,6 +50,8 @@
         <circle cx="12" cy="7" r="4"></circle>
       </svg>
       <div id="profile-icon-avatar" style="display:none; width:22px; height:22px; border-radius:50%; background:var(--accent); color:var(--bg); font-size:13px; font-weight:bold; align-items:center; justify-content:center;">U</div>
+      <!-- Wartet im Kontofenster ein ungelesener Hinweis, steht hier eine 1 -->
+      <span id="profile-badge" class="titlebar-badge" style="display:none">1</span>
     </button>
     <button class="titlebar-settings-btn" id="btn-settings" data-i18n-title="settings" title="Einstellungen" style="display:none">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -607,8 +609,14 @@
         Melde dich an, um deine Notizbücher in der Cloud zu sichern und auf der Website anzusehen.
       </p>
 
-      <!-- Wird eingeblendet, wenn die Sitzung abgelaufen ist -->
-      <div id="auth-expired-notice" style="display:none; font-size:12px; color:var(--text); line-height:1.5; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px;"></div>
+      <!-- Wird eingeblendet, wenn die Sitzung abgelaufen ist. Mit dem Kreuz
+           lässt er sich wegdrücken – wer sich nicht mehr anmelden will, soll
+           ihn nicht dauerhaft vor sich haben. Solange er steht, trägt der
+           Kontoknopf in der Titelleiste eine kleine 1. -->
+      <div id="auth-expired-notice" style="display:none; align-items:flex-start; gap:8px; font-size:12px; color:var(--text); line-height:1.5; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px;">
+        <span id="auth-expired-text" style="flex:1"></span>
+        <button id="auth-expired-close" class="notice-close" data-i18n-title="hideNotice" title="Ausblenden">✕</button>
+      </div>
 
       <button id="auth-google-btn" class="settings-btn provider-btn" style="display:flex;justify-content:center;align-items:center;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">

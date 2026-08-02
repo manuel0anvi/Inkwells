@@ -530,6 +530,8 @@ class CloudSyncManager {
       cloudUserName: profile.name,
       cloudUserPicture: profile.picture,
       cloudSessionLost: false,
+      // Neue Sitzung: ein späterer Ablauf soll wieder auffallen dürfen
+      cloudExpiredNoticeDismissed: false,
       // Nur Microsoft: Firebase prüft das ID-Token gegen diese nonce. Sie
       // muss aufgehoben werden, weil auch ein später über das Refresh-Token
       // nachgeholtes ID-Token dieselbe nonce trägt.

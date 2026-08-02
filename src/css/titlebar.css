@@ -115,6 +115,31 @@
   transition: all .12s;
   margin-left: 6px;
   margin-right: 4px;
+  /* Bezugspunkt für den Zähler unten */
+  position: relative;
+}
+
+/* Kleiner Zähler am Knopf, wie man ihn aus anderen Programmen kennt:
+   im Kontofenster wartet ein Hinweis. Ohne ihn bliebe unbemerkt, dass
+   dort noch etwas steht – der Hinweis selbst lässt sich ja wegdrücken. */
+.titlebar-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  letter-spacing: 0;
+  /* Der Klick soll den Knopf treffen, nicht den Zähler */
+  pointer-events: none;
 }
 
 .titlebar-settings-btn svg {

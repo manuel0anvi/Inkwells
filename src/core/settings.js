@@ -51,7 +51,12 @@ const DEFAULT_SETTINGS = {
   cloudPendingUploads: [],
   // Wird gesetzt, sobald eine Sitzung ungewollt endet (Token abgelaufen,
   // Zugriff entzogen). Beim nächsten Start weist die App darauf hin.
-  cloudSessionLost: false
+  cloudSessionLost: false,
+  /* Wahr, sobald der Hinweis auf die abgelaufene Sitzung weggedrückt wurde.
+     Sonst stünde er dauerhaft im Kontofenster, auch wenn gar keine erneute
+     Anmeldung mehr gewollt ist. Eine neue Anmeldung setzt ihn zurück, damit
+     ein späterer Ablauf wieder auffällt. */
+  cloudExpiredNoticeDismissed: false
 };
 
 // Einstellungen aus früheren Fassungen, die beim Laden entfernt werden.

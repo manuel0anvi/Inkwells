@@ -49,6 +49,15 @@
   accountClose.addEventListener('click', () => {
     accountOverlay.style.display = 'none';
   });
+
+  /* Hinweis auf die abgelaufene Sitzung wegdrücken. Bleibt weg, bis man
+     sich das nächste Mal anmeldet – gemerkt wird das in den Einstellungen,
+     sonst stünde er nach jedem Neustart wieder da. */
+  E('auth-expired-close')?.addEventListener('click', async () => {
+    E('auth-expired-notice').style.display = 'none';
+    await Settings.update({ cloudExpiredNoticeDismissed: true });
+    refreshProfileBadge();
+  });
   accountOverlay.addEventListener('click', (e) => {
     if (e.target === accountOverlay) accountOverlay.style.display = 'none';
   });
@@ -98,11 +107,12 @@
       // Nach Ablauf der Sitzung: Konto benennen, damit der erneute Login
       // ein einzelner Klick ist (die E-Mail geht als login_hint mit).
       const expiredBox = E('auth-expired-notice');
+      const expiredText = E('auth-expired-text');
       const rememberedEmail = Settings.get('cloudEmail');
       if (expiredBox) {
-        if (rememberedEmail && anyReady) {
-          expiredBox.style.display = 'block';
-          expiredBox.textContent = t('sessionExpiredFor').replace('{mail}', rememberedEmail);
+        if (expiredNoticePending() && anyReady) {
+          expiredBox.style.display = 'flex';
+          if (expiredText) expiredText.textContent = t('sessionExpiredFor').replace('{mail}', rememberedEmail);
         } else {
           expiredBox.style.display = 'none';
         }
@@ -219,8 +229,25 @@
       : t('sessionExpired');
   }
 
+  /* Steht der Hinweis auf die abgelaufene Sitzung noch aus? Es gibt eine
+     gemerkte E-Mail, aber kein gültiges Token mehr – und weggedrückt wurde
+     er auch nicht. Daran hängen beide Anzeigen: der Kasten im Kontofenster
+     und die 1 am Knopf in der Titelleiste. */
+  function expiredNoticePending() {
+    if (!window.CloudSync_ || CloudSync_.isAuthenticated()) return false;
+    if (!Settings.get('cloudEmail')) return false;
+    return !Settings.get('cloudExpiredNoticeDismissed');
+  }
+
+  function refreshProfileBadge() {
+    const badge = E('profile-badge');
+    if (badge) badge.style.display = expiredNoticePending() ? 'block' : 'none';
+  }
+
   function refreshTitleBarAvatar() {
     if (!window.CloudSync_ || !profileIconSvg || !profileIconAvatar) return;
+
+    refreshProfileBadge();
 
     if (CloudSync_.isAuthenticated()) {
       const session = CloudSync_.getSession();
