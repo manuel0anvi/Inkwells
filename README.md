@@ -36,6 +36,35 @@ git clone -b website https://github.com/manuel0anvi/Inkwell.git website
 
 Danach funktionieren `npm run web` und `npm run deploy-web` wie gehabt.
 
+## Zu zweit arbeiten
+
+```
+git pull            # holen, was der andere hochgeladen hat
+git push            # eigenes hochladen
+```
+
+VS Code fragt alle drei Minuten von selbst nach (`.vscode/settings.json`).
+Hat der andere etwas hochgeladen, steht unten links im blauen Balken ein Pfeil
+mit Zahl — z. B. `↓ 2` für zwei wartende Commits. Ein Klick auf **Sync
+Changes** holt sie und lädt gleichzeitig die eigenen hoch.
+
+Wichtig: **erst festschreiben, dann holen.** Ein `git pull` mit ungespeicherten
+Änderungen bricht ab oder erzeugt unnötige Konflikte.
+
+```
+git add -A
+git commit -m "was ich gemacht habe"
+git pull
+git push
+```
+
+Wer wann was geändert hat:
+
+```
+git log --oneline --graph        # Verlauf
+git blame src/core/share.js      # wer schrieb welche Zeile
+```
+
 ## Entwicklung
 
 Node.js wird benötigt. Einmalig:

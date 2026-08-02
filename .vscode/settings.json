@@ -1,0 +1,17 @@
+{
+  // Alle drei Minuten bei GitHub nachfragen, ob der andere etwas
+  // hochgeladen hat. Ohne das merkt man es erst beim naechsten Pull.
+  // Geholt wird nur die Information - die eigenen Dateien ruehrt das
+  // nicht an. Erst ein Klick auf "Sync Changes" uebernimmt wirklich.
+  "git.autofetch": true,
+  "git.autofetchPeriod": 180,
+
+  // Vor dem Hochladen immer erst holen. Verhindert die Ablehnung
+  // "updates were rejected because the remote contains work".
+  "git.fetchOnPull": true,
+
+  // Zeilenenden wie in .gitattributes festgelegt (eol=lf). Ohne das
+  // schreibt VS Code unter Windows CRLF und jede angefasste Datei
+  // erscheint als komplett geaendert.
+  "files.eol": "\n"
+}
