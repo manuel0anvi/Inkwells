@@ -207,16 +207,44 @@
       const api = await whenShareReady();
       head = await api.loadDocumentHead(docId);
       renderFromHead();
+      await noteAccess();
     } catch (err) {
       // Dokument gibt es nicht mehr (auf einem anderen Gerät aufgehoben)
       if (err?.message === 'SHARE_NOT_FOUND') {
         head = null;
-        await forget(shareNb.id, ['docId', 'linkId', 'url', 'linkMode']);
+        await forget(shareNb.id, ['docId', 'linkId', 'url', 'linkMode', 'access']);
+        markPagesChanged();
         statusEl.textContent = t('sharedGone');
         return;
       }
       statusEl.textContent = describeError(err);
     }
+  }
+
+  /* ── Recht für das Zeichen am Seitenkopf ──────────────────────────
+     Was die Eingeladenen dürfen, steht nur in Firestore. app.js baut
+     die Seiten aber auch ohne Netz auf. Deshalb wird das höchste
+     vergebene Recht hier örtlich mitgeschrieben, sobald der Kopf
+     geladen ist – siehe shareMarkFor() in app.js.
+     ─────────────────────────────────────────────────────────────── */
+
+  function highestAccess() {
+    if (!head) return 'off';
+    if (head.linkMode === 'edit') return 'edit';
+    const roles = window.InkwellShare.listMembers(head).map(p => p.role);
+    if (roles.includes('edit')) return 'edit';
+    if (head.linkMode === 'view' || roles.length) return 'view';
+    return 'off';
+  }
+
+  async function noteAccess() {
+    if (!shareNb || !head) return;
+    await remember(shareNb.id, { access: highestAccess() });
+    markPagesChanged();
+  }
+
+  function markPagesChanged() {
+    if (typeof window.refreshPageShareIcons === 'function') window.refreshPageShareIcons();
   }
 
   function renderFromHead() {
@@ -471,7 +499,8 @@
     try {
       const api = await whenShareReady();
       await api.unshareDocument(head.docId);
-      await forget(shareNb.id, ['docId', 'linkId', 'url', 'linkMode']);
+      await forget(shareNb.id, ['docId', 'linkId', 'url', 'linkMode', 'access']);
+      markPagesChanged();
 
       head = null;
       linkRow.style.display = 'none';
@@ -500,6 +529,7 @@
       const api = await whenShareReady();
       await api.revokeShare(entry.shareId);
       await forget(shareNb.id, ['shareId', 'mode']);
+      markPagesChanged();
       legacyBox.style.display = 'none';
       toast(t('shareRevoked'));
     } catch (err) {
