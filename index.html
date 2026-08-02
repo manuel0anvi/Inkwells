@@ -122,7 +122,9 @@
 <!-- Login Modal -->
 <div id="login-modal" class="modal-backdrop" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true">
-    <div class="modal-kicker" data-i18n="nav_login">Anmelden</div>
+    <!-- Dreimal hintereinander anklicken öffnet den Adminzugang.
+         Siehe den Abschnitt "Adminzugang" weiter unten im Script. -->
+    <div class="modal-kicker" id="login-kicker" data-i18n="nav_login" style="user-select:none;">Anmelden</div>
     <h4 data-i18n="login_title">Cloud Login</h4>
     <p data-i18n="login_sub">Melde dich mit Google oder Microsoft an, um deine Notizbücher aus Google Drive bzw. OneDrive anzusehen.</p>
 
@@ -161,6 +163,29 @@
   </div>
 </div>
 
+<!-- Adminzugang. Erscheint nur nach dem Dreifachklick auf die Kopfzeile
+     des Anmeldefensters – es gibt bewusst keinen sichtbaren Weg dorthin. -->
+<div id="admin-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <div class="modal-kicker" id="admin-modal-kicker">Interner Zugang</div>
+    <h4 id="admin-modal-title">Adminbereich</h4>
+    <p id="admin-modal-sub">Passwort eingeben, um die Verwaltung zu öffnen.</p>
+    <form id="admin-login-form" autocomplete="off">
+      <div style="margin-top:16px;">
+        <label for="admin-password" id="admin-modal-pw-label"
+               style="display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-light); margin-bottom:6px;">Passwort</label>
+        <input type="password" id="admin-password" required autocomplete="current-password"
+               style="width:100%; background:var(--navy-card); border:0.5px solid var(--navy-border); color:var(--cream); font-family:'Jost',sans-serif; font-size:14px; padding:10px 12px; border-radius:4px;">
+      </div>
+      <p id="admin-modal-error" style="display:none; font-size:12px; color:#d9534f; margin:10px 0 0; line-height:1.5;"></p>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="button" class="btn-m" id="admin-cancel" data-i18n="downgrade_cancel">Abbrechen</button>
+        <button type="submit" class="btn-m warn" id="admin-submit">Anmelden</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Downgrade Modal -->
 <div id="downgrade-modal" class="modal-backdrop" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="downgrade-title">
@@ -182,6 +207,7 @@
 <script src="js/config.js"></script>
 <script src="js/providers.js"></script>
 <script src="js/common.js"></script>
+<script src="js/admin.js"></script>
 <script>
 const GH_USER = 'manuel0anvi';
 const GH_REPO = 'Inkwell';
@@ -447,6 +473,116 @@ document.getElementById('login-cancel').addEventListener('click', () => {
   loginModal.classList.remove('open');
   loginModal.setAttribute('aria-hidden', 'true');
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   ADMINZUGANG
+
+   Dreimal auf die Kopfzeile des Anmeldefensters klicken öffnet die
+   Passwortabfrage. Es gibt keinen Verweis darauf und keinen Eintrag im
+   Menü – wer den Griff nicht kennt, stolpert nicht darüber.
+
+   Das ist ausdrücklich nur Bequemlichkeit, kein Schutz. Geschützt wird der
+   Adminbereich dadurch, dass das Passwort bei Firebase liegt und Firestore
+   jede Änderung an der angemeldeten Kennung misst (website/firestore.rules).
+   ══════════════════════════════════════════════════════════════════════ */
+
+const adminModal = document.getElementById('admin-modal');
+const adminError = document.getElementById('admin-modal-error');
+
+// Firebase wird erst geladen, wenn es wirklich gebraucht wird. Sonst zahlt
+// jeder Besucher der Startseite für etwas, das ihn nichts angeht.
+let adminApiPromise = null;
+function loadAdminApi() {
+  if (!adminApiPromise) {
+    adminApiPromise = import('./js/firebase.js').then(() => whenAdminApiReady());
+  }
+  return adminApiPromise;
+}
+
+function applyAdminModalLabels() {
+  document.getElementById('admin-modal-kicker').textContent = t('admin_login_kicker');
+  document.getElementById('admin-modal-title').textContent = t('admin_login_title');
+  document.getElementById('admin-modal-sub').textContent = t('admin_login_sub');
+  document.getElementById('admin-modal-pw-label').textContent = t('admin_login_password');
+  document.getElementById('admin-submit').textContent = t('admin_login_submit');
+}
+
+function openAdminModal() {
+  applyAdminModalLabels();
+  adminError.style.display = 'none';
+  document.getElementById('admin-password').value = '';
+
+  loginModal.classList.remove('open');
+  loginModal.setAttribute('aria-hidden', 'true');
+
+  adminModal.classList.add('open');
+  adminModal.setAttribute('aria-hidden', 'false');
+  document.getElementById('admin-password').focus();
+
+  // Schon im Hintergrund laden, während das Passwort getippt wird
+  loadAdminApi().catch(() => {});
+}
+
+function closeAdminModal() {
+  adminModal.classList.remove('open');
+  adminModal.setAttribute('aria-hidden', 'true');
+}
+
+/* Drei Klicks zählen, aber nur solange sie zusammengehören: nach einer
+   Sekunde Pause beginnt die Zählung von vorn. Ohne das würden drei über
+   den Tag verteilte Klicks irgendwann ebenfalls auslösen. */
+let kickerClicks = 0;
+let kickerTimer = null;
+
+document.getElementById('login-kicker').addEventListener('click', () => {
+  kickerClicks += 1;
+  clearTimeout(kickerTimer);
+  kickerTimer = setTimeout(() => { kickerClicks = 0; }, 1000);
+
+  if (kickerClicks >= 3) {
+    kickerClicks = 0;
+    clearTimeout(kickerTimer);
+    openAdminModal();
+  }
+});
+
+document.getElementById('admin-cancel').addEventListener('click', closeAdminModal);
+
+adminModal.addEventListener('click', (event) => {
+  if (event.target === adminModal) closeAdminModal();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && adminModal.classList.contains('open')) closeAdminModal();
+});
+
+document.getElementById('admin-login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const password = document.getElementById('admin-password').value;
+  const submit = document.getElementById('admin-submit');
+
+  submit.disabled = true;
+  adminError.style.display = 'none';
+
+  try {
+    const api = await loadAdminApi();
+    await api.adminSignIn(password);
+    window.location.href = 'admin/';
+  } catch (err) {
+    adminError.textContent = describeAdminError(err);
+    adminError.style.display = 'block';
+    document.getElementById('admin-password').select();
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+if (typeof addLangChangeListener === 'function') {
+  addLangChangeListener(() => {
+    if (adminModal.classList.contains('open')) applyAdminModalLabels();
+  });
+}
 </script>
 </body>
 </html>

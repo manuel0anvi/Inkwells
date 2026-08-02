@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Verwaltung</title>
+
+<!-- Der Adminbereich gehört nicht in Suchergebnisse. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" type="image/png" href="../icon.png">
+<link rel="alternate icon" type="image/x-icon" href="../icon.ico">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Cormorant+Infant:ital,wght@0,300;1,300&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+
+<style>
+/* Die Seite bleibt verborgen, bis feststeht, dass jemand angemeldet ist.
+   Sonst blitzt der Adminbereich beim Neuladen kurz auf, während Firebase
+   die gespeicherte Sitzung noch wiederherstellt. */
+body[data-admin="pending"] .admin-page,
+body[data-admin="no"] .admin-page { display: none; }
+
+.admin-gate {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  font-family: 'Jost', sans-serif; font-size: 13px; color: var(--text-muted);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+body[data-admin="yes"] .admin-gate { display: none; }
+
+/* Logo oben rechts – der Weg aus dem Adminbereich heraus. */
+.admin-nav { justify-content: space-between; }
+.admin-nav-label {
+  font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 22px;
+  color: var(--gold-light);
+}
+.admin-exit {
+  display: flex; align-items: center; gap: 10px; background: transparent;
+  border: 0; cursor: pointer; padding: 4px; color: var(--cream);
+  font-family: 'Jost', sans-serif; font-size: 15px; letter-spacing: .06em;
+}
+.admin-exit img { width: 28px; height: 28px; }
+.admin-exit:hover { color: var(--gold-light); }
+
+.admin-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 32px; }
+.admin-tab {
+  background: transparent; border: 0.5px solid var(--navy-border); color: var(--text-muted);
+  font-family: 'Jost', sans-serif; font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; padding: 10px 18px; cursor: pointer;
+  transition: border-color .2s, color .2s;
+}
+.admin-tab:hover { border-color: var(--gold); color: var(--gold-light); }
+.admin-tab.active { border-color: var(--gold); color: var(--gold-light); background: var(--gold-dim); }
+
+.admin-panel { display: none; }
+.admin-panel.active { display: block; }
+
+.admin-hint {
+  font-size: 12px; color: var(--text-muted); line-height: 1.6;
+  border-left: 2px solid var(--navy-border); padding-left: 12px; margin-bottom: 24px;
+}
+
+.admin-field { margin-bottom: 18px; }
+.admin-field label {
+  display: block; font-family: 'Jost', sans-serif; font-size: 11px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--gold-light);
+  margin-bottom: 6px;
+}
+.admin-field input, .admin-field textarea, .admin-field select {
+  width: 100%; background: var(--navy-card); border: 0.5px solid var(--navy-border);
+  color: var(--cream); font-family: 'Jost', sans-serif; font-weight: 300;
+  font-size: 14px; padding: 10px 12px; border-radius: 4px; line-height: 1.6;
+}
+.admin-field textarea { resize: vertical; min-height: 80px; }
+.admin-field input:focus, .admin-field textarea:focus, .admin-field select:focus {
+  outline: none; border-color: var(--gold);
+}
+
+.admin-card {
+  border: 0.5px solid var(--navy-border); background: var(--navy-card);
+  border-radius: 6px; padding: 18px 20px; margin-bottom: 16px;
+}
+.admin-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 14px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.admin-card-meta { font-size: 12px; color: var(--text-muted); }
+.admin-card h3 {
+  font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 400;
+  font-size: 22px; color: var(--cream); margin: 0 0 6px;
+}
+.admin-card-body { font-size: 14px; color: var(--text-body); white-space: pre-wrap; margin-bottom: 12px; }
+
+.admin-del {
+  background: transparent; border: 0.5px solid rgba(217,83,79,0.4); color: #d9534f;
+  font-family: 'Jost', sans-serif; font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase; padding: 6px 10px; cursor: pointer; white-space: nowrap;
+  transition: background .2s, border-color .2s;
+}
+.admin-del:hover { background: rgba(217,83,79,0.12); border-color: #d9534f; }
+
+.admin-reply {
+  border-left: 2px solid var(--navy-border); padding: 8px 0 8px 14px; margin-bottom: 10px;
+  display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
+}
+.admin-reply-meta { font-size: 11px; color: var(--gold-light); margin-bottom: 4px; }
+.admin-reply-text { font-size: 13px; color: var(--text-body); white-space: pre-wrap; }
+
+.admin-section-block {
+  border: 0.5px solid var(--navy-border); border-radius: 6px;
+  padding: 16px 18px; margin-bottom: 14px; background: rgba(21,23,36,0.5);
+}
+
+.admin-status { font-size: 13px; margin: 14px 0 0; min-height: 20px; }
+.admin-status.ok { color: var(--gold-light); }
+.admin-status.err { color: #d9534f; }
+
+.admin-badge {
+  display: inline-block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  border: 0.5px solid var(--navy-border); color: var(--text-muted);
+  padding: 4px 8px; border-radius: 3px; margin-left: 10px;
+}
+.admin-badge.on { border-color: var(--gold); color: var(--gold-light); }
+
+.admin-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+@media (max-width: 720px) {
+  nav.admin-nav { padding: 14px 20px; }
+  .admin-nav-label { font-size: 18px; }
+}
+</style>
+</head>
+<body data-admin="pending">
+
+<nav class="admin-nav">
+  <span class="admin-nav-label" id="admin-nav-label">Verwaltung</span>
+  <!-- Zum Verlassen: Logo anklicken. Fragt vorher nach. -->
+  <button type="button" class="admin-exit" id="admin-exit-btn" title="Adminbereich verlassen">
+    <span>Inkwell</span>
+    <img src="../icon.png" alt="Inkwell Logo">
+  </button>
+</nav>
+
+<div class="admin-gate" id="admin-gate">Prüfe Anmeldung…</div>
+
+<div class="admin-page">
+  <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title" id="admin-title">Verwaltung</h1>
+      <p class="page-subtitle" id="admin-subtitle">Angemeldet als Inkwell Team.</p>
+    </div>
+
+    <div class="admin-tabs">
+      <button type="button" class="admin-tab active" data-panel="moderation" id="tab-moderation">Community</button>
+      <button type="button" class="admin-tab" data-panel="privacy" id="tab-privacy">Datenschutz</button>
+      <button type="button" class="admin-tab" data-panel="password" id="tab-password">Passwort</button>
+    </div>
+
+    <!-- ── Community ────────────────────────────────────────────── -->
+    <section class="admin-panel active" id="panel-moderation">
+      <div class="admin-actions" style="margin-top:0; margin-bottom:20px;">
+        <button type="button" class="btn-m" id="mod-refresh">Neu laden</button>
+      </div>
+      <div id="mod-list"></div>
+    </section>
+
+    <!-- ── Datenschutz ──────────────────────────────────────────── -->
+    <section class="admin-panel" id="panel-privacy">
+      <p class="admin-hint" id="privacy-hint"></p>
+
+      <div class="admin-field">
+        <label for="privacy-lang-select" id="lbl-privacy-lang">Sprache</label>
+        <select id="privacy-lang-select">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+          <option value="it">Italiano</option>
+        </select>
+        <span class="admin-badge" id="privacy-source-badge"></span>
+      </div>
+
+      <div class="admin-field">
+        <label for="privacy-updated-input" id="lbl-privacy-updated">Stand (JJJJ-MM-TT)</label>
+        <input type="text" id="privacy-updated-input" placeholder="2026-08-02" maxlength="10">
+      </div>
+
+      <div class="admin-field">
+        <label for="privacy-title-input" id="lbl-privacy-title">Überschrift</label>
+        <input type="text" id="privacy-title-input" maxlength="120">
+      </div>
+
+      <div class="admin-field">
+        <label for="privacy-subtitle-input" id="lbl-privacy-subtitle">Unterzeile</label>
+        <textarea id="privacy-subtitle-input" rows="2" maxlength="400"></textarea>
+      </div>
+
+      <div class="admin-field">
+        <label id="lbl-privacy-summary">Kurzübersicht</label>
+        <div id="privacy-summary-fields"></div>
+      </div>
+
+      <div class="admin-field">
+        <label id="lbl-privacy-sections">Abschnitte</label>
+        <div id="privacy-section-fields"></div>
+      </div>
+
+      <div class="admin-actions">
+        <button type="button" class="btn-p" id="privacy-save">Speichern</button>
+        <button type="button" class="btn-m warn" id="privacy-reset">Auf Originaltext zurücksetzen</button>
+      </div>
+      <p class="admin-status" id="privacy-status"></p>
+    </section>
+
+    <!-- ── Passwort ─────────────────────────────────────────────── -->
+    <section class="admin-panel" id="panel-password">
+      <form id="password-form" autocomplete="off">
+        <div class="admin-field">
+          <label for="pw-current" id="lbl-pw-current">Aktuelles Passwort</label>
+          <input type="password" id="pw-current" required autocomplete="current-password">
+        </div>
+        <div class="admin-field">
+          <label for="pw-new" id="lbl-pw-new">Neues Passwort</label>
+          <input type="password" id="pw-new" required minlength="8" autocomplete="new-password">
+        </div>
+        <div class="admin-field">
+          <label for="pw-repeat" id="lbl-pw-repeat">Neues Passwort wiederholen</label>
+          <input type="password" id="pw-repeat" required minlength="8" autocomplete="new-password">
+        </div>
+        <div class="admin-actions">
+          <button type="submit" class="btn-p" id="pw-submit">Passwort ändern</button>
+        </div>
+        <p class="admin-status" id="pw-status"></p>
+      </form>
+    </section>
+  </div>
+
+  <footer>
+    <p>© 2026 Inkwell · Anvi</p>
+    <div class="fl">
+      <a href="../community/" data-i18n="nav_community">Community</a>
+      <a href="../datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
+    </div>
+  </footer>
+</div>
+
+<!-- Scripts -->
+<script src="../js/i18n.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/privacy-content.js"></script>
+<script src="../js/admin.js"></script>
+<script type="module" src="../js/firebase.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   ADMINSEITE
+
+   Alles hier ist Bedienoberfläche. Ob ein Löschen oder Speichern
+   tatsächlich durchgeht, entscheidet Firestore anhand der angemeldeten
+   Kennung (siehe website/firestore.rules). Wer diese Seite ohne gültige
+   Anmeldung öffnet, sieht sie gar nicht erst – und käme selbst dann nicht
+   an die Daten.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let adminApi = null;
+let posts = [];
+
+/* Arbeitsfassung der Datenschutzerklärung, je Sprache. Wird beim ersten
+   Öffnen aus Firestore oder aus js/privacy-content.js befüllt. */
+let privacyDraft = null;
+let privacyUpdated = '';
+let privacyFromDb = false;
+
+/* ── Beschriftungen ─────────────────────────────────────────────────
+   Die Seite wird nicht über data-i18n gefüllt, weil viele Texte in
+   erzeugten Elementen stehen. Stattdessen einmal zentral setzen und bei
+   jedem Sprachwechsel erneut aufrufen. */
+function applyAdminLabels() {
+  const set = (id, key) => {
+    const node = document.getElementById(id);
+    if (node) node.textContent = t(key);
+  };
+
+  document.title = 'Inkwell — ' + t('admin_page_title');
+  set('admin-nav-label', 'admin_page_title');
+  set('admin-title', 'admin_page_title');
+  set('admin-subtitle', 'admin_page_sub');
+  set('tab-moderation', 'admin_tab_moderation');
+  set('tab-privacy', 'admin_tab_privacy');
+  set('tab-password', 'admin_tab_password');
+  set('mod-refresh', 'admin_mod_refresh');
+
+  set('privacy-hint', 'admin_privacy_hint');
+  set('lbl-privacy-lang', 'admin_privacy_lang');
+  set('lbl-privacy-updated', 'admin_privacy_updated');
+  set('lbl-privacy-title', 'admin_privacy_title_field');
+  set('lbl-privacy-subtitle', 'admin_privacy_subtitle');
+  set('lbl-privacy-summary', 'admin_privacy_summary');
+  set('lbl-privacy-sections', 'admin_privacy_sections');
+  set('privacy-save', 'admin_privacy_save');
+  set('privacy-reset', 'admin_privacy_reset');
+
+  set('lbl-pw-current', 'admin_pw_current');
+  set('lbl-pw-new', 'admin_pw_new');
+  set('lbl-pw-repeat', 'admin_pw_repeat');
+  set('pw-submit', 'admin_pw_submit');
+
+  updatePrivacyBadge();
+}
+
+function showStatus(id, message, kind) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.textContent = message;
+  node.className = 'admin-status' + (kind ? ' ' + kind : '');
+}
+
+/* ── Reiter ─────────────────────────────────────────────────────────── */
+
+function switchPanel(name) {
+  for (const tab of document.querySelectorAll('.admin-tab')) {
+    tab.classList.toggle('active', tab.dataset.panel === name);
+  }
+  for (const panel of document.querySelectorAll('.admin-panel')) {
+    panel.classList.toggle('active', panel.id === 'panel-' + name);
+  }
+  if (name === 'privacy' && !privacyDraft) loadPrivacyDraft();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   COMMUNITY
+   ══════════════════════════════════════════════════════════════════════ */
+
+function formatDate(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = lang === 'de' ? 'de-DE' : lang === 'it' ? 'it-IT' : 'en-GB';
+  return date.toLocaleDateString(locale, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+async function loadModeration() {
+  const list = document.getElementById('mod-list');
+  list.textContent = t('admin_mod_loading');
+
+  try {
+    posts = await adminApi.listPosts();
+    renderModeration();
+  } catch (err) {
+    list.textContent = describeAdminError(err);
+    list.style.color = '#d9534f';
+  }
+}
+
+/* Baut die Liste mit createElement statt innerHTML: Beitragstexte kommen
+   von Fremden, und so kann daraus grundsätzlich kein Markup werden. */
+function renderModeration() {
+  const list = document.getElementById('mod-list');
+  list.textContent = '';
+  list.style.color = '';
+
+  if (!posts.length) {
+    list.textContent = t('admin_mod_empty');
+    return;
+  }
+
+  for (const post of posts) {
+    const card = document.createElement('div');
+    card.className = 'admin-card';
+
+    const head = document.createElement('div');
+    head.className = 'admin-card-head';
+
+    const headText = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = post.title;
+    const meta = document.createElement('div');
+    meta.className = 'admin-card-meta';
+    meta.textContent = `${post.author} · ${formatDate(post.created_at)} · ${post.type}`;
+    headText.append(title, meta);
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'admin-del';
+    delBtn.textContent = t('admin_mod_delete_post');
+    delBtn.addEventListener('click', () => removePost(post));
+
+    head.append(headText, delBtn);
+
+    const body = document.createElement('div');
+    body.className = 'admin-card-body';
+    body.textContent = post.content;
+
+    card.append(head, body);
+
+    // Antworten
+    if (post.replies && post.replies.length) {
+      const repliesTitle = document.createElement('div');
+      repliesTitle.className = 'admin-card-meta';
+      repliesTitle.style.marginBottom = '8px';
+      repliesTitle.textContent = `${post.replies.length} ${t('admin_mod_replies')}`;
+      card.appendChild(repliesTitle);
+
+      for (const reply of post.replies) {
+        const row = document.createElement('div');
+        row.className = 'admin-reply';
+
+        const texts = document.createElement('div');
+        const rMeta = document.createElement('div');
+        rMeta.className = 'admin-reply-meta';
+        rMeta.textContent = `${reply.author} · ${formatDate(reply.created_at)}`;
+        const rText = document.createElement('div');
+        rText.className = 'admin-reply-text';
+        rText.textContent = reply.content;
+        texts.append(rMeta, rText);
+
+        const rDel = document.createElement('button');
+        rDel.type = 'button';
+        rDel.className = 'admin-del';
+        rDel.textContent = t('admin_mod_delete_reply');
+        rDel.addEventListener('click', () => removeReply(post, reply));
+
+        row.append(texts, rDel);
+        card.appendChild(row);
+      }
+    }
+
+    // Antwort als Inkwell Team
+    const form = document.createElement('form');
+    form.style.marginTop = '14px';
+
+    const field = document.createElement('div');
+    field.className = 'admin-field';
+    field.style.marginBottom = '10px';
+
+    const label = document.createElement('label');
+    label.textContent = t('admin_mod_reply_as');
+    const textarea = document.createElement('textarea');
+    textarea.rows = 2;
+    textarea.maxLength = 500;
+    textarea.required = true;
+    field.append(label, textarea);
+
+    const send = document.createElement('button');
+    send.type = 'submit';
+    send.className = 'btn-m';
+    send.textContent = t('admin_mod_reply_send');
+
+    form.append(field, send);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const content = textarea.value.trim();
+      if (!content) return;
+
+      send.disabled = true;
+      try {
+        await adminApi.createReply(post.id, { author: ADMIN_DISPLAY_NAME, content });
+        textarea.value = '';
+        await loadModeration();
+      } catch (err) {
+        alert(describeAdminError(err));
+      } finally {
+        send.disabled = false;
+      }
+    });
+
+    card.appendChild(form);
+    list.appendChild(card);
+  }
+}
+
+async function removePost(post) {
+  const ok = await askConfirm({
+    title: t('admin_del_post_title'),
+    body: `„${post.title}“ — ${t('admin_del_post_body')}`,
+    confirm: t('admin_del_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    await adminApi.deletePost(post.id);
+    await loadModeration();
+  } catch (err) {
+    alert(describeAdminError(err));
+  }
+}
+
+async function removeReply(post, reply) {
+  const ok = await askConfirm({
+    title: t('admin_del_reply_title'),
+    body: t('admin_del_reply_body'),
+    confirm: t('admin_del_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    await adminApi.deleteReply(post.id, reply.id);
+    await loadModeration();
+  } catch (err) {
+    alert(describeAdminError(err));
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DATENSCHUTZERKLÄRUNG
+
+   Bearbeitet werden Überschriften, Absätze und die Kurzübersicht. Listen,
+   Tabellen und Verweise bleiben unangetastet: sie stecken in der Struktur
+   aus js/privacy-content.js und werden beim Speichern unverändert
+   mitgeschrieben. So kann man den Text pflegen, ohne den Aufbau der Seite
+   versehentlich zu zerlegen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+function updatePrivacyBadge() {
+  const badge = document.getElementById('privacy-source-badge');
+  if (!badge) return;
+  badge.textContent = privacyFromDb ? t('admin_privacy_edited') : t('admin_privacy_original');
+  badge.classList.toggle('on', privacyFromDb);
+}
+
+async function loadPrivacyDraft() {
+  try {
+    const stored = await adminApi.loadPrivacy();
+    if (stored) {
+      privacyDraft = stored.content;
+      privacyUpdated = stored.updated || PRIVACY_UPDATED;
+      privacyFromDb = true;
+    } else {
+      // Tiefe Kopie, damit das Original im Script unberührt bleibt
+      privacyDraft = JSON.parse(JSON.stringify(PRIVACY));
+      privacyUpdated = PRIVACY_UPDATED;
+      privacyFromDb = false;
+    }
+  } catch (err) {
+    privacyDraft = JSON.parse(JSON.stringify(PRIVACY));
+    privacyUpdated = PRIVACY_UPDATED;
+    privacyFromDb = false;
+    showStatus('privacy-status', describeAdminError(err), 'err');
+  }
+
+  updatePrivacyBadge();
+  renderPrivacyEditor();
+}
+
+function currentPrivacyLang() {
+  return document.getElementById('privacy-lang-select').value;
+}
+
+function renderPrivacyEditor() {
+  if (!privacyDraft) return;
+
+  const code = currentPrivacyLang();
+  const data = privacyDraft[code] || privacyDraft.de;
+
+  /* Überschrift, Unterzeile und Datum schreiben ihre Änderung sofort in die
+     Arbeitsfassung. Würden sie erst beim Speichern ausgelesen, wären sie
+     beim Wechsel der Sprache verloren – renderPrivacyEditor() überschreibt
+     die Felder dann ja mit dem Text der anderen Sprache.
+
+     Zuweisung an .oninput statt addEventListener: die drei Felder stehen
+     fest im Dokument, und bei jedem Aufbau käme sonst ein weiterer
+     Zuhörer obendrauf. */
+  const updatedInput = document.getElementById('privacy-updated-input');
+  const titleInput = document.getElementById('privacy-title-input');
+  const subtitleInput = document.getElementById('privacy-subtitle-input');
+
+  updatedInput.value = privacyUpdated || '';
+  titleInput.value = data.title || '';
+  subtitleInput.value = data.subtitle || '';
+
+  updatedInput.oninput = () => { privacyUpdated = updatedInput.value.trim(); };
+  titleInput.oninput = () => { data.title = titleInput.value; };
+  subtitleInput.oninput = () => { data.subtitle = subtitleInput.value; };
+
+  // Kurzübersicht: Paare aus Begriff und Erklärung
+  const summaryBox = document.getElementById('privacy-summary-fields');
+  summaryBox.textContent = '';
+  (data.summary || []).forEach((pair, index) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid; grid-template-columns:minmax(120px,1fr) 2fr; gap:10px; margin-bottom:8px;';
+
+    const term = document.createElement('input');
+    term.type = 'text';
+    term.value = pair[0] || '';
+    term.addEventListener('input', () => { data.summary[index][0] = term.value; });
+
+    const desc = document.createElement('input');
+    desc.type = 'text';
+    desc.value = pair[1] || '';
+    desc.addEventListener('input', () => { data.summary[index][1] = desc.value; });
+
+    row.append(term, desc);
+    summaryBox.appendChild(row);
+  });
+
+  // Abschnitte
+  const sectionBox = document.getElementById('privacy-section-fields');
+  sectionBox.textContent = '';
+  (data.sections || []).forEach((section) => {
+    const block = document.createElement('div');
+    block.className = 'admin-section-block';
+
+    const headingField = document.createElement('div');
+    headingField.className = 'admin-field';
+    const headingLabel = document.createElement('label');
+    headingLabel.textContent = t('admin_privacy_section_heading');
+    const headingInput = document.createElement('input');
+    headingInput.type = 'text';
+    headingInput.value = section.h || '';
+    headingInput.addEventListener('input', () => { section.h = headingInput.value; });
+    headingField.append(headingLabel, headingInput);
+    block.appendChild(headingField);
+
+    /* Absätze stehen im Datenmodell als Liste. Im Formular sind sie ein
+       einziges Feld, in dem eine Leerzeile zwei Absätze trennt – das
+       tippt sich weit angenehmer als ein Feld je Absatz. */
+    const makeParagraphField = (key) => {
+      if (!Array.isArray(section[key])) return;
+
+      const field = document.createElement('div');
+      field.className = 'admin-field';
+      const label = document.createElement('label');
+      label.textContent = t('admin_privacy_paragraphs');
+      const area = document.createElement('textarea');
+      area.rows = Math.min(10, Math.max(3, section[key].length * 2));
+      area.value = section[key].join('\n\n');
+      area.addEventListener('input', () => {
+        section[key] = area.value.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+      });
+      field.append(label, area);
+      block.appendChild(field);
+    };
+
+    makeParagraphField('p');
+    makeParagraphField('p2');
+
+    if (typeof section.note === 'string') {
+      const noteField = document.createElement('div');
+      noteField.className = 'admin-field';
+      noteField.style.marginBottom = '0';
+      const noteLabel = document.createElement('label');
+      noteLabel.textContent = t('admin_privacy_note');
+      const noteArea = document.createElement('textarea');
+      noteArea.rows = 2;
+      noteArea.value = section.note;
+      noteArea.addEventListener('input', () => { section.note = noteArea.value; });
+      noteField.append(noteLabel, noteArea);
+      block.appendChild(noteField);
+    }
+
+    sectionBox.appendChild(block);
+  });
+}
+
+async function savePrivacyDraft() {
+  // Alle Felder schreiben schon beim Tippen in privacyDraft – hier ist
+  // deshalb nichts mehr einzusammeln.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(privacyUpdated)) {
+    showStatus('privacy-status', t('admin_privacy_date_invalid'), 'err');
+    return;
+  }
+
+  const button = document.getElementById('privacy-save');
+  button.disabled = true;
+  try {
+    await adminApi.savePrivacy(privacyDraft, privacyUpdated);
+    privacyFromDb = true;
+    updatePrivacyBadge();
+    showStatus('privacy-status', t('admin_privacy_saved'), 'ok');
+  } catch (err) {
+    showStatus('privacy-status', describeAdminError(err), 'err');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function resetPrivacyDraft() {
+  const ok = await askConfirm({
+    title: t('admin_privacy_reset_title'),
+    body: t('admin_privacy_reset_body'),
+    confirm: t('admin_privacy_reset_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    await adminApi.resetPrivacy();
+    privacyDraft = null;
+    await loadPrivacyDraft();
+    showStatus('privacy-status', t('admin_privacy_saved'), 'ok');
+  } catch (err) {
+    showStatus('privacy-status', describeAdminError(err), 'err');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PASSWORT
+   ══════════════════════════════════════════════════════════════════════ */
+
+async function handlePasswordChange(event) {
+  event.preventDefault();
+
+  const current = document.getElementById('pw-current').value;
+  const next = document.getElementById('pw-new').value;
+  const repeat = document.getElementById('pw-repeat').value;
+
+  if (next !== repeat) {
+    showStatus('pw-status', t('admin_pw_mismatch'), 'err');
+    return;
+  }
+  if (next.length < 8) {
+    showStatus('pw-status', t('admin_pw_short'), 'err');
+    return;
+  }
+
+  const button = document.getElementById('pw-submit');
+  button.disabled = true;
+  showStatus('pw-status', '', '');
+
+  try {
+    await adminApi.adminChangePassword(current, next);
+    document.getElementById('password-form').reset();
+    showStatus('pw-status', t('admin_pw_changed'), 'ok');
+  } catch (err) {
+    showStatus('pw-status', describeAdminError(err), 'err');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   VERLASSEN
+
+   Der Weg hinaus führt über das Logo oben rechts – mit Rückfrage, damit
+   ein versehentlicher Klick nicht die Sitzung beendet.
+   ══════════════════════════════════════════════════════════════════════ */
+
+async function exitAdmin() {
+  const ok = await askConfirm({
+    title: t('admin_exit_title'),
+    body: t('admin_exit_body'),
+    confirm: t('admin_exit_confirm')
+  });
+  if (!ok) return;
+
+  try {
+    await adminApi.adminSignOut();
+  } catch (err) {
+    console.warn('[Admin] Abmelden:', err);
+  }
+  window.location.replace('../?home=true');
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   START
+   ══════════════════════════════════════════════════════════════════════ */
+
+document.getElementById('admin-exit-btn').addEventListener('click', exitAdmin);
+document.getElementById('mod-refresh').addEventListener('click', loadModeration);
+document.getElementById('privacy-save').addEventListener('click', savePrivacyDraft);
+document.getElementById('privacy-reset').addEventListener('click', resetPrivacyDraft);
+document.getElementById('password-form').addEventListener('submit', handlePasswordChange);
+document.getElementById('privacy-lang-select').addEventListener('change', renderPrivacyEditor);
+
+for (const tab of document.querySelectorAll('.admin-tab')) {
+  tab.addEventListener('click', () => switchPanel(tab.dataset.panel));
+}
+
+if (typeof addLangChangeListener === 'function') {
+  addLangChangeListener(() => {
+    applyAdminLabels();
+    renderModeration();
+    if (privacyDraft) renderPrivacyEditor();
+  });
+}
+
+(async () => {
+  applyAdminLabels();
+
+  try {
+    adminApi = await whenAdminApiReady();
+  } catch (err) {
+    document.getElementById('admin-gate').textContent = describeAdminError(err);
+    document.body.dataset.admin = 'no';
+    return;
+  }
+
+  const signedIn = await adminApi.adminReady();
+  if (!signedIn) {
+    // Kein Hinweis, keine Verzögerung: wer hier nichts zu suchen hat, soll
+    // nicht einmal erfahren, dass es die Seite gibt.
+    window.location.replace('../');
+    return;
+  }
+
+  document.body.dataset.admin = 'yes';
+  loadModeration();
+
+  // Wird die Sitzung anderswo beendet (etwa in einem zweiten Tab),
+  // schließt sich der Adminbereich auch hier.
+  adminApi.onAdminChange((stillAdmin) => {
+    if (!stillAdmin) window.location.replace('../');
+  });
+})();
+</script>
+</body>
+</html>

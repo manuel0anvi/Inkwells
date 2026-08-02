@@ -72,6 +72,8 @@
 <script src="../js/providers.js"></script>
 <script src="../js/common.js"></script>
 <script src="../js/privacy-content.js"></script>
+<script src="../js/admin.js"></script>
+<script type="module" src="../js/firebase.js"></script>
 <script>
 (function () {
   const el = (tag, cls) => {
@@ -188,16 +190,25 @@
     }
   }
 
+  /* Der Text steht fest in js/privacy-content.js. Wurde die Erklärung über
+     die Adminseite bearbeitet, liegt eine neuere Fassung in Firestore und
+     hat Vorrang. Die feste Fassung bleibt der Rückfall: Ist die Datenbank
+     nicht erreichbar, ist die Seite trotzdem vollständig lesbar – bei einer
+     Datenschutzerklärung ist eine leere Seite keine Option. */
+  let activeContent = PRIVACY;
+  let activeUpdated = PRIVACY_UPDATED;
+
   function renderPrivacy() {
-    const data = PRIVACY[lang] || PRIVACY.de;
+    const data = activeContent[lang] || activeContent.de || PRIVACY.de;
 
     document.getElementById('privacy-title').textContent = data.title;
     document.getElementById('privacy-subtitle').textContent = data.subtitle;
 
     const locale = lang === 'de' ? 'de-AT' : lang === 'it' ? 'it-IT' : 'en-GB';
-    const updated = new Date(PRIVACY_UPDATED);
-    document.getElementById('privacy-updated').textContent =
-      `${data.updatedLabel}: ${updated.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })}`;
+    const updated = new Date(activeUpdated);
+    document.getElementById('privacy-updated').textContent = Number.isNaN(updated.getTime())
+      ? data.updatedLabel
+      : `${data.updatedLabel}: ${updated.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })}`;
 
     document.documentElement.lang = lang;
 
@@ -207,6 +218,22 @@
 
   renderPrivacy();
   if (typeof addLangChangeListener === 'function') addLangChangeListener(renderPrivacy);
+
+  // Nachladen und, falls es eine bearbeitete Fassung gibt, neu zeichnen.
+  (async () => {
+    try {
+      const api = await whenAdminApiReady();
+      const stored = await api.loadPrivacy();
+      if (!stored || !stored.content) return;
+
+      activeContent = stored.content;
+      activeUpdated = stored.updated || PRIVACY_UPDATED;
+      renderPrivacy();
+    } catch (err) {
+      // Bewusst nur eine Notiz in der Konsole: der Rückfalltext steht schon.
+      console.warn('[Datenschutz] Bearbeitete Fassung nicht ladbar:', err.message);
+    }
+  })();
 })();
 </script>
 </body>

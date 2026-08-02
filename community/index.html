@@ -169,6 +169,25 @@
   flex-wrap: wrap;
   gap: 10px;
 }
+/* Löschknopf der Moderation. Steckt in derselben Zeile wie Verfasser und
+   Datum und ist bewusst zurückhaltend – rot, aber ohne Fläche, damit er
+   den Beitrag nicht überstrahlt. */
+.forum-del-btn {
+  background: transparent;
+  border: 0.5px solid rgba(217,83,79,0.4);
+  color: #d9534f;
+  font-family: 'Jost', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s, border-color .2s;
+}
+.forum-del-btn:hover { background: rgba(217,83,79,0.12); border-color: #d9534f; }
+
 .post-badge {
   font-size: 9px;
   letter-spacing: 0.08em;
@@ -489,6 +508,7 @@
 <script src="../js/config.js"></script>
 <script src="../js/providers.js"></script>
 <script src="../js/common.js"></script>
+<script src="../js/admin.js"></script>
 
 <!-- Datenbank des Forums: Cloud Firestore.
      Als ES-Modul, weil das Firebase v9+ SDK modular ist. Module laufen
@@ -515,6 +535,12 @@ let forumIdentity = {
   email: ''
 };
 let forumIdentityPromise = null;
+
+/* Ist das Adminkonto angemeldet? Steuert nur, ob Löschknöpfe und das Feld
+   "Als Inkwell Team antworten" auftauchen. Ob das Löschen dann auch
+   gelingt, entscheidet Firestore (website/firestore.rules) – hier eine
+   Variable umzustellen bringt niemandem etwas. */
+let forumIsAdmin = false;
 
 function togglePostForm() {
   const card = document.getElementById('post-form-card');
@@ -584,6 +610,18 @@ function syncForumAuthorField(kind) {
   const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
   const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
   if (!input || !checkbox) return;
+
+  // Als Admin steht der Name fest und lässt sich nicht ändern.
+  if (forumIsAdmin) {
+    checkbox.checked = false;
+    const toggle = checkbox.closest('.forum-author-toggle');
+    if (toggle) toggle.style.display = 'none';
+    input.value = ADMIN_DISPLAY_NAME;
+    input.disabled = true;
+    input.required = false;
+    updateForumAuthorState(kind, false);
+    return;
+  }
 
   const anonymous = isForumAnonymous();
   checkbox.checked = anonymous;
@@ -760,13 +798,25 @@ async function handleCreatePost(event) {
   const type = document.getElementById('post-type').value;
   const authorInput = document.getElementById('post-author');
   const anonymous = document.getElementById('post-author-anonymous').checked;
-  const author = anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName()));
+  const author = forumIsAdmin
+    ? ADMIN_DISPLAY_NAME
+    : (anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName())));
   const content = document.getElementById('post-content').value.trim();
 
   if (!title || !content) return;
 
+  // Geschützte Namen abfangen, bevor die Datenbank sie ablehnt: sonst käme
+  // nur ein "permission-denied" zurück, mit dem niemand etwas anfangen kann.
+  const nameError = checkAuthorName(author, forumIsAdmin);
+  if (nameError) {
+    alert(nameError);
+    return;
+  }
+
   localStorage.setItem('inkwell_forum_author_anonymous', anonymous ? 'true' : 'false');
-  if (!anonymous) {
+  // Der Adminname wird nicht gemerkt – sonst stünde er nach dem Abmelden
+  // noch im Formular des nächsten Besuchers an diesem Gerät.
+  if (!anonymous && !forumIsAdmin) {
     localStorage.setItem('inkwell_forum_author_name', author);
     localStorage.setItem('inkwell_forum_name', author);
   }
@@ -798,12 +848,22 @@ async function handleCreateReply(event, postId) {
   const form = event.target;
   const authorInput = form.querySelector('.reply-author-input');
   const anonymous = form.querySelector('.reply-author-anonymous').checked;
-  const author = anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName()));
+  const author = forumIsAdmin
+    ? ADMIN_DISPLAY_NAME
+    : (anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName())));
   const content = form.querySelector('.reply-content-input').value.trim();
   if (!content) return;
 
+  const nameError = checkAuthorName(author, forumIsAdmin);
+  if (nameError) {
+    alert(nameError);
+    return;
+  }
+
   localStorage.setItem('inkwell_forum_author_anonymous', anonymous ? 'true' : 'false');
-  if (!anonymous) {
+  // Der Adminname wird nicht gemerkt – sonst stünde er nach dem Abmelden
+  // noch im Formular des nächsten Besuchers an diesem Gerät.
+  if (!anonymous && !forumIsAdmin) {
     localStorage.setItem('inkwell_forum_author_name', author);
     localStorage.setItem('inkwell_forum_name', author);
   }
@@ -822,6 +882,54 @@ async function handleCreateReply(event, postId) {
     alert(err.message || 'Antwort konnte nicht gespeichert werden.');
   } finally {
     submitBtn.disabled = false;
+  }
+}
+
+/* ── Moderation ─────────────────────────────────────────────────────
+   Erscheint nur, wenn das Adminkonto angemeldet ist. Die Knöpfe rufen
+   diese Funktionen aus onclick="…" auf, deshalb stehen sie hier im
+   globalen Gültigkeitsbereich.
+
+   Dass hier gelöscht werden darf, entscheidet nicht diese Seite, sondern
+   Firestore anhand der angemeldeten Kennung. Wer die Knöpfe im Browser
+   selbst einblendet, bekommt beim Klick ein "permission-denied". */
+
+async function adminDeletePost(postId) {
+  const post = posts.find(p => p.id === postId);
+  const ok = await askConfirm({
+    title: t('admin_del_post_title'),
+    body: post ? `„${post.title}“ — ${t('admin_del_post_body')}` : t('admin_del_post_body'),
+    confirm: t('admin_del_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    const db = await whenForumDbReady();
+    await db.deletePost(postId);
+    await loadPosts();
+  } catch (err) {
+    console.error('Forum delete post error:', err);
+    alert(describeAdminError(err));
+  }
+}
+
+async function adminDeleteReply(postId, replyId) {
+  const ok = await askConfirm({
+    title: t('admin_del_reply_title'),
+    body: t('admin_del_reply_body'),
+    confirm: t('admin_del_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    const db = await whenForumDbReady();
+    await db.deleteReply(postId, replyId);
+    await loadPosts();
+  } catch (err) {
+    console.error('Forum delete reply error:', err);
+    alert(describeAdminError(err));
   }
 }
 
@@ -854,6 +962,7 @@ function renderFeed() {
       <div class="post-meta-line">
         <span class="post-badge ${post.type}">${badgeText}</span>
         <span class="post-author-time">${isAnonPost ? '' : `von <strong>${escapeHtml(post.author)}</strong> `}${getFormattedDate(post.created_at) ? 'am ' + getFormattedDate(post.created_at) : ''}</span>
+        ${forumIsAdmin ? `<button type="button" class="forum-del-btn" onclick="adminDeletePost('${post.id}')">${escapeHtml(t('admin_mod_delete_post'))}</button>` : ''}
       </div>
       <h3>${escapeHtml(post.title)}</h3>
       <div class="post-body-text">${escapeHtml(post.content)}</div>
@@ -878,6 +987,7 @@ function renderFeed() {
             <div class="reply-meta">
               ${isAnonReply ? '' : `<strong>${escapeHtml(reply.author)}</strong>`}
               <span>${getFormattedDate(reply.created_at)}</span>
+              ${forumIsAdmin ? `<button type="button" class="forum-del-btn" onclick="adminDeleteReply('${post.id}', '${reply.id}')">${escapeHtml(t('admin_mod_delete_reply'))}</button>` : ''}
             </div>
             <div class="reply-text">${escapeHtml(reply.content)}</div>
           </div>`;
@@ -889,9 +999,11 @@ function renderFeed() {
     html += `
         <form id="reply-form-${post.id}" class="reply-form" onsubmit="handleCreateReply(event, '${post.id}')">
           <div class="reply-form-row">
-            <input type="text" id="reply-author-${post.id}" class="reply-author-input" maxlength="60" ${savedAnonymous || forumIdentity.loggedIn ? '' : 'required'} placeholder="${t('community_post_author')}" value="${escapeHtml(savedAnonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? activeAuthorName : savedName))}" ${savedAnonymous || forumIdentity.loggedIn ? 'disabled' : ''} oninput="syncForumAuthorDraft('reply-${post.id}')">
-            <label class="forum-author-toggle" for="reply-author-anonymous-${post.id}" style="align-self:center; white-space:nowrap;">
-              <input type="checkbox" class="reply-author-anonymous" id="reply-author-anonymous-${post.id}" ${savedAnonymous ? 'checked' : ''} onchange="toggleForumAnonymous('reply-${post.id}')">
+            <input type="text" id="reply-author-${post.id}" class="reply-author-input" maxlength="60" ${forumIsAdmin || savedAnonymous || forumIdentity.loggedIn ? '' : 'required'} placeholder="${t('community_post_author')}" value="${escapeHtml(forumIsAdmin ? ADMIN_DISPLAY_NAME : (savedAnonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? activeAuthorName : savedName)))}" ${forumIsAdmin || savedAnonymous || forumIdentity.loggedIn ? 'disabled' : ''} oninput="syncForumAuthorDraft('reply-${post.id}')">
+            <!-- Als Admin steht der Name fest; das Kästchen bleibt im
+                 Dokument (der Absende-Code liest es aus), aber unsichtbar. -->
+            <label class="forum-author-toggle" for="reply-author-anonymous-${post.id}" style="align-self:center; white-space:nowrap;${forumIsAdmin ? ' display:none;' : ''}">
+              <input type="checkbox" class="reply-author-anonymous" id="reply-author-anonymous-${post.id}" ${!forumIsAdmin && savedAnonymous ? 'checked' : ''} onchange="toggleForumAnonymous('reply-${post.id}')">
               <span data-i18n="community_author_anonymous">Anonym posten</span>
             </label>
             <div class="forum-input-group" style="margin:0; width:100%;">
@@ -928,6 +1040,11 @@ function escapeHtml(text) {
 document.addEventListener('DOMContentLoaded', () => {
   (async () => {
     await ensureForumIdentity();
+
+    // Vor dem ersten Zeichnen klären, ob moderiert werden darf – sonst
+    // erschiene der Feed zweimal, einmal ohne und einmal mit Knöpfen.
+    forumIsAdmin = await isAdminSignedIn();
+
     syncForumAuthorField('post');
     updateForumCounter('post-title', 120);
     updateForumCounter('post-content', 2000);

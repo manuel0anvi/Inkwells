@@ -457,6 +457,26 @@ function checkCommonAuth(isLandingPage = false, relativePathToRoot = './') {
   const userIcon = btnOpenLogin.querySelector('.nav-icon-user');
   const homeIcon = btnOpenLogin.querySelector('.nav-icon-home');
 
+  /* Das Adminkonto hat kein Dashboard: es gehört zu keinem Google- oder
+     Microsoft-Konto und hat deshalb auch keine Notizbücher in der Cloud.
+     Statt eines Verweises, der ins Leere führt, führt der Knopf zurück in
+     die Verwaltung. Gesetzt wird das Kennzeichen von js/admin.js, sobald
+     Firebase die Anmeldung bestätigt hat. */
+  if (document.body.dataset.inkwellAdmin === 'yes') {
+    if (span) {
+      span.textContent = window.t ? t('admin_page_title') : 'Verwaltung';
+      span.removeAttribute('data-i18n');
+    }
+    if (userIcon) userIcon.style.display = 'inline-block';
+    if (homeIcon) homeIcon.style.display = 'none';
+
+    btnOpenLogin.onclick = (e) => {
+      e.preventDefault();
+      window.location.href = relativePathToRoot + 'admin/';
+    };
+    return;
+  }
+
   if (loggedIn) {
     if (isDashboard) {
       if (span) {

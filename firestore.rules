@@ -1,0 +1,145 @@
+rules_version = '2';
+
+/* ══════════════════════════════════════════════════════════════════════
+   FIRESTORE-SICHERHEITSREGELN  ―  Community-Forum und Seiteninhalte
+
+   Diese Datei wird NICHT automatisch ausgeliefert. Sie muss einmal von
+   Hand in die Firebase-Konsole übertragen werden:
+
+     Firebase-Konsole → Firestore Database → Regeln → Veröffentlichen
+
+   ⚠ NICHT einfach alles ersetzen!
+
+   Die Freigabe-Funktion der App (js/share.js) hat bereits eigene Regeln
+   in der Konsole stehen, und zwar für diese Sammlungen:
+
+       shared_notebooks/…      docs/…      doc_links/…
+
+   Stehen dort match-Blöcke dafür, müssen die erhalten bleiben. Aus
+   dieser Datei gehören nur die Funktionen (adminUid, isAdmin, …) und
+   die match-Blöcke für `community_posts` und `site_content` HINZU.
+   Werden die vorhandenen Regeln überschrieben, funktioniert das Teilen
+   von Notizbüchern nicht mehr.
+
+   ── Einmalige Einrichtung ─────────────────────────────────────────────
+
+   1) Anmeldeverfahren aktivieren
+      Firebase-Konsole → Authentication → Sign-in method
+      → "E-Mail/Passwort" aktivieren (nur die obere Option, nicht
+        "E-Mail-Link").
+
+   2) Admin-Konto anlegen
+      Authentication → Users → "Add user"
+      → E-Mail und ein Startpasswort eintragen.
+      Dieselbe E-Mail muss in js/config.js unter ADMIN_EMAIL stehen.
+
+   3) Kennung (UID) des Kontos übertragen
+      In der Nutzerliste steht rechts die "User UID". Diese Zeichenkette
+      unten bei ADMIN_UID eintragen und die Regeln veröffentlichen.
+
+      Die UID ist kein Geheimnis. Sie ist nur eine Kennung – wer sie
+      kennt, kann damit nichts anfangen, weil das Anmelden trotzdem das
+      Passwort verlangt.
+
+   ── Warum das sicher ist ──────────────────────────────────────────────
+
+   Die Website liegt auf GitHub Pages und hat keinen eigenen Server. Ein
+   im JavaScript hinterlegtes Passwort wäre für jeden Besucher lesbar.
+   Deshalb prüft nicht die Seite, ob jemand Admin ist, sondern Firestore:
+   Löschen, das Schreiben unter geschütztem Namen und das Ändern der
+   Datenschutzerklärung sind an die UID oben gebunden. Selbst wer die
+   Seite umgeht und die Datenbank direkt anspricht, kommt damit nicht
+   weiter.
+   ══════════════════════════════════════════════════════════════════════ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* >>>>>>>>>>>>  HIER DIE UID AUS SCHRITT 3 EINTRAGEN  <<<<<<<<<<<< */
+    function adminUid() {
+      return 'HIER_ADMIN_UID_EINTRAGEN';
+    }
+
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == adminUid();
+    }
+
+    /* Geschützte Anzeigenamen.
+
+       Alles, was nach dem Betreiber der Seite aussieht, bleibt dem
+       Admin-Konto vorbehalten – sonst könnte sich jeder als "Inkwell
+       Team" ausgeben und im Namen des Projekts antworten.
+
+       matches() vergleicht die ganze Zeichenkette, deshalb die Punkte
+       außen herum. Die Groß-/Kleinschreibung fällt durch lower() weg.
+       Leerzeichen, Punkte und Bindestriche werden entfernt, damit
+       "I n k w e l l" oder "Ink-well" nicht durchrutschen. */
+    function normalizedName(name) {
+      return name.lower().replace('[^a-z0-9]', '');
+    }
+
+    function isReservedName(name) {
+      return normalizedName(name).matches(
+        '.*(inkwell|1nkwell|admin|administrator|moderator|support|offiziell|official|anvi).*'
+      );
+    }
+
+    /* Grenzen für Beiträge. Verhindert, dass jemand die Datenbank mit
+       riesigen Dokumenten vollschreibt. Die Zahlen entsprechen den
+       maxlength-Angaben der Formulare auf community/index.html. */
+    function validPost(data) {
+      return data.keys().hasOnly(['type', 'title', 'author', 'content', 'created_at'])
+          && data.type in ['question', 'bug']
+          && data.title is string   && data.title.size()   > 0 && data.title.size()   <= 120
+          && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
+          && data.author is string  && data.author.size()  > 0 && data.author.size()  <= 60
+          && data.created_at == request.time;
+    }
+
+    function validReply(data) {
+      return data.keys().hasOnly(['author', 'content', 'created_at'])
+          && data.content is string && data.content.size() > 0 && data.content.size() <= 500
+          && data.author is string  && data.author.size()  > 0 && data.author.size()  <= 60
+          && data.created_at == request.time;
+    }
+
+    /* ── Forum ──────────────────────────────────────────────────────
+       Lesen darf jeder, auch ohne Anmeldung – das Forum ist öffentlich.
+       Schreiben darf jeder, aber nicht unter geschütztem Namen.
+       Löschen und Ändern darf nur das Admin-Konto. */
+    match /community_posts/{postId} {
+      allow read: if true;
+
+      allow create: if validPost(request.resource.data)
+                    && (isAdmin() || !isReservedName(request.resource.data.author));
+
+      allow update, delete: if isAdmin();
+
+      match /replies/{replyId} {
+        allow read: if true;
+
+        allow create: if validReply(request.resource.data)
+                      && (isAdmin() || !isReservedName(request.resource.data.author));
+
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    /* ── Seiteninhalte (Datenschutzerklärung) ───────────────────────
+       Lesen muss jeder dürfen, sonst sieht niemand die Erklärung.
+       Geschrieben wird sie ausschließlich über die Adminseite. */
+    match /site_content/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    /* ── Hier gehören die vorhandenen Regeln der Freigabe-Funktion hin ──
+       match /shared_notebooks/{shareId} { … }
+       match /docs/{docId}               { … }
+       match /doc_links/{linkId}         { … }
+
+       Sie stehen bereits in der Firebase-Konsole und werden hier bewusst
+       nicht wiederholt, damit sie beim Einfügen nicht versehentlich
+       durch eine ältere Fassung ersetzt werden. */
+  }
+}
