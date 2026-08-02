@@ -307,7 +307,13 @@
   }
 
   googleBtn?.addEventListener('click', () => { if (!googleBtn.disabled) signIn('google'); });
-  microsoftBtn?.addEventListener('click', () => { if (!microsoftBtn.disabled) signIn('microsoft'); });
+
+  /* Microsoft: erst der Hinweis, dann weiter. Wer abbricht, bleibt im
+     Kontofenster und kann ohne Umweg Google wählen. */
+  microsoftBtn?.addEventListener('click', async () => {
+    if (microsoftBtn.disabled) return;
+    if (await showMsHint()) signIn('microsoft');
+  });
 
   // Von anderen Stellen aus zu öffnen (z. B. dem Abgemeldet-Hinweis beim Start)
   window.openAccountDialog = () => {

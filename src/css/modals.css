@@ -510,6 +510,15 @@
   margin-bottom: 4px
 }
 
+/* Nachgeordneter Satz unter .confirm-msg – erklärt den Grund, ohne der
+   eigentlichen Aussage die Aufmerksamkeit zu nehmen. */
+.confirm-note {
+  font-size: 13px;
+  color: var(--lo);
+  line-height: 1.55;
+  margin-top: 10px
+}
+
 .toasts {
   position: fixed;
   bottom: 20px;

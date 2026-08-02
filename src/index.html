@@ -482,6 +482,24 @@
   </div>
 </div>
 
+<!-- Hinweis vor der Microsoft-Anmeldung.
+
+     Die App ist auf den Mandanten "consumers" eingerichtet (TENANT in
+     core/cloudConfig.js). Ein Geschäfts- oder Schulkonto läuft dort in
+     eine Fehlerseite von Microsoft, die nicht erklärt, woran es liegt.
+     Deshalb steht der Hinweis vorher hier – wie auf der Website. -->
+<div class="overlay" id="ov-ms-hint" style="display:none">
+  <div class="modal confirm-modal">
+    <h3 style="margin:0 0 12px 0" data-i18n="msHintTitle">Nur mit privatem Microsoft-Konto</h3>
+    <p class="confirm-msg" data-i18n="msHintBody">Inkwell ist für persönliche Microsoft-Konten eingerichtet — also Outlook.com, Hotmail, Live oder MSN.</p>
+    <p class="confirm-note" data-i18n="msHintNote">Mit einem Geschäfts- oder Schulkonto schlägt die Anmeldung fehl. Diese Konten verwaltet deine Organisation, und sie müsste Inkwell erst freigeben.</p>
+    <div class="modal-btns">
+      <button id="ms-hint-cancel" data-i18n="cancel">Abbrechen</button>
+      <button id="ms-hint-ok" class="ok-btn" data-i18n="msHintConfirm">Verstanden, weiter</button>
+    </div>
+  </div>
+</div>
+
 <!-- MIGRATION DIALOG -->
 <div class="overlay" id="ov-migration" style="display:none">
   <div class="modal confirm-modal">

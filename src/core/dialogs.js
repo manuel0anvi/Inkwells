@@ -24,6 +24,21 @@ function showConfirm(msg) {
   });
 }
 
+/* Hinweis vor der Microsoft-Anmeldung. Der Text steht fest im Fenster
+   (index.html), deshalb nimmt die Funktion keine Nachricht entgegen.
+   Liefert true, wenn weitergemacht werden soll. */
+function showMsHint() {
+  E('ov-ms-hint').style.display = 'flex';
+  return new Promise(res => {
+    const ok = () => { E('ov-ms-hint').style.display = 'none'; res(true); off(); };
+    const cancel = () => { E('ov-ms-hint').style.display = 'none'; res(false); off(); };
+    const kd = e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') cancel(); };
+    function off() { E('ms-hint-ok').onclick = null; E('ms-hint-cancel').onclick = null; document.removeEventListener('keydown', kd); }
+    E('ms-hint-ok').onclick = ok; E('ms-hint-cancel').onclick = cancel;
+    document.addEventListener('keydown', kd);
+  });
+}
+
 // Returns 'save', 'leave', or null (cancelled)
 function showSaveConfirm(msg) {
   E('save-confirm-msg').textContent = msg;
