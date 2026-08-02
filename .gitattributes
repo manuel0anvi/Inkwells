@@ -1,0 +1,21 @@
+# Zeilenenden einheitlich halten.
+#
+# Ohne diese Datei wandelt Git unter Windows beim Auschecken jedes LF in
+# CRLF um. Dann zeigt "git diff" ganze Dateien als geändert an, obwohl
+# nur die unsichtbaren Zeilenenden anders sind – und bei zwei Leuten
+# überschreibt man sich gegenseitig mit Nichts.
+#
+# text=auto  : Git erkennt selbst, was Text ist.
+# eol=lf     : im Repo UND in der Arbeitskopie immer LF, auf jedem System.
+* text=auto eol=lf
+
+# Binärdateien nicht anfassen
+*.ico binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+*.jrnl binary
