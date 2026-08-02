@@ -149,9 +149,12 @@ const Trash = {
     // In Drive in den Papierkorb-Unterordner verschieben. Ohne das käme das
     // Heft beim nächsten Abgleich zurück.
     let driveFileId = null;
+    let cloudTrashed = false;
     try {
       if (typeof CloudSync_ !== 'undefined' && CloudSync_) {
-        driveFileId = await CloudSync_.trashRemoteNotebook(notebook.id);
+        const moved = await CloudSync_.trashRemoteNotebook(notebook.id);
+        driveFileId = moved?.fileId || null;
+        cloudTrashed = !!moved?.done;
       }
     } catch (err) {
       console.warn('[Trash] Drive-Verschieben übersprungen:', err.message);
@@ -165,6 +168,9 @@ const Trash = {
       originalPath: originalPath || null,
       trashPath,
       driveFileId,
+      // Ist die Cloud-Seite wirklich erledigt? Solange nicht, versucht es
+      // syncWithCloud bei jedem Abgleich erneut.
+      cloudTrashed,
       deletedAt: new Date().toISOString(),
       // Sicherheitsnetz: falls die Datei fehlt, liegt der Inhalt hier
       snapshot: trashPath ? null : JSON.parse(JSON.stringify(notebook))
@@ -217,16 +223,6 @@ const Trash = {
         continue;
       }
 
-      // Neu und noch nicht hochgeladen. Falls beim Löschen keine
-      // Internetverbindung bestand, jetzt die Drive-Datei nachziehen.
-      if (!local.driveFileId) {
-        try {
-          local.driveFileId = await CloudSync_.trashRemoteNotebook(local.id);
-        } catch (err) {
-          console.warn('[Trash] Drive-Verschieben nachgeholt fehlgeschlagen:', err.message);
-        }
-      }
-
       merged.push({ ...local, syncedToCloud: true });
       changed = true;
     }
@@ -239,12 +235,41 @@ const Trash = {
 
     this._entries = merged;
 
+    // Erst jetzt die Cloud-Seite nachziehen – für ALLE Einträge, auch die
+    // von anderen Geräten. Ein Gerät, das beim Löschen kein Netz hatte,
+    // hinterlässt die Datei sonst im Hauptordner, und der nächste Abgleich
+    // holt das gelöschte Heft überall wieder herunter.
+    if (await this._catchUpCloudTrash()) changed = true;
+
     if (changed) {
       await this.save();
       await CloudSync_.saveTrashIndex(this._entries.map(stripLocalFields));
     }
 
     return true;
+  },
+
+  /**
+   * Holt für jeden Eintrag nach, was in der Cloud noch offen ist.
+   * @returns {Promise<boolean>} ob sich etwas geändert hat
+   */
+  async _catchUpCloudTrash() {
+    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return false;
+
+    let changed = false;
+    for (const entry of this._entries) {
+      if (entry.cloudTrashed) continue;
+      try {
+        const moved = await CloudSync_.trashRemoteNotebook(entry.id);
+        if (!moved?.done) continue;              // kein Netz – beim nächsten Mal
+        if (moved.fileId) entry.driveFileId = moved.fileId;
+        entry.cloudTrashed = true;
+        changed = true;
+      } catch (err) {
+        console.warn('[Trash] Drive-Verschieben nachgeholt fehlgeschlagen:', err.message);
+      }
+    }
+    return changed;
   },
 
   /** Holt ein Heft zurück. Gibt das Heft zurück oder null. */
@@ -343,8 +368,19 @@ const Trash = {
       }
     }
 
-    if (entry.driveFileId && typeof CloudSync_ !== 'undefined' && CloudSync_) {
-      await CloudSync_.deleteRemoteFile(entry.driveFileId);
+    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return;
+
+    /* >>> Die Kennung allein reicht nicht <<<
+       Wer beim Löschen kein Netz hatte, hat keine Datei-Kennung. Endgültig
+       gelöscht wurde dann nur örtlich – die Datei blieb in der Cloud und
+       kam beim nächsten Abgleich als „neues" Heft zurück. Deshalb zusätzlich
+       über die Heft-Kennung suchen, in beiden Ordnern. */
+    let gone = false;
+    if (entry.driveFileId) {
+      gone = await CloudSync_.deleteRemoteFile(entry.driveFileId);
+    }
+    if (!gone) {
+      await CloudSync_.deleteRemoteNotebookById(entry.id);
     }
   },
 

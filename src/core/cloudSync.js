@@ -148,6 +148,17 @@ class CloudSyncManager {
     this._initialized = true;
 
     await this._restoreSession();
+
+    /* >>> Angemeldet heißt online speichern <<<
+       Den Schalter dafür gibt es nicht mehr. Steht er aus einer älteren
+       Fassung noch auf „aus", wäre die Anmeldung folgenlos: es würde
+       nichts hochgeladen, nichts heruntergeladen, und der Freigabe-Dialog
+       bliebe ohne erkennbaren Grund gesperrt. Deshalb hier nachziehen. */
+    if (this.isAuthenticated() && !Settings.get('cloudEnabled')) {
+      await Settings.update({ cloudEnabled: true });
+      console.log('[CloudSync] Cloud-Speicher eingeschaltet (Konto vorhanden)');
+    }
+
     this._restorePendingQueue();
     this.isOnline = await this._checkConnectivity();
 
@@ -1227,22 +1238,75 @@ class CloudSyncManager {
      PAPIERKORB IN DER CLOUD
      ══════════════════════════════════════════════════════════════════ */
 
+  /**
+   * Schiebt die Cloud-Datei eines Hefts in den Papierkorb-Unterordner.
+   *
+   * >>> Warum die Antwort zwei Angaben braucht <<<
+   * Vorher kam in drei ganz verschiedenen Fällen dasselbe `null` zurück:
+   * „kein Netz", „nicht angemeldet" und „es gibt dort gar keine Datei".
+   * Der Papierkorb konnte daran nicht erkennen, ob die Cloud-Seite erledigt
+   * ist – er hakte den Eintrag in allen drei Fällen ab. Blieb die Datei in
+   * Wirklichkeit liegen, brachte sie der nächste Abgleich zurück, sobald
+   * der Papierkorb-Eintrag ablief oder geleert wurde.
+   *
+   * @returns {Promise<{done: boolean, fileId: string|null}>}
+   *   done = die Cloud ist auf dem gewünschten Stand (verschoben oder es
+   *   war nichts da). false heißt: später noch einmal versuchen.
+   */
   async trashRemoteNotebook(nbId) {
-    if (!this._canSync() || !this.isOnline) return null;
+    if (!this._canSync() || !this.isOnline) return { done: false, fileId: null };
 
     this._removeFromQueue(nbId);
     this.immediateUploads.delete(nbId);
     this.lastUploadAt.delete(nbId);
 
-    const file = await this._findRemoteFile({ id: nbId, name: '' });
-    if (!file) return null;
+    try {
+      const file = await this._findRemoteFile({ id: nbId, name: '' });
+      if (!file) return { done: true, fileId: null };
 
-    const folderId = await this._getFolder();
-    const trashFolderId = await this._getTrashFolder();
-    await this.provider.moveFile(this._http, file.id, folderId, trashFolderId);
+      const folderId = await this._getFolder();
+      const trashFolderId = await this._getTrashFolder();
+      await this.provider.moveFile(this._http, file.id, folderId, trashFolderId);
 
-    console.log('[CloudSync] Heft in den Cloud-Papierkorb verschoben:', nbId);
-    return file.id;
+      console.log('[CloudSync] Heft in den Cloud-Papierkorb verschoben:', nbId);
+      return { done: true, fileId: file.id };
+    } catch (err) {
+      console.warn('[CloudSync] Cloud-Papierkorb fehlgeschlagen:', err.message);
+      return { done: false, fileId: null };
+    }
+  }
+
+  /**
+   * Löscht jede Cloud-Datei zu einem Heft – im Hauptordner UND im
+   * Papierkorb-Unterordner.
+   *
+   * Gebraucht für Einträge, deren Datei-Kennung nie ankam (Löschen ohne
+   * Netz). Ohne diesen Weg bliebe die Datei nach dem endgültigen Löschen
+   * im Hauptordner liegen und der nächste Abgleich lüde das Heft wieder
+   * herunter.
+   */
+  async deleteRemoteNotebookById(nbId) {
+    if (!this._canSync() || !this.isOnline || !nbId) return false;
+
+    try {
+      const folders = [await this._getFolder(), await this._getTrashFolder()];
+      let deleted = false;
+
+      for (const folderId of folders) {
+        if (!folderId) continue;
+        const files = await this.provider.listNotebookFiles(this._http, folderId);
+        for (const file of files) {
+          if (!this.provider.matchesNotebook(file, { id: nbId, name: '' })) continue;
+          await this.provider.deleteFile(this._http, file.id);
+          deleted = true;
+        }
+      }
+
+      return deleted;
+    } catch (err) {
+      console.warn('[CloudSync] Endgültiges Löschen über die Kennung fehlgeschlagen:', err.message);
+      return false;
+    }
   }
 
   async untrashRemoteNotebook(fileId) {
