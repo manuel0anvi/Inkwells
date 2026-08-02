@@ -36,10 +36,10 @@ const PRIVACY = {
         h: '1. Wer hinter Inkwell steht',
         p: [
           'Inkwell ist ein privates, quelloffenes Projekt und wird nicht kommerziell betrieben. Es gibt keine Firma, keine Werbevermarktung und keine Weitergabe von Daten an Dritte zu Werbezwecken.',
-          'Fragen zum Datenschutz, Auskunftswünsche und Löschanfragen richtest du am einfachsten als Issue an das öffentliche Projekt-Repository auf GitHub. Dort werden sie bearbeitet.'
+          'Fragen zum Datenschutz, Auskunftswünsche und Löschanfragen richtest du am einfachsten als Fehlerbericht im Community-Bereich der Website. Dort werden sie bearbeitet.'
         ],
         links: [
-          { label: 'github.com/manuel0anvi/Inkwell', href: 'https://github.com/manuel0anvi/Inkwell' }
+          { label: 'Community: Fehler melden', href: '../community/' }
         ]
       },
       {
@@ -213,10 +213,10 @@ const PRIVACY = {
         h: '1. Who is behind Inkwell',
         p: [
           'Inkwell is a private, open-source project and is not run commercially. There is no company, no ad business and no sharing of data with third parties for advertising.',
-          'For privacy questions, access requests and deletion requests, the simplest route is to open an issue on the public project repository on GitHub, where they are handled.'
+          'For privacy questions, access requests and deletion requests, the simplest route is to file a bug report in the Community section of the website, where they are handled.'
         ],
         links: [
-          { label: 'github.com/manuel0anvi/Inkwell', href: 'https://github.com/manuel0anvi/Inkwell' }
+          { label: 'Community: Report a bug', href: '../community/' }
         ]
       },
       {
@@ -390,10 +390,10 @@ const PRIVACY = {
         h: '1. Chi c\'è dietro Inkwell',
         p: [
           'Inkwell è un progetto privato e open source, non gestito a scopo commerciale. Non c\'è nessuna azienda, nessuna raccolta pubblicitaria e nessuna cessione di dati a terzi per scopi pubblicitari.',
-          'Per domande sulla privacy, richieste di accesso e richieste di cancellazione il modo più semplice è aprire una issue nel repository pubblico del progetto su GitHub, dove vengono gestite.'
+          'Per domande sulla privacy, richieste di accesso e richieste di cancellazione il modo più semplice è segnalare un bug nella sezione Community del sito, dove vengono gestite.'
         ],
         links: [
-          { label: 'github.com/manuel0anvi/Inkwell', href: 'https://github.com/manuel0anvi/Inkwell' }
+          { label: 'Community: Segnala un bug', href: '../community/' }
         ]
       },
       {
