@@ -25,13 +25,27 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebas
 import {
   getFirestore,
   collection,
+  doc,
   addDoc,
+  getDoc,
   getDocs,
+  setDoc,
+  deleteDoc,
+  writeBatch,
   query,
   orderBy,
   onSnapshot,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider
+} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
    Diese Werte sind KEIN Geheimnis. Der Firebase-"apiKey" ist nur eine
@@ -60,6 +74,8 @@ const firebaseConfig = {
 // Sicherheitsregeln in website/firestore.rules synchron.
 const POSTS = 'community_posts';
 const REPLIES = 'replies';
+const SITE_CONTENT = 'site_content';
+const PRIVACY_DOC = 'privacy';
 
 // Fällt der Name weg, steht laut Datenmodell "Gast" im Dokument.
 const DEFAULT_AUTHOR = 'Gast';
@@ -95,6 +111,11 @@ const DEFAULT_AUTHOR = 'Gast';
    Wiedererkennen oder Beobachten von Besuchern eingesetzt werden.
    ─────────────────────────────────────────────────────────────────── */
 const app = initializeApp(firebaseConfig);
+
+// Reihenfolge wie in js/share.js: getAuth() vor getFirestore(). Sonst baut
+// Firestore seine Verbindung auf, bevor eine gespeicherte Anmeldung wieder
+// hergestellt ist, und die ersten Schreibzugriffe gelten als nicht angemeldet.
+const auth = getAuth(app);
 const db = getFirestore(app);
 
 /* ── Umwandlung ─────────────────────────────────────────────────────── */
@@ -230,6 +251,171 @@ async function createReply(postId, { author, content }) {
   return ref.id;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ADMIN
+
+   Die Website ist statisch – ein Passwort im JavaScript wäre für jeden
+   Besucher lesbar. Die Prüfung übernimmt deshalb Firebase Authentication,
+   und ob jemand löschen darf, entscheidet Firestore anhand der UID (siehe
+   website/firestore.rules). Alles hier ist nur Bedienoberfläche: Wer die
+   Funktionen unten ohne gültige Anmeldung aufruft, bekommt von der
+   Datenbank ein "permission-denied" zurück.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Ist gerade das Adminkonto angemeldet? */
+function isAdmin() {
+  const user = auth.currentUser;
+  if (!user || !user.email) return false;
+  return user.email.toLowerCase() === String(ADMIN_EMAIL || '').toLowerCase();
+}
+
+/**
+ * Meldet die Adminsitzung an.
+ * Die E-Mail steht fest in js/config.js – eingegeben wird nur das Passwort.
+ *
+ * @param {string} password
+ * @returns {Promise<void>}
+ */
+async function adminSignIn(password) {
+  await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
+}
+
+/** Meldet die Adminsitzung ab. */
+async function adminSignOut() {
+  await signOut(auth);
+}
+
+/**
+ * Wartet, bis Firebase die gespeicherte Anmeldung wiederhergestellt hat.
+ *
+ * Direkt nach dem Laden ist auth.currentUser noch null, auch wenn eine
+ * gültige Sitzung existiert. Ohne dieses Warten würde die Adminseite beim
+ * Neuladen kurz aufblitzen und dann fälschlich zur Startseite werfen.
+ *
+ * @returns {Promise<boolean>} ob das Adminkonto angemeldet ist
+ */
+function adminReady() {
+  return new Promise((resolve) => {
+    const stop = onAuthStateChanged(auth, () => {
+      stop();
+      resolve(isAdmin());
+    });
+  });
+}
+
+/**
+ * Meldet Änderungen der Anmeldung.
+ * @param {(admin: boolean) => void} callback
+ * @returns {() => void} Abmeldefunktion
+ */
+function onAdminChange(callback) {
+  return onAuthStateChanged(auth, () => callback(isAdmin()));
+}
+
+/**
+ * Ändert das Passwort des Adminkontos.
+ *
+ * Firebase verlangt für diesen Schritt eine frische Anmeldung. Statt den
+ * Fehler abzuwarten und dann nachzufragen, wird hier immer zuerst mit dem
+ * aktuellen Passwort bestätigt – das ist ohnehin die Rückfrage, die man
+ * bei einer Passwortänderung erwartet.
+ *
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ */
+async function adminChangePassword(currentPassword, newPassword) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('NOT_SIGNED_IN');
+
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
+}
+
+/* ── Löschen ────────────────────────────────────────────────────────── */
+
+/**
+ * Löscht eine einzelne Antwort.
+ * @param {string} postId
+ * @param {string} replyId
+ */
+async function deleteReply(postId, replyId) {
+  await deleteDoc(doc(db, POSTS, postId, REPLIES, replyId));
+}
+
+/**
+ * Löscht einen Beitrag samt seiner Antworten.
+ *
+ * Firestore löscht Unter-Sammlungen NICHT mit: würde nur das
+ * Beitragsdokument verschwinden, blieben die Antworten als verwaiste
+ * Dokumente in der Datenbank liegen. Sie werden deshalb zuerst entfernt,
+ * gebündelt in einem Schreibvorgang.
+ *
+ * @param {string} postId
+ */
+async function deletePost(postId) {
+  const replies = await getDocs(collection(db, POSTS, postId, REPLIES));
+
+  // Ein Batch fasst höchstens 500 Schreibvorgänge; bei mehr Antworten wird
+  // in Blöcken gelöscht. Der Beitrag selbst kommt zum Schluss, damit er bei
+  // einem Abbruch nicht ohne seine Antworten verschwindet.
+  const docs = replies.docs;
+  for (let i = 0; i < docs.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const snap of docs.slice(i, i + 450)) batch.delete(snap.ref);
+    await batch.commit();
+  }
+
+  await deleteDoc(doc(db, POSTS, postId));
+}
+
+/* ── Datenschutzerklärung ────────────────────────────────────────────
+   Der Text steht als Rückfall fest in js/privacy-content.js. Sobald über
+   die Adminseite gespeichert wurde, liegt eine überarbeitete Fassung in
+   Firestore und hat Vorrang. So bleibt die Seite auch dann lesbar, wenn
+   die Datenbank nicht erreichbar ist.
+   ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Holt die gespeicherte Fassung, falls es eine gibt.
+ * @returns {Promise<{content: object, updated: string}|null>}
+ */
+async function loadPrivacy() {
+  const snap = await getDoc(doc(db, SITE_CONTENT, PRIVACY_DOC));
+  if (!snap.exists()) return null;
+
+  const data = snap.data() || {};
+  if (!data.content) return null;
+
+  return {
+    content: typeof data.content === 'string' ? JSON.parse(data.content) : data.content,
+    updated: String(data.updated || '')
+  };
+}
+
+/**
+ * Speichert eine überarbeitete Fassung.
+ *
+ * Der Inhalt wird als JSON-Zeichenkette abgelegt, nicht als verschachteltes
+ * Objekt: Firestore erlaubt nur 20 Verschachtelungsebenen und keine Listen
+ * in Listen – die Tabellenzeilen der Erklärung sind aber genau das.
+ *
+ * @param {object} content  gleiche Form wie PRIVACY in js/privacy-content.js
+ * @param {string} updated  Datum als JJJJ-MM-TT
+ */
+async function savePrivacy(content, updated) {
+  await setDoc(doc(db, SITE_CONTENT, PRIVACY_DOC), {
+    content: JSON.stringify(content),
+    updated: String(updated || ''),
+    updated_at: serverTimestamp()
+  });
+}
+
+/** Verwirft die gespeicherte Fassung – danach gilt wieder js/privacy-content.js. */
+async function resetPrivacy() {
+  await deleteDoc(doc(db, SITE_CONTENT, PRIVACY_DOC));
+}
+
 /* ── Echtzeit (vorbereitet, aktuell ungenutzt) ───────────────────────
    Die Forenseite lädt bewusst auf Anforderung neu statt über onSnapshot:
    ein Live-Update würde die Liste neu zeichnen und dabei ein gerade
@@ -273,7 +459,21 @@ window.InkwellForum = {
   createReply,
   watchPosts,
   toDate,
-  DEFAULT_AUTHOR
+  DEFAULT_AUTHOR,
+
+  // Admin. Die Datenbank entscheidet, ob diese Aufrufe durchgehen –
+  // hier stehen sie nur bereit.
+  isAdmin,
+  adminReady,
+  adminSignIn,
+  adminSignOut,
+  onAdminChange,
+  adminChangePassword,
+  deletePost,
+  deleteReply,
+  loadPrivacy,
+  savePrivacy,
+  resetPrivacy
 };
 
 // Signal für die Seite: ab jetzt darf geladen werden. Wird auch dann

@@ -20,6 +20,10 @@
     <span>Inkwell</span>
   </a>
   <div class="nav-right">
+    <a href="community/" class="nav-dl nav-community" title="Community">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      <span data-i18n="nav_community">Community</span>
+    </a>
     <button id="btn-open-login" class="nav-dl" title="Web-App / Login" style="padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-radius: 20px; cursor: pointer;">
       <svg class="nav-icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
       <svg class="nav-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display: none;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
@@ -122,7 +126,9 @@
 <!-- Login Modal -->
 <div id="login-modal" class="modal-backdrop" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true">
-    <div class="modal-kicker" data-i18n="nav_login">Anmelden</div>
+    <!-- Dreimal hintereinander anklicken öffnet den Adminzugang.
+         Siehe den Abschnitt "Adminzugang" weiter unten im Script. -->
+    <div class="modal-kicker" id="login-kicker" data-i18n="nav_login" style="user-select:none;">Anmelden</div>
     <h4 data-i18n="login_title">Cloud Login</h4>
     <p data-i18n="login_sub">Melde dich mit Google oder Microsoft an, um deine Notizbücher aus Google Drive bzw. OneDrive anzusehen.</p>
 
@@ -161,6 +167,50 @@
   </div>
 </div>
 
+<!-- Hinweis vor der Microsoft-Anmeldung.
+
+     Die App ist auf den Mandanten "consumers" eingerichtet (siehe
+     MICROSOFT_TENANT in js/config.js). Ein Geschäfts- oder Schulkonto
+     läuft dort in eine Fehlerseite von Microsoft, die nicht erklärt,
+     woran es liegt. Deshalb steht der Hinweis vorher hier. -->
+<div id="ms-hint-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ms-hint-title">
+    <div class="modal-kicker" data-i18n="ms_hint_kicker">Vor der Anmeldung</div>
+    <h4 id="ms-hint-title" data-i18n="ms_hint_title">Nur mit privatem Microsoft-Konto</h4>
+    <p data-i18n="ms_hint_body">Inkwell ist für persönliche Microsoft-Konten eingerichtet — also Outlook.com, Hotmail, Live oder MSN.</p>
+    <p class="modal-note" data-i18n="ms_hint_body_2">Mit einem Geschäfts- oder Schulkonto schlägt die Anmeldung fehl. Diese Konten verwaltet deine Organisation, und sie müsste Inkwell erst freigeben.</p>
+    <div class="modal-actions">
+      <button id="ms-hint-cancel" class="btn-m" type="button" data-i18n="downgrade_cancel">Abbrechen</button>
+      <button id="ms-hint-confirm" class="btn-m warn" type="button" data-i18n="ms_hint_confirm">Verstanden, weiter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Adminzugang. Erscheint nur nach dem Dreifachklick auf die Kopfzeile
+     des Anmeldefensters – es gibt bewusst keinen sichtbaren Weg dorthin. -->
+<div id="admin-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <div class="modal-kicker" id="admin-modal-kicker">Interner Zugang</div>
+    <h4 id="admin-modal-title">Adminbereich</h4>
+    <p id="admin-modal-sub">Passwort eingeben, um die Verwaltung zu öffnen.</p>
+    <form id="admin-login-form" autocomplete="off">
+      <div style="margin-top:16px;">
+        <label for="admin-password" id="admin-modal-pw-label"
+               style="display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-light); margin-bottom:6px;">Passwort</label>
+        <span class="pw-field">
+          <input type="password" id="admin-password" required autocomplete="current-password"
+                 style="background:var(--navy-card); border:0.5px solid var(--navy-border); color:var(--cream); font-family:'Jost',sans-serif; font-size:14px; padding:10px 12px; border-radius:4px;">
+        </span>
+      </div>
+      <p id="admin-modal-error" style="display:none; font-size:12px; color:#d9534f; margin:10px 0 0; line-height:1.5;"></p>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="button" class="btn-m" id="admin-cancel" data-i18n="downgrade_cancel">Abbrechen</button>
+        <button type="submit" class="btn-m warn" id="admin-submit">Anmelden</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Downgrade Modal -->
 <div id="downgrade-modal" class="modal-backdrop" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="downgrade-title">
@@ -182,6 +232,7 @@
 <script src="js/config.js"></script>
 <script src="js/providers.js"></script>
 <script src="js/common.js"></script>
+<script src="js/admin.js"></script>
 <script>
 const GH_USER = 'manuel0anvi';
 const GH_REPO = 'Inkwell';
@@ -439,14 +490,159 @@ document.getElementById('login-google-btn').addEventListener('click', () => {
   startGoogleLogin('dashboard/');
 });
 
+/* Microsoft-Anmeldung: erst der Hinweis, dann weiter zu Microsoft.
+   Abbrechen schließt nur das Hinweisfenster – das Anmeldefenster bleibt
+   offen, damit man ohne Umweg Google wählen kann. */
+const msHintModal = document.getElementById('ms-hint-modal');
+
+function closeMsHint() {
+  msHintModal.classList.remove('open');
+  msHintModal.setAttribute('aria-hidden', 'true');
+}
+
 document.getElementById('login-microsoft-btn').addEventListener('click', () => {
+  msHintModal.classList.add('open');
+  msHintModal.setAttribute('aria-hidden', 'false');
+  document.getElementById('ms-hint-confirm').focus();
+});
+
+document.getElementById('ms-hint-confirm').addEventListener('click', () => {
+  closeMsHint();
   startCloudLogin('dashboard/', 'microsoft');
+});
+
+document.getElementById('ms-hint-cancel').addEventListener('click', closeMsHint);
+
+msHintModal.addEventListener('click', (event) => {
+  if (event.target === msHintModal) closeMsHint();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && msHintModal.classList.contains('open')) closeMsHint();
 });
 
 document.getElementById('login-cancel').addEventListener('click', () => {
   loginModal.classList.remove('open');
   loginModal.setAttribute('aria-hidden', 'true');
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   ADMINZUGANG
+
+   Dreimal auf die Kopfzeile des Anmeldefensters klicken öffnet die
+   Passwortabfrage. Es gibt keinen Verweis darauf und keinen Eintrag im
+   Menü – wer den Griff nicht kennt, stolpert nicht darüber.
+
+   Das ist ausdrücklich nur Bequemlichkeit, kein Schutz. Geschützt wird der
+   Adminbereich dadurch, dass das Passwort bei Firebase liegt und Firestore
+   jede Änderung an der angemeldeten Kennung misst (website/firestore.rules).
+   ══════════════════════════════════════════════════════════════════════ */
+
+const adminModal = document.getElementById('admin-modal');
+const adminError = document.getElementById('admin-modal-error');
+
+// Firebase wird erst geladen, wenn es wirklich gebraucht wird. Sonst zahlt
+// jeder Besucher der Startseite für etwas, das ihn nichts angeht.
+let adminApiPromise = null;
+function loadAdminApi() {
+  if (!adminApiPromise) {
+    adminApiPromise = import('./js/firebase.js').then(() => whenAdminApiReady());
+  }
+  return adminApiPromise;
+}
+
+function applyAdminModalLabels() {
+  document.getElementById('admin-modal-kicker').textContent = t('admin_login_kicker');
+  document.getElementById('admin-modal-title').textContent = t('admin_login_title');
+  document.getElementById('admin-modal-sub').textContent = t('admin_login_sub');
+  document.getElementById('admin-modal-pw-label').textContent = t('admin_login_password');
+  document.getElementById('admin-submit').textContent = t('admin_login_submit');
+}
+
+function openAdminModal() {
+  applyAdminModalLabels();
+  setupPasswordEyes(adminModal);
+  adminError.style.display = 'none';
+
+  // Beim erneuten Öffnen wieder verdeckt starten, auch wenn zuletzt das
+  // Auge aktiv war – sonst steht das Passwort beim nächsten Mal offen da.
+  const passwordInput = document.getElementById('admin-password');
+  passwordInput.value = '';
+  passwordInput.type = 'password';
+  const eye = adminModal.querySelector('.pw-eye');
+  if (eye) eye.classList.remove('revealed');
+
+  loginModal.classList.remove('open');
+  loginModal.setAttribute('aria-hidden', 'true');
+
+  adminModal.classList.add('open');
+  adminModal.setAttribute('aria-hidden', 'false');
+  document.getElementById('admin-password').focus();
+
+  // Schon im Hintergrund laden, während das Passwort getippt wird
+  loadAdminApi().catch(() => {});
+}
+
+function closeAdminModal() {
+  adminModal.classList.remove('open');
+  adminModal.setAttribute('aria-hidden', 'true');
+}
+
+/* Drei Klicks zählen, aber nur solange sie zusammengehören: nach einer
+   Sekunde Pause beginnt die Zählung von vorn. Ohne das würden drei über
+   den Tag verteilte Klicks irgendwann ebenfalls auslösen. */
+let kickerClicks = 0;
+let kickerTimer = null;
+
+document.getElementById('login-kicker').addEventListener('click', () => {
+  kickerClicks += 1;
+  clearTimeout(kickerTimer);
+  kickerTimer = setTimeout(() => { kickerClicks = 0; }, 1000);
+
+  if (kickerClicks >= 3) {
+    kickerClicks = 0;
+    clearTimeout(kickerTimer);
+    openAdminModal();
+  }
+});
+
+document.getElementById('admin-cancel').addEventListener('click', closeAdminModal);
+
+adminModal.addEventListener('click', (event) => {
+  if (event.target === adminModal) closeAdminModal();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && adminModal.classList.contains('open')) closeAdminModal();
+});
+
+document.getElementById('admin-login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const password = document.getElementById('admin-password').value;
+  const submit = document.getElementById('admin-submit');
+
+  submit.disabled = true;
+  adminError.style.display = 'none';
+
+  try {
+    const api = await loadAdminApi();
+    await api.adminSignIn(password);
+    window.location.href = 'admin/';
+  } catch (err) {
+    adminError.textContent = describeAdminError(err);
+    adminError.style.display = 'block';
+    document.getElementById('admin-password').select();
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+if (typeof addLangChangeListener === 'function') {
+  addLangChangeListener(() => {
+    if (adminModal.classList.contains('open')) applyAdminModalLabels();
+  });
+}
 </script>
 </body>
 </html>

@@ -211,6 +211,9 @@ async function showDashboard() {
 
   if (!await requireSession()) return;
 
+  const driveLabel = document.getElementById('drive-connected-label');
+  if (driveLabel) driveLabel.textContent = getActiveProvider().label;
+
   try {
     const { notebooks, folderFound, ownBytes } = await loadNotebooksFromCloud();
     allNotebooks = notebooks;
