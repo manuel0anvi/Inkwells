@@ -224,22 +224,35 @@ function emailFromIdToken(idToken) {
   }
 }
 
-async function signInWithProviderToken({ provider, idToken, rawNonce, accessToken } = {}) {
+/* >>> Was bei Microsoft NICHT funktioniert – bitte nicht erneut versuchen <<<
+
+   Firebase nimmt für microsoft.com KEINE selbst besorgte Anmeldung an.
+   Am 02.08.2026 gegen den echten Endpunkt durchgemessen, mit einem
+   frischen Token und eingeschaltetem Anbieter:
+
+     id_token allein                → INVALID_CREDENTIAL_OR_PROVIDER_ID
+     id_token + access_token        → INVALID_CREDENTIAL_OR_PROVIDER_ID
+     access_token allein            → INVALID_CREDENTIAL_OR_PROVIDER_ID
+
+   Dass der Anbieter eingeschaltet ist, wurde dabei ebenfalls belegt:
+   accounts:createAuthUri liefert für microsoft.com eine Adresse mit
+   genau unserer Anwendungs-ID zurück.
+
+   Der Grund ist bauartbedingt: Google ist bei Firebase ein
+   eigenständiger Anbieter, dessen Token direkt geprüft werden.
+   Microsoft ist ein generischer OAuth-Anbieter – dessen Anmeldung muss
+   Firebase SELBST begonnen haben (createAuthUri liefert dazu eine
+   sessionId). Ohne die gibt es keinen Weg hinein.
+
+   Die Meldung dazu lautet ausgerechnet
+   „invalid-credential-or-provider-id" – dieselbe wie bei einem
+   abgeschalteten Anbieter. Das hat schon einmal zu einer langen,
+   ergebnislosen Suche in der Firebase Console geführt. */
+async function signInWithProviderToken({ provider, idToken, rawNonce } = {}) {
   if (!idToken) throw new Error('NO_ID_TOKEN');
 
-  /* >>> Warum bei Microsoft das Zugriffstoken mit muss <<<
-     Google ist bei Firebase ein eigenständiger Anbieter: ein ID-Token
-     allein genügt. Microsoft ist dort ein generischer OAuth-Anbieter –
-     sein Backend prüft die Anmeldung, indem es mit dem ZUGRIFFSTOKEN bei
-     Microsoft nachfragt. Ein ID-Token allein wurde deshalb abgewiesen,
-     mit „invalid-credential-or-provider-id" – derselben Meldung wie bei
-     einem abgeschalteten Anbieter, obwohl er längst eingeschaltet war. */
   const credential = provider === 'microsoft'
-    ? new OAuthProvider('microsoft.com').credential({
-        idToken,
-        accessToken: accessToken || undefined,
-        rawNonce: rawNonce || undefined
-      })
+    ? new OAuthProvider('microsoft.com').credential({ idToken, rawNonce: rawNonce || undefined })
     : GoogleAuthProvider.credential(idToken);
 
   const existing = auth.currentUser;

@@ -149,7 +149,15 @@
          längst eingeschaltet hatte, suchte damit an der falschen Stelle –
          genau das ist bei Microsoft passiert. Deshalb jetzt die möglichen
          Ursachen und die Originalmeldung dazu. */
+      /* Bei Microsoft ist die Ursache bekannt und nicht zu beheben:
+         Firebase nimmt für microsoft.com keine selbst besorgte Anmeldung
+         an (ausführlich in core/share.js über signInWithProviderToken).
+         Wer hier auf die Firebase Console verwiesen wird, sucht
+         vergeblich – der Anbieter ist eingeschaltet. */
       if (/invalid-credential|provider-id/i.test(detail)) {
+        const isMicrosoft = (typeof CloudSync_ !== 'undefined' && CloudSync_)
+          && CloudSync_.getProviderId() === 'microsoft';
+        if (isMicrosoft) return t('shareMicrosoftUnsupported');
         return t('shareCredentialRejected') + (detail ? ' (' + detail + ')' : '');
       }
 

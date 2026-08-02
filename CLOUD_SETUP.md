@@ -406,6 +406,38 @@ Ohne diesen Eintrag lautet der Fehler beim Anmelden sinngemäß
 
 ### Schritt 1b — Microsoft einschalten
 
+> ### ⚠ Das führt derzeit trotzdem nicht zum Ziel
+>
+> **Geteilte Dokumente gehen zurzeit nur mit einem Google-Konto.** Die
+> folgenden Schritte sind richtig ausgeführt und trotzdem wirkungslos —
+> daran ist in der Console nichts einzustellen.
+>
+> Am 02.08.2026 gegen den echten Endpunkt durchgemessen, mit frischem
+> Token und eingeschaltetem Anbieter:
+>
+> | Was geschickt wurde | Antwort |
+> | --- | --- |
+> | `id_token` allein | `INVALID_CREDENTIAL_OR_PROVIDER_ID` |
+> | `id_token` + `access_token` | `INVALID_CREDENTIAL_OR_PROVIDER_ID` |
+> | `access_token` allein | `INVALID_CREDENTIAL_OR_PROVIDER_ID` |
+>
+> Dass der Anbieter **eingeschaltet** ist, wurde dabei mitbewiesen:
+> `accounts:createAuthUri` liefert für `microsoft.com` eine Adresse mit
+> genau unserer Anwendungs-ID zurück.
+>
+> Der Grund ist bauartbedingt: Google ist bei Firebase ein eigenständiger
+> Anbieter, dessen Token direkt geprüft werden. Microsoft ist ein
+> generischer OAuth-Anbieter — dessen Anmeldung muss Firebase **selbst**
+> begonnen haben. Inkwell besorgt das Token aber selbst, für OneDrive.
+>
+> Die Fehlermeldung lautet ausgerechnet
+> `invalid-credential-or-provider-id` — dieselbe wie bei einem
+> *abgeschalteten* Anbieter. Genau das hat schon zu einer langen,
+> ergebnislosen Suche hier in der Console geführt. Nicht wiederholen.
+>
+> Die Anmeldung bei OneDrive und die Sicherung der Hefte sind davon
+> **nicht** betroffen; nur Teilen und Empfangen bleiben aus.
+
 Zuerst in Azure ein Geheimnis anlegen (Firebase verlangt eines, auch wenn
 die App selbst ohne auskommt):
 
