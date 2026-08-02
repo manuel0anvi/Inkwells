@@ -27,19 +27,17 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .nav-dl:hover{background:var(--gold-dim)}
 
 /* ── Community in der Kopfzeile ──────────────────────────────────────
-   Stand vorher nur in der Fußzeile und wurde übersehen.
+   Stand vorher nur in der Fußzeile und wurde übersehen. Hebt sich durch
+   die gefüllte Fläche von den übrigen, nur umrandeten Knöpfen ab.
 
-   Am Computer nur der Schriftzug, ohne Kasten drumherum – hebt sich durch
-   die Linie beim Überfahren ab, nicht durch eine Fläche.
-
-   Auf dem Handy bleibt die gefüllte, runde Fläche mit Symbol bestehen
-   (Regeln im Media-Block weiter unten): dort fällt die Beschriftung weg
-   und ohne Symbol bliebe der Knopf leer. */
-.nav-community{display:inline-flex;align-items:center;background:transparent;border:none;padding:0;text-decoration:none;border-bottom:1px solid transparent;transition:border-color .2s}
-.nav-community:hover{background:transparent;border-bottom-color:var(--gold-light)}
-.nav-community svg{width:15px;height:15px;flex-shrink:0;display:none}
+   Das Symbol ist immer sichtbar, nicht nur auf dem Handy: unter 768px
+   fällt die Beschriftung weg (Regel weiter unten) und der Knopf wird zum
+   Kreis – ohne Symbol bliebe er dann leer. */
+.nav-community{display:inline-flex;align-items:center;gap:8px;background:var(--gold-dim);border-color:var(--gold-light)}
+.nav-community:hover{background:rgba(201,162,39,.28)}
+.nav-community svg{width:15px;height:15px;flex-shrink:0}
 /* Auf der Community-Seite selbst: zeigt an, wo man ist. */
-.nav-community[aria-current="page"]{border-bottom-color:var(--gold);color:var(--cream)}
+.nav-community[aria-current="page"]{background:rgba(201,162,39,.32);border-color:var(--gold);color:var(--cream)}
 .lang-sw{display:flex;align-items:center;gap:1px;border:0.5px solid var(--navy-border);padding:2px}
 .lb{background:transparent;border:none;color:var(--text-muted);font-family:'Jost',sans-serif;font-size:10px;letter-spacing:0.1em;padding:5px 8px;cursor:pointer;transition:color .2s,background .2s;text-transform:uppercase}
 .lb:hover{color:var(--gold-light)}
@@ -164,6 +162,41 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
   font-family:'DM Mono',Consolas,monospace;font-size:12px;
 }
 .opt-radio-input:disabled{opacity:.45}
+
+/* ── Freigabe: Link-Zeile ────────────────────────────────────────────
+   Schalter links, Rollenauswahl rechts – dieselbe Auswahl wie bei den
+   Personen darunter, damit man die Frage „nur lesen oder bearbeiten?"
+   nur einmal versteht. Gegenstück zu .share-link-head in
+   src/css/modals.css. */
+.share-link-head{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;background:rgba(0,0,0,0.28);
+  border:0.5px solid var(--navy-border);border-radius:5px;
+}
+.share-link-toggle{
+  flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;
+  font-family:'Jost',sans-serif;font-size:13px;color:var(--cream);cursor:pointer;
+}
+/* Der Typ gehört in den Selektor: sonst kann eine breitere Regel für
+   Eingabefelder das Häkchen auf volle Breite ziehen und die
+   Beschriftung aus der Zeile schieben. */
+.share-link-toggle input[type="checkbox"]{
+  flex:none;width:15px;height:15px;padding:0;margin:0;
+  accent-color:var(--gold-light);cursor:pointer;
+}
+.share-link-toggle span{min-width:0}
+.share-role-select{
+  flex:none;
+  padding:6px 8px;background:rgba(0,0,0,0.28);
+  border:0.5px solid var(--navy-border);border-radius:5px;color:var(--cream);
+  font-family:'Jost',sans-serif;font-size:12px;
+}
+.share-role-select:disabled{opacity:.4}
+
+/* Solange geschrieben wird, keine zweite Änderung annehmen – sonst
+   überholen sich zwei Schreibvorgänge in Firestore. */
+#share-dlg-link-section.busy,
+#share-dlg-people-section.busy{opacity:.55;pointer-events:none}
 
 /* General layouts for other subpages (Community & Datenschutz) */
 .page-container{
@@ -481,13 +514,6 @@ footer a:hover{color:var(--gold-light)}
   .lang-sw{display:none !important}
   .lang-sw-mobile-custom{display:inline-block !important}
   .nav-right{gap:10px}
-
-  /* Community-Kreis am Handy: hier greift die schlankere Desktop-Regel
-     oben nicht – der Knopf bleibt gefüllt und mit Rand, wie vorher. */
-  .nav-community{background:var(--gold-dim) !important;border:0.5px solid var(--gold-light) !important}
-  .nav-community:hover{background:rgba(201,162,39,.28) !important}
-  .nav-community svg{display:inline-block !important}
-  .nav-community[aria-current="page"]{background:rgba(201,162,39,.32) !important;border-color:var(--gold) !important}
 
   .hero,.features,.dl-section,.ver-section,.page-container{padding-left:20px;padding-right:20px}
   .hero{padding-top:104px;padding-bottom:72px}

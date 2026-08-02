@@ -75,7 +75,15 @@ function markAdminOnBody(admin) {
 if (!window.location.pathname.includes('/admin/')
     && document.querySelector('script[src*="firebase.js"]')) {
   document.addEventListener('DOMContentLoaded', () => {
-    isAdminSignedIn().then(markAdminOnBody).catch(() => {});
+    /* Dauerhaft zuhören statt einmal fragen: meldet man sich anderswo im
+       selben Browser ab, verschwindet „Verwaltung" sofort, statt bis zum
+       nächsten Neuladen stehen zu bleiben. */
+    whenAdminApiReady()
+      .then(api => {
+        if (api.onAdminChange) api.onAdminChange(markAdminOnBody);
+        else return isAdminSignedIn().then(markAdminOnBody);
+      })
+      .catch(() => {});
   });
 }
 

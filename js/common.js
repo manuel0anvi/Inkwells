@@ -4,6 +4,14 @@
    und js/providers.js).
    ══════════════════════════════════════════════════════════════════════ */
 
+/* Wo diese Datei liegt. Gebraucht, um js/firebase.js beim Abmelden
+   nachzuladen: ein dynamisches import() in einem klassischen Script
+   rechnet relative Pfade gegen die SEITE, nicht gegen das Script – aus
+   dem Dashboard heraus zeigte './js/firebase.js' deshalb ins Leere. */
+const INKWELL_SCRIPT_DIR = (document.currentScript && document.currentScript.src)
+  ? document.currentScript.src.replace(/[^/]*$/, '')
+  : './';
+
 const INKWELL_TOKEN_KEY = 'inkwell_cloud_token';
 const INKWELL_REFRESH_KEY = 'inkwell_cloud_refresh';
 const INKWELL_EXPIRY_KEY = 'inkwell_cloud_expiry';
@@ -253,22 +261,7 @@ async function inkwellIdentityReady() {
   try {
     const api = await whenInkwellShareReady(8000);
     await api.whenIdentityReady();
-    if (!api.hasRealIdentity()) return null;
-
-    /* >>> Kennt Firebase noch jemand ANDEREN? <<<
-       Eine Sitzung, die von einem früheren Konto stehen geblieben ist,
-       würde die geteilten Dokumente dauerhaft unter der alten Adresse
-       suchen. Sie wird weggeräumt; die Anmeldung mit der richtigen
-       Adresse holt linkFirebaseIdentity() danach nach. */
-    const known = api.currentIdentity();
-    const wanted = api.normalizeEmail(getRememberedEmail() || '');
-    if (wanted && known.email !== wanted) {
-      console.warn('[Auth] Firebase kennt noch', known.email, '– erwartet wird', wanted);
-      try { await api.signOutIdentity(); } catch (e) { /* ohne Netz: beim nächsten Mal */ }
-      return null;
-    }
-
-    return known;
+    return api.hasRealIdentity() ? api.currentIdentity() : null;
   } catch (err) {
     return null;
   }
@@ -427,10 +420,38 @@ function handleGoogleCallback() {
   return handleCloudCallback();
 }
 
+/* ── Abmelden ──────────────────────────────────────────────────────
+   >>> Warum das Abmelden zwei Sitzungen beenden muss <<<
+
+   Die Anmeldung bei Google bzw. Microsoft und die des Adminkontos bei
+   Firebase sind zwei völlig getrennte Dinge. Firebase bewahrt seine
+   Sitzung im Browser auf und überlebt damit jedes Neuladen, auch ein
+   hartes. Wer sich abgemeldet hatte, konnte deshalb weiterhin Beiträge
+   löschen und schrieb weiter unter „Inkwell Team" – der einzige Weg
+   hinaus war das Logo im Adminbereich, und darauf kommt niemand.
+
+   js/firebase.js wird dafür bei Bedarf geholt: die meisten Seiten binden
+   es gar nicht ein, und dann gibt es auch keine Adminsitzung zu beenden.
+   ─────────────────────────────────────────────────────────────────── */
+
+async function inkwellAdminSignOut() {
+  try {
+    const module = await import(INKWELL_SCRIPT_DIR + 'firebase.js');
+    const api = module.default || window.InkwellForum;
+    if (api?.adminSignOut) await api.adminSignOut();
+    document.body.dataset.inkwellAdmin = 'no';
+  } catch (err) {
+    console.warn('[Inkwell] Adminsitzung nicht beendet:', err?.message || err);
+  }
+}
+
 function inkwellLogout() {
   const session = getInkwellSession();
   const providerId = getActiveProviderId();
   clearInkwellSession();
+
+  // Auch die Adminsitzung beenden – siehe inkwellAdminSignOut()
+  inkwellAdminSignOut().catch(() => {});
 
   // Zugriff zurückziehen – nur Google bietet dafür einen Endpunkt
   if (providerId === 'google' && session?.accessToken) {
@@ -440,20 +461,6 @@ function inkwellLogout() {
       mode: 'no-cors'
     }).catch(() => {});
   }
-
-  /* >>> Auch bei Firebase abmelden <<<
-     Die Anmeldung bei Google bzw. Microsoft und die bei Firebase sind zwei
-     verschiedene Dinge. Blieb die Firebase-Sitzung stehen, wurden die
-     geteilten Dokumente danach weiter unter der ALTEN Adresse gesucht –
-     auch nachdem man sich längst mit einer anderen angemeldet hatte.
-
-     Gibt ein Promise zurück, auf das der Aufrufer warten MUSS, bevor er
-     die Seite wechselt: sonst schneidet die Navigation das Abmelden ab
-     und die alte Kennung bleibt doch stehen. */
-  return whenInkwellShareReady(3000)
-    .then(api => api.signOutIdentity())
-    .then(() => document.dispatchEvent(new CustomEvent('inkwell-identity-changed')))
-    .catch(err => console.warn('[Auth] Firebase-Abmeldung übersprungen:', err?.message || err));
 }
 
 /* ── Navigation / Sprachmenü ──────────────────────────────────────── */

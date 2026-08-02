@@ -353,32 +353,18 @@
     <p id="share-dlg-needs-account" style="display:none; font-size:12px; color:var(--text-muted); line-height:1.6; border:0.5px solid rgba(224,166,58,0.3); background:rgba(224,166,58,0.07); border-radius:6px; padding:10px; margin:0 0 16px;"></p>
 
     <div style="margin-bottom:16px;" id="share-dlg-link-section">
-      <div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gold-light); margin-bottom:10px;" data-i18n="share_link_label">Was darf, wer den Link hat?</div>
-
-      <div class="opt-radio-list">
-        <label class="opt-radio">
-          <input type="radio" name="share-link-mode" value="off" checked>
-          <span class="opt-radio-body">
-            <span class="opt-radio-title" data-i18n="share_link_off">Kein Link</span>
-            <span class="opt-radio-hint" data-i18n="share_link_off_hint">Nur die Leute, die du unten einträgst, kommen an das Heft.</span>
-          </span>
+      <!-- Ein Schalter und daneben dieselbe Rollenauswahl wie bei den
+           Personen darunter. Vorher standen hier drei Auswahlpunkte –
+           dieselbe Frage in anderer Form, zweimal zu lernen. -->
+      <div class="share-link-head">
+        <label class="share-link-toggle">
+          <input type="checkbox" id="share-dlg-link-on">
+          <span data-i18n="share_link_anyone">Jeder mit dem Link</span>
         </label>
-
-        <label class="opt-radio">
-          <input type="radio" name="share-link-mode" value="view">
-          <span class="opt-radio-body">
-            <span class="opt-radio-title" data-i18n="share_link_view">Nur ansehen</span>
-            <span class="opt-radio-hint" data-i18n="share_link_view_hint">Wer den Link hat, kann das Heft lesen – auch ohne Konto.</span>
-          </span>
-        </label>
-
-        <label class="opt-radio">
-          <input type="radio" name="share-link-mode" value="edit">
-          <span class="opt-radio-body">
-            <span class="opt-radio-title" data-i18n="share_link_edit">Ansehen und bearbeiten</span>
-            <span class="opt-radio-hint" data-i18n="share_link_edit_hint">Angemeldete Empfänger können in der Inkwell-App mitarbeiten.</span>
-          </span>
-        </label>
+        <select id="share-dlg-link-role" class="share-role-select" disabled>
+          <option value="view" data-i18n="role_view">Nur lesen</option>
+          <option value="edit" data-i18n="role_edit">Bearbeiten</option>
+        </select>
       </div>
     </div>
 
@@ -412,9 +398,12 @@
 
     <div id="share-dlg-status" style="font-size:12px; color:var(--gold-light); min-height:18px; margin-bottom:14px;"></div>
 
+    <!-- „Link erzeugen" und „Freigabe aktualisieren" gibt es nicht mehr:
+         der Schalter oben und das Hinzufügen einer Adresse wirken
+         unmittelbar. Nur das Aufheben bleibt ein eigener Knopf – es ist
+         der einzige Schritt hier, der etwas wegnimmt. -->
     <div class="web-dialog-actions">
       <button id="share-dlg-revoke" class="btn-m" style="display:none; padding:8px 16px; font-size:12px; color:#d9534f; border-color:rgba(217,83,79,0.35);" data-i18n="share_revoke">Freigabe aufheben</button>
-      <button id="share-dlg-create" class="btn-m" style="padding:8px 18px; font-size:12px; background:var(--gold-dim); border-color:var(--gold-light); color:var(--gold-light);" data-i18n="share_create">Link erzeugen</button>
     </div>
   </div>
 </div>

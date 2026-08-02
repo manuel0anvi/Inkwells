@@ -699,14 +699,41 @@ let shareHead = null;
 
 function shareEl(id) { return document.getElementById(id); }
 
+/* ── Link-Zeile: Schalter + Rolle ⇄ linkMode ────────────────────────
+   In Firestore ist es EIN Wert ('off' | 'view' | 'edit'), in der
+   Oberfläche sind es zwei Bedienelemente. Hier die Übersetzung.
+   ─────────────────────────────────────────────────────────────────── */
+
 function selectedLinkMode() {
-  const checked = document.querySelector('input[name="share-link-mode"]:checked');
-  return checked ? checked.value : 'off';
+  if (!shareEl('share-dlg-link-on')?.checked) return 'off';
+  return shareEl('share-dlg-link-role')?.value === 'edit' ? 'edit' : 'view';
 }
 
-function setLinkModeRadio(mode) {
-  const radio = document.querySelector(`input[name="share-link-mode"][value="${mode}"]`);
-  if (radio) radio.checked = true;
+function showLinkMode(mode) {
+  const on = mode === 'view' || mode === 'edit';
+  const toggle = shareEl('share-dlg-link-on');
+  const role = shareEl('share-dlg-link-role');
+  if (toggle) toggle.checked = on;
+  if (role) {
+    // Beim Ausschalten die zuletzt gewählte Rolle stehen lassen: wer
+    // versehentlich abschaltet, findet beim Einschalten alles vor.
+    if (on) role.value = mode;
+    role.disabled = !on;
+  }
+}
+
+/* Solange in Firestore geschrieben wird, keine zweite Änderung annehmen.
+   Ohne diese Bremse konnten sich zwei Schreibvorgänge überholen, und am
+   Ende stand die ältere Rolle im Dokument. */
+function setShareBusy(busy) {
+  for (const id of ['share-dlg-link-section', 'share-dlg-people-section']) {
+    shareEl(id)?.classList.toggle('busy', !!busy);
+  }
+}
+
+/** Freigeben geht nur online – jeder Schritt schreibt nach Firestore. */
+function shareIsOffline() {
+  return navigator.onLine === false;
 }
 
 async function openShareDialog() {
@@ -724,19 +751,27 @@ async function openShareDialog() {
   shareEl('share-dlg-link-row').style.display = 'none';
   shareEl('share-dlg-link').value = '';
   shareEl('share-dlg-revoke').style.display = 'none';
-  shareEl('share-dlg-create').textContent = t('share_create');
-  setLinkModeRadio(entry?.linkMode || 'off');
+  setShareBusy(false);
+  showLinkMode(entry?.linkMode || 'off');
 
   overlay.style.display = 'flex';
 
+  // Ohne Netz sofort Bescheid geben, statt in eine Zeitgrenze zu laufen
+  const needs = shareEl('share-dlg-needs-account');
+  if (shareIsOffline()) {
+    needs.textContent = t('share_offline');
+    needs.style.display = 'block';
+    shareEl('share-dlg-link-section').style.display = 'none';
+    shareEl('share-dlg-people-section').style.display = 'none';
+    return;
+  }
+
   // Ohne echte Firebase-Kennung geht nichts davon.
   const me = await inkwellIdentityReady();
-  const needs = shareEl('share-dlg-needs-account');
   needs.textContent = t('share_needs_account');
   needs.style.display = me ? 'none' : 'block';
   shareEl('share-dlg-link-section').style.display = me ? '' : 'none';
   shareEl('share-dlg-people-section').style.display = me ? '' : 'none';
-  shareEl('share-dlg-create').disabled = !me;
   if (!me) return;
 
   if (entry?.docId) await loadShareHead(entry.docId);
@@ -762,8 +797,7 @@ async function loadShareHead(docId) {
 function renderShareHead() {
   if (!shareHead) return;
 
-  setLinkModeRadio(shareHead.linkMode);
-  shareEl('share-dlg-create').textContent = t('share_update');
+  showLinkMode(shareHead.linkMode);
   shareEl('share-dlg-revoke').style.display = 'inline-block';
   shareEl('share-dlg-status').textContent = t('share_active');
 
@@ -860,53 +894,71 @@ function closeShareDialog() {
   shareHead = null;
 }
 
-async function submitShare() {
-  if (!currentNotebook) return;
+/**
+ * Sorgt dafür, dass es das geteilte Dokument gibt. Beim allerersten Mal
+ * geht dabei der Inhalt mit hinauf.
+ *
+ * Von hier aus laufen alle Wege: Link einschalten, Rolle ändern, jemanden
+ * einladen. Damit gibt es keinen Zustand mehr, in dem man etwas einstellt
+ * und es erst durch einen zweiten Knopfdruck gilt.
+ *
+ * @returns {Promise<boolean>} ob ein Dokument bereitsteht
+ */
+async function ensureShareDocument() {
+  if (shareHead) return true;
+  if (!currentNotebook) return false;
 
-  const btn = shareEl('share-dlg-create');
-  const status = shareEl('share-dlg-status');
   const entry = shareFor(currentNotebook.id);
-
-  btn.disabled = true;
-  status.textContent = t('share_working');
-
-  try {
-    const api = await whenShareReady();
-    const result = await api.shareDocument(currentNotebook, {
-      docId: entry?.docId,
-      linkMode: selectedLinkMode()
-    });
-
-    rememberShare(currentNotebook.id, {
-      docId: result.docId,
-      linkId: result.linkId,
-      url: result.url,
-      linkMode: result.linkMode
-    });
-
-    await loadShareHead(result.docId);
-    status.textContent = entry?.docId ? t('share_updated_ok') : t('share_done');
-  } catch (err) {
-    console.error('[Share]', err);
-    status.textContent = describeShareError(err);
-  } finally {
-    btn.disabled = false;
+  if (entry?.docId) {
+    await loadShareHead(entry.docId);
+    return !!shareHead;
   }
+
+  shareEl('share-dlg-status').textContent = t('share_working');
+
+  const api = await whenShareReady();
+  const result = await api.shareDocument(currentNotebook, { linkMode: 'off' });
+
+  rememberShare(currentNotebook.id, {
+    docId: result.docId,
+    linkId: result.linkId,
+    url: result.url,
+    linkMode: result.linkMode
+  });
+
+  await loadShareHead(result.docId);
+  return !!shareHead;
 }
 
-/** Nur das Linkrecht umstellen, ohne den Inhalt neu hochzuladen. */
+/** Link ein-/ausschalten oder sein Recht umstellen – sofort wirksam. */
 async function applyShareLinkMode() {
-  if (!shareHead) return;
+  if (!currentNotebook) return;
+
+  // Die Rollenauswahl gehört zum Schalter – sofort mitziehen, nicht erst,
+  // wenn Firestore geantwortet hat.
+  const role = shareEl('share-dlg-link-role');
+  if (role) role.disabled = !shareEl('share-dlg-link-on')?.checked;
+
   const wanted = selectedLinkMode();
-  if (wanted === shareHead.linkMode) return;
+  const status = shareEl('share-dlg-status');
+  setShareBusy(true);
 
   try {
+    if (!await ensureShareDocument()) return;
+    if (wanted === shareHead.linkMode) { status.textContent = t('share_active'); return; }
+
     const api = await whenShareReady();
     await api.setLinkMode(shareHead.docId, wanted);
     rememberShare(currentNotebook.id, { linkMode: wanted });
     await loadShareHead(shareHead.docId);
+
+    status.textContent = wanted === 'off' ? t('share_link_off_done') : t('share_saved');
   } catch (err) {
-    shareEl('share-dlg-status').textContent = describeShareError(err);
+    status.textContent = describeShareError(err);
+    // Nicht durchgekommen: die Anzeige darf nichts anderes behaupten
+    showLinkMode(shareHead ? shareHead.linkMode : 'off');
+  } finally {
+    setShareBusy(false);
   }
 }
 
@@ -927,13 +979,19 @@ async function renewShareLink() {
 
 async function addSharePerson() {
   const status = shareEl('share-dlg-status');
-  if (!shareHead) { status.textContent = t('share_create_first'); return; }
-
   const input = shareEl('share-dlg-mail');
+  if (!input.value.trim()) return;
   const role = shareEl('share-dlg-role').value === 'edit' ? 'edit' : 'view';
 
+  setShareBusy(true);
   try {
+    // Die Adresse zuerst prüfen: sonst entstünde für einen Tippfehler ein
+    // leeres geteiltes Dokument, das niemand je zu sehen bekäme.
     const api = await whenShareReady();
+    if (!api.looksLikeEmail(api.normalizeEmail(input.value))) throw new Error('BAD_EMAIL');
+
+    if (!await ensureShareDocument()) return;
+
     await api.setMember(shareHead.docId, input.value, role);
     const mail = api.normalizeEmail(input.value);
     input.value = '';
@@ -941,17 +999,24 @@ async function addSharePerson() {
     status.textContent = tf('share_invited', { mail });
   } catch (err) {
     status.textContent = describeShareError(err);
+  } finally {
+    setShareBusy(false);
   }
 }
 
 async function changeShareRole(email, role) {
   if (!shareHead) return;
+  setShareBusy(true);
   try {
     const api = await whenShareReady();
     await api.setMember(shareHead.docId, email, role);
     await loadShareHead(shareHead.docId);
+    shareEl('share-dlg-status').textContent = t('share_saved');
   } catch (err) {
     shareEl('share-dlg-status').textContent = describeShareError(err);
+    renderSharePeople();     // die alte Rolle wieder anzeigen
+  } finally {
+    setShareBusy(false);
   }
 }
 
@@ -993,9 +1058,8 @@ async function revokeCurrentShare() {
     shareEl('share-dlg-link-row').style.display = 'none';
     shareEl('share-dlg-link').value = '';
     shareEl('share-dlg-revoke').style.display = 'none';
-    shareEl('share-dlg-create').textContent = t('share_create');
     shareEl('share-dlg-people').innerHTML = '';
-    setLinkModeRadio('off');
+    showLinkMode('off');
     status.textContent = t('share_revoked');
   } catch (err) {
     console.error('[Share]', err);
@@ -1021,7 +1085,6 @@ async function copyShareLink() {
 
 document.getElementById('viewer-share').addEventListener('click', openShareDialog);
 document.getElementById('share-dlg-close').addEventListener('click', closeShareDialog);
-document.getElementById('share-dlg-create').addEventListener('click', submitShare);
 document.getElementById('share-dlg-revoke').addEventListener('click', revokeCurrentShare);
 document.getElementById('share-dlg-copy').addEventListener('click', copyShareLink);
 document.getElementById('share-dlg-renew').addEventListener('click', renewShareLink);
@@ -1029,9 +1092,10 @@ document.getElementById('share-dlg-add').addEventListener('click', addSharePerso
 document.getElementById('share-dlg-mail').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); addSharePerson(); }
 });
-document.querySelectorAll('input[name="share-link-mode"]').forEach(radio => {
-  radio.addEventListener('change', applyShareLinkMode);
-});
+// Beides führt zum selben Schreibvorgang – die Auswahl ist gesperrt,
+// solange der Schalter aus ist, kann also nicht allein auslösen.
+document.getElementById('share-dlg-link-on').addEventListener('change', applyShareLinkMode);
+document.getElementById('share-dlg-link-role').addEventListener('change', applyShareLinkMode);
 document.getElementById('share-overlay').addEventListener('click', (e) => {
   if (e.target === document.getElementById('share-overlay')) closeShareDialog();
 });
@@ -1099,67 +1163,15 @@ function switchDashTab(which) {
   }
 }
 
-/* Bei Microsoft fehlt die Firebase-Kennung nicht aus Versehen: sie lässt
-   sich nur über Firebases eigenen Ablauf herstellen, und der braucht einen
-   Klick – ein Fenster ohne Zutun blockt der Browser. Deshalb hier ein
-   eigener Knopf statt eines stillen Nachholers. */
-function renderMicrosoftLinkButton(hint) {
-  if (!hint) return;
-  if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'microsoft') return;
-  if (!isInkwellLoggedIn()) return;
-
-  const btn = document.createElement('button');
-  btn.id = 'shared-ms-link';
-  /* Gleicher Zuschnitt wie „Link erzeugen" im Freigabe-Fenster.
-
-     Der Knopf steht bewusst NEBEN dem Raster, nicht darin: als Kind von
-     .nb-grid wurde er auf Kartenbreite gezogen, und die Beschriftung brach
-     dreizeilig um. Und er kommt NACH dem Hinweis – erst der Satz, der
-     erklärt, warum es ihn gibt, dann der Knopf. */
-  btn.className = 'btn-m';
-  btn.style.cssText = 'padding:8px 18px; font-size:12px; margin:0 0 24px;'
-    + 'background:var(--gold-dim); border-color:var(--gold-light); color:var(--gold-light);';
-  btn.textContent = t('shared_link_microsoft') || 'Für geteilte Dokumente anmelden';
-
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    try {
-      const api = await whenInkwellShareReady();
-      await api.signInMicrosoftInteractive(getRememberedEmail() || '');
-      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
-      await startWatchingShared().catch(() => {});
-      renderSharedDocs();
-    } catch (err) {
-      const code = String(err?.code || '');
-      if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/i.test(code)) return;
-
-      /* Die eine Ursache, die man selbst beheben muss und die sonst nur
-         als englischer Code dasteht: die Adresse dieser Seite ist in
-         Firebase nicht als erlaubte Herkunft eingetragen. */
-      hint.textContent = /unauthorized-domain/i.test(code)
-        ? (t('shared_domain_missing') || 'Diese Adresse ist in Firebase nicht als erlaubte Herkunft eingetragen.')
-        : (t('shared_link_failed') || 'Anmeldung fehlgeschlagen.') + ' (' + (code || err?.message || '?') + ')';
-      console.warn('[Dashboard] Microsoft-Anmeldung bei Firebase fehlgeschlagen:', code, err?.message || err);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  hint.insertAdjacentElement('afterend', btn);
-}
-
 function renderSharedDocs() {
   const grid = document.getElementById('shared-grid');
   const hint = document.getElementById('shared-hint');
   if (!grid) return;
   grid.innerHTML = '';
-  // Liegt außerhalb des Rasters, wird von grid.innerHTML also nicht geleert
-  document.getElementById('shared-ms-link')?.remove();
 
   const api = window.InkwellShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
-    renderMicrosoftLinkButton(hint);
     return;
   }
 
@@ -1272,10 +1284,8 @@ function openNotebookFromUrl() {
   if (nb) renderNotebook(nb);
 }
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
-  // Erst abwarten, dann wechseln: inkwellLogout() meldet auch bei Firebase
-  // ab, und die Navigation würde das sonst abschneiden.
-  await inkwellLogout();
+document.getElementById('logout-btn').addEventListener('click', () => {
+  inkwellLogout();
   session = null;
   window.location.replace('../');
 });
