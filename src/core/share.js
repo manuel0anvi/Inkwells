@@ -224,11 +224,22 @@ function emailFromIdToken(idToken) {
   }
 }
 
-async function signInWithProviderToken({ provider, idToken, rawNonce } = {}) {
+async function signInWithProviderToken({ provider, idToken, rawNonce, accessToken } = {}) {
   if (!idToken) throw new Error('NO_ID_TOKEN');
 
+  /* >>> Warum bei Microsoft das Zugriffstoken mit muss <<<
+     Google ist bei Firebase ein eigenständiger Anbieter: ein ID-Token
+     allein genügt. Microsoft ist dort ein generischer OAuth-Anbieter –
+     sein Backend prüft die Anmeldung, indem es mit dem ZUGRIFFSTOKEN bei
+     Microsoft nachfragt. Ein ID-Token allein wurde deshalb abgewiesen,
+     mit „invalid-credential-or-provider-id" – derselben Meldung wie bei
+     einem abgeschalteten Anbieter, obwohl er längst eingeschaltet war. */
   const credential = provider === 'microsoft'
-    ? new OAuthProvider('microsoft.com').credential({ idToken, rawNonce: rawNonce || undefined })
+    ? new OAuthProvider('microsoft.com').credential({
+        idToken,
+        accessToken: accessToken || undefined,
+        rawNonce: rawNonce || undefined
+      })
     : GoogleAuthProvider.credential(idToken);
 
   const existing = auth.currentUser;

@@ -284,7 +284,8 @@ class CloudSyncManager {
           await this._linkFirebaseIdentity(
             this.getProviderId(),
             tokens.idToken,
-            tokens.rawNonce || Settings.get('cloudAuthNonce') || ''
+            tokens.rawNonce || Settings.get('cloudAuthNonce') || '',
+            tokens.accessToken
           );
         }
 
@@ -562,7 +563,7 @@ class CloudSyncManager {
     // kennen die Sicherheitsregeln nur eine anonyme Gerätekennung und die
     // geteilten Dokumente wären nicht durchsetzbar. Bewusst ohne await
     // dahinter: schlägt es fehl, arbeitet die App ganz normal weiter.
-    this._linkFirebaseIdentity(provider.id, idToken, rawNonce);
+    this._linkFirebaseIdentity(provider.id, idToken, rawNonce, accessToken);
 
     this._resetCloudState({ keepQueue: true });
     this._expiryWarned = false;
@@ -581,7 +582,7 @@ class CloudSyncManager {
    * Client-Secret) wird nur eine Notiz geschrieben. Alles außer den
    * geteilten Dokumenten funktioniert dann weiter wie bisher.
    */
-  _linkFirebaseIdentity(providerId, idToken, rawNonce) {
+  _linkFirebaseIdentity(providerId, idToken, rawNonce, accessToken) {
     if (!idToken) {
       console.warn('[CloudSync] Kein ID-Token erhalten – geteilte Dokumente bleiben aus.'
         + (providerId === 'google'
@@ -593,7 +594,7 @@ class CloudSyncManager {
 
     return this._whenShareReady()
       .then(async (api) => {
-        await api.signInWithProviderToken({ provider: providerId, idToken, rawNonce });
+        await api.signInWithProviderToken({ provider: providerId, idToken, rawNonce, accessToken });
         await Settings.update({ cloudIdentityMissing: false });
         console.log('[CloudSync] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
 
