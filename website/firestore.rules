@@ -88,7 +88,7 @@ service cloud.firestore {
        Console → Authentication → Users → Spalte „User UID"
        ───────────────────────────────────────────────────────────────── */
     function adminUid() {
-      return '9czynXNXAlfs8bGtx5hEOO9dRCd2';
+      return 'HIER_ADMIN_UID_EINTRAGEN';
     }
 
     function isAdmin() {
