@@ -261,7 +261,22 @@ async function inkwellIdentityReady() {
   try {
     const api = await whenInkwellShareReady(8000);
     await api.whenIdentityReady();
-    return api.hasRealIdentity() ? api.currentIdentity() : null;
+    if (!api.hasRealIdentity()) return null;
+
+    /* >>> Kennt Firebase noch jemand ANDEREN? <<<
+       Eine Sitzung, die von einem früheren Konto stehen geblieben ist,
+       würde die geteilten Dokumente dauerhaft unter der alten Adresse
+       suchen. Sie wird weggeräumt; die Anmeldung mit der richtigen
+       Adresse holt linkFirebaseIdentity() danach nach. */
+    const known = api.currentIdentity();
+    const wanted = api.normalizeEmail(getRememberedEmail() || '');
+    if (wanted && known.email !== wanted) {
+      console.warn('[Auth] Firebase kennt noch', known.email, '– erwartet wird', wanted);
+      try { await api.signOutIdentity(); } catch (e) { /* ohne Netz: beim nächsten Mal */ }
+      return null;
+    }
+
+    return known;
   } catch (err) {
     return null;
   }
@@ -450,9 +465,6 @@ function inkwellLogout() {
   const providerId = getActiveProviderId();
   clearInkwellSession();
 
-  // Auch die Adminsitzung beenden – siehe inkwellAdminSignOut()
-  inkwellAdminSignOut().catch(() => {});
-
   // Zugriff zurückziehen – nur Google bietet dafür einen Endpunkt
   if (providerId === 'google' && session?.accessToken) {
     fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(session.accessToken)}`, {
@@ -461,6 +473,27 @@ function inkwellLogout() {
       mode: 'no-cors'
     }).catch(() => {});
   }
+
+  /* >>> Abmelden muss ZWEI Firebase-Sitzungen beenden <<<
+     Beide sind von der Anmeldung bei Google bzw. Microsoft unabhängig und
+     überleben jedes Neuladen, auch ein hartes:
+
+       · die Kennung für geteilte Dokumente. Blieb sie stehen, wurden sie
+         danach weiter unter der ALTEN Adresse gesucht – auch nachdem man
+         sich längst mit einer anderen angemeldet hatte.
+       · die Adminsitzung, siehe inkwellAdminSignOut(). Blieb sie stehen,
+         konnte man weiter Beiträge löschen und schrieb weiter unter
+         „Inkwell Team".
+
+     Gibt ein Promise zurück, auf das der Aufrufer warten MUSS, bevor er
+     die Seite wechselt: sonst schneidet die Navigation das Abmelden ab
+     und beide Sitzungen bleiben doch stehen. */
+  const identityOut = whenInkwellShareReady(3000)
+    .then(api => api.signOutIdentity())
+    .then(() => document.dispatchEvent(new CustomEvent('inkwell-identity-changed')))
+    .catch(err => console.warn('[Auth] Firebase-Abmeldung übersprungen:', err?.message || err));
+
+  return Promise.all([identityOut, inkwellAdminSignOut()]).then(() => {});
 }
 
 /* ── Navigation / Sprachmenü ──────────────────────────────────────── */

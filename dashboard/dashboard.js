@@ -1163,15 +1163,66 @@ function switchDashTab(which) {
   }
 }
 
+/* ── Zweiter Schritt für Microsoft ───────────────────────────────────
+   Firebase nimmt bei Microsoft – anders als bei Google – keine Anmeldung
+   an, die es nicht selbst begonnen hat (nachgemessen am 2.8.2026, siehe
+   CLOUD_SETUP.md). Ohne diesen Knopf gäbe es für Microsoft-Konten also
+   überhaupt keine geteilten Dokumente. Bei Google erscheint er nicht. */
+function renderMicrosoftLinkButton(hint) {
+  if (!hint) return;
+  if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'microsoft') return;
+  if (!isInkwellLoggedIn()) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'shared-ms-link';
+  /* Der Knopf steht bewusst NEBEN dem Raster, nicht darin: als Kind von
+     .nb-grid wurde er auf Kartenbreite gezogen, und die Beschriftung brach
+     dreizeilig um. Und er kommt NACH dem Hinweis – erst der Satz, der
+     erklärt, warum es ihn gibt, dann der Knopf. */
+  btn.className = 'btn-m';
+  btn.style.cssText = 'padding:8px 18px; font-size:12px; margin:0 0 24px;'
+    + 'background:var(--gold-dim); border-color:var(--gold-light); color:var(--gold-light);';
+  btn.textContent = t('shared_link_microsoft') || 'Für geteilte Dokumente anmelden';
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const api = await whenInkwellShareReady();
+      await api.signInMicrosoftInteractive(getRememberedEmail() || '');
+      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      await startWatchingShared().catch(() => {});
+      renderSharedDocs();
+    } catch (err) {
+      const code = String(err?.code || '');
+      if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/i.test(code)) return;
+
+      /* Die eine Ursache, die man selbst beheben muss und die sonst nur
+         als englischer Code dasteht: die Adresse dieser Seite ist in
+         Firebase nicht als erlaubte Herkunft eingetragen. */
+      hint.textContent = /unauthorized-domain/i.test(code)
+        ? (t('shared_domain_missing') || 'Diese Adresse ist in Firebase nicht als erlaubte Herkunft eingetragen.')
+        : (t('shared_link_failed') || 'Anmeldung fehlgeschlagen.') + ' (' + (code || err?.message || '?') + ')';
+      console.warn('[Dashboard] Microsoft-Anmeldung bei Firebase fehlgeschlagen:', code, err?.message || err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  hint.insertAdjacentElement('afterend', btn);
+}
+
 function renderSharedDocs() {
   const grid = document.getElementById('shared-grid');
   const hint = document.getElementById('shared-hint');
   if (!grid) return;
   grid.innerHTML = '';
+  // Liegt außerhalb des Rasters, wird von grid.innerHTML also nicht geleert
+  document.getElementById('shared-ms-link')?.remove();
 
   const api = window.InkwellShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
+    renderMicrosoftLinkButton(hint);
     return;
   }
 
@@ -1284,8 +1335,9 @@ function openNotebookFromUrl() {
   if (nb) renderNotebook(nb);
 }
 
-document.getElementById('logout-btn').addEventListener('click', () => {
-  inkwellLogout();
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  // Warten, sonst schneidet die Navigation das Abmelden ab – siehe inkwellLogout()
+  await inkwellLogout();
   session = null;
   window.location.replace('../');
 });
