@@ -308,11 +308,20 @@
 
   googleBtn?.addEventListener('click', () => { if (!googleBtn.disabled) signIn('google'); });
 
-  /* Microsoft: erst der Hinweis, dann weiter. Wer abbricht, bleibt im
-     Kontofenster und kann ohne Umweg Google wählen. */
+  /* Microsoft: erst der Hinweis, dann weiter.
+
+     Das Kontofenster geht dafür zu. Beide liegen auf derselben Ebene
+     (z-index 900) und das Kontofenster steht weiter unten im Dokument –
+     bliebe es offen, läge der Hinweis unsichtbar dahinter.
+
+     Danach ist es wieder da: nach dem Abbrechen, um ohne Umweg Google
+     zu wählen, sonst als Anzeige der laufenden Anmeldung. */
   microsoftBtn?.addEventListener('click', async () => {
     if (microsoftBtn.disabled) return;
-    if (await showMsHint()) signIn('microsoft');
+    accountOverlay.style.display = 'none';
+    const goOn = await showMsHint();
+    accountOverlay.style.display = 'flex';
+    if (goOn) signIn('microsoft');
   });
 
   // Von anderen Stellen aus zu öffnen (z. B. dem Abgemeldet-Hinweis beim Start)
