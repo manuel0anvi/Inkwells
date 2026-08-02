@@ -386,7 +386,27 @@ body.read-only #add-page-btn-wrap {
   font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
   font-size: 9px;
   color: var(--lo);
-  margin-top: 12px
+  margin-top: 12px;
+  /* Seitenzahl links, Freigabe-Zeichen rechts an der Kante */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px
+}
+
+/* Dasselbe Zeichen wie am Seitenkopf, hier aber auf dunklem Grund –
+   deshalb die Farbe der Karte statt der des Papiers. */
+.nb-card-share {
+  display: flex;
+  align-items: center;
+  color: var(--lo);
+  flex-shrink: 0
+}
+
+.nb-card-share svg {
+  width: 12px;
+  height: 12px;
+  display: block
 }
 
 .nb-card-bg {

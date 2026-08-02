@@ -19,7 +19,8 @@ function renderHomeGrid() {
       + `<button class="nb-card-edit-btn" title="${t('edit')}">⋯</button>`
       + `<div class="nb-card-name">${nb.name}</div>`
       + `<div class="nb-card-bg" style="${BG_STYLE[nb.defaultBg]}"></div>`
-      + `<div class="nb-card-meta">${pageCount} ${pageLabel}</div>`
+      + `<div class="nb-card-meta"><span>${pageCount} ${pageLabel}</span>`
+      + `${typeof shareMarkHTML === 'function' ? shareMarkHTML(shareMarkFor(nb), 'nb-card-share') : ''}</div>`
       + `</div>`;
     card.querySelector('.nb-card-edit-btn').addEventListener('click', e => { e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, nb.id); });
     card.addEventListener('click', (e) => { if (!_dragState) openNotebook(nb.id); });

@@ -295,12 +295,15 @@ function shareMarkFor(nb) {
   return entry.linkMode === 'view' ? 'view' : 'edit';
 }
 
-function shareMarkHTML(mark) {
+/* Die Klasse ist wählbar, weil dasselbe Zeichen an zwei Orten steht: auf
+   dem hellen Papier des Seitenkopfs und auf der dunklen Karte der
+   Übersicht. Die Farbe muss dort jeweils eine andere sein. */
+function shareMarkHTML(mark, cls = 'j-share-mark') {
   if (!mark) return '';
   const label = mark === 'view'
     ? (t('shareMarkView') || 'Freigegeben – andere können nur lesen')
     : (t('shareMarkEdit') || 'Freigegeben – andere können mitschreiben');
-  return '<span class="j-share-mark" title="' + label + '">' + SHARE_MARK_SVG[mark] + '</span>';
+  return '<span class="' + cls + '" title="' + label + '">' + SHARE_MARK_SVG[mark] + '</span>';
 }
 
 /** Nach dem Freigeben oder Aufheben die Zeichen nachziehen, ohne alles neu

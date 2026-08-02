@@ -243,8 +243,14 @@
     markPagesChanged();
   }
 
+  /* Das Zeichen steht an zwei Orten: am Seitenkopf im offenen Heft und auf
+     der Karte in der Übersicht. Freigeben geht von beiden aus, also müssen
+     auch beide nachziehen. */
   function markPagesChanged() {
     if (typeof window.refreshPageShareIcons === 'function') window.refreshPageShareIcons();
+    if (typeof renderHomeGrid === 'function' && E('view-home')?.style.display !== 'none') {
+      renderHomeGrid();
+    }
   }
 
   function renderFromHead() {
