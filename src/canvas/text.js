@@ -341,6 +341,52 @@ function rectOfSpan(textDiv, von, bis, kante) {
   return new DOMRect(kante === 'links' ? r.left : r.right, r.top, 0, r.height);
 }
 
+/**
+ * Das Rechteck einer LEEREN Zeile im reinen Text.
+ *
+ * >>> Der Fall, an dem die fremde Marke nach oben links sprang <<<
+ * Sobald nur getippt wurde, hält dieser Editor die ganze Seite als EINEN
+ * Textknoten mit echten \n und white-space:pre-wrap – Absätze gibt es
+ * dann keine. Eine leere Zeile hat damit kein eigenes Element, an dem
+ * man messen könnte: flatRangeAt landet in diesem einen Textknoten, und
+ * „das umgebende Element" ist das ganze Textfeld. Dessen Rechteck ist
+ * die halbe Seite, nicht die Zeile. Die fremde Marke saß deshalb oben
+ * links in der Ecke – und schlimmer: visualLineSpan (ui/collab.js)
+ * rechnet aus genau diesem Rechteck aus, welche Zeilen gesperrt werden,
+ * und legte das Band dadurch auf eine ganz andere Zeile.
+ *
+ * Ausgelöst wird das vom häufigsten Handgriff überhaupt: einmal Enter am
+ * Textende, und schon steht die Marke auf einer leeren Zeile.
+ *
+ * Messbar ist stattdessen das letzte Zeichen davor, das kein Umbruch
+ * ist. Zwischen ihm und der gesuchten Stelle stehen nur noch Umbrüche,
+ * und jeder davon ist genau eine Bildschirmzeile tiefer – eine leere
+ * Zeile kann nicht umbrechen, da ist ja nichts, was umbrechen könnte.
+ *
+ * @param {number} lh   Zeilenhöhe in BILDSCHIRM-Pixeln (mit Zoom)
+ * @param {number} zoom
+ */
+function emptyLineRectAt(textDiv, inhalt, stelle, lh, zoom) {
+  if (typeof textDiv.getBoundingClientRect !== 'function') return null;
+  const feld = textDiv.getBoundingClientRect();
+
+  // Wie viele Umbrüche liegen zwischen dem letzten Zeichen und hier?
+  let i = stelle - 1;
+  let tiefer = 0;
+  while (i >= 0 && inhalt[i] === '\n') { tiefer++; i--; }
+
+  if (i >= 0) {
+    const davor = rectOfSpan(textDiv, i, i + 1, 'links');
+    if (davor) return new DOMRect(feld.left, davor.top + tiefer * lh, 0, davor.height);
+  }
+
+  /* Nichts Messbares davor – die Seite fängt mit leeren Zeilen an oder
+     ist ganz leer. Dann vom oberen Rand des Textbereichs aus zählen. */
+  const cs = (typeof getComputedStyle === 'function') ? getComputedStyle(textDiv) : null;
+  const oben = feld.top + (parseFloat(cs && cs.paddingTop) || 0) * zoom;
+  return new DOMRect(feld.left, oben + tiefer * lh, 0, lh);
+}
+
 function caretRectAt(textDiv, pos, text) {
   const inhalt = (typeof text === 'string') ? text : flatTextOf(textDiv);
   const stelle = Math.max(0, Math.min(Number(pos) || 0, inhalt.length));
@@ -358,18 +404,25 @@ function caretRectAt(textDiv, pos, text) {
     if (r) return r;
   }
 
+  const zoom = (typeof getZoom === 'function') ? getZoom() : 1;
+  const lh = (parseInt(textDiv.style.lineHeight) || 24) * zoom;
+
   /* Leere Zeile – es gibt kein Zeichen, an dem man sich festhalten
      könnte. Dann das umgebende Element; das IST hier die Zeile. */
   const range = flatRangeAt(textDiv, stelle);
   const host = range && (range.startContainer.nodeType === 1
     ? range.startContainer
     : range.startContainer.parentElement);
-  if (!host || typeof host.getBoundingClientRect !== 'function') return null;
+
+  /* Ist das „umgebende Element" das Textfeld selbst, gibt es keinen
+     Absatz, der die Zeile wäre – siehe emptyLineRectAt. */
+  if (!host || host === textDiv) {
+    return emptyLineRectAt(textDiv, inhalt, stelle, lh, zoom);
+  }
+  if (typeof host.getBoundingClientRect !== 'function') return null;
 
   const box = host.getBoundingClientRect();
   if (!box.height && !box.width) return null;
-  const lh = (parseInt(textDiv.style.lineHeight) || 24)
-    * ((typeof getZoom === 'function') ? getZoom() : 1);
   return new DOMRect(box.left, box.top, 0, Math.min(box.height || lh, lh));
 }
 

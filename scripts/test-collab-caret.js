@@ -61,6 +61,12 @@ class ElementNode {
     while (cur) { if (cur === this) return true; cur = cur.parentNode; }
     return false;
   }
+  /* Das Textfeld als Ganzes. Gebraucht für leere Zeilen im reinen Text:
+     dort gibt es kein Element, das die Zeile wäre, und caretRectAt
+     rechnet vom Rand des Feldes aus. */
+  getBoundingClientRect() {
+    return new DOMRectStub(LINKS, OBEN, UMBRUCH_BEI * ZEICHENBREITE, ZEILENHOEHE * 20);
+  }
 }
 
 function el(tag, ...kids) {
@@ -117,19 +123,35 @@ class DOMRectStub {
   }
 }
 
-/** Welche Zeile und Spalte hat das Zeichen an dieser Stelle? */
-function gitter(index) {
-  return { zeile: Math.floor(index / UMBRUCH_BEI), spalte: index % UMBRUCH_BEI };
+/**
+ * Welche Zeile und Spalte hat das Zeichen an dieser Stelle?
+ *
+ * Ein \n beendet die Zeile, sonst wird nach UMBRUCH_BEI Zeichen
+ * umgebrochen. Dass der Umbruch hier vorher gefehlt hat, ist kein
+ * Schönheitsfehler gewesen: der Editor hält eine getippte Seite als EINEN
+ * Textknoten mit echten \n, und ohne sie konnte der Stub den häufigsten
+ * Fall überhaupt nicht nachstellen – die leere Zeile.
+ */
+function gitter(text, index) {
+  let zeile = 0;
+  let spalte = 0;
+  for (let i = 0; i < index; i++) {
+    if (text[i] === '\n') { zeile++; spalte = 0; continue; }
+    spalte++;
+    if (spalte >= UMBRUCH_BEI) { zeile++; spalte = 0; }
+  }
+  return { zeile, spalte };
 }
 
 /**
  * Rechtecke für den Zeichenbereich [von, bis) – eines je Bildschirmzeile,
  * genau wie Range.getClientRects() es im Browser tut.
  */
-function rechtecke(von, bis) {
+function rechtecke(text, von, bis) {
   const out = [];
   for (let i = von; i < bis; i++) {
-    const { zeile, spalte } = gitter(i);
+    if (text[i] === '\n') continue;          // ein Umbruch hat keine Breite
+    const { zeile, spalte } = gitter(text, i);
     const letzte = out[out.length - 1];
     if (letzte && letzte._zeile === zeile) { letzte.right += ZEICHENBREITE; letzte.width += ZEICHENBREITE; continue; }
     const r = new DOMRectStub(
@@ -172,7 +194,7 @@ function makeRange() {
     getClientRects() {
       if (this.startContainer !== this.endContainer) return [];
       if (this.startContainer.nodeType !== TEXT_NODE) return [];
-      return rechtecke(this.startOffset, this.endOffset);
+      return rechtecke(this.startContainer.nodeValue || '', this.startOffset, this.endOffset);
     }
   };
 }
@@ -349,6 +371,59 @@ mitUmbruch.style = { lineHeight: '32px' };
 const vorUmbruch = caretRectAt(mitUmbruch, 3);
 check('Vor einem \\n: bleibt am Ende der Zeile davor',
   vorUmbruch.left, LINKS + 3 * ZEICHENBREITE);
+
+/* ══ 6b. Die Marke auf einer LEEREN Zeile ═══════════════════════════
+   Der Fall, an dem in der Live-Sitzung „alles falsch markiert" war.
+
+   Sobald nur getippt wurde, ist die ganze Seite EIN Textknoten mit
+   echten \n. Eine leere Zeile hat dann kein Element, an dem man messen
+   könnte – caretRectAt nahm deshalb das umgebende Element, und das war
+   das ganze Textfeld. Die fremde Marke sprang in die obere linke Ecke,
+   und weil visualLineSpan (ui/collab.js) aus genau diesem Rechteck
+   ausrechnet, welche Zeilen gesperrt werden, lag auch das Sperrband auf
+   einer ganz anderen Zeile.
+
+   Ausgelöst hat das der häufigste Handgriff überhaupt: einmal Enter.
+   ══════════════════════════════════════════════════════════════════ */
+
+console.log('\nDie Marke auf einer leeren Zeile');
+
+const leerDazwischen = el('div', new TextNode('abc\n\ndef'));
+leerDazwischen.style = { lineHeight: '32px' };
+const aufLeer = caretRectAt(leerDazwischen, 4);
+check('Leere Zeile zwischen zwei Absätzen: zweite Zeile, ganz links',
+  [zeileVon(aufLeer.top), aufLeer.left], [1, LINKS]);
+
+// Einmal Enter am Textende – die Marke steht auf der neuen, leeren Zeile
+const nachEnter = el('div', new TextNode('abc\n'));
+nachEnter.style = { lineHeight: '32px' };
+const amNeuenAnfang = caretRectAt(nachEnter, 4);
+check('Nach Enter am Ende: zweite Zeile, ganz links',
+  [zeileVon(amNeuenAnfang.top), amNeuenAnfang.left], [1, LINKS]);
+
+// Mehrere leere Zeilen hintereinander: jede zählt eine Zeile
+const zweiLeer = el('div', new TextNode('abc\n\n\ndef'));
+zweiLeer.style = { lineHeight: '32px' };
+const zweiteLeere = caretRectAt(zweiLeer, 5);
+check('Zwei leere Zeilen: dritte Zeile', zeileVon(zweiteLeere.top), 2);
+
+/* Nichts Messbares davor – die Seite fängt mit leeren Zeilen an. Dann
+   wird vom oberen Rand des Textbereichs aus gezählt. Geprüft wird über
+   die MITTE der Zeile: das Rechteck ist hier eine volle Zeilenhöhe, bei
+   den Zeichen nur deren Buchstabenhöhe, und lineBoxOf in ui/collab.js
+   rechnet aus genau dieser Mitte die Zeile aus. */
+const anfangLeer = el('div', new TextNode('\n\nabc'));
+anfangLeer.style = { lineHeight: '32px' };
+
+const mitte = (r) => r.top + r.height / 2 - OBEN;
+
+const zweiteLeereOben = caretRectAt(anfangLeer, 1);
+check('Leere Zeile am Seitenanfang: zweite Zeile, ganz links',
+  [mitte(zweiteLeereOben), zweiteLeereOben.left], [1.5 * ZEILENHOEHE, LINKS]);
+
+// Und die Zeile darunter, die wieder Text trägt, sitzt eine tiefer
+const wiederText = caretRectAt(anfangLeer, 2);
+check('Danach wieder messbarer Text: dritte Zeile', zeileVon(wiederText.top), 2);
 
 /* ══ 7. flatCaretPos liest die Auswahl ══════════════════════════════ */
 
