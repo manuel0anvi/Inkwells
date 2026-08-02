@@ -36,7 +36,8 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
-  GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut
+  GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut,
+  signInWithPopup
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
@@ -293,6 +294,34 @@ function hasRealIdentity() {
 async function signOutIdentity() {
   if (!auth.currentUser) return;
   await fbSignOut(auth);
+}
+
+/**
+ * Microsoft-Anmeldung über Firebases EIGENEN Ablauf.
+ *
+ * Der einzige Weg, der bei Microsoft funktioniert: ein selbst besorgtes
+ * Token weist Firebase ab (Begründung über signInWithProviderToken).
+ *
+ * >>> Setzt voraus, dass die Herkunft in Firebase erlaubt ist <<<
+ * Firebase Console → Authentication → Settings → Authorized domains.
+ * Steht inkwells.me dort nicht, kommt auth/unauthorized-domain zurück.
+ *
+ * Muss aus einem Klick heraus aufgerufen werden; ein Fenster ohne Zutun
+ * des Nutzers blockt der Browser.
+ *
+ * @param {string} [loginHint] Adresse, die vorgeschlagen wird
+ */
+async function signInMicrosoftInteractive(loginHint = '') {
+  const provider = new OAuthProvider('microsoft.com');
+  provider.addScope('email');
+
+  // Nur persönliche Konten, wie überall sonst in Inkwell (js/config.js)
+  const params = { tenant: 'consumers' };
+  if (loginHint) params.login_hint = loginHint;
+  provider.setCustomParameters(params);
+
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
 }
 
 /**
@@ -1857,6 +1886,7 @@ const InkwellShare = {
 
   // Anmeldung
   signInWithProviderToken,
+  signInMicrosoftInteractive,
   signOutIdentity,
   currentIdentity,
   hasRealIdentity,
@@ -1913,7 +1943,7 @@ export default InkwellShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
-  signInWithProviderToken, signOutIdentity, currentIdentity, hasRealIdentity,
+  signInWithProviderToken, signInMicrosoftInteractive, signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
   setLinkMode, rotateLink,

@@ -1099,6 +1099,47 @@ function switchDashTab(which) {
   }
 }
 
+/* Bei Microsoft fehlt die Firebase-Kennung nicht aus Versehen: sie lässt
+   sich nur über Firebases eigenen Ablauf herstellen, und der braucht einen
+   Klick – ein Fenster ohne Zutun blockt der Browser. Deshalb hier ein
+   eigener Knopf statt eines stillen Nachholers. */
+function renderMicrosoftLinkButton(grid, hint) {
+  if (!grid) return;
+  if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'microsoft') return;
+  if (!isInkwellLoggedIn()) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'btn-p';
+  btn.style.cssText = 'margin-top:14px;';
+  btn.textContent = t('shared_link_microsoft') || 'Für geteilte Dokumente anmelden';
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const api = await whenInkwellShareReady();
+      await api.signInMicrosoftInteractive(getRememberedEmail() || '');
+      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      await startWatchingShared().catch(() => {});
+      renderSharedDocs();
+    } catch (err) {
+      const code = String(err?.code || '');
+      if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/i.test(code)) return;
+
+      /* Die eine Ursache, die man selbst beheben muss und die sonst nur
+         als englischer Code dasteht: die Adresse dieser Seite ist in
+         Firebase nicht als erlaubte Herkunft eingetragen. */
+      hint.textContent = /unauthorized-domain/i.test(code)
+        ? (t('shared_domain_missing') || 'Diese Adresse ist in Firebase nicht als erlaubte Herkunft eingetragen.')
+        : (t('shared_link_failed') || 'Anmeldung fehlgeschlagen.') + ' (' + (code || err?.message || '?') + ')';
+      console.warn('[Dashboard] Microsoft-Anmeldung bei Firebase fehlgeschlagen:', code, err?.message || err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  grid.appendChild(btn);
+}
+
 function renderSharedDocs() {
   const grid = document.getElementById('shared-grid');
   const hint = document.getElementById('shared-hint');
@@ -1108,6 +1149,7 @@ function renderSharedDocs() {
   const api = window.InkwellShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
+    renderMicrosoftLinkButton(grid, hint);
     return;
   }
 
