@@ -277,6 +277,56 @@ if (typeof addLangChangeListener === 'function') {
         mehr gebraucht.
      3. Anzeigen – immer schreibgeschützt. Bearbeitet wird nur in der App.
    ─────────────────────────────────────────────────────────────────── */
+/* ── Mitbekommen, wenn sich etwas ändert ──────────────────────────────
+   Bearbeitet wird nur in der App – gelesen wird aber hier, und wer
+   zusieht, während drüben jemand schreibt, soll das auch sehen. Beobachtet
+   wird nur der KOPF; erst wenn die laufende Nummer steigt, wird der Inhalt
+   neu geholt.
+
+   Der Abstand von fünf Sekunden ist keine Bequemlichkeit: das Neuladen
+   holt Seiten, Handschrift und Bilder: im kostenlosen Firebase-Plan sind
+   50.000 Lesevorgänge am Tag für das ganze Projekt vorgesehen. Die App
+   speichert alle vier Sekunden, ein ungebremster Betrachter läge also bei
+   einem vollen Neuladen im selben Takt.
+   ─────────────────────────────────────────────────────────────────── */
+let watchStop = null;
+
+function watchForChanges(api, docId, knownRevision) {
+  if (watchStop) { watchStop(); watchStop = null; }
+
+  const MIN_GAP_MS = 5000;
+  let lastAt = Date.now();
+  let seen = knownRevision || 0;
+  let pending = null;
+  let busy = false;
+
+  const refresh = async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const { notebook, head } = await api.loadDocument(docId);
+      const next = normalizeNotebookRecord(notebook);
+      if (!next) return;
+      sharedNotebook = next;
+      window.__shareMeta = { title: head.title, mode: head.linkMode, updatedAt: head.updatedAt };
+      renderShared(sharedNotebook, window.__shareMeta);
+      lastAt = Date.now();
+    } catch (err) {
+      console.warn('[Share] Neu laden fehlgeschlagen:', err?.message || err);
+    } finally {
+      busy = false;
+    }
+  };
+
+  watchStop = api.watchDocument(docId, (head) => {
+    if (!head || !head.revision || head.revision <= seen) return;
+    seen = head.revision;
+
+    clearTimeout(pending);
+    pending = setTimeout(refresh, Math.max(0, MIN_GAP_MS - (Date.now() - lastAt)));
+  });
+}
+
 async function openSharedDocument(api, linkId) {
   const { docId } = await api.resolveLink(linkId);
   if (!docId) throw new Error('SHARE_NOT_FOUND');
@@ -305,6 +355,9 @@ async function openSharedDocument(api, linkId) {
     openApp.href = api.appUrlFor(linkId);
     openApp.style.display = 'inline-flex';
   }
+
+  // Ab jetzt bei jeder Änderung neu zeichnen
+  watchForChanges(api, docId, head.revision);
 
   const me = api.currentIdentity();
   const role = head.roleFor(me?.email || '');

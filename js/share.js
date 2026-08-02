@@ -1405,14 +1405,21 @@ async function listSharedDocs(email) {
  * verschwindet ein entzogenes Dokument noch während der Sitzung.
  * @returns {Function} zum Abbestellen
  */
-function watchSharedDocs(email, callback) {
+function watchSharedDocs(email, callback, onError) {
   const key = normalizeEmail(email || currentIdentity()?.email);
   if (!key) return () => {};
 
   return onSnapshot(
     query(collection(db, DOCS), where('memberEmails', 'array-contains', key)),
     (snapshot) => callback(snapshot.docs.map(d => describeDoc(d.id, d.data() || {}))),
-    (err) => console.warn('[Share] Beobachtung der geteilten Dokumente beendet:', err?.message || err)
+    (err) => {
+      /* Wichtig: eine abgebrochene Beobachtung kommt von selbst NICHT
+         wieder. Vorher landete das nur in der Konsole – der Tab blieb
+         einfach leer, und das sah aus wie „es hat niemand geteilt".
+         Jetzt erfährt die Oberfläche davon und versucht es erneut. */
+      console.warn('[Share] Beobachtung der geteilten Dokumente beendet:', err?.message || err);
+      if (typeof onError === 'function') onError(err);
+    }
   );
 }
 
@@ -1513,6 +1520,44 @@ async function loadDocument(docId) {
   for (const row of pageRows) if (row.ycrdt) crdt[row.id] = row.ycrdt;
 
   return { notebook, head, crdt, fingerprint: fingerprintNotebook(notebook) };
+}
+
+/**
+ * Holt EINE Seite mit allem, was dazugehört.
+ *
+ * Gebraucht für den Live-Betrieb: Bilder und Seiten mit sehr viel
+ * Handschrift passen nicht durch den Änderungsstrom der Realtime Database
+ * (dort gilt eine Längengrenze je Meldung). Statt sie zu stückeln,
+ * schickt der Absender nur den Hinweis „hol dir diese Seite neu" und
+ * sichert sie vorher nach Firestore – von dort kommt sie hierüber.
+ *
+ * @returns {Promise<object|null>} die Seite in Heft-Form, oder null
+ */
+async function loadPage(docId, pageId) {
+  const [pageSnap, inkSnap, blobSnap] = await Promise.all([
+    getDoc(doc(db, DOCS, docId, PAGES, pageId)),
+    getDocs(query(collection(db, DOCS, docId, INK), where('pageId', '==', pageId))),
+    getDocs(query(collection(db, DOCS, docId, BLOBS), where('pageId', '==', pageId)))
+  ]);
+  if (!pageSnap.exists()) return null;
+
+  const row = { id: pageSnap.id, ...(pageSnap.data() || {}) };
+
+  /* Über assembleNotebook gehen und nicht von Hand zusammensetzen: dann
+     gelten für eine einzelne Seite genau dieselben Regeln wie für ein
+     ganzes Heft – Bilder aus blob:-Verweisen, Handschrift in der
+     Reihenfolge der Bögen. Zwei Wege wären zwei Gelegenheiten für
+     Unterschiede. */
+  const notebook = assembleNotebook(
+    { pageOrder: [pageId], sections: [] },
+    [row],
+    inkSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) })),
+    blobSnap.docs.map(d => (d.data() || {}))
+  );
+
+  const page = notebook.pages[0] || null;
+  if (page && row.ycrdt) page.ycrdt = row.ycrdt;
+  return page;
 }
 
 /** Der alte Weg: ein JSON-Klumpen in Stücken. */
@@ -1796,6 +1841,7 @@ const InkwellShare = {
   resolveLink,
   joinViaLink,
   loadDocument,
+  loadPage,
 
   // Hilfsmittel
   docUrlFor,
@@ -1830,7 +1876,7 @@ export {
   setLinkMode, rotateLink,
   setMember, removeMember, leaveDocument, unblockMember, listMembers,
   listSharedDocs, watchSharedDocs, watchDocument, resolveLink, joinViaLink,
-  loadDocument, docUrlFor, appUrlFor, normalizeEmail, looksLikeEmail,
+  loadDocument, loadPage, docUrlFor, appUrlFor, normalizeEmail, looksLikeEmail,
   splitNotebook, assembleNotebook, fingerprintNotebook,
   joinDocRoom, savePageText, initialsOf, colorForUid
 };
