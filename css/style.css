@@ -36,7 +36,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
    (Regeln im Media-Block weiter unten): dort fällt die Beschriftung weg
    und ohne Symbol bliebe der Knopf leer. */
 .nav-community{display:inline-flex;align-items:center;background:transparent;border:none;padding:0;text-decoration:none;border-bottom:1px solid transparent;transition:border-color .2s}
-.nav-community:hover{border-bottom-color:var(--gold-light)}
+.nav-community:hover{background:transparent;border-bottom-color:var(--gold-light)}
 .nav-community svg{width:15px;height:15px;flex-shrink:0;display:none}
 /* Auf der Community-Seite selbst: zeigt an, wo man ist. */
 .nav-community[aria-current="page"]{border-bottom-color:var(--gold);color:var(--cream)}
