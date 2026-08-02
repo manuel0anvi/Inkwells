@@ -15,8 +15,11 @@
    Skript hält beide gleich und meldet sich, wenn sie es nicht mehr sind.
 
    Aufruf:
-     node scripts/sync-share.js          kopiert Website -> App
-     node scripts/sync-share.js --check  prüft nur, Rückgabewert 1 bei Abweichung
+     npm run sync-share                  kopiert Website -> App
+     npm run check-share                 prüft nur, Rückgabewert 1 bei Abweichung
+
+   Zum Prüfen NICHT `npm run sync-share --check` nehmen: npm behält das
+   Flag für sich, das Skript schreibt dann doch. Siehe checkOnly unten.
    ══════════════════════════════════════════════════════════════════════ */
 
 const fs = require('fs');
@@ -45,7 +48,18 @@ function header(sourceRel) {
 `;
 }
 
-const checkOnly = process.argv.includes('--check');
+/* >>> Warum hier auch die npm-Umgebung gelesen wird <<<
+   `npm run sync-share --check` sieht aus wie eine Prüfung, ist aber
+   keine: npm behält das Flag für sich und reicht es NICHT ans Skript
+   weiter. Das Skript lief dadurch im Schreibmodus und hat in der App
+   still 123 Zeilen Live-Zusammenarbeit gelöscht – zweimal an einem
+   Abend, und beide Male hat der Aufrufende eine Prüfung erwartet.
+
+   npm legt das geschluckte Flag aber in der Umgebung ab. Von dort ist
+   die Absicht eindeutig abzulesen, und der Fehlgriff kann nicht mehr
+   passieren. Sauber ist weiterhin `npm run check-share`. */
+const checkOnly = process.argv.includes('--check')
+               || process.env.npm_config_check === 'true';
 let stale = 0;
 
 for (const pair of PAIRS) {

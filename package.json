@@ -10,6 +10,7 @@
     "test": "node scripts/test-doc-split.js && node scripts/test-collab-text.js && node scripts/test-collab-caret.js && node scripts/test-collab-sync.js && node scripts/test-shared-save.js",
     "build": "npm test && node scripts/sync-share.js --check && node scripts/build-release.js",
     "sync-share": "node scripts/sync-share.js",
+    "check-share": "node scripts/sync-share.js --check",
     "build-yjs": "node scripts/build-yjs.js",
     "deploy-web": "node scripts/deploy-website.js",
     "test:rules": "firebase emulators:exec --project inkwell-rules-test --only firestore,database \"node scripts/test-rules.js\""
