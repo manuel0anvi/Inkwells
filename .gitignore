@@ -15,7 +15,24 @@ src/core/cloudConfig.local.js
 # "npm run web" und "npm run deploy-web" weiter gebraucht. Wer den
 # app-Branch frisch klont, holt ihn sich aus dem website-Branch:
 #     git clone -b website https://github.com/manuel0anvi/Inkwell.git website
-/website/
+# Bewusst "/website/*" und nicht "/website/": in einen ausgeschlossenen
+# ORDNER steigt Git gar nicht erst hinein, ein "!" darin bliebe wirkungslos.
+# Mit dem Stern wird jeder Eintrag einzeln ausgeschlossen – und nur dann
+# lassen sich die zwei Regeldateien darunter wieder hereinholen.
+/website/*
+
+# ── Ausnahme: die Sicherheitsregeln ──────────────────────────────────
+# Sie gehören NICHT auf den website-Branch (deploy-web überspringt sie,
+# siehe scripts/deploy-website.js) – lagen dadurch aber auf gar keinem
+# Branch und nur örtlich auf je einem Rechner. Ausgerechnet die Dateien,
+# die die Freigaben absichern, konnten so unbemerkt auseinanderlaufen:
+# der eine hätte mit der echten UID veröffentlicht, der andere mit dem
+# Platzhalter, und niemand hätte es gemerkt.
+#
+# Sie enthalten kein Geheimnis: die Admin-UID ist öffentlich, geschützt
+# wird über das Passwort beim Anmelden.
+!/website/firestore.rules
+!/website/database.rules.json
 
 # ── Erzeugte Ordner ─────────────────────────────────────────────────
 # Arbeitsplatz von scripts/deploy-website.js (Klon des website-Branch)
