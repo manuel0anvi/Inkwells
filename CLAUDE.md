@@ -8,8 +8,8 @@ Die Regeln hier sorgen dafür, dass sich das nicht in die Quere kommt.
 **Vor dem Anfangen:** `git pull`. Sonst wird auf einem veralteten Stand
 gebaut und der Konflikt kommt später umso härter.
 
-**Nach dem Fertigwerden:** festschreiben und hochladen — aber erst, wenn der
-Nutzer es sagt. Nicht ungefragt committen oder pushen.
+**Nach dem Fertigwerden:** festschreiben und hochladen, ohne vorher extra
+nachzufragen — beide Nutzer haben das erlaubt.
 
 Wird ein Push abgelehnt (*„updates were rejected"*), ist der andere schneller
 gewesen. Dann `git pull`, den Konflikt lösen, `git push`. **Niemals**
@@ -79,3 +79,8 @@ Kurz das Wichtigste selbst prüfen, nicht jeden Zustand mit Headless-Browser
 und Screenshots durchspielen — das kostet mehr Zeit, als es bringt. Danach in
 zwei Sätzen sagen: was schon geprüft wurde und was der Nutzer selbst noch
 ansehen soll.
+
+Bei einer kleinen Nachbesserung direkt im Anschluss an eine bereits geprüfte
+Änderung (z. B. nur noch eine Farbe oder ein Hover-Zustand) reicht ein Blick
+in den Code — dafür keinen eigenen lokalen Server mehr starten und keine neuen
+Screenshots machen.
