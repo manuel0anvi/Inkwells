@@ -457,6 +457,21 @@ class CloudSyncManager {
       console.warn('[CloudSync] Zugriff konnte nicht zurückgezogen werden (ignoriert):', err.message);
     }
 
+    /* >>> Auch bei Firebase abmelden <<<
+       Die Anmeldung bei Google bzw. Microsoft und die bei Firebase sind
+       zwei verschiedene Dinge. Blieb die Firebase-Sitzung stehen, wurden
+       die geteilten Dokumente danach weiter unter der ALTEN Adresse
+       gesucht – auch nachdem man sich längst mit einer anderen angemeldet
+       hatte. Ohne Netz schlägt das fehl; dann bleibt es beim Alten, und
+       die nächste Anmeldung räumt es auf (signInWithProviderToken). */
+    try {
+      const api = await this._whenShareReady(3000);
+      await api.signOutIdentity();
+      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    } catch (err) {
+      console.warn('[CloudSync] Firebase-Abmeldung übersprungen:', err.message);
+    }
+
     this._notify();
   }
 
@@ -632,7 +647,26 @@ class CloudSyncManager {
     }
 
     await api.whenIdentityReady();
-    if (api.hasRealIdentity()) { this.identityProblem = null; return true; }
+
+    /* >>> Kennt Firebase noch jemand ANDEREN? <<<
+       Eine Sitzung, die von einem früheren Konto stehen geblieben ist,
+       würde die geteilten Dokumente dauerhaft unter der alten Adresse
+       suchen – genau so, wie es nach einem Wechsel von Google auf
+       Microsoft passierte. Sie wird erst weggeräumt; die Anmeldung mit
+       der richtigen Adresse holt der Rest dieser Funktion nach. */
+    const known = api.currentIdentity();
+    const wanted = api.normalizeEmail(Settings.get('cloudEmail') || '');
+    if (known && !known.anonymous && wanted && known.email !== wanted) {
+      console.warn('[CloudSync] Firebase kennt noch', known.email, '– erwartet wird', wanted);
+      try {
+        await api.signOutIdentity();
+      } catch (err) {
+        console.warn('[CloudSync] Alte Firebase-Sitzung nicht abmeldbar:', err.message);
+      }
+    } else if (api.hasRealIdentity()) {
+      this.identityProblem = null;
+      return true;
+    }
 
     if (!this.isAuthenticated()) {
       // Gar nicht bei Google/Microsoft angemeldet – dann ist das kein Fehler,
