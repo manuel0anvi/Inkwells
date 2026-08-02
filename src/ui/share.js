@@ -133,11 +133,24 @@
         return t('shareClientNotAllowed');
       }
 
-      /* Der Anbieter ist in der Firebase Console gar nicht eingeschaltet.
-         Firebase sagt dazu „invalid-credential-or-provider-id" und hängt
-         das komplette Token an – unlesbar lang und ohne Anweisung. */
-      if (/provider-id|operation-not-allowed/i.test(detail)) {
+      /* Nur das sagt Firebase eindeutig: der Anbieter ist in der Console
+         wirklich nicht eingeschaltet. */
+      if (/operation-not-allowed/i.test(detail)) {
         return t('shareProviderOff');
+      }
+
+      /* >>> „invalid-credential-or-provider-id" sagt NICHT, was los ist <<<
+         Firebase nennt diese eine Zeichenkette für mehrere ganz
+         verschiedene Ursachen: abgeschalteter Anbieter, nicht passende
+         nonce, ein Token für eine andere Anwendungs-ID, oder ein
+         Aussteller, den der Anbieter in der Console nicht abdeckt.
+
+         Vorher stand hier trotzdem „Anbieter nicht eingeschaltet". Wer ihn
+         längst eingeschaltet hatte, suchte damit an der falschen Stelle –
+         genau das ist bei Microsoft passiert. Deshalb jetzt die möglichen
+         Ursachen und die Originalmeldung dazu. */
+      if (/invalid-credential|provider-id/i.test(detail)) {
+        return t('shareCredentialRejected') + (detail ? ' (' + detail + ')' : '');
       }
 
       return t('shareIdentityFailed') + (detail ? ' (' + detail + ')' : '');

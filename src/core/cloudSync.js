@@ -615,11 +615,17 @@ class CloudSyncManager {
         return true;
       })
       .catch(err => {
-        console.warn('[CloudSync] Firebase-Anmeldung fehlgeschlagen:', err?.message || err);
-        // Die genaue Meldung ist hier Gold wert: sie sagt, ob der Anbieter
-        // in der Firebase Console fehlt oder die Client-ID nicht zugelassen
-        // ist. Ohne sie steht man vor einem stummen Knopf.
-        this.identityError = err?.message || String(err);
+        /* Die genaue Meldung ist hier Gold wert: sie sagt, ob der Anbieter
+           in der Firebase Console fehlt oder die Client-ID nicht zugelassen
+           ist. Ohne sie steht man vor einem stummen Knopf.
+
+           Der Code (err.code) wird eigens mitgeschrieben: "auth/invalid-
+           credential" und "auth/operation-not-allowed" sehen in der
+           Meldung fast gleich aus, meinen aber zwei verschiedene Dinge –
+           abgelehntes Token gegenüber abgeschaltetem Anbieter. */
+        console.warn('[CloudSync] Firebase-Anmeldung fehlgeschlagen:',
+          providerId, err?.code || '(ohne Code)', err?.message || err);
+        this.identityError = (err?.code ? err.code + ': ' : '') + (err?.message || String(err));
         this.identityProblem = 'failed';
         Settings.update({ cloudIdentityMissing: true }).catch(() => {});
         return false;
