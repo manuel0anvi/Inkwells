@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Inkwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet"></noscript>
+<!-- CSS Modules (ordered by cascade importance) -->
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/titlebar.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/sidebar.css">
+<link rel="stylesheet" href="css/toolbar.css">
+<link rel="stylesheet" href="css/pages.css">
+<link rel="stylesheet" href="css/modals.css">
+<link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="tbar-l">
+    <button class="home-btn" id="btn-home" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <path d="M2 7.5L7.5 2l5.5 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <path d="M4 5.5V13h2.5v-3h2v3H11V5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span data-i18n="overview">Übersicht</span>
+    </button>
+    <span class="app-logo" id="app-logo">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <rect x="2" y="2" width="11" height="11" rx="2" stroke="var(--gold)" stroke-width="1.2"/>
+        <path d="M5 2v11M7 5h5M7 8h5M7 11h3" stroke="var(--gold)" stroke-width="1" opacity=".7"/>
+      </svg>
+    </span>
+  </div>
+  <div class="tbar-c" id="tbar-title">
+    <span class="tbar-title-accent" id="tbar-title-accent" style="display:none"></span>
+    <span id="tbar-title-text">Inkwell</span>
+  </div>
+  <div class="tbar-r">
+    <button class="titlebar-update-btn" id="btn-update" style="display:none">
+      <span class="update-progress-bg" id="btn-update-progress"></span>
+      <span class="update-text" id="btn-update-text">Update</span>
+    </button>
+    <button class="titlebar-settings-btn" id="btn-profile" data-i18n-title="account" title="Profil/Cloud">
+      <svg id="profile-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+      <div id="profile-icon-avatar" style="display:none; width:22px; height:22px; border-radius:50%; background:var(--accent); color:var(--bg); font-size:13px; font-weight:bold; align-items:center; justify-content:center;">U</div>
+    </button>
+    <button class="titlebar-settings-btn" id="btn-settings" data-i18n-title="settings" title="Einstellungen" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+    <div class="window-controls-divider"></div>
+    <button class="wbtn" id="btn-min">–</button>
+    <button class="wbtn" id="btn-max">□</button>
+    <button class="wbtn x" id="btn-close">✕</button>
+  </div>
+</div>
+
+<!-- HOME VIEW -->
+<div class="view" id="view-home">
+  <div class="home-wrap">
+    <h1 class="home-heading" data-i18n="myNotebooks">Meine Hefte</h1>
+
+    <div class="home-search" id="home-search">
+      <svg class="home-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+      </svg>
+      <input type="search" id="home-search-input" data-i18n-ph="searchPlaceholder"
+             placeholder="In allen Heften suchen…" autocomplete="off" spellcheck="false">
+      <button class="home-search-clear" id="home-search-clear" title="Leeren" style="display:none">✕</button>
+    </div>
+
+    <!-- Eigene Hefte und geteilte Dokumente. Der Zähler am zweiten Reiter
+         zeigt, was seit dem letzten Besuch dazugekommen ist. -->
+    <div class="home-tabs" id="home-tabs">
+      <button class="home-tab active" id="tab-own" data-i18n="myNotebooks">Meine Hefte</button>
+      <button class="home-tab" id="tab-shared">
+        <span data-i18n="sharedWithMe">Geteilte Dokumente</span>
+        <span class="home-tab-count" id="shared-new-count" style="display:none">0</span>
+      </button>
+    </div>
+
+    <div class="nb-grid" id="nb-grid"></div>
+    <div class="search-results" id="search-results" style="display:none"></div>
+
+    <!-- Tab „Geteilte Dokumente" -->
+    <div id="shared-panel" style="display:none">
+      <div class="nb-grid" id="shared-grid"></div>
+      <p class="shared-hint" id="shared-hint"></p>
+    </div>
+
+    <div class="home-footer">
+      <button class="sm-action" id="btn-new-nb"><span class="btn-icon">+</span> <span data-i18n="newNotebook">Neues Heft</span></button>
+      <button class="sm-action" id="btn-load-home"><svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> <span data-i18n="open">Öffnen</span></button>
+      <button class="sm-action" id="btn-trash"><svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg> <span data-i18n="trash">Papierkorb</span><span class="trash-count" id="trash-count" style="display:none">0</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- JOURNAL VIEW -->
+<div class="view" id="view-journal" style="display:none">
+  <div class="journal-layout">
+
+    <!-- Side panel -->
+    <aside class="side-panel" id="side-panel">
+      <div class="side-strip">
+        <button class="strip-btn" id="btn-panel-toggle" data-i18n-title="navigation" title="Navigation">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <rect x="2" y="2.5" width="11" height="1.4" fill="currentColor"/>
+            <rect x="2" y="6.8" width="11" height="1.4" fill="currentColor"/>
+            <rect x="2" y="11"  width="11" height="1.4" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <div class="side-content" id="side-content">
+        <div class="side-head">
+          <span class="side-label" data-i18n="navigation">Navigation</span>
+          <button class="side-add-sec" id="btn-add-sec" data-i18n="addSection" data-i18n-title="addSection" title="Neuer Abschnitt">+ Abschnitt</button>
+        </div>
+        <div class="side-tree" id="side-tree"></div>
+      </div>
+    </aside>
+
+    <!-- Editor -->
+    <div class="editor-col">
+      <!-- Streifen für geteilte Dokumente: sagt, von wem es kommt und ob
+           man daran arbeiten darf. Nur sichtbar, wenn eines offen ist. -->
+      <div class="shared-bar" id="shared-bar" style="display:none">
+        <span class="shared-bar-badge" id="shared-bar-role">Nur lesen</span>
+        <span class="shared-bar-text" id="shared-bar-text"></span>
+        <!-- Sagt Bescheid, wenn die Live-Übertragung NICHT läuft. Ohne
+             diesen Hinweis scheiterte sie stumm. -->
+        <span class="shared-bar-warn" id="collab-state" style="display:none"></span>
+        <!-- Wer gerade mitarbeitet: runde Abzeichen mit Initialen -->
+        <div class="collab-people" id="collab-people" style="display:none"></div>
+        <button class="shared-bar-btn" id="shared-bar-leave" data-i18n="sharedLeave">Freigabe verlassen</button>
+      </div>
+      <div class="toolbar" id="toolbar">
+        <div class="tb-zone tb-left">
+          <div class="tb-grp">
+          <button class="tb-mode active" data-mode="cursor">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 1l9 5.5-4.5 1.5-1.5 5L2 1z" fill="currentColor"/></svg>
+            <span data-i18n="cursor">Cursor</span>
+          </button>
+          <button class="tb-mode" data-mode="pen1">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8 1l4 4-7 7-3.5 1 1-3.5z" stroke="currentColor" stroke-width="1.3"/></svg>
+            <span data-i18n="pen1">Stift 1</span>
+          </button>
+          <button class="tb-mode" data-mode="pen2">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8 1l4 4-7 7-3.5 1 1-3.5z" stroke="currentColor" stroke-width="2"/></svg>
+            <span data-i18n="pen2">Stift 2</span>
+          </button>
+          <button class="tb-mode" data-mode="hl">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="3" y="5" width="7" height="5" rx="1" fill="currentColor" opacity=".5"/><path d="M5.5 2h2v3h-2z" fill="currentColor"/></svg>
+            <span data-i18n="highlighter">Marker</span>
+          </button>
+          <button class="tb-mode" data-mode="eraser">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="6" width="11" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 6V4a2 2 0 014 0v2" stroke="currentColor" stroke-width="1.1"/></svg>
+            <span data-i18n="eraser">Radierer</span>
+          </button>
+          </div>
+        </div>
+
+        <div class="tb-zone tb-center">
+          <div class="tb-sep"></div>
+          <div class="tb-grp" id="pen-opts" style="display:none">
+            <div class="pen-swatches" id="pen-swatches">
+              <button class="pen-sw active" data-pcolor="#1a1510" style="background:#1a1510" data-i18n-title="colorBlack" title="Schwarz"></button>
+              <button class="pen-sw" data-pcolor="#2a5fa8" style="background:#2a5fa8" data-i18n-title="colorBlue" title="Blau"></button>
+              <button class="pen-sw" data-pcolor="#c04040" style="background:#c04040" data-i18n-title="colorRed" title="Rot"></button>
+              <button class="pen-sw" data-pcolor="#2e8a46" style="background:#2e8a46" data-i18n-title="colorGreen" title="Grün"></button>
+            </div>
+            <div class="color-ring" id="pen-color-ring" data-i18n-title="customColor" title="Eigene Farbe"><div class="color-dot" id="pen-color-dot"></div><input type="color" id="pen-color-in"></div>
+            <div class="v-div"></div>
+            <div class="sz-row" id="pen-sz-row">
+              <button class="sz-btn active" data-sz="0">●</button><button class="sz-btn" data-sz="1">●</button>
+              <button class="sz-btn" data-sz="2">●</button><button class="sz-btn" data-sz="3">●</button>
+            </div>
+          </div>
+
+          <div class="tb-grp" id="eraser-opts" style="display:none">
+            <button class="tb-opt active" data-eraser="pixel" data-i18n="eraserPixel">Pixel</button>
+            <button class="tb-opt" data-eraser="stroke" data-i18n="eraserStroke">Objekt</button>
+            <div class="sz-row" id="er-sz-row">
+              <button class="sz-btn active" data-esz="0">●</button><button class="sz-btn" data-esz="1">●</button><button class="sz-btn" data-esz="2">●</button>
+            </div>
+          </div>
+
+          <div class="tb-grp" id="text-opts">
+            <button class="tb-opt" id="fmt-p">¶</button>
+            <button class="tb-opt" id="fmt-h1">H1</button>
+            <button class="tb-opt" id="fmt-h2">H2</button>
+            <button class="tb-opt" id="fmt-h3">H3</button>
+            <div class="tb-sep-sm"></div>
+            <button class="tb-opt" id="fmt-bold"><b>B</b></button>
+            <button class="tb-opt" id="fmt-italic"><i>I</i></button>
+            <button class="tb-opt" id="fmt-under"><u>U</u></button>
+            <div style="position:relative" id="txt-color-wrap">
+              <div class="color-ring" style="width:24px;height:24px" id="txt-color-ring">
+                <div class="color-dot" id="txt-color-dot" style="background:#1a1510"></div>
+                <input type="color" id="txt-color-in" value="#1a1510" style="display:none">
+              </div>
+              <div class="txt-color-dropdown" id="txt-color-dropdown" style="display:none">
+                <button class="pen-sw active" data-tcolor="#1a1510" style="background:#1a1510" data-i18n-title="colorBlack" title="Schwarz"></button>
+                <button class="pen-sw" data-tcolor="#2a5fa8" style="background:#2a5fa8" data-i18n-title="colorBlue" title="Blau"></button>
+                <button class="pen-sw" data-tcolor="#c04040" style="background:#c04040" data-i18n-title="colorRed" title="Rot"></button>
+                <button class="pen-sw" data-tcolor="#2e8a46" style="background:#2e8a46" data-i18n-title="colorGreen" title="Grün"></button>
+                <div class="color-ring" style="width:20px;height:20px" id="txt-custom-ring">
+                  <div style="width:100%;height:100%;border-radius:50%;background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tb-sep"></div>
+          <div class="tb-grp">
+            <!-- Undo/Redo-Buttons entfernt -->
+            <div class="tb-sep-sm"></div>
+            <button class="tb-opt" id="btn-insert" data-i18n-title="insert" title="Einfügen">📎</button>
+          </div>
+        </div>
+
+        <div class="tb-zone tb-right">
+          <div class="tb-sep"></div>
+          <div class="tb-grp">
+            <button class="tb-opt save-status" id="save-status" data-i18n-title="saveNow" title="Speichern">
+              <span class="save-icon" id="save-icon">○</span>
+              <span class="save-text" id="save-text" data-i18n="saved">Gespeichert</span>
+            </button>
+          </div>
+          <div class="tb-sep"></div>
+          <!-- Freigeben und Exportieren direkt aus dem geöffneten Heft.
+               Vorher ging beides nur über das Kontextmenü auf der Startseite. -->
+          <div class="tb-grp">
+            <button class="tb-opt" id="btn-doc-share" data-i18n-title="shareTitle" title="Heft freigeben">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+              </svg>
+            </button>
+            <button class="tb-opt" id="btn-doc-export" data-i18n-title="exportNotebook" title="Heft exportieren">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M12 18v-6M9 15l3 3 3-3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="tb-sep"></div>
+          <div class="tb-grp">
+            <button class="tb-opt" id="btn-zoom-out" data-i18n-title="zoomOut" title="Verkleinern">－</button>
+            <button class="tb-opt" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom zurücksetzen" style="font-family:'DM Mono',monospace;font-size:10px;min-width:38px" >100%</button>
+            <button class="tb-opt" id="btn-zoom-in" data-i18n-title="zoomIn" title="Vergrößern">＋</button>
+          </div>
+        </div>
+      </div>
+      <div class="pg-scroll" id="pg-scroll">
+        <div id="pg-sizer" style="width:1px;pointer-events:none;position:absolute;top:0;left:0"></div>
+        <div class="pages-wrap" id="pages-wrap"></div>
+      </div>
+      <div class="add-page-btn-wrap" id="add-page-btn-wrap">
+        <button class="add-page-btn" id="btn-add-page-end" data-i18n-title="addPage" title="Seite hinzufügen">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span data-i18n="addPage">Neue Seite</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION MANAGER MODAL -->
+<div class="overlay" id="ov-sec-mgr" style="display:none">
+  <div class="modal sec-mgr-modal">
+    <div class="sec-mgr-head">
+      <h3 id="sec-mgr-title" data-i18n="manageSectionsTitle">Abschnitt bearbeiten</h3>
+      <button class="modal-close-x" id="sec-mgr-close">✕</button>
+    </div>
+    <p class="sec-mgr-hint" data-i18n="sectionManagerHint">Seiten per Drag & Drop verschieben. Rechtsklick für weitere Optionen.</p>
+    <div class="sec-mgr-body" id="sec-mgr-body"></div>
+    <div class="sec-mgr-footer">
+      <button id="sec-mgr-add-sec" class="mgr-btn" data-i18n="addSection">+ Abschnitt</button>
+      <button id="sec-mgr-add-page" class="mgr-btn" data-i18n="addPage">+ Seite</button>
+      <button class="ok-btn" id="sec-mgr-done" data-i18n="done">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- NB MODAL -->
+<div class="overlay" id="ov-nb" style="display:none">
+  <div class="modal modal-nb">
+    <h3 id="nb-modal-title" data-i18n="newNotebookTitle">Neues Heft</h3>
+    <label class="modal-label" data-i18n="notebookName">Name</label>
+    <input id="nb-name-in" data-i18n="notebookNamePlaceholder" placeholder="z.B. Mathematik" autocomplete="off">
+    <label class="modal-label" style="margin-top:14px" data-i18n="color">Farbe</label>
+    <div class="color-palette" id="nb-color-palette"></div>
+    <label class="modal-label" style="margin-top:14px" data-i18n="background">Standard-Hintergrund</label>
+    <div class="bg-row large" id="nb-bg-row"></div>
+    <div class="modal-btns">
+      <button id="nb-modal-cancel" data-i18n="cancel">Abbrechen</button>
+      <button id="nb-modal-ok" class="ok-btn" data-i18n="create">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- TEXT MODAL -->
+<div class="overlay" id="ov-txt" style="display:none">
+  <div class="modal">
+    <h3 id="txt-modal-h"></h3>
+    <input id="txt-modal-in" autocomplete="off">
+    <div class="modal-btns">
+      <button id="txt-modal-cancel" data-i18n="cancel">Abbrechen</button>
+      <button id="txt-modal-ok" class="ok-btn" data-i18n="ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE CONTEXT MENU -->
+<div class="ctx-menu" id="pg-ctx-menu" style="display:none">
+  <button class="ctx-item" id="pgctx-bg">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <path d="M3 15l5-5 4 4 4-4 5 5"/>
+    </svg>
+    <span data-i18n="changeBackground">Hintergrund ändern</span>
+  </button>
+  <button class="ctx-item" id="pgctx-clear">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+    </svg>
+    <span data-i18n="clearPage">Seite leeren</span>
+  </button>
+  <button class="ctx-item danger" id="pgctx-delete">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M18 6L6 18M6 6l12 12"/>
+    </svg>
+    <span data-i18n="deletePage">Seite löschen</span>
+  </button>
+</div>
+
+<!-- PAGE BG PICKER OVERLAY -->
+<div class="overlay" id="ov-pg-bg" style="display:none">
+  <div class="modal">
+    <h3 data-i18n="pageBackground">Seitenhintergrund</h3>
+    <div class="bg-row large" id="pg-bg-picker-row"></div>
+    <div class="modal-btns">
+      <button id="pg-bg-cancel" data-i18n="cancel">Abbrechen</button>
+      <button id="pg-bg-ok" class="ok-btn" data-i18n="apply">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- NB CONTEXT MENU -->
+<div class="ctx-menu" id="ctx-menu" style="display:none">
+  <button class="ctx-item" id="ctx-edit">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+    <span data-i18n="edit">Bearbeiten</span>
+  </button>
+  <button class="ctx-item" id="ctx-export-pdf">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="M12 18v-6M9 15l3 3 3-3"/>
+    </svg>
+    <span data-i18n="exportNotebook">Heft exportieren</span>
+  </button>
+  <button class="ctx-item" id="ctx-versions">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 3v5h5"/>
+      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/>
+      <path d="M12 7v5l4 2"/>
+    </svg>
+    <span data-i18n="versionHistory">Frühere Fassungen</span>
+  </button>
+  <button class="ctx-item" id="ctx-share">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+    </svg>
+    <span data-i18n="shareTitle">Heft freigeben</span>
+  </button>
+  <button class="ctx-item" id="ctx-remove">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M18 6L6 18M6 6l12 12"/>
+    </svg>
+    <span data-i18n="removeFromOverview">Aus Übersicht entfernen</span>
+  </button>
+  <button class="ctx-item danger" id="ctx-delete">
+    <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+    </svg>
+    <span data-i18n="deleteNotebook">Notebook löschen</span>
+  </button>
+</div>
+
+<!-- PAPIERKORB -->
+<div class="overlay" id="ov-trash" style="display:none">
+  <div class="modal" style="width:560px; max-width:92vw;">
+    <div class="modal-head">
+      <h3 data-i18n="trash">Papierkorb</h3>
+      <button class="modal-close-x" id="trash-close">✕</button>
+    </div>
+    <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+      <p style="font-size:12px; color:var(--md); margin:0;" data-i18n="trashHint">
+        Gelöschte Hefte werden 30 Tage aufbewahrt und danach automatisch entfernt. Die Frist gilt für jedes Heft einzeln. Bei aktiver Cloud-Sicherung siehst du den Papierkorb auf allen Geräten.
+      </p>
+      <div id="trash-list" style="display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto;"></div>
+      <button id="trash-empty" class="settings-btn" style="color:#d9534f; border-color:rgba(217,83,79,0.3)" data-i18n="trashEmpty">
+        Papierkorb leeren
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- FRÜHERE FASSUNGEN (Google Drive / OneDrive) -->
+<div class="overlay" id="ov-versions" style="display:none">
+  <div class="modal" style="width:560px; max-width:92vw;">
+    <div class="modal-head">
+      <h3 data-i18n="versionHistory">Frühere Fassungen</h3>
+      <button class="modal-close-x" id="versions-close">✕</button>
+    </div>
+    <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+      <p style="font-size:12px; color:var(--md); margin:0;" data-i18n="versionHint">
+        Der Cloud-Speicher bewahrt ältere Fassungen jeder Datei auf. Hier kannst du zu einer davon zurück.
+      </p>
+      <div id="versions-list" style="display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- CUSTOM CONFIRM DIALOG -->
+<div class="overlay" id="ov-confirm" style="display:none">
+  <div class="modal confirm-modal">
+    <p class="confirm-msg" id="confirm-msg"></p>
+    <div class="modal-btns">
+      <button id="confirm-cancel" data-i18n="cancel">Abbrechen</button>
+      <button id="confirm-ok" class="ok-btn" data-i18n="ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE CONFIRM DIALOG (for leaving without saving) -->
+<div class="overlay" id="ov-save-confirm" style="display:none">
+  <div class="modal confirm-modal">
+    <p class="confirm-msg" id="save-confirm-msg"></p>
+    <div class="modal-btns" style="gap: 10px;">
+      <button id="save-confirm-leave" class="danger-btn" data-i18n="leave">Verlassen</button>
+      <button id="save-confirm-save" class="ok-btn" data-i18n="saveAndLeave">Speichern & Verlassen</button>
+    </div>
+  </div>
+</div>
+
+<!-- INSERT CHOICE DIALOG -->
+<div class="overlay" id="ov-insert-choice" style="display:none">
+  <div class="modal confirm-modal">
+    <p class="confirm-msg" id="insert-msg">Wie möchtest du das Element einfügen?</p>
+    <div class="modal-btns" style="justify-content:center;gap:12px">
+      <button id="insert-as-img" class="ok-btn" style="background:var(--sh2);color:var(--text);border:1px solid var(--sb)">Als Bild/Objekt</button>
+      <button id="insert-as-page" class="ok-btn">Als neue Seite(n)</button>
+    </div>
+  </div>
+</div>
+
+<!-- CUSTOM ALERT DIALOG -->
+<div class="overlay" id="ov-alert" style="display:none">
+  <div class="modal confirm-modal">
+    <p class="confirm-msg" id="alert-msg"></p>
+    <div class="modal-btns">
+      <button id="alert-ok" class="ok-btn">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- MIGRATION DIALOG -->
+<div class="overlay" id="ov-migration" style="display:none">
+  <div class="modal confirm-modal">
+    <h3 style="margin:0 0 12px 0" data-i18n="transferNotebooks">Notebooks übertragen</h3>
+    <p class="confirm-msg" id="migration-msg" data-i18n="transferQuestion">Was soll mit bestehenden Notebooks passieren?</p>
+    <div class="modal-btns" style="gap: 10px;">
+      <button id="migration-keep" class="ok-btn" style="background:var(--sh2);color:var(--text);border:1px solid var(--sb)" data-i18n="keepExisting">Nur neue hier speichern</button>
+      <button id="migration-transfer" class="ok-btn" data-i18n="transferAll">Alle übertragen</button>
+    </div>
+  </div>
+</div>
+
+<div class="custom-color-pop" id="custom-color-pop" style="display:none">
+  <div class="custom-color-pop-head">
+    <span id="custom-color-pop-title">Eigene Farbe</span>
+    <button class="custom-color-pop-close" id="custom-color-pop-close">✕</button>
+  </div>
+  <input type="color" id="custom-color-pop-input" value="#1a1510">
+  <div class="custom-color-recent" id="custom-color-recent" style="display:none"></div>
+</div>
+
+<div id="eraser-cursor" style="display:none; position:fixed; pointer-events:none; z-index:9999; border:1px solid rgba(80,80,80,0.8); background:rgba(150,150,150,0.3); border-radius:50%; transform:translate(-50%,-50%); margin:0; padding:0; left:-100px; top:-100px;"></div>
+
+<!-- SETTINGS MODAL -->
+<div class="overlay" id="ov-settings" style="display:none">
+  <div class="modal settings-modal">
+    <div class="modal-head">
+      <h3 data-i18n="settings">Einstellungen</h3>
+      <button class="modal-close-x" id="settings-close">✕</button>
+    </div>
+    <div class="settings-tabs" role="tablist">
+      <button class="settings-tab active" id="settings-tab-general" data-panel="general"
+              role="tab" aria-selected="true" data-i18n="settingsTabGeneral">Allgemein</button>
+      <button class="settings-tab" id="settings-tab-shortcuts" data-panel="shortcuts"
+              role="tab" aria-selected="false" data-i18n="shortcuts">Tastenkürzel</button>
+    </div>
+
+    <div class="settings-body" id="settings-panel-general" role="tabpanel">
+      <!-- Language -->
+      <div class="settings-group">
+        <label class="settings-label" data-i18n="language">Sprache</label>
+        <div class="settings-row">
+          <select id="language-select" class="settings-select">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+            <option value="it">Italiano</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Save Location -->
+      <div class="settings-group">
+        <label class="settings-label" data-i18n="saveLocation">Speicherort</label>
+        <div class="settings-row">
+          <input type="text" id="save-location-display" readonly data-i18n="noSaveLocation" placeholder="Kein Ordner ausgewählt">
+          <button class="settings-btn" id="btn-pick-save-location" data-i18n="chooseFolder">Ordner wählen</button>
+        </div>
+      </div>
+
+      <!-- Auto-Save -->
+      <div class="settings-group">
+        <label class="settings-label" data-i18n="autoSave">Auto-Speichern</label>
+        <div class="settings-row">
+          <label class="toggle-switch">
+            <input type="checkbox" id="autosave-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" data-i18n="autoSave">Automatisch speichern</span>
+        </div>
+        <div class="settings-row" id="autosave-interval-row">
+          <label style="flex: 0 0 auto; margin-right: 12px" data-i18n="autoSaveInterval">Intervall:</label>
+          <select id="autosave-interval" class="settings-select">
+            <option value="15" data-i18n="seconds15">15 Sekunden</option>
+            <option value="30" selected data-i18n="seconds30">30 Sekunden</option>
+            <option value="60" data-i18n="seconds60">1 Minute</option>
+            <option value="120" data-i18n="seconds120">2 Minuten</option>
+          </select>
+        </div>
+      </div>
+      <!-- Cloud Sync (Moved to Profile Menu) -->
+    </div>
+
+    <!-- Tastenkürzel: Inhalt wird von ui/shortcuts.js erzeugt -->
+    <div class="settings-body" id="settings-panel-shortcuts" role="tabpanel" style="display:none"></div>
+
+    <div class="modal-btns">
+      <button id="settings-ok" class="ok-btn" data-i18n="done">Fertig</button>
+    </div>
+    <div class="settings-version" id="settings-version">Version 1.0.1</div>
+  </div>
+</div>
+
+<!-- PROFILE / CLOUD MODAL -->
+<div class="overlay" id="ov-account" style="display:none">
+  <div class="modal auth-modal" style="width:400px; max-width:90vw;">
+    <div class="modal-head">
+      <h3 data-i18n="account">Konto & Cloud</h3>
+      <button class="modal-close-x" id="account-close">✕</button>
+    </div>
+    
+    <!-- Unauthenticated State -->
+    <div id="auth-logged-out" style="display:flex; flex-direction:column; gap: 12px; padding: 16px;">
+
+      <p style="font-size:13px; color:var(--text-muted); margin:0 0 4px 0;" data-i18n="loginBenefit">
+        Melde dich an, um deine Notizbücher in der Cloud zu sichern und auf der Website anzusehen.
+      </p>
+
+      <!-- Wird eingeblendet, wenn die Sitzung abgelaufen ist -->
+      <div id="auth-expired-notice" style="display:none; font-size:12px; color:var(--text); line-height:1.5; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px;"></div>
+
+      <button id="auth-google-btn" class="settings-btn provider-btn" style="display:flex;justify-content:center;align-items:center;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">
+          <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.344-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0 5.611 0 0 5.372 0 12s5.611 12 12.24 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/>
+        </svg>
+        <span data-i18n="loginWithGoogle">Mit Google anmelden</span>
+      </button>
+
+      <button id="auth-microsoft-btn" class="settings-btn provider-btn" style="display:flex;justify-content:center;align-items:center;">
+        <svg width="14" height="14" viewBox="0 0 23 23" fill="currentColor" style="margin-right:8px;">
+          <rect x="1"  y="1"  width="10" height="10"/>
+          <rect x="12" y="1"  width="10" height="10"/>
+          <rect x="1"  y="12" width="10" height="10"/>
+          <rect x="12" y="12" width="10" height="10"/>
+        </svg>
+        <span data-i18n="loginWithMicrosoft">Mit Microsoft anmelden</span>
+      </button>
+
+      <div id="auth-provider-hint" style="font-size:11px; color:var(--text-muted); line-height:1.5;" data-i18n="providerHint">
+        Der Login öffnet sich im Standard-Browser. Inkwell erhält nur Zugriff auf die Dateien, die es selbst im Ordner „Inkwell“ anlegt.
+      </div>
+
+      <div id="auth-separate-hint" style="font-size:11px; color:var(--text-muted); line-height:1.5;" data-i18n="providerSeparateHint">
+        Beide Konten sind getrennt: Hefte in Google Drive erscheinen nicht in OneDrive und umgekehrt.
+      </div>
+
+      <div id="auth-config-warning" style="display:none; font-size:11px; color:#d9534f; line-height:1.5; border:1px solid rgba(217,83,79,0.35); border-radius:6px; padding:10px;"></div>
+    </div>
+
+    <!-- Authenticated State -->
+    <div id="auth-logged-in" style="display:none; flex-direction:column; gap: 12px; padding: 16px;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom: 8px;">
+        <div style="width:40px;height:40px;border-radius:20px;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold" id="auth-avatar">
+          U
+        </div>
+        <div>
+          <div style="font-weight:bold; font-size:14px;" id="auth-user-name">Nutzer</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="auth-user-email">email@test.de</div>
+          <div style="font-size:11px;color:var(--accent)" id="auth-user-provider"></div>
+        </div>
+      </div>
+
+      <div class="settings-row" style="background:var(--sidebar-bg); padding:12px; border-radius:6px; margin: 4px 0;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="auth-cloud-enabled">
+          <span class="toggle-slider"></span>
+        </label>
+        <div style="display:flex; flex-direction:column; gap:2px; margin-left:12px;">
+           <span class="toggle-label" style="font-weight:600;font-size:14px;" data-i18n="cloudStorage">Cloud-Speicher</span>
+           <span id="auth-cloud-status" style="font-size:11px;color:var(--text-muted);" data-i18n="statusUnknown">Status unbekannt</span>
+        </div>
+      </div>
+
+      <!-- Speicherplatz im Cloud-Konto des Nutzers (Drive bzw. OneDrive) -->
+      <div id="auth-cloud-usage-container" style="display:none; font-size:12px; margin: 4px 0; background:var(--sidebar-bg); padding:12px; border-radius:6px; flex-direction:column; gap:6px;">
+        <div style="display:flex; justify-content:space-between; font-weight:500;">
+          <span id="auth-cloud-usage-label" data-i18n="storageUsed">Speicherplatz:</span>
+          <span id="auth-cloud-usage-text">–</span>
+        </div>
+        <div id="auth-cloud-usage-track" style="width:100%; height:6px; background:var(--sb); border-radius:3px; overflow:hidden;">
+          <div id="auth-cloud-usage-bar" style="width:0%; height:100%; background:var(--accent); transition:width 0.3s;"></div>
+        </div>
+        <div id="auth-cloud-usage-free" style="font-size:11px; color:var(--text-muted);"></div>
+        <div id="auth-cloud-usage-own" style="font-size:11px; color:var(--text-muted);"></div>
+      </div>
+
+      <!-- Zustand der Cloud-Sitzung (Restlaufzeit bzw. „bleibt aktiv") -->
+      <div id="auth-session-info" style="display:none; font-size:11px; color:var(--text-muted); line-height:1.5;"></div>
+
+      <hr style="border:0; border-top:1px solid var(--sb); margin:8px 0;">
+
+      <button id="auth-signout-btn" class="settings-btn" style="color:#d9534f; border-color: rgba(217, 83, 79, 0.3)" data-i18n="signOut">
+        Abmelden
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- HEFT FREIGEBEN -->
+<div class="overlay" id="ov-share" style="display:none">
+  <div class="modal" style="width:480px; max-width:92vw;">
+    <div class="modal-head">
+      <h3 data-i18n="shareTitle">Heft freigeben</h3>
+      <button class="modal-close-x" id="share-close">✕</button>
+    </div>
+
+    <div style="padding:16px; display:flex; flex-direction:column; gap:14px; max-height:78vh; overflow-y:auto;">
+      <p style="font-size:13px; color:var(--md); margin:0; line-height:1.6;" data-i18n="shareIntro">
+        Teile dieses Heft über einen Link oder mit bestimmten E-Mail-Adressen. Du legst je Person fest, ob sie nur lesen oder auch bearbeiten darf.
+      </p>
+
+      <!-- Ohne echte Anmeldung bei Firebase geht nichts davon; dann steht
+           hier statt der Bedienelemente eine Erklärung. -->
+      <p id="share-needs-account" style="display:none; font-size:12px; color:var(--md); line-height:1.6; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px; margin:0;" data-i18n="shareNeedsAccount">
+        Zum Teilen musst du in Inkwell mit deinem Google- oder Microsoft-Konto angemeldet sein.
+      </p>
+
+      <div class="share-section" id="share-link-section">
+        <div class="share-section-label" data-i18n="shareLinkLabel">Was darf, wer den Link hat?</div>
+
+        <div class="opt-radio-list">
+          <label class="opt-radio">
+            <input type="radio" name="app-link-mode" value="off" checked>
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="shareLinkOff">Kein Link</span>
+              <span class="opt-radio-hint" data-i18n="shareLinkOffHint">Nur die Leute, die du unten einträgst, kommen an das Heft.</span>
+            </span>
+          </label>
+
+          <label class="opt-radio">
+            <input type="radio" name="app-link-mode" value="view">
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="shareLinkView">Nur ansehen</span>
+              <span class="opt-radio-hint" data-i18n="shareLinkViewHint">Wer den Link hat, kann das Heft lesen – auch ohne Konto.</span>
+            </span>
+          </label>
+
+          <label class="opt-radio">
+            <input type="radio" name="app-link-mode" value="edit">
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="shareLinkEdit">Ansehen und bearbeiten</span>
+              <span class="opt-radio-hint" data-i18n="shareLinkEditHint">Angemeldete Empfänger können in der Inkwell-App mitarbeiten.</span>
+            </span>
+          </label>
+        </div>
+
+        <div id="share-link-row" style="display:none; gap:8px; margin-top:10px;">
+          <input id="share-link" type="text" readonly style="flex:1; min-width:0; padding:9px 12px; background:var(--sc); border:1px solid var(--sb); border-radius:6px; color:var(--hi); font-size:12px;">
+          <button class="settings-btn" id="share-copy" style="flex-shrink:0; padding:8px 14px; font-size:12px; white-space:nowrap;" data-i18n="shareCopy">Link kopieren</button>
+          <button class="settings-btn" id="share-renew" style="flex-shrink:0; padding:8px 14px; font-size:12px; white-space:nowrap;" data-i18n="shareRenewLink" data-i18n-title="shareRenewLinkHint" title="Erzeugt eine neue Adresse. Alle bisher verschickten Links laufen danach ins Leere.">Link erneuern</button>
+        </div>
+      </div>
+
+      <div class="share-section" id="share-people-section">
+        <div class="share-section-label" data-i18n="shareInviteLabel">Bestimmte Personen</div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input id="share-invite-mail" type="email" autocomplete="off" spellcheck="false"
+                 data-i18n-ph="shareInvitePlaceholder" placeholder="name@example.com"
+                 style="flex:1 1 180px; min-width:0; padding:9px 12px; background:var(--sc); border:1px solid var(--sb); border-radius:6px; color:var(--hi); font-size:12px;">
+          <select id="share-invite-role" style="flex:0 0 auto; padding:9px 10px; background:var(--sc); border:1px solid var(--sb); border-radius:6px; color:var(--hi); font-size:12px;">
+            <option value="view" data-i18n="roleView">Nur lesen</option>
+            <option value="edit" data-i18n="roleEdit">Bearbeiten</option>
+          </select>
+          <button class="settings-btn" id="share-invite-add" style="flex:0 0 auto; padding:8px 14px; font-size:12px;" data-i18n="shareInviteAdd">Hinzufügen</button>
+        </div>
+
+        <!-- Eingeladene und über den Link Dazugekommene stehen gemischt in
+             einer Liste. Sonst könnte man genau die Leute nicht entfernen,
+             die man nie eingeladen hat. -->
+        <div id="share-people" class="share-people"></div>
+      </div>
+
+      <p style="font-size:11px; color:var(--md); line-height:1.5; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px; margin:0;" data-i18n="shareWarning">
+        Jeder mit dem Link kann das Heft lesen – auch ohne Anmeldung. Gib ihn nur an Leute weiter, denen du den Inhalt anvertraust.
+      </p>
+
+      <!-- Ältere Lesekopie aus der Zeit vor den geteilten Dokumenten -->
+      <div id="share-legacy" style="display:none; font-size:11px; color:var(--md); line-height:1.6; border:1px solid var(--sb); border-radius:6px; padding:10px;">
+        <span data-i18n="shareLegacyHint">Für dieses Heft gibt es noch eine ältere Lesekopie mit eigenem Link.</span>
+        <button class="settings-btn" id="share-legacy-revoke" style="margin-top:8px; padding:6px 12px; font-size:11px; color:#d9534f; border-color:rgba(217,83,79,0.3);" data-i18n="shareLegacyRevoke">Ältere Freigabe aufheben</button>
+      </div>
+
+      <div id="share-status" style="font-size:12px; color:var(--gold); min-height:18px;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="settings-btn" id="share-revoke" style="display:none; color:#d9534f; border-color:rgba(217,83,79,0.3);" data-i18n="shareRevoke">Freigabe aufheben</button>
+        <button class="settings-btn" id="share-create" data-i18n="shareCreate">Freigabe erstellen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT: Format (PDF / Word) und Seitenauswahl -->
+<div class="overlay" id="ov-export" style="display:none">
+  <div class="modal" style="width:480px; max-width:92vw;">
+    <div class="modal-head">
+      <h3 data-i18n="exportTitle">Heft exportieren</h3>
+      <button class="modal-close-x" id="export-close">✕</button>
+    </div>
+
+    <div style="padding:16px; display:flex; flex-direction:column; gap:16px;">
+      <div>
+        <div style="font-family:'DM Mono',Consolas,monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--lo); margin-bottom:10px;" data-i18n="exportFormatLabel">Format</div>
+
+        <div class="opt-radio-list">
+          <label class="opt-radio">
+            <input type="radio" name="export-format" value="pdf" checked>
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="exportFormatPdf">PDF</span>
+              <span class="opt-radio-hint" data-i18n="exportFormatPdfHint">Zum Ansehen und Drucken. Sieht genau aus wie in Inkwell.</span>
+            </span>
+          </label>
+
+          <label class="opt-radio">
+            <input type="radio" name="export-format" value="docx">
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="exportFormatDocx">Word (.docx)</span>
+              <span class="opt-radio-hint" data-i18n="exportFormatDocxHint">Zum Weiterbearbeiten in Word. Text bleibt änderbar, Papier und Handschrift bleiben sichtbar.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-family:'DM Mono',Consolas,monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--lo); margin-bottom:10px;">
+          <span data-i18n="exportScopeLabel">Welche Seiten?</span>
+          <span id="export-total" style="text-transform:none; letter-spacing:0; color:var(--md);"></span>
+        </div>
+
+        <div class="opt-radio-list">
+          <label class="opt-radio">
+            <input type="radio" name="export-scope" value="all" checked>
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="exportScopeAll">Alle Seiten</span>
+            </span>
+          </label>
+
+          <label class="opt-radio" id="export-scope-current-row">
+            <input type="radio" name="export-scope" value="current">
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="exportScopeCurrent">Nur die aktuelle Seite</span>
+              <span class="opt-radio-hint" id="export-current-hint"></span>
+            </span>
+          </label>
+
+          <label class="opt-radio">
+            <input type="radio" name="export-scope" value="range">
+            <span class="opt-radio-body">
+              <span class="opt-radio-title" data-i18n="exportScopeRange">Bestimmte Seiten</span>
+              <span class="opt-radio-hint" data-i18n="exportRangeHint">Seitenzahlen wie im Heft. Mehrere durch Komma trennen, Bereiche mit Bindestrich.</span>
+            </span>
+            <input class="opt-radio-input" id="export-range-in" type="text" disabled
+                   data-i18n-ph="exportRangePlaceholder" placeholder="z. B. 1-3, 5, 8-10" autocomplete="off" spellcheck="false">
+          </label>
+        </div>
+      </div>
+
+      <div id="export-status" style="font-size:12px; color:var(--gold); min-height:18px;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="settings-btn" id="export-cancel" data-i18n="cancel">Abbrechen</button>
+        <button class="settings-btn" id="export-start" data-i18n="exportStart">Exportieren</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ABGEMELDET-HINWEIS (beim Start, wenn die Sitzung im Hintergrund endete) -->
+<div class="overlay" id="ov-signed-out" style="display:none">
+  <div class="modal" style="width:440px; max-width:92vw;">
+    <div class="modal-head">
+      <h3 data-i18n="signedOutTitle">Du bist abgemeldet</h3>
+      <button class="modal-close-x" id="signed-out-close">✕</button>
+    </div>
+
+    <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e0a63a" stroke-width="1.8"
+             style="flex-shrink:0; margin-top:2px;">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <path d="M16 17l5-5-5-5M21 12H9"/>
+        </svg>
+        <p id="signed-out-text" style="font-size:13px; color:var(--md); margin:0; line-height:1.6;"></p>
+      </div>
+
+      <p id="signed-out-account" style="font-size:12px; color:var(--lo); margin:0;"></p>
+
+      <p id="signed-out-pending" style="display:none; font-size:12px; color:var(--md); margin:0;
+                                        border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08);
+                                        border-radius:6px; padding:9px 10px;"></p>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:2px;">
+        <button class="settings-btn" id="signed-out-later" data-i18n="signedOutLater">Später</button>
+        <button class="settings-btn" id="signed-out-signin" data-i18n="signedOutSignIn">Jetzt anmelden</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="lib/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+</script>
+<!-- Core state, dialogs, data -->
+<script src="core/webAPI.js"></script>
+<script src="core/state.js"></script>
+<script src="core/translations.js"></script>
+<script src="core/dialogs.js"></script>
+<script src="core/data.js"></script>
+<script src="core/settings.js"></script>
+<!-- Örtliche Zugangsdaten. Muss VOR cloudConfig.js kommen und ist nicht im
+     Repo; fehlt die Datei, meldet die Konsole einen 404 und alles läuft
+     weiter (Google-Anmeldung dann stündlich). Vorlage: cloudConfig.local.example.js -->
+<script src="core/cloudConfig.local.js"></script>
+<script src="core/cloudConfig.js"></script>
+<script src="core/providers/googleDrive.js"></script>
+<script src="core/providers/oneDrive.js"></script>
+<script src="core/shortcuts.js"></script>
+<script src="core/registry.js"></script>
+<script src="core/fileManager.js"></script>
+<script src="core/trash.js"></script>
+<script src="core/autoSave.js"></script>
+<!-- Verbindet Bearbeiten und Auto-Speichern: definiert markCurrentNotebookDirty().
+     Fehlt diese Zeile, wird nichts als geändert erkannt und nie automatisch gespeichert. -->
+<script src="core/integration.js"></script>
+<script src="core/cloudSync.js"></script>
+<script src="core/importExport.js"></script>
+<script src="ui/auth.js"></script>
+  
+  
+
+<!-- Zoom & page scaling system -->
+<script src="core/zoom.js"></script>
+<script src="core/pageCanvas.js"></script>
+
+<!-- UI Components -->
+<script src="ui/homeGrid.js"></script>
+<script src="ui/search.js"></script>
+<script src="ui/sidebar.js"></script>
+<script src="ui/toolbar.js"></script>
+<script src="ui/settings.js"></script>
+<script src="ui/saveStatus.js"></script>
+  <script src="ui/contextMenu.js"></script>
+  <script src="ui/titlebar.js"></script>
+  
+  
+  
+  
+
+<!-- Canvas & Drawing -->
+<script src="canvas/drawing.js"></script>
+<script src="canvas/input.js"></script>
+  <script src="canvas/objects.js"></script>
+  <script src="canvas/text.js"></script>
+  
+  <script src="ui/update.js"></script>
+  <!-- benötigen buildPdf/switchMode/zoom aus app.js & importExport.js -->
+  <script src="ui/notebookActions.js"></script>
+  <!-- Word-Export (erzeugte Kopie von website/js/docx.js) und der Dialog,
+       der Format und Seitenumfang auswählt -->
+  <script src="core/docx.js"></script>
+  <script src="ui/export.js"></script>
+  <!-- Freigabe: Firestore-Zugriff als Modul, Oberfläche als klassisches Script.
+       Das Modul läuft nach den klassischen Scripts und meldet sich über
+       das Ereignis "inkwell-share-ready". -->
+  <script type="module" src="core/share.js"></script>
+  <script src="ui/share.js"></script>
+  <!-- Tab „Geteilte Dokumente": Liste, Öffnen, Zurückschreiben, Hinweise -->
+  <script src="ui/sharedDocs.js"></script>
+  <!-- Yjs, zu einer Datei gebündelt (npm run build-yjs). Meldet sich als
+       globales "Y" und trägt das gleichzeitige Tippen. -->
+  <script src="lib/yjs.bundle.js"></script>
+  <!-- Live-Bearbeitung: Anwesenheit, Marker, gemeinsamer Text, Handschrift -->
+  <script src="ui/collab.js"></script>
+  <!-- Weist beim Start darauf hin, wenn die Cloud-Sitzung im Hintergrund endete -->
+  <script src="ui/signedOut.js"></script>
+  <script src="ui/shortcuts.js"></script>
+  <script src="app.js"></script>
+  <script src="core/init.js"></script>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  

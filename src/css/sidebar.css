@@ -1,0 +1,330 @@
+/* Module: Sidebar & Navigation */
+
+.side-panel {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  background: var(--sp);
+  border-right: 1px solid var(--sb)
+}
+
+.side-strip {
+  width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  border-right: 1px solid var(--sb)
+}
+
+.strip-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--md);
+  cursor: pointer;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .12s
+}
+
+.strip-btn:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.strip-btn.active {
+  background: var(--sc);
+  color: var(--gold)
+}
+
+.side-content {
+  width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  transition: width .2s ease
+}
+
+.side-panel.open .side-content {
+  width: 230px
+}
+
+.side-head {
+  padding: 9px 12px 7px;
+  border-bottom: 1px solid var(--sb);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 230px
+}
+
+.side-label {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: var(--lo);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  flex: 1
+}
+
+.side-add-sec {
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 12px;
+  color: var(--gd);
+  font-size: 10px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  white-space: nowrap;
+  transition: all .2s;
+  letter-spacing: .5px;
+  font-weight: 500
+}
+
+.side-add-sec:hover {
+  background: var(--gold);
+  color: var(--sh);
+  border-color: transparent;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(200, 169, 110, 0.2)
+}
+
+.side-add-sec:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px
+}
+
+.side-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  min-width: 230px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb) transparent
+}
+
+.side-tree::-webkit-scrollbar {
+  width: 3px
+}
+
+.side-tree::-webkit-scrollbar-thumb {
+  background: var(--sb)
+}
+
+/* Section header */
+.sec-hdr {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px 5px;
+  cursor: pointer;
+  user-select: none;
+  gap: 4px;
+  border-left: 3px solid transparent;
+  transition: background .1s
+}
+
+.sec-hdr:hover {
+  background: var(--sh2)
+}
+
+.sec-hdr.active {
+  border-left-color: var(--gold);
+  background: var(--sc)
+}
+
+.sec-arrow {
+  font-size: 7px;
+  color: var(--lo);
+  flex-shrink: 0;
+  transition: transform .15s;
+  width: 10px
+}
+
+.sec-hdr.collapsed .sec-arrow {
+  transform: rotate(-90deg)
+}
+
+.sec-name {
+  font-size: 12px;
+  color: var(--hi);
+  flex: 1;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.sec-hdr.active .sec-name {
+  color: var(--gold)
+}
+
+.sec-pg-count {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: var(--lo);
+  flex-shrink: 0
+}
+
+.sec-edit-btn {
+  background: none;
+  border: none;
+  color: var(--lo);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: all .1s;
+  flex-shrink: 0;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace
+}
+
+.sec-hdr:hover .sec-edit-btn {
+  opacity: 1
+}
+
+.sec-edit-btn:hover {
+  color: var(--gold);
+  background: var(--sh2)
+}
+
+/* Section body (headings + active page indicator) */
+.sec-body {
+  overflow: hidden;
+  transition: max-height .18s ease
+}
+
+.sec-body.collapsed {
+  max-height: 0 !important
+}
+
+.cur-pg-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px 4px 14px;
+  gap: 6px;
+  background: rgba(200, 169, 110, .07);
+  border-left: 2px solid var(--gold)
+}
+
+.cur-pg-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0
+}
+
+.cur-pg-label {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: var(--gold);
+  letter-spacing: .3px
+}
+
+.cur-pg-title {
+  font-size: 10px;
+  color: var(--md);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic
+}
+
+/* Nav heading items */
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  cursor: default;
+  border-left: 2px solid transparent;
+  transition: background .1s;
+  user-select: none;
+  gap: 4px
+}
+
+.nav-item:hover {
+  background: var(--sh2)
+}
+
+.nav-item[data-level="h1"] {
+  font-size: 12px;
+  color: var(--hi);
+  padding-left: 12px;
+  font-style: italic;
+  font-weight: 500
+}
+
+.nav-item[data-level="h2"] {
+  font-size: 11px;
+  color: var(--md);
+  padding-left: 22px
+}
+
+.nav-item[data-level="h3"] {
+  font-size: 10px;
+  color: var(--lo);
+  padding-left: 30px
+}
+
+.nav-item.nav-active {
+  background: var(--sc) !important;
+  border-left-color: var(--gold) !important
+}
+
+.nav-item.nav-active .nav-item-text {
+  color: var(--gold)
+}
+
+.nav-item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer
+}
+
+.nav-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--gd);
+  flex-shrink: 0
+}
+
+.nav-collapse-arrow {
+  font-size: 7px;
+  color: var(--lo);
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px
+}
+
+.nav-collapse-arrow:hover {
+  color: var(--gold)
+}
+
+.nav-pg-badge {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 8px;
+  color: var(--lo);
+  flex-shrink: 0;
+  margin-left: 2px
+}
+
+.nav-empty {
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--lo);
+  font-style: italic
+}

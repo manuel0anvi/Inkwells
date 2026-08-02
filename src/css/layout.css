@@ -1,0 +1,540 @@
+/* Module: Main Layout Structure */
+
+.view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 36px);
+  overflow: hidden
+}
+
+.home-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 48px 60px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb) transparent
+}
+
+.home-heading {
+  font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;
+  font-size: 32px;
+  font-weight: 300;
+  font-style: italic;
+  color: var(--hi);
+  letter-spacing: 1px;
+  margin-bottom: 36px
+}
+
+/* ── Reiter: eigene Hefte / geteilte Dokumente ──────────────────────── */
+
+.home-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--sb);
+  flex-wrap: wrap
+}
+
+.home-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 4px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  color: var(--lo);
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: color .15s, border-color .15s
+}
+
+.home-tab:hover { color: var(--md) }
+
+.home-tab.active {
+  color: var(--hi);
+  border-bottom-color: var(--gold)
+}
+
+.home-tab-count {
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #1a1510;
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center
+}
+
+.shared-hint {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--lo);
+  margin: 0 0 24px
+}
+
+/* Abzeichen auf der Karte eines geteilten Dokuments */
+.nb-card-role {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border: 1px solid var(--sb2);
+  color: var(--lo)
+}
+
+.nb-card-role.can-edit {
+  border-color: rgba(224, 166, 58, .5);
+  color: var(--gold)
+}
+
+/* Streifen über dem Editor, solange ein geteiltes Dokument offen ist */
+.shared-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: rgba(224, 166, 58, .08);
+  border-bottom: 1px solid rgba(224, 166, 58, .3);
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 10px;
+  color: var(--md)
+}
+
+.shared-bar-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(224, 166, 58, .5);
+  color: var(--gold);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap
+}
+
+.shared-bar-text { flex: 1 1 auto; min-width: 0 }
+
+/* Hinweis, dass die Live-Übertragung nicht läuft */
+.shared-bar-warn {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(217, 83, 79, .5);
+  color: #d9534f;
+  white-space: nowrap;
+  cursor: help
+}
+
+.shared-bar-btn {
+  background: none;
+  border: 1px solid var(--sb2);
+  border-radius: 5px;
+  color: var(--md);
+  padding: 4px 10px;
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer
+}
+
+.shared-bar-btn:hover { color: var(--hi); border-color: var(--gold) }
+
+/* ── Wer gerade mitarbeitet ─────────────────────────────────────────
+   Oben eine Leiste mit runden Abzeichen (wie bei Google Docs), und am
+   rechten Rand der Seite ein Marker mit denselben Initialen. Fremde
+   Textcursor werden bewusst nicht gezeigt – nur die Markierung.
+   ─────────────────────────────────────────────────────────────────── */
+
+.collab-people {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none
+}
+
+.collab-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: .02em;
+  color: #fff;
+  border: 1.5px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  user-select: none
+}
+
+.collab-dot-more {
+  background: var(--sb2);
+  color: var(--hi)
+}
+
+/* Marker am rechten Seitenrand – INNERHALB der Seite, weil .j-page
+   alles abschneidet, was darüber hinausragt (overflow: hidden). Liegt
+   über dem Text, aber im schmalen Randstreifen, in den nicht geschrieben
+   wird. */
+.collab-marker {
+  position: absolute;
+  top: 64px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 14;
+  pointer-events: none
+}
+
+.collab-marker .collab-dot {
+  pointer-events: auto;
+  opacity: .9;
+  animation: collab-pop .18s ease-out
+}
+
+@keyframes collab-pop {
+  from { opacity: 0; transform: scale(.7) }
+  to   { opacity: .9; transform: scale(1) }
+}
+
+/* ── Fremde Schreibmarken ───────────────────────────────────────────
+   Ein farbiger Strich genau an der Stelle, an der der andere steht,
+   mit Namensschild darüber. Nimmt keine Klicks an – sonst käme man an
+   den Text darunter nicht mehr heran.
+   ─────────────────────────────────────────────────────────────────── */
+
+.collab-caret {
+  position: absolute;
+  width: 2px;
+  z-index: 15;
+  pointer-events: none;
+  border-radius: 1px;
+  transition: left .12s ease-out, top .12s ease-out
+}
+
+.collab-caret-label {
+  position: absolute;
+  left: -1px;
+  top: -15px;
+  padding: 1px 5px;
+  border-radius: 3px 3px 3px 0;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  line-height: 13px;
+  color: #fff;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: .95;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3)
+}
+
+/* ── Gesperrte Zeilen ───────────────────────────────────────────────
+   Die Zeile, an der jemand schreibt, und die darauf folgende gehören
+   ihm. Ein zartes Band in seiner Farbe zeigt das an – kräftig genug, um
+   es zu bemerken, blass genug, um den Text darunter zu lesen. Nimmt
+   keine Klicks an: man soll daneben weiterarbeiten können.
+   ─────────────────────────────────────────────────────────────────── */
+
+.collab-lock {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--lock-color) 13%, transparent);
+  box-shadow: inset 2px 0 0 var(--lock-color);
+  transition: top .12s ease-out, height .12s ease-out
+}
+
+.collab-lock-tag {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  line-height: 13px;
+  color: #fff;
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: .92;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3)
+}
+
+/* Kurzes Aufblinken, wenn jemand doch hineintippt */
+.collab-lock.bump {
+  animation: collab-lock-bump .32s ease-out
+}
+
+@keyframes collab-lock-bump {
+  0%   { background: color-mix(in srgb, var(--lock-color) 13%, transparent) }
+  35%  { background: color-mix(in srgb, var(--lock-color) 38%, transparent) }
+  100% { background: color-mix(in srgb, var(--lock-color) 13%, transparent) }
+}
+
+/* Werkzeugleiste im Nur-Lese-Modus: nur Zoom und Export bleiben nutzbar */
+body.read-only .toolbar .tb-zone.tb-left,
+body.read-only .toolbar .tb-zone.tb-center,
+body.read-only .toolbar #save-status,
+body.read-only .toolbar #btn-doc-share,
+body.read-only #add-page-btn-wrap {
+  opacity: .35;
+  pointer-events: none
+}
+
+.nb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px
+}
+
+.nb-card {
+  position: relative;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, opacity .15s;
+  user-select: none;
+  overflow: hidden;
+  touch-action: none
+}
+
+.nb-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .5)
+}
+
+.nb-card.dragging {
+  opacity: 0.3;
+  transform: scale(0.95)
+}
+
+.nb-drag-clone {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.9;
+  transform: scale(1.02) rotate(2deg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+  cursor: grabbing
+}
+
+.nb-drop-placeholder {
+  display: none;
+  width: 6px;
+  min-height: 180px;
+  background: var(--gold);
+  border-radius: 3px;
+  margin: 0 -3px;
+  animation: placeholder-pulse 0.8s ease-in-out infinite
+}
+
+@keyframes placeholder-pulse {
+  0%, 100% { opacity: 0.6; transform: scaleY(0.95); }
+  50% { opacity: 1; transform: scaleY(1); }
+}
+
+.nb-card-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 12px
+}
+
+.nb-card-body {
+  padding: 20px 16px 16px 24px;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sc);
+  border: 2px solid var(--nb-color, var(--sb2));
+  border-radius: 10px;
+  position: relative
+}
+
+.nb-card.active .nb-card-body {
+  box-shadow: 0 0 0 2px var(--nb-color, var(--gold));
+}
+
+.nb-card-name {
+  font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;
+  font-size: 16px;
+  font-style: italic;
+  color: var(--hi);
+  margin-bottom: auto;
+  word-break: break-word
+}
+
+.nb-card-meta {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: var(--lo);
+  margin-top: 12px
+}
+
+.nb-card-bg {
+  width: 100%;
+  height: 28px;
+  border-radius: 4px;
+  margin-top: 8px;
+  opacity: .6
+}
+
+.nb-add-card {
+  border-radius: 10px;
+  border: 2px dashed var(--sb2);
+  cursor: pointer;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--lo);
+  transition: all .15s
+}
+
+.nb-add-card:hover {
+  border-color: var(--gd);
+  color: var(--gold);
+  background: rgba(200, 169, 110, .04)
+}
+
+.nb-add-card span {
+  font-size: 13px;
+  font-style: italic;
+  font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif
+}
+
+.home-footer {
+  display: flex;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sb)
+}
+
+.sm-action {
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  padding: 7px 18px;
+  font-size: 13px;
+  color: var(--md);
+  cursor: pointer;
+  font-family: 'Crimson Pro', serif;
+  transition: all .12s;
+  display: flex;
+  align-items: center;
+  gap: 6px
+}
+
+.sm-action:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.btn-icon {
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 15px
+}
+
+.btn-icon-svg {
+  stroke: var(--gold);
+  flex-shrink: 0
+}
+
+.journal-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden
+}
+
+.editor-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0
+}
+
+.pg-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #1a1a24;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 0 50vh;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb2) transparent;
+  position: relative
+}
+
+.pg-scroll::-webkit-scrollbar {
+  width: 6px
+}
+
+.pg-scroll::-webkit-scrollbar-thumb {
+  background: var(--sb2);
+  border-radius: 3px
+}
+
+.pages-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  position: relative;
+  z-index: 1
+}
+
+.nb-card-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--sh2);
+  border: 1px solid var(--sb2);
+  border-radius: 5px;
+  color: var(--md);
+  cursor: pointer;
+  font-size: 13px;
+  width: 26px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all .12s;
+  z-index: 2;
+  line-height: 1
+}
+
+.nb-card:hover .nb-card-edit-btn {
+  opacity: 1
+}
+
+.nb-card-edit-btn:hover {
+  background: var(--gold);
+  color: var(--sh);
+  border-color: transparent
+}

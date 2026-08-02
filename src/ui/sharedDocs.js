@@ -1,0 +1,1004 @@
+'use strict';
+
+/* ══════════════════════════════════════════════════════════════════════
+   GETEILTE DOKUMENTE  ―  Oberfläche in der App
+
+   Der zweite Reiter auf der Startseite. Darin steht alles, was andere mit
+   diesem Konto geteilt haben – Rolle, Besitzer und Änderungsdatum je Karte.
+
+   ── Woher die Liste kommt ───────────────────────────────────────────
+   Aus genau EINER Abfrage in Firestore:
+       where('memberEmails', 'array-contains', meineAdresse)
+   Es gibt bewusst keine zweite Datenhaltung. Nimmt der Besitzer jemanden
+   aus der Liste, verschwindet das Dokument bei ihm von selbst – auch
+   mitten in der Sitzung, weil hier auf Änderungen gehört wird.
+
+   ── Warum ein geteiltes Dokument kein normales Heft ist ─────────────
+   Es liegt zwar in S.notebooks (der Editor holt sich alles über getNb),
+   trägt aber nb.origin = 'shared'. Daran erkennen fileManager, registry,
+   autoSave, cloudSync und trash, dass sie die Finger davon lassen müssen
+   – sonst lüde die App fremde Hefte in das EIGENE Google Drive.
+
+   ── Warum Bearbeiten hier eine harte Sperre hat ─────────────────────
+   Ein Heft liegt bis auf Weiteres als ein einziger JSON-Klumpen in
+   Firestore. Zwei gleichzeitige Schreiber würden sich vollständig
+   überschreiben. Deshalb trägt das Dokument eine laufende Nummer: wer auf
+   einem älteren Stand sitzt, darf nicht speichern und bekommt es gesagt.
+   Echtes gleichzeitiges Arbeiten braucht das zerlegte Datenmodell
+   (COLLAB_SPEC.md, Abschnitt 2).
+   ══════════════════════════════════════════════════════════════════════ */
+
+(function () {
+  const tabOwn = E('tab-own');
+  const tabShared = E('tab-shared');
+  const sharedPanel = E('shared-panel');
+  const sharedGrid = E('shared-grid');
+  const sharedHint = E('shared-hint');
+  const newCountEl = E('shared-new-count');
+  if (!tabOwn || !tabShared) return;
+
+  // Zuletzt bekannter Stand der Liste
+  let docs = [];
+  let unwatchList = null;
+  let unwatchOpen = null;
+  let activeTab = 'own';
+  let listError = '';
+
+  // Wiederholung nach einem Abbruch, mit wachsendem Abstand
+  let retryTimer = null;
+  let retryDelay = 2000;
+
+  /* ── Modul abwarten ─────────────────────────────────────────────────
+     core/share.js ist ein ES-Modul und läuft nach den klassischen
+     Scripts. Ohne Internet kommt es gar nicht hoch.
+     ─────────────────────────────────────────────────────────────── */
+  function whenShareReady(timeoutMs = 15000) {
+    if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), timeoutMs);
+      document.addEventListener('inkwell-share-ready', () => {
+        clearTimeout(timer);
+        if (window.InkwellShare) resolve(window.InkwellShare);
+        else reject(new Error('SHARE_OFFLINE'));
+      }, { once: true });
+    });
+  }
+
+  /* ── Gelesen-Zeitpunkt ──────────────────────────────────────────────
+     Es gibt keinen eigenen Benachrichtigungs-Speicher. Gemerkt wird nur,
+     wann der Reiter zuletzt offen war; alles Neuere gilt als neu. Das
+     kostet keinen einzigen zusätzlichen Schreibvorgang in Firestore.
+     ─────────────────────────────────────────────────────────────── */
+
+  function lastSeen() {
+    return Number(Settings.get('sharedDocsSeenAt')) || 0;
+  }
+
+  async function markSeen() {
+    await Settings.update({ sharedDocsSeenAt: Date.now() });
+    renderBadge();
+  }
+
+  function newDocs() {
+    const since = lastSeen();
+    if (!since) return docs.slice();     // erster Besuch: alles ist neu
+    return docs.filter(d => {
+      const at = d.sharedAt || d.updatedAt;
+      return at instanceof Date && at.getTime() > since;
+    });
+  }
+
+  function renderBadge() {
+    if (!newCountEl) return;
+    const count = newDocs().length;
+    newCountEl.textContent = String(count);
+    newCountEl.style.display = count > 0 ? 'inline-block' : 'none';
+  }
+
+  /** Beim Start einmal kurz sagen, was dazugekommen ist. */
+  let announced = false;
+  function announceNew() {
+    if (announced || activeTab === 'shared') return;
+    const fresh = newDocs();
+    if (!fresh.length) return;
+    announced = true;
+
+    const first = fresh[0];
+    const who = first.ownerName || first.ownerEmail || '?';
+    const msg = fresh.length === 1
+      ? (t('sharedNotifyOne') || '{name} hat „{title}" mit dir geteilt.')
+          .replace('{name}', who).replace('{title}', first.title || '?')
+      : (t('sharedNotifyMany') || '{n} neue geteilte Dokumente.')
+          .replace('{n}', String(fresh.length));
+
+    if (typeof toast === 'function') toast(msg);
+  }
+
+  /* ── Reiter ─────────────────────────────────────────────────────── */
+
+  function switchTab(which) {
+    activeTab = which === 'shared' ? 'shared' : 'own';
+
+    tabOwn.classList.toggle('active', activeTab === 'own');
+    tabShared.classList.toggle('active', activeTab === 'shared');
+
+    E('nb-grid').style.display = activeTab === 'own' ? '' : 'none';
+    E('home-search').style.display = activeTab === 'own' ? '' : 'none';
+    E('search-results').style.display = 'none';
+    if (sharedPanel) sharedPanel.style.display = activeTab === 'shared' ? '' : 'none';
+
+    if (activeTab === 'shared') {
+      renderShared();
+      markSeen().catch(() => {});
+
+      /* Läuft noch keine Beobachtung, jetzt anstoßen. Beim Start kann die
+         Firebase-Kennung noch gefehlt haben; ohne diesen Anstoß bliebe der
+         Tab bis zum nächsten Programmstart leer. */
+      if (!unwatchList) startWatching().catch(() => {});
+    }
+  }
+
+  tabOwn.addEventListener('click', () => switchTab('own'));
+  tabShared.addEventListener('click', () => switchTab('shared'));
+
+  /* ── Liste ──────────────────────────────────────────────────────── */
+
+  function myEmail() {
+    const api = window.InkwellShare;
+    return api?.currentIdentity()?.email || '';
+  }
+
+  function myRole(head) {
+    return head.roleFor ? head.roleFor(myEmail()) : 'view';
+  }
+
+  function fmtDate(date) {
+    if (!(date instanceof Date)) return '';
+    return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  }
+
+  function renderShared() {
+    if (!sharedGrid) return;
+    sharedGrid.innerHTML = '';
+
+    const api = window.InkwellShare;
+    const signedIn = !!(api && api.hasRealIdentity());
+
+    /* >>> Warum hier so viel Text steht <<<
+       Ein leerer Reiter hat vier ganz verschiedene Ursachen, und von
+       außen sehen alle gleich aus: Firebase kennt den Nutzer nicht, es
+       ist wirklich nichts geteilt, die Adresse passt nicht zu der, unter
+       der eingeladen wurde, oder die Abfrage wird abgewiesen. Vorher
+       stand in den ersten drei Fällen derselbe Satz – „melde dich an" –,
+       auch wenn man längst angemeldet war. Damit ließ sich nicht
+       herausfinden, woran es liegt. */
+    if (!signedIn) {
+      sharedHint.textContent = listError
+        || (typeof window.describeShareIdentityProblem === 'function'
+              ? window.describeShareIdentityProblem()
+              : t('sharedNeedsAccount'));
+      return;
+    }
+
+    if (!docs.length) {
+      /* Die Adresse mit dazu. Eingeladen wird auf die Adresse genau –
+         wer sich auf diesem Gerät mit einem anderen Konto angemeldet hat
+         (oder wessen Adresse anders geschrieben wurde), sieht hier
+         sofort, dass gesucht und eingeladen nicht dasselbe ist. */
+      const mine = myEmail();
+      sharedHint.textContent = listError
+        || (t('sharedEmpty') + (mine ? ' ' + t('sharedLookingFor').replace('{mail}', mine) : ''));
+      return;
+    }
+    sharedHint.textContent = listError || t('sharedHint');
+
+    for (const head of docs) {
+      const role = myRole(head) === 'edit' ? 'edit' : 'view';
+      const card = document.createElement('div');
+      card.className = 'nb-card';
+      card.style.setProperty('--nb-color', head.color);
+
+      const spine = document.createElement('div');
+      spine.className = 'nb-card-spine';
+      spine.style.background = head.color;
+
+      const body = document.createElement('div');
+      body.className = 'nb-card-body';
+
+      const name = document.createElement('div');
+      name.className = 'nb-card-name';
+      name.textContent = head.title || '?';
+
+      const badge = document.createElement('span');
+      badge.className = 'nb-card-role' + (role === 'edit' ? ' can-edit' : '');
+      badge.textContent = role === 'edit' ? t('roleEdit') : t('roleView');
+
+      const meta = document.createElement('div');
+      meta.className = 'nb-card-meta';
+      const parts = [head.ownerName || head.ownerEmail || '?'];
+      if (head.updatedAt) parts.push(fmtDate(head.updatedAt));
+      meta.textContent = parts.join(' · ');
+
+      body.append(name, badge, meta);
+      card.append(spine, body);
+      card.addEventListener('click', () => openSharedDocument(head).catch(err => {
+        console.error('[SharedDocs] Öffnen fehlgeschlagen:', err);
+        toast(describeError(err), true);
+      }));
+
+      sharedGrid.appendChild(card);
+    }
+  }
+
+  function describeError(err) {
+    const msg = err?.message || '';
+    if (msg === 'SHARE_OFFLINE') return t('shareOffline');
+    if (msg === 'NEEDS_ACCOUNT') return t('sharedNeedsAccount');
+    if (msg === 'SHARE_NOT_FOUND') return t('sharedGone');
+    if (msg === 'DOC_OUTDATED') return t('sharedOutdated');
+    if (msg === 'NOT_ALLOWED') return t('sharedNoRight');
+    return t('shareFailed').replace('{msg}', msg || '?');
+  }
+
+  /** Startet (oder erneuert) die Beobachtung der eigenen Empfängerliste. */
+  async function startWatching() {
+    clearTimeout(retryTimer);
+    if (unwatchList) { unwatchList(); unwatchList = null; }
+
+    let api;
+    try {
+      api = await whenShareReady();
+    } catch (err) {
+      listError = t('shareOffline');
+      renderShared();
+      return;
+    }
+
+    // Auch hier erst versuchen, die Firebase-Kennung nachzuholen: wer schon
+    // vor dieser Fassung angemeldet war, hat nie ein ID-Token abgegeben.
+    const known = await CloudSync_.ensureFirebaseIdentity();
+    if (!known) {
+      docs = [];
+      listError = '';
+      renderBadge();
+      if (activeTab === 'shared') renderShared();
+      return;
+    }
+
+    listError = '';
+    unwatchList = api.watchSharedDocs(
+      api.currentIdentity().email,
+      (list) => {
+        listError = '';
+        retryDelay = 2000;
+        docs = list.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
+        renderBadge();
+        announceNew();
+        if (activeTab === 'shared') renderShared();
+        checkStillAllowed();
+      },
+      (err) => {
+        /* Reißt die Beobachtung ab (Netz weg, Regeln abgelehnt), kommt sie
+           von selbst nicht wieder. Vorher blieb der Tab dann stumm leer –
+           genau das Verhalten von „erscheint erst ganz spät". */
+        listError = t('sharedListError').replace('{msg}', err?.message || '?');
+        if (activeTab === 'shared') renderShared();
+
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, 60000);
+          startWatching().catch(() => {});
+        }, retryDelay);
+      }
+    );
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE LAUFENDE LIVE-SITZUNG
+
+     Ein Heft kann auf zwei Wegen im Raum landen:
+
+       · als FREMDES Dokument – über den Reiter oder einen Link. Es
+         bekommt origin = 'shared', keine Datei, keinen Eintrag in der
+         eigenen Verwaltung.
+       · als EIGENES, freigegebenes Heft – der Besitzer öffnet es ganz
+         normal von der Startseite. Es behält seine Datei (die bleibt die
+         Sicherung), wird aber zusätzlich in den Raum geschrieben.
+
+     Der zweite Fall fehlte lange, und damit fehlte die halbe
+     Zusammenarbeit: der Besitzer sah von den Änderungen der anderen
+     nichts, und „Freigabe aktualisieren" hat sie überschrieben. Beide
+     Fälle laufen jetzt durch dieselbe Sitzung.
+     ══════════════════════════════════════════════════════════════════ */
+
+  // { docId, nbId, isOwner } – solange etwas im Raum offen ist
+  let live = null;
+
+  /* ── Ein Dokument öffnen ────────────────────────────────────────── */
+
+  async function openSharedDocument(head) {
+    const api = await whenShareReady();
+
+    /* Ohne Konto (oder mit einer Adresse, die nicht eingetragen ist) bleibt
+       der Weg über den Link: solange der offen ist, darf gelesen werden –
+       genau so steht es auch in den Regeln. Vorher endete dieser Fall mit
+       „Freigabe gibt es nicht mehr", obwohl der Link einwandfrei war. */
+    const role = myRole(head)
+      || (head.linkMode === 'view' || head.linkMode === 'edit' ? 'view' : null);
+    if (!role) throw new Error('SHARE_NOT_FOUND');
+
+    toast(t('sharedOpening'));
+    const { notebook, head: fresh, fingerprint, crdt } = await api.loadDocument(head.docId);
+
+    // Merkzettel vom geladenen Stand. Daran erkennt das Speichern später,
+    // WELCHE Seite sich geändert hat – geschrieben wird nur die.
+    baseline = fingerprint;
+    crdtState = crdt || {};
+    dirty = false;
+
+    // Als geteiltes Dokument kennzeichnen, BEVOR es in S.notebooks landet:
+    // sonst greifen die Bremsen in fileManager/registry/cloudSync nicht.
+    notebook.origin = 'shared';
+    notebook.id = 'shared:' + fresh.docId;
+
+    const idx = S.notebooks.findIndex(nb => nb.id === notebook.id);
+    if (idx >= 0) S.notebooks[idx] = notebook; else S.notebooks.push(notebook);
+
+    live = { docId: fresh.docId, nbId: notebook.id, isOwner: false };
+
+    const finalRole = myRole(fresh) || role;
+    applyReadOnlyChrome(finalRole !== 'edit', {
+      docId: fresh.docId,
+      role: finalRole,
+      ownerName: fresh.ownerName,
+      ownerEmail: fresh.ownerEmail,
+      title: fresh.title,
+      revision: fresh.revision
+    });
+
+    openNotebook(notebook.id);
+    watchOpenDocument(fresh.docId);
+
+    /* Live-Betrieb: Anwesenheit, Marker, gemeinsames Tippen, Handschrift.
+       Läuft ohne Realtime Database nicht – dann bleibt es beim Speichern
+       im 4-Sekunden-Takt, ohne dass etwas kaputtgeht.
+
+       Ohne echtes Konto (Link ohne Anmeldung) gar nicht erst versuchen:
+       der Raum verlangt eine Kennung, der Versuch endete nur mit einer
+       roten Warnung im Streifen, obwohl alles in Ordnung ist. */
+    if (window.Collab && api.hasRealIdentity()) {
+      Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit')
+        .catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DER BESITZER MACHT MIT
+
+     Der Besitzer öffnet sein Heft von der Startseite – aus der Datei,
+     nicht aus dem Raum. Ist es freigegeben, wird daraus hier eine
+     Live-Sitzung. Drei Schritte, und die Reihenfolge ist nicht beliebig:
+
+       1. Was hier seit dem letzten Abgleich entstanden ist, geht ZUERST
+          hinauf. Sonst ginge es beim nächsten Schritt verloren.
+       2. Dann übernimmt der Raum. Er ist die maßgebliche Fassung – so ist
+          es entschieden (COLLAB_SPEC, Abschnitt 7 und 9.4). Die Datei
+          bleibt die Sicherung und wird vom Raum aus geschrieben, nicht
+          umgekehrt; zwei Wahrheiten nebeneinander wären die Quelle jedes
+          künftigen Fehlers.
+       3. Erst danach der Raum selbst.
+
+     Seiten, die es hier gibt und im Raum nicht, bleiben trotzdem stehen
+     (siehe adoptRoom). Ohne das verlöre ein Besitzer, der ohne Netz
+     gearbeitet hat, seine Arbeit beim nächsten Öffnen.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /** Merkzettel je Dokument, damit Schritt 1 einen Vergleichsstand hat. */
+  function fingerprintStore() {
+    const raw = Settings.get('liveFingerprints');
+    return (raw && typeof raw === 'object') ? raw : {};
+  }
+
+  async function rememberFingerprint(docId, fingerprint) {
+    const all = fingerprintStore();
+    all[docId] = fingerprint;
+    await Settings.update({ liveFingerprints: all }).catch(() => {});
+  }
+
+  /**
+   * Übernimmt den Stand aus dem Raum in das eigene Heft.
+   *
+   * Was der Raum nicht kennt, bleibt erhalten und geht beim nächsten
+   * Sichern hinauf – der Fall „ohne Netz eine Seite angelegt".
+   */
+  function adoptRoom(nb, roomNb) {
+    const roomIds = new Set((roomNb.pages || []).map(p => String(p.id)));
+
+    // Wo lagen die eigenen Seiten? Für die, die der Raum nicht kennt.
+    const sectionOf = new Map();
+    for (const sec of (nb.sections || [])) {
+      for (const pgId of (sec.pgIds || [])) sectionOf.set(String(pgId), String(sec.id));
+    }
+
+    const extras = (nb.pages || []).filter(p => !roomIds.has(String(p.id)));
+
+    nb.pages = (roomNb.pages || []).concat(extras);
+    nb.sections = (roomNb.sections || []).map(sec => ({
+      id: String(sec.id),
+      name: String(sec.name || ''),
+      pgIds: (sec.pgIds || []).map(String),
+      defaultBg: sec.defaultBg || nb.defaultBg || 'ruled'
+    }));
+
+    if (!nb.sections.length && typeof getSections === 'function') getSections(nb);
+
+    for (const page of extras) {
+      const wanted = sectionOf.get(String(page.id));
+      const sec = nb.sections.find(s => s.id === wanted) || nb.sections[0];
+      if (sec && !sec.pgIds.includes(String(page.id))) sec.pgIds.push(String(page.id));
+    }
+
+    if (!nb.sections.some(s => s.id === nb.activeSecId)) {
+      nb.activeSecId = nb.sections[0]?.id || '';
+    }
+    return extras.length;
+  }
+
+  /**
+   * Wird am Ende von openNotebook aufgerufen (app.js). Ist das Heft
+   * freigegeben, wird daraus eine Live-Sitzung.
+   */
+  async function startOwnerSession(nb) {
+    if (!nb || nb.origin === 'shared') return;
+
+    const entry = (typeof window.notebookShareEntry === 'function')
+      ? window.notebookShareEntry(nb.id) : null;
+    if (!entry || !entry.docId) return;
+    if (live && live.nbId === nb.id) return;              // läuft schon
+
+    const api = await whenShareReady();
+    const known = await CloudSync_.ensureFirebaseIdentity();
+    if (!known) return;                                    // ohne Konto kein Raum
+
+    const me = api.currentIdentity();
+    const head = await api.loadDocumentHead(entry.docId);
+    if (!me || head.owner !== me.uid) return;              // gehört uns nicht mehr
+
+    /* Was im Editor steht, muss erst ins Datenmodell – sonst ginge genau
+       das verloren, was in den Sekunden bis hierher getippt wurde. */
+    if (S.activeNbId === nb.id && typeof syncAll === 'function') {
+      try { syncAll(); } catch (e) { console.warn('[SharedDocs] syncAll:', e); }
+    }
+
+    // 1. Eigenes zuerst hinauf – nur wenn wir wissen, WAS neu ist.
+    const stored = fingerprintStore()[entry.docId] || null;
+    if (stored) {
+      try {
+        await api.saveDocumentContent(entry.docId, nb, { baseline: stored });
+      } catch (err) {
+        console.warn('[SharedDocs] Eigener Stand nicht hochgeladen:', err?.message || err);
+      }
+    }
+
+    // 2. Der Raum übernimmt
+    const loaded = await api.loadDocument(entry.docId);
+    const extras = adoptRoom(nb, loaded.notebook);
+
+    baseline = loaded.fingerprint;
+    crdtState = loaded.crdt || {};
+    dirty = extras > 0;                 // eigene Seiten müssen noch hinauf
+    live = { docId: entry.docId, nbId: nb.id, isOwner: true };
+    rememberFingerprint(entry.docId, loaded.fingerprint);
+
+    applyReadOnlyChrome(false, {
+      docId: entry.docId,
+      role: 'edit',
+      isOwner: true,
+      ownerName: me.name || me.email,
+      ownerEmail: me.email,
+      title: loaded.head.title,
+      revision: loaded.head.revision
+    });
+
+    // Der Raum kann anders aussehen als die Datei – neu aufbauen.
+    if (S.activeNbId === nb.id && typeof openSection === 'function') {
+      const sec = (nb.sections || []).find(s => s.id === nb.activeSecId) || (nb.sections || [])[0];
+      if (sec) openSection(sec);
+    }
+
+    watchOpenDocument(entry.docId);
+
+    // 3. Der Raum
+    if (window.Collab) {
+      Collab.start(entry.docId, nb, crdtState, true)
+        .catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
+    }
+  }
+
+  /**
+   * Eine einzelne Seite aus Firestore nachholen. Ruft ui/collab.js auf,
+   * wenn eine Änderung nicht durch den Live-Kanal passt – Bilder und
+   * Seiten mit sehr viel Handschrift.
+   *
+   * Der TEXT wird bewusst nicht übernommen: der läuft über Yjs und ist
+   * dort feiner und aktueller als alles, was in Firestore steht.
+   */
+  /**
+   * Eine Änderung des anderen ist angekommen (ui/collab.js). Der
+   * Merkzettel wird nachgezogen, damit sie NICHT als eigene, neue
+   * Änderung gilt.
+   *
+   * >>> Warum das nicht bloß Sparsamkeit ist <<<
+   * Der Merkzettel entscheidet in saveDocumentContent, was mit der
+   * Handschrift geschieht. Eine Seite, die er nicht kennt, gilt als neu –
+   * und für die werden die Bögen NEU GESCHRIEBEN. Käme also eine Seite
+   * live herein und stünde nicht im Merkzettel, würde die nächste
+   * Sicherung alle Striche löschen, die der andere seither darauf
+   * gezeichnet hat.
+   *
+   * @param {string|null} pageId  null = alles neu bewerten (Reihenfolge,
+   *   Abschnitte); sonst nur diese Seite.
+   */
+  window.noteRemoteApplied = function noteRemoteApplied(pageId) {
+    const api = window.InkwellShare;
+    if (!live || !baseline || !api) return;
+
+    const nb = getNb(live.nbId);
+    if (!nb) return;
+
+    const fresh = api.fingerprintNotebook(nb);
+    baseline.order = fresh.order;
+    baseline.headSig = fresh.headSig;
+
+    if (pageId === null || pageId === undefined) {
+      baseline.pages = fresh.pages;
+      return;
+    }
+
+    const key = String(pageId);
+    if (fresh.pages[key]) baseline.pages[key] = fresh.pages[key];
+    else delete baseline.pages[key];
+  };
+
+  window.reloadLivePage = async function reloadLivePage(pageId) {
+    if (!live) return false;
+    const api = await whenShareReady();
+    const page = await api.loadPage(live.docId, String(pageId));
+    if (!page) return false;
+
+    const nb = getNb(live.nbId);
+    if (!nb) return false;
+
+    /* Die Seite fehlt hier noch? Dann ist sie eine, die für den
+       Live-Kanal zu groß war und nur als Hinweis angekündigt wurde.
+       Anlegen – wohin sie gehört, sagt die Reihenfolge, die gleich
+       darauf kommt. */
+    let local = (nb.pages || []).find(p => String(p.id) === String(pageId));
+    const isNew = !local;
+    if (!local) {
+      local = { id: String(pageId), date: page.date || new Date().toISOString(),
+                bg: null, textContent: page.textContent || '', inkStrokes: [], objects: [] };
+      nb.pages.push(local);
+    }
+
+    /* ── Was von hier übernommen wird, und was nicht ──────────────────
+       Firestore ist beim Nachladen NICHT die frischere Quelle. Es wird
+       nur angefragt, weil Bilddaten nicht durch den Live-Kanal passen –
+       alles Übrige ist über den Kanal längst da, und zwar aktueller.
+
+       Vorher wurde die Seite komplett ersetzt. Wer ein Bild verschob,
+       schickte deshalb erst die richtige neue Position über den Kanal
+       und gleich darauf den Hinweis „lade neu" – und der holte den
+       ALTEN Stand zurück. Beim Empfänger sprang das Bild wieder an
+       seinen Platz. Genau das passiert hier jetzt nicht mehr: von der
+       Seite kommen nur noch die Bilddaten. */
+    let changed = isNew;
+
+    if (isNew) {
+      local.objects = page.objects || [];
+      local.inkStrokes = page.inkStrokes || [];
+      local.bg = page.bg ?? null;
+      if (page.w) local.w = page.w;
+      if (page.h) local.h = page.h;
+      S.strokeHistory[String(pageId)] = JSON.parse(JSON.stringify(local.inkStrokes || []));
+    } else {
+      // Nur die Bilddaten in die bekannten Objekte einsetzen
+      const withData = new Map(
+        (page.objects || [])
+          .filter(o => typeof o.src === 'string' && o.src.startsWith('data:'))
+          .map(o => [String(o.id), o.src])
+      );
+      for (const obj of (local.objects || [])) {
+        const src = withData.get(String(obj.id));
+        if (src && obj.src !== src) { obj.src = src; changed = true; }
+      }
+      /* Ein Bild, dessen obj-Meldung noch unterwegs ist, gehört dazu.
+         Bewusst NUR Bilder: alles andere kommt vollständig über den
+         Live-Kanal, und würde man es hier ergänzen, käme ein gerade
+         gelöschtes Objekt aus Firestore wieder zurück. */
+      const known = new Set((local.objects || []).map(o => String(o.id)));
+      for (const [id, src] of withData) {
+        if (known.has(id)) continue;
+        const source = (page.objects || []).find(o => String(o.id) === id);
+        if (source) { (local.objects = local.objects || []).push({ ...source, src }); changed = true; }
+      }
+    }
+
+    const bgBefore = local.bgImg || '';
+    if (page.bgImg) local.bgImg = page.bgImg; else delete local.bgImg;
+    if ((local.bgImg || '') !== bgBefore) changed = true;
+
+    /* >>> Warum hier ehrlich „nichts gebracht" gemeldet werden muss <<<
+       ui/collab.js versucht es noch einmal, wenn nichts herauskam – die
+       Seite kann in Firestore stehen, ihre Bilder aber noch nicht. Würde
+       hier immer „ja" gemeldet, bliebe der Abruf bei diesem einen Versuch
+       und das Bild fehlte für immer. */
+    return changed;
+  };
+
+  /**
+   * Das offene Dokument im Auge behalten. Verschwindet die eigene Adresse
+   * aus der Mitgliederliste, wird sofort geschlossen – auf den Anstand des
+   * Clients verlässt sich dabei niemand, die Regeln blockieren jedes
+   * weitere Schreiben ohnehin.
+   */
+  function watchOpenDocument(docId) {
+    if (unwatchOpen) { unwatchOpen(); unwatchOpen = null; }
+    const api = window.InkwellShare;
+    if (!api) return;
+
+    unwatchOpen = api.watchDocument(docId, (head) => {
+      if (!S.sharedDoc || S.sharedDoc.docId !== docId) return;
+
+      /* Der Besitzer kann sich nicht selbst aussperren. Ist das Dokument
+         weg (auf einem anderen Gerät aufgehoben), endet nur die
+         Live-Sitzung – sein Heft behält er. */
+      if (S.sharedDoc.isOwner) {
+        if (!head) { endLiveSession(); applyReadOnlyChrome(false, null); }
+        else S.sharedDoc.revision = head.revision;
+        return;
+      }
+
+      if (!head) { kickOut(t('sharedRevoked')); return; }
+
+      const role = myRole(head);
+      if (!role) { kickOut(t('sharedRevoked')); return; }
+
+      // Recht heruntergestuft: weiterlesen ja, weiterschreiben nein
+      if (role !== S.sharedDoc.role) {
+        S.sharedDoc.role = role;
+        applyReadOnlyChrome(role !== 'edit', S.sharedDoc);
+        toast(role === 'edit' ? t('sharedNowEdit') : t('sharedNowView'));
+      }
+      S.sharedDoc.revision = head.revision;
+    });
+  }
+
+  function kickOut(message) {
+    const docId = S.sharedDoc?.docId;
+    if (unwatchOpen) { unwatchOpen(); unwatchOpen = null; }
+    if (docId) S.notebooks = S.notebooks.filter(nb => nb.id !== 'shared:' + docId);
+    S.activeNbId = null;
+    showHome();
+    switchTab('shared');
+    toast(message, true);
+  }
+
+  /** Ist das gerade offene Dokument noch in der Liste? */
+  function checkStillAllowed() {
+    const open = S.sharedDoc;
+    if (!open || open.isOwner) return;      // der eigene Raum steht nie in der Liste
+    if (docs.some(d => d.docId === open.docId)) return;
+    kickOut(t('sharedRevoked'));
+  }
+
+  /* ── Zurückschreiben ────────────────────────────────────────────────
+     autoSave.markDirty leitet Änderungen an geteilten Dokumenten hierher
+     um. Gespeichert wird gebündelt, nicht bei jedem Tastendruck: jedes
+     Mal geht das ganze Heft über die Leitung.
+     ─────────────────────────────────────────────────────────────── */
+
+  const SAVE_DELAY_MS = 4000;
+  let saveTimer = null;
+  let saving = false;
+  let outdatedWarned = false;
+
+  /* Stand des Dokuments beim Laden bzw. nach dem letzten Speichern.
+     Ohne ihn müsste jedes Mal das ganze Heft hochgeladen werden. */
+  let baseline = null;
+
+  // Gespeicherte Yjs-Stände je Seite (für die Live-Bearbeitung)
+  let crdtState = {};
+
+  /* Gibt es überhaupt etwas zu sichern? Ohne diese Frage lief beim
+     Schließen jedes Mal ein Speichervorgang an – auch wenn nur gelesen
+     wurde. Zusammen mit dem Merkzettel-Fehler unten hieß das: das ganze
+     Dokument wurde neu geschrieben, bloß weil man es geöffnet hatte. */
+  let dirty = false;
+
+  /* Der gerade laufende Speichervorgang – oder null.
+     Gebraucht, damit jemand darauf warten KANN. saveOpenDocument steigt
+     aus, solange schon einer läuft; wer danach auf das Ergebnis wartete,
+     wartete in Wirklichkeit auf nichts. */
+  let inFlight = null;
+
+  /**
+   * Speichern anstoßen und den Vorgang festhalten.
+   *
+   * Läuft bewusst synchron an: saveOpenDocument merkt sich Dokument,
+   * Merkzettel und Heft im ersten Zug, noch vor dem ersten await. Beim
+   * Schließen wird gleich nach dem Aufruf `live = null` gesetzt – käme
+   * der Anfang erst eine Warteschlange später, fände er nichts mehr vor
+   * und es würde gar nicht gespeichert.
+   */
+  function startSave() {
+    const running = saveOpenDocument();
+    inFlight = running;
+    Promise.resolve(running).catch(() => {}).then(() => {
+      if (inFlight === running) inFlight = null;
+    });
+    return running;
+  }
+
+  window.markSharedDocDirty = function markSharedDocDirty(nbId) {
+    // Gehört das Heft zur laufenden Sitzung? Für ein fremdes Dokument ist
+    // die Kennung 'shared:<docId>', für ein eigenes die des Hefts.
+    if (!live || S.readOnly || nbId !== live.nbId) return;
+
+    dirty = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { startSave().catch(() => {}); }, SAVE_DELAY_MS);
+  };
+
+  /**
+   * Jetzt wirklich schreiben – und erst zurückkommen, wenn es durch ist.
+   *
+   * Gebraucht von ui/collab.js, bevor es der Gegenseite sagt, sie solle
+   * eine Seite aus Firestore nachladen. Der Hinweis ist nur brauchbar,
+   * wenn dort auch schon der neue Stand steht. Vorher ging er hinaus,
+   * ohne dass je etwas geschrieben worden wäre – daran lagen die leeren
+   * PDF-Seiten und die zurückspringenden Bilder beim anderen.
+   *
+   * `dirty` wird dabei bewusst gesetzt: ein verschobenes Bild meldet sich
+   * nicht von selbst, und ohne die Marke stiege das Speichern gleich
+   * wieder aus.
+   */
+  window.forceSharedDocSave = async function forceSharedDocSave() {
+    if (!live || S.readOnly) return;
+
+    // Auf einen laufenden Vorgang warten – der kennt den jetzigen Stand nicht
+    for (let guard = 0; inFlight && guard < 20; guard++) {
+      try { await inFlight; } catch (err) { /* der nächste Versuch zählt */ }
+    }
+    if (!live || S.readOnly) return;
+
+    dirty = true;
+    await startSave();
+  };
+
+  async function saveOpenDocument() {
+    if (saving || !live || S.readOnly || !dirty) return;
+    const open = S.sharedDoc || { docId: live.docId };
+    const nb = getNb(live.nbId);
+    if (!nb) return;
+
+    /* >>> Den Merkzettel JETZT festhalten <<<
+       Beim Schließen wird gleich nach diesem Aufruf `baseline = null`
+       gesetzt – synchron, also lange bevor die erste Antwort da ist. Wurde
+       er erst später gelesen, stand dort null, und saveDocumentContent
+       deutete das als „ich weiß nichts über den bisherigen Stand": es hat
+       den gesamten Inhalt gelöscht und neu geschrieben. Damit war bei
+       jedem Schließen alles weg, was ein anderer inzwischen geändert
+       hatte – samt der Yjs-Stände aller Seiten. */
+    const base = baseline;
+    const states = crdtState;
+    const session = live;
+
+    saving = true;
+    dirty = false;
+    try {
+      /* Was im Live-Kanal noch wartet, gehört zuerst hinaus. Sonst ginge
+         der Stand nach Firestore, bevor die anderen ihn überhaupt gesehen
+         haben – und wer gerade dazukäme, sähe zwei verschiedene Fassungen. */
+      if (window.Collab && typeof Collab.syncNow === 'function') {
+        try { Collab.syncNow(); } catch (e) {}
+      }
+
+      // Der Editor-Stand muss erst ins Datenmodell, sonst fehlt genau das,
+      // was gerade getippt wurde.
+      if (S.activeNbId === nb.id && typeof syncAll === 'function') {
+        try { syncAll(); } catch (e) { console.warn('[SharedDocs] syncAll:', e); }
+      }
+
+      const api = await whenShareReady();
+      const result = await api.saveDocumentContent(open.docId, nb, { baseline: base });
+
+      /* Den Yjs-Stand der Seiten mitsichern, auf denen getippt wurde. Er
+         ist beim nächsten Öffnen die maßgebliche Fassung – nur er kann
+         zwei gleichzeitige Änderungen zusammenführen. Der HTML-Text
+         daneben bleibt für Betrachter, Export und Suche. */
+      /* Bewusst NICHT von Collab.isLive() abhängig: der gemeinsame Text
+         wird auch ohne Realtime Database mitgeführt (ui/collab.js), und
+         beim Schließen ist der Raum ohnehin schon verlassen. Vorher fiel
+         genau die letzte Sicherung dadurch aus – der Yjs-Stand blieb auf
+         dem Stand der vorletzten. */
+      if (window.Collab) {
+        for (const page of (nb.pages || [])) {
+          const pageId = String(page.id);
+          const state = Collab.stateFor(pageId);
+          if (!state || states[pageId] === state) continue;
+          await api.savePageText(open.docId, pageId, {
+            text: page.textContent || '',
+            ycrdt: state
+          });
+          states[pageId] = state;
+        }
+      }
+
+      /* Ab jetzt ist DAS der bekannte Stand – die nächste Änderung wird
+         wieder nur gegen ihn verglichen. Nur, solange dasselbe Dokument
+         noch offen ist: beim Schließen ist der Merkzettel absichtlich
+         leer, und ein nachträglicher Eintrag würde den nächsten Öffner
+         mit einem fremden Stand vergleichen lassen. */
+      if (live === session) {
+        baseline = result.fingerprint;
+        // Damit der Besitzer beim nächsten Öffnen weiß, was er selbst
+        // zuletzt hinaufgegeben hat (startOwnerSession, Schritt 1).
+        if (session.isOwner) rememberFingerprint(session.docId, result.fingerprint);
+      }
+      open.revision = result.revision;
+      outdatedWarned = false;
+      if (result.written) console.log('[SharedDocs]', result.written, 'Teil(e) geschrieben');
+    } catch (err) {
+      // Nicht angekommen heißt: es steht weiterhin etwas aus.
+      if (live === session) dirty = true;
+
+      if (err?.message === 'DOC_OUTDATED') {
+        // Nur noch bei Freigaben aus der Zeit vor dem zerlegten Modell.
+        if (!outdatedWarned) {
+          outdatedWarned = true;
+          toast(t('sharedOutdated'), true);
+        }
+      } else {
+        console.warn('[SharedDocs] Speichern fehlgeschlagen:', err?.message || err);
+        toast(describeError(err), true);
+      }
+    } finally {
+      saving = false;
+    }
+  }
+
+  /* ── Freigabe verlassen ─────────────────────────────────────────── */
+
+  E('shared-bar-leave')?.addEventListener('click', async () => {
+    const open = S.sharedDoc;
+    if (!open || open.isOwner) return;     // sein eigenes Heft verlässt niemand
+    if (!await showConfirm(t('sharedLeaveConfirm'))) return;
+
+    try {
+      const api = await whenShareReady();
+      await api.leaveDocument(open.docId);
+      kickOut(t('sharedLeft'));
+    } catch (err) {
+      console.error('[SharedDocs] Verlassen fehlgeschlagen:', err);
+      toast(describeError(err), true);
+    }
+  });
+
+  /* ── Aus dem Browser heraus geöffnet ────────────────────────────────
+     main.js schickt inkwell://share/<linkId> als eigenes Ereignis. Das
+     landete früher beim OAuth-Rückruf und lief dort ins Leere.
+     ─────────────────────────────────────────────────────────────── */
+
+  async function openFromLink(linkId) {
+    if (!linkId) return;
+    try {
+      const api = await whenShareReady();
+      await api.whenIdentityReady();
+
+      const { docId } = await api.resolveLink(linkId);
+      if (!docId) throw new Error('SHARE_NOT_FOUND');
+
+      if (api.hasRealIdentity()) {
+        const outcome = await api.joinViaLink(docId);
+        if (outcome === 'blocked') { toast(t('sharedBlocked'), true); return; }
+      }
+
+      const head = await api.loadDocumentHead(docId);
+      await openSharedDocument(head);
+    } catch (err) {
+      console.error('[SharedDocs] Link konnte nicht geöffnet werden:', err);
+      toast(describeError(err), true);
+    }
+  }
+
+  if (window.api && typeof window.api.onOpenShare === 'function') {
+    window.api.onOpenShare((linkId) => openFromLink(linkId));
+  }
+  if (window.api && typeof window.api.getPendingShareLink === 'function') {
+    window.api.getPendingShareLink().then(linkId => {
+      if (linkId) openFromLink(linkId);
+    }).catch(() => {});
+  }
+
+  /* ── Verdrahtung ────────────────────────────────────────────────── */
+
+  // Nach einer Anmeldung (oder deren Verlust) die Liste neu aufbauen
+  document.addEventListener('inkwell-identity-changed', () => {
+    startWatching().catch(() => {});
+  });
+
+  window.refreshSharedTab = function refreshSharedTab() {
+    renderBadge();
+    if (activeTab === 'shared') renderShared();
+  };
+
+  /**
+   * Räumt auf, sobald ein geteiltes Dokument nicht mehr offen ist: noch
+   * ausstehende Änderungen wegschreiben, Beobachtung beenden und das
+   * fremde Heft wieder aus S.notebooks nehmen. Ohne das fände die Suche
+   * es später wieder – und öffnete es dann beschreibbar.
+   * Wird von showHome() aufgerufen (core/dialogs.js).
+   */
+  function endLiveSession() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+
+    /* Noch nicht gespeicherte Änderungen jetzt loswerden, bevor das Heft
+       aus dem Zustand verschwindet. saveOpenDocument() merkt sich Dokument
+       und Heft sofort, der Rest läuft im Hintergrund weiter.
+
+       Reihenfolge: ERST sichern, DANN den Raum verlassen. Andersherum war
+       der gemeinsame Text schon abgebaut, wenn das Sichern ihn holen
+       wollte – der Yjs-Stand der letzten Minuten ging dabei verloren. */
+    const closingId = live?.docId || '';
+    const pending = (live && !S.readOnly)
+      ? startSave().catch(() => {})
+      : Promise.resolve();
+
+    if (unwatchOpen) { unwatchOpen(); unwatchOpen = null; }
+    pending.then(() => {
+      // Mit der Kennung: bis hierher kann längst ein anderes Dokument
+      // offen sein, und das darf dieser Aufruf nicht mit abräumen.
+      if (window.Collab) return Collab.stop(closingId);
+    }).catch(() => {});
+
+    // Nur FREMDE Dokumente verschwinden aus dem Zustand – das eigene Heft
+    // des Besitzers bleibt selbstverständlich, wo es ist.
+    S.notebooks = S.notebooks.filter(nb => nb.origin !== 'shared');
+    S.sharedDoc = null;
+    live = null;
+    baseline = null;
+    crdtState = {};
+    dirty = false;
+  }
+
+  /**
+   * Räumt auf, sobald nichts mehr im Raum offen ist.
+   * Wird von showHome() aufgerufen (core/dialogs.js).
+   */
+  window.closeOpenSharedDoc = endLiveSession;
+
+  /**
+   * Ein Heft wurde geöffnet (Ende von openNotebook, app.js). Gehört es zu
+   * einer Freigabe, wird daraus eine Live-Sitzung – auch beim Besitzer.
+   */
+  window.onNotebookOpened = function onNotebookOpened(nb) {
+    if (!nb) return;
+    // Vorherige Sitzung beenden, wenn jetzt ein anderes Heft offen ist
+    if (live && live.nbId !== nb.id) endLiveSession();
+    if (nb.origin === 'shared') return;      // hat ui/sharedDocs selbst aufgesetzt
+
+    startOwnerSession(nb).catch(err => {
+      const msg = err?.message || String(err);
+      if (msg !== 'SHARE_NOT_FOUND' && msg !== 'SHARE_OFFLINE') {
+        console.warn('[SharedDocs] Eigene Live-Sitzung nicht gestartet:', msg);
+      }
+    });
+  };
+
+  window.openSharedDocumentByLink = openFromLink;
+  window.flushSharedDocSave = startSave;
+
+  // Beim Start einmal nachsehen. Ohne Anmeldung passiert dabei nichts.
+  startWatching().catch(err => console.warn('[SharedDocs] Start:', err?.message || err));
+})();

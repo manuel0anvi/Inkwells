@@ -1,0 +1,190 @@
+/* Module: Titlebar Styling */
+
+.titlebar {
+  height: 36px;
+  background: var(--sh);
+  border-bottom: 1px solid var(--sb);
+  display: flex;
+  align-items: center;
+  -webkit-app-region: drag;
+  user-select: none;
+  position: relative;
+  z-index: 400;
+  flex-shrink: 0
+}
+
+.tbar-l {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  -webkit-app-region: no-drag
+}
+
+.tbar-c {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  text-align: center;
+  font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-style: italic;
+  pointer-events: none
+}
+
+.tbar-title-accent {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .25)
+}
+
+.tbar-r {
+  display: flex;
+  gap: 2px;
+  padding: 0 6px;
+  -webkit-app-region: no-drag
+}
+
+.app-logo {
+  color: var(--gd)
+}
+
+.home-btn {
+  background: transparent;
+  border: 1px solid var(--sb2);
+  border-radius: 5px;
+  color: var(--md);
+  cursor: pointer;
+  padding: 3px 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: 'Crimson Pro', serif;
+  transition: all .12s
+}
+
+.home-btn:hover {
+  background: var(--sh2);
+  color: var(--hi);
+  border-color: var(--gd)
+}
+
+.wbtn {
+  width: 30px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  color: var(--gd);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .12s
+}
+
+.wbtn:hover {
+  background: var(--sh2);
+  color: var(--gold)
+}
+
+.wbtn.x:hover {
+  background: var(--red);
+  color: #fff
+}
+
+.titlebar-settings-btn {
+  width: 34px;
+  height: 28px;
+  background: none !important;
+  border: none !important;
+  border-radius: 6px;
+  color: var(--gd);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .12s;
+  margin-left: 6px;
+  margin-right: 4px;
+}
+
+.titlebar-settings-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--gd);
+  transition: stroke .12s;
+}
+
+.titlebar-settings-btn:hover {
+  background: var(--sh2) !important;
+}
+
+.titlebar-settings-btn:hover svg {
+  stroke: var(--gold);
+}
+
+.window-controls-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--sb2);
+  margin: 0 4px;
+  align-self: center;
+}
+
+.titlebar-update-btn {
+  height: 26px;
+  min-width: 100px;
+  background: var(--sh2);
+  border: 1px solid var(--sb2);
+  border-radius: 4px;
+  color: var(--md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  font-size: 11px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  transition: all .12s;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.titlebar-update-btn:not(:disabled):hover {
+  border-color: var(--gd);
+  color: var(--hi);
+}
+
+.titlebar-update-btn:disabled {
+  opacity: 0.8;
+  cursor: default;
+}
+
+.update-progress-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background: rgba(255, 170, 40, 0.15);
+  transition: width 0.15s ease-out;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.update-text {
+  position: relative;
+  z-index: 1;
+}
+

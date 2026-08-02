@@ -1,0 +1,537 @@
+/* ══════════════════════════════════════════════════════════════════════
+   FIRESTORE-SICHERHEITSREGELN  ―  Community-Forum, Freigaben, Adminbereich
+
+   Einspielen: Firebase Console → Firestore Database → Regeln → Inhalt
+   dieser Datei einfügen → Veröffentlichen.
+
+   ── Was gegenüber der ersten Fassung dazugekommen ist ───────────────
+   Die ursprünglichen Regeln lauteten sinngemäß `allow read, create: if true`.
+   Lesen und Schreiben ohne Anmeldung ist für ein offenes Forum richtig so —
+   ungeprüft schreiben zu dürfen aber nicht: ohne Prüfung darf jeder
+   beliebige Felder anlegen und Dokumente bis 1 MiB ablegen, beliebig oft.
+   Das ist bei einem öffentlich erreichbaren Projekt vor allem ein
+   Kostenrisiko.
+
+   Deshalb prüfen die Regeln unten zusätzlich:
+     · es dürfen NUR die vorgesehenen Felder vorkommen (hasOnly),
+     · jedes Feld hat den richtigen Typ,
+     · Titel/Text/Name halten dieselben Längen ein wie die Formulare,
+     · created_at muss der Server-Zeitstempel sein (serverTimestamp()),
+       damit niemand ein Datum frei erfinden kann.
+
+   ── Neu: der Adminbereich ──────────────────────────────────────────
+   Früher galt „nur anhängen": Ändern und Löschen war für alle gesperrt,
+   Beiträge musste die Betreuung von Hand in der Console entfernen. Das
+   übernimmt jetzt der Adminbereich der Website (/admin/).
+
+   Damit das nicht zur Hintertür wird, hängt alles an einer einzigen
+   Bedingung: der UID des Adminkontos, siehe adminUid() weiter unten.
+   Die Website selbst entscheidet gar nichts – sie zeigt nur Knöpfe an.
+   Wer sie im Browser nachbaut, bekommt hier ein „permission-denied".
+
+   Dazugekommen sind:
+     · Löschen von Beiträgen und Antworten, nur für das Adminkonto,
+     · geschützte Anzeigenamen: niemand außer dem Admin darf unter
+       „Inkwell Team" o. Ä. schreiben (isReservedName),
+     · site_content: die auf der Website bearbeitete Fassung der
+       Datenschutzerklärung. Öffentlich lesbar, nur vom Admin schreibbar.
+
+   ── Einrichtung des Adminkontos ────────────────────────────────────
+   1) Console → Authentication → Sign-in method → „E-Mail/Passwort"
+      aktivieren (nur die obere Option, nicht „E-Mail-Link").
+   2) Authentication → Users → „Add user": E-Mail und Startpasswort.
+      Dieselbe Adresse muss in js/config.js unter ADMIN_EMAIL stehen.
+   3) Die „User UID" aus der Nutzerliste unten bei adminUid() eintragen.
+
+   Die UID ist kein Geheimnis – wer sie kennt, kann damit nichts anfangen,
+   weil das Anmelden weiterhin das Passwort verlangt. Das Passwort steht
+   nirgends im Code; es liegt bei Firebase und wird über die Adminseite
+   geändert.
+
+   ── Was Regeln NICHT können ────────────────────────────────────────
+   Sie kennen keine Rate-Begrenzung. Gegen automatisierte Massenbeiträge
+   hilft nur Firebase App Check (Console → App Check → reCAPTCHA v3 für die
+   Web-App). Solange das nicht aktiv ist, lohnt ein Blick auf das
+   Nutzungs-Budget unter Firebase → Einstellungen → Nutzung und Abrechnung.
+   ══════════════════════════════════════════════════════════════════════ */
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Name oder Pseudonym; "Gast"/"Anonym" sind normale Namen.
+    // Länge wie maxlength im Formular (60).
+    function validAuthor(value) {
+      return value is string && value.size() > 0 && value.size() <= 60;
+    }
+
+    // Freitext mit Ober- und Untergrenze
+    function validText(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    // Muss über serverTimestamp() gesetzt worden sein
+    function isServerTime(value) {
+      return value == request.time;
+    }
+
+    /* ── Das Adminkonto ───────────────────────────────────────────────
+       Ein einziges Konto, angemeldet über E-Mail und Passwort. Erkannt
+       wird es an der UID, nicht an der Adresse: Adressen lassen sich bei
+       manchen Anbietern ändern, die UID nie. Außerdem ist mit „E-Mail/
+       Passwort" das Anlegen eigener Konten vom Browser aus grundsätzlich
+       möglich – ein neu erfundenes Konto trifft die UID unten aber nicht,
+       und genau darauf kommt es an.
+
+       >>>>>>>>>>>>  HIER DIE UID DES ADMINKONTOS EINTRAGEN  <<<<<<<<<<<<
+       Console → Authentication → Users → Spalte „User UID"
+       ───────────────────────────────────────────────────────────────── */
+    function adminUid() {
+      return '9czynXNXAlfs8bGtx5hEOO9dRCd2';
+    }
+
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == adminUid();
+    }
+
+    /* ── Geschützte Anzeigenamen ──────────────────────────────────────
+       Ohne diese Sperre könnte sich jeder „Inkwell Team" nennen und im
+       Namen des Projekts antworten. Für Leser wäre das nicht zu
+       unterscheiden – und genau deshalb gehört die Prüfung hierher und
+       nicht nur ins Formular.
+
+       Verglichen wird eine vereinfachte Fassung des Namens: klein
+       geschrieben und ohne alles, was kein Buchstabe und keine Ziffer
+       ist. Dadurch fallen „Ink-well", „I.n.k.w.e.l.l" und „I n k w e l l"
+       mit „inkwell" zusammen.
+
+       matches() vergleicht immer die GANZE Zeichenkette, deshalb die
+       Punkte außen herum – sonst müsste der Name exakt „inkwell" lauten.
+
+       Die Ziffernschreibweisen stehen einzeln in der Liste. Die Website
+       übersetzt sie vorher zurück (normalizeAuthorName in js/config.js)
+       und fängt dadurch mehr Fälle ab; hier steht die Grundsicherung für
+       den Fall, dass jemand das Formular umgeht. ─────────────────── */
+    function normalizedName(name) {
+      return name.lower().replace('[^a-z0-9]', '');
+    }
+
+    function isReservedName(name) {
+      return normalizedName(name).matches(
+        '.*(inkwell|1nkwell|inkwe11|admin|4dmin|administrator|moderator|m0derator|support|supp0rt|offiziell|official|0fficial|anvi|4nvi).*'
+      );
+    }
+
+    match /community_posts/{postId} {
+      allow read: if true;
+
+      /* Anlegen darf jeder – aber niemand unter einem geschützten Namen.
+         Der Admin ist ausgenommen, sonst könnte ausgerechnet er nicht als
+         „Inkwell Team" antworten. */
+      allow create: if request.resource.data.keys()
+                          .hasOnly(['type', 'title', 'author', 'content', 'created_at'])
+                    && request.resource.data.type in ['question', 'bug']
+                    && validText(request.resource.data.title, 120)
+                    && validAuthor(request.resource.data.author)
+                    && validText(request.resource.data.content, 2000)
+                    && isServerTime(request.resource.data.created_at)
+                    && (isAdmin() || !isReservedName(request.resource.data.author));
+
+      /* Ändern bleibt für alle gesperrt: ein nachträglich umgeschriebener
+         Beitrag wäre für Leser nicht erkennbar. Löschen darf nur der
+         Admin – das ist die Moderation. */
+      allow update: if false;
+      allow delete: if isAdmin();
+
+      match /replies/{replyId} {
+        allow read: if true;
+
+        allow create: if request.resource.data.keys()
+                            .hasOnly(['author', 'content', 'created_at'])
+                      && validAuthor(request.resource.data.author)
+                      && validText(request.resource.data.content, 500)
+                      && isServerTime(request.resource.data.created_at)
+                      && (isAdmin() || !isReservedName(request.resource.data.author));
+
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+    }
+
+    /* ── Seiteninhalte ────────────────────────────────────────────────
+       Zurzeit ein einziges Dokument: site_content/privacy, die über die
+       Adminseite bearbeitete Datenschutzerklärung.
+
+       Lesen muss jeder dürfen, auch ohne Anmeldung – sonst sähe niemand
+       die Erklärung. Der feste Text in js/privacy-content.js bleibt der
+       Rückfall, falls hier nichts steht.
+       ───────────────────────────────────────────────────────────────── */
+    match /site_content/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    /* ── Kennung des Anmeldenden ──────────────────────────────────────
+       Seit die App das id_token von Google bzw. Microsoft an Firebase
+       weiterreicht (js/share.js, signInWithProviderToken), steht hier
+       eine echte, vom Anbieter bestätigte Adresse. Ohne Anmeldung oder
+       bei einer rein anonymen Gerätekennung ist sie leer.
+
+       Kleinschreibung überall: die Oberfläche legt Adressen ebenfalls
+       klein ab, sonst greift array-contains nicht. ────────────────── */
+    function myEmail() {
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    /* Ist die Adresse vertrauenswürdig?
+
+       Google setzt email_verified zuverlässig. Microsoft tut das NICHT
+       immer – bei persönlichen Konten fehlt die Angabe oder steht auf
+       false, obwohl die Adresse dem Konto gehört. Würde hier stur auf
+       email_verified bestanden, könnte sich mit Microsoft niemand etwas
+       teilen lassen.
+
+       Deshalb: entweder ausdrücklich bestätigt, oder die Anmeldung kam
+       über einen der beiden Anbieter, die wir selbst eingerichtet haben.
+       Eine anonyme Gerätekennung fällt dadurch weiterhin durch.
+
+       Das Adminkonto meldet sich mit Passwort an und fällt hier ebenfalls
+       durch – das ist beabsichtigt. Es hat mit dem Teilen von Heften
+       nichts zu tun und braucht diese Rechte nicht. */
+    function isVerifiedUser() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && (
+             request.auth.token.email_verified == true
+             || request.auth.token.firebase.sign_in_provider in ['google.com', 'microsoft.com']
+           );
+    }
+
+    /* ── Freigegebene Hefte ───────────────────────────────────────────
+       Lesen darf jeder, der den Link kennt – das ist der Zweck. Die
+       Kennung im Link ist 22 Zeichen lang und zufällig, also nicht
+       erratbar. Eine Liste aller Freigaben gibt es nicht: ohne die
+       Kennung kommt man an nichts heran (Firestore erlaubt kein
+       Auflisten, wenn die Regel den Dokumentnamen nicht kennt).
+
+       Anlegen darf jedes anonym angemeldete Gerät, aber nur mit sich
+       selbst als Besitzer. Ändern und Löschen darf ausschließlich der
+       eingetragene Besitzer.
+       ───────────────────────────────────────────────────────────────── */
+    match /shared_notebooks/{shareId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+                    && request.resource.data.owner == request.auth.uid
+                    && request.resource.data.mode in ['frozen', 'live']
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() <= 200
+                    && request.resource.data.chunkCount is int
+                    && request.resource.data.chunkCount > 0
+                    && request.resource.data.chunkCount <= 500;
+
+      /* Ändern darf der eingetragene Besitzer – oder wer nachweislich zu
+         der hinterlegten E-Mail-Adresse gehört. Der zweite Fall ist der
+         Umstieg von der Gerätekennung auf das Konto: Freigaben, die früher
+         einer anonymen Kennung gehörten, lassen sich dadurch von jedem
+         Gerät aus übernehmen und später auch wieder aufheben.
+         Der Besitzer kann dabei nur auf einen selbst umgeschrieben werden. */
+      allow update: if request.auth != null
+                    && request.resource.data.owner == request.auth.uid
+                    && (
+                         resource.data.owner == request.auth.uid
+                         || (
+                              isVerifiedUser()
+                              && 'ownerEmail' in resource.data
+                              && resource.data.ownerEmail.lower() == myEmail()
+                            )
+                       );
+
+      allow delete: if request.auth != null
+                    && resource.data.owner == request.auth.uid;
+
+      match /chunks/{index} {
+        allow read: if true;
+
+        // Schreiben nur, wenn das Kopf-Dokument diesem Gerät gehört.
+        // Der Kopf wird immer ZUERST geschrieben (siehe js/share.js),
+        // deshalb steht der Besitzer hier schon fest – es braucht keinen
+        // Sonderfall für das erste Anlegen.
+        allow write: if request.auth != null
+                     && get(/databases/$(database)/documents/shared_notebooks/$(shareId)).data.owner == request.auth.uid;
+      }
+    }
+
+    /* ── Geteilte Dokumente ───────────────────────────────────────────
+       Ein Dokument ist ein Heft, das mit bestimmten Leuten geteilt ist.
+       Wer dazugehört, steht in memberEmails – daraus besteht der ganze
+       Tab „Geteilte Dokumente": eine einzige Abfrage
+         where('memberEmails', 'array-contains', meineAdresse)
+       Wird jemand daraus entfernt, verschwindet das Dokument bei ihm beim
+       nächsten Laden von selbst. Es gibt bewusst keine zweite Liste.
+
+       ── Wer darf lesen ─────────────────────────────────────────────
+       · der Besitzer,
+       · wer in memberEmails steht,
+       · und jeder, der die Dokumentkennung hat, solange ein Link mit
+         Leserecht besteht. Das Letzte ist gewollt: der Link soll auch
+         ohne Konto funktionieren.
+
+       >>> Grenze, die man kennen muss <<<
+       Der Schutz des Links liegt in seiner Kennung (22 zufällige
+       Zeichen). In der Adresse steht die LINK-Kennung, nicht die des
+       Dokuments; „Link erneuern" löscht den Eintrag unter doc_links und
+       die verschickte Adresse läuft ins Leere. Wer sich die interne
+       Dokumentkennung aus der Netzwerkansicht herausgesucht hat, käme
+       trotzdem noch heran – dagegen hilft nur, den Link ganz abzuschalten
+       (linkMode = 'off') oder die Freigabe aufzuheben.
+       ───────────────────────────────────────────────────────────────── */
+    match /docs/{docId} {
+
+      function head() { return resource.data; }
+
+      function isDocOwner() {
+        return request.auth != null && head().owner == request.auth.uid;
+      }
+
+      function isMember() {
+        return myEmail() != '' && myEmail() in head().memberEmails;
+      }
+
+      function linkIsOpen() {
+        return head().linkMode in ['view', 'edit'];
+      }
+
+      /* Lesen einzeln: Besitzer, Mitglied oder offener Link.
+
+         `resource == null` steht bewusst vorn: fragt jemand nach einem
+         Dokument, das es nicht (mehr) gibt, laufen alle drei Prüfungen in
+         einen Fehler – sie greifen auf resource.data zu. Firestore
+         antwortet dann mit „keine Berechtigung" statt mit „gibt es
+         nicht", und die App zeigt eine Fehlermeldung, wo ein schlichtes
+         „Freigabe gibt es nicht mehr" hingehört. Verraten wird dadurch
+         nichts: dass etwas NICHT existiert, ist kein Geheimnis. */
+      allow get: if resource == null || isDocOwner() || isMember() || linkIsOpen();
+
+      // Auflisten nur über die Mitgliedschaft – eine Liste aller Dokumente
+      // gibt es dadurch nicht, auch nicht für Angemeldete.
+      allow list: if isMember();
+
+      /* Kein chunkCount mehr: der Inhalt liegt seit dem zerlegten Modell
+         in pages/ink/blobs, nicht in Stücken. Stattdessen wird die
+         Seitenzahl geprüft – die gibt es in beiden Formen. */
+      allow create: if isVerifiedUser()
+                    && request.resource.data.owner == request.auth.uid
+                    && request.resource.data.ownerEmail.lower() == myEmail()
+                    && request.resource.data.linkMode in ['off', 'view', 'edit']
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() <= 200
+                    && request.resource.data.pageCount is int
+                    && request.resource.data.pageCount >= 0
+                    && request.resource.data.pageCount <= 2000
+                    && request.resource.data.memberEmails.size() == 0;
+
+      /* Der Besitzer darf alles ändern, nur nicht den Besitz abgeben. */
+      function ownerUpdate() {
+        return isDocOwner()
+               && request.resource.data.owner == request.auth.uid
+               && request.resource.data.linkMode in ['off', 'view', 'edit'];
+      }
+
+      /* Selbsteintrag über den Link: nur die eigene Adresse, nur mit der
+         Rolle, die der Link hergibt, und nur wenn man nicht gesperrt ist.
+         Ohne die Sperrliste könnte eine entfernte Person den Link einfach
+         noch einmal öffnen und wäre sofort wieder dabei. */
+      function selfJoin() {
+        return isVerifiedUser()
+               && linkIsOpen()
+               && !(myEmail() in head().blockedEmails)
+               && request.resource.data.diff(head()).affectedKeys()
+                    .hasOnly(['memberEmails', 'members', 'memberVia'])
+               && myEmail() in request.resource.data.memberEmails
+               && request.resource.data.memberEmails.size()
+                    <= head().memberEmails.size() + 1
+               && request.resource.data.members[myEmail()] == head().linkMode
+               // Fremde Einträge müssen unverändert bleiben
+               && head().memberEmails.hasOnly(request.resource.data.memberEmails)
+               /* Und zwar auch in der Rollentabelle. Ohne diese Zeile
+                  durfte man sich zwar nur selbst in memberEmails
+                  eintragen, in `members` aber beliebige fremde Adressen
+                  anlegen – mit 'edit'. Beim Inhalt fällt das inzwischen
+                  auf (mayWriteContent prüft beides), hier wird es gar
+                  nicht erst möglich. */
+               && request.resource.data.members.diff(head().members)
+                    .affectedKeys().hasOnly([myEmail()]);
+      }
+
+      /* Wer Bearbeitungsrecht hat, darf den Inhalt neu schreiben – am Kopf
+         aber nur die Angaben, die dazugehören. Titel, Rechte und die
+         Mitgliederliste bleiben Sache des Besitzers. */
+      function canEdit() {
+        return myEmail() != ''
+               && myEmail() in head().memberEmails
+               && head().members[myEmail()] == 'edit';
+      }
+
+      /* Seit der Inhalt in einzelne Seiten zerlegt ist, schreibt niemand
+         mehr das ganze Heft. Am Kopf bleiben für Bearbeiter nur die
+         Angaben, die zum Inhalt gehören: Reihenfolge, Abschnitte, Stand.
+         Titel, Rechte und Mitgliederliste bleiben Sache des Besitzers. */
+      function editorUpdate() {
+        return isVerifiedUser()
+               && canEdit()
+               && request.resource.data.diff(head()).affectedKeys()
+                    .hasOnly([
+                      'pageOrder', 'pageCount', 'sections', 'activeSecId',
+                      'chunkCount', 'revision', 'updatedAt'
+                    ])
+               // Nur vorwärts. Die Nummer ist kein Schloss mehr, sondern ein
+               // Zähler, an dem die anderen Clients Neues erkennen.
+               && request.resource.data.revision > head().revision;
+      }
+
+      /* Selbst aussteigen: nur die eigene Adresse darf verschwinden.
+         Für Empfänger ist das die Entsprechung zu „Löschen" – das fremde
+         Heft selbst geht sie nichts an. */
+      function selfLeave() {
+        return request.auth != null
+               && myEmail() != ''
+               && myEmail() in head().memberEmails
+               && request.resource.data.diff(head()).affectedKeys()
+                    .hasOnly(['memberEmails', 'members', 'memberVia'])
+               && !(myEmail() in request.resource.data.memberEmails)
+               && request.resource.data.memberEmails.size()
+                    == head().memberEmails.size() - 1
+               && request.resource.data.memberEmails
+                    .hasOnly(head().memberEmails)
+               // Beim Hinausgehen wird auch in der Rollentabelle nur der
+               // eigene Eintrag angefasst.
+               && request.resource.data.members.diff(head().members)
+                    .affectedKeys().hasOnly([myEmail()]);
+      }
+
+      allow update: if ownerUpdate() || editorUpdate() || selfJoin() || selfLeave();
+
+      allow delete: if isDocOwner();
+
+      /* ── Der Inhalt ────────────────────────────────────────────────
+         Vier Unterordner mit denselben Rechten:
+
+           pages   eine Seite = ein Dokument
+           ink     Handschrift, bogenweise (arrayUnion beim Anhängen)
+           blobs   Bilder und PDF-Seiten, gestückelt
+           chunks  die alte Klumpenform, nur noch zum Lesen und Aufräumen
+
+         Gelesen wird wie beim Kopf. Dafür muss die Regel den Kopf
+         nachschlagen, weil resource hier der Inhalt ist – das ist ein
+         zusätzlicher Lesevorgang je Anfrage, aber der einzige Weg.
+         Schreiben darf der Besitzer und wer Bearbeitungsrecht hat.
+
+         Warum die Rechte NICHT je Unterordner unterschiedlich sind:
+         Wer eine Seite ändern darf, muss auch ihre Handschrift und ihre
+         Bilder ändern dürfen. Eine feinere Aufteilung würde nur mehr
+         Nachschlagevorgänge kosten, ohne etwas zu schützen.
+         ──────────────────────────────────────────────────────────── */
+      function docHead() {
+        return get(/databases/$(database)/documents/docs/$(docId)).data;
+      }
+
+      /* request.auth kann null sein – ein Link darf ja ohne Konto
+         geöffnet werden. Ohne die Prüfung darauf liefe request.auth.uid
+         in einen Fehler und die Regel würde ALLES ablehnen, auch das
+         erlaubte Lesen über den Link. */
+      function mayReadContent() {
+        return (request.auth != null && docHead().owner == request.auth.uid)
+               || (myEmail() != '' && myEmail() in docHead().memberEmails)
+               || docHead().linkMode in ['view', 'edit'];
+      }
+
+      /* >>> Die Mitgliederliste MUSS mitgeprüft werden <<<
+         Vorher stand hier nur `members[meineAdresse] == 'edit'`. Das war
+         eine Lücke, und zwar eine, die sich ausnutzen ließ: der
+         Selbsteintrag über den Link (selfJoin, oben) darf `members`
+         anfassen. Er stellt sicher, dass die EIGENE Rolle nicht höher
+         wird als der Link hergibt – aber niemand hinderte einen daran,
+         im selben Zug einen Eintrag für eine ANDERE Adresse anzulegen.
+         Diese Adresse stand dann in `members` mit 'edit', ohne je in
+         memberEmails zu stehen, und kam hier durch.
+
+         Mit der zusätzlichen Prüfung läuft ein solcher Eintrag ins Leere:
+         in memberEmails kommt man nur über den Besitzer oder über den
+         Selbsteintrag, und der trägt ausschließlich die eigene Adresse
+         ein. Gefunden hat das scripts/test-rules.js. */
+      function mayWriteContent() {
+        return request.auth != null
+               && (
+                    docHead().owner == request.auth.uid
+                    || (
+                         myEmail() != ''
+                         && myEmail() in docHead().memberEmails
+                         && docHead().members[myEmail()] == 'edit'
+                       )
+                  );
+      }
+
+      match /pages/{pageId} {
+        allow read: if mayReadContent();
+        allow write: if mayWriteContent();
+      }
+
+      match /ink/{sheetId} {
+        allow read: if mayReadContent();
+        allow write: if mayWriteContent();
+      }
+
+      match /blobs/{blobKey} {
+        allow read: if mayReadContent();
+        allow write: if mayWriteContent();
+      }
+
+      match /chunks/{index} {
+        allow read: if mayReadContent();
+        allow write: if mayWriteContent();
+      }
+    }
+
+    /* ── Nachschlagewerk Link -> Dokument ─────────────────────────────
+       Öffentlich lesbar, das ist der Zweck: die Adresse trägt nur die
+       Link-Kennung, erst hierüber wird daraus ein Dokument. Anlegen und
+       löschen darf nur, wer sich selbst als Besitzer einträgt – die
+       Dokumentregeln prüfen danach ohnehin noch einmal alles.
+
+       >>> Warum Anlegen und Ändern getrennt stehen <<<
+       Vorher galt für beides dieselbe Bedingung, und die sah nur die NEUE
+       Fassung an. Wer eine fremde Link-Kennung kannte, konnte den Eintrag
+       also überschreiben und auf sein eigenes Dokument umbiegen: der Link,
+       den jemand anderes verschickt hatte, führte danach woandershin.
+       Ändern darf jetzt nur, wem der Eintrag schon gehört.
+       ───────────────────────────────────────────────────────────────── */
+    match /doc_links/{linkId} {
+      allow get: if true;
+      allow list: if false;
+
+      function validLink() {
+        return isVerifiedUser()
+               && request.resource.data.owner == request.auth.uid
+               && request.resource.data.docId is string
+               && request.resource.data.docId.size() > 0;
+      }
+
+      allow create: if validLink();
+
+      allow update: if validLink()
+                    && resource.data.owner == request.auth.uid;
+
+      allow delete: if request.auth != null
+                    && resource.data.owner == request.auth.uid;
+    }
+
+    // Alles andere im Projekt bleibt zu.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

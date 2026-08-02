@@ -1,0 +1,535 @@
+'use strict';
+
+/* ── PDF TO IMAGES Helper ── */
+async function parsePdfToImages(pdfDataUrl) {
+  const base64 = pdfDataUrl.split(',')[1];
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+
+  const loadingTask = pdfjsLib.getDocument({ data: bytes });
+  const pdf = await loadingTask.promise;
+  const images = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+    images.push({
+      url: canvas.toDataURL('image/jpeg', 0.65),
+      w: Math.round(viewport.width / 1.5), // native width (at scale 1.0)
+      h: Math.round(viewport.height / 1.5) // native height
+    });
+  }
+  return images;
+}
+
+/* ── INSERT ── */
+E('btn-insert').addEventListener('click', async () => {
+  if (!window.api) { toast(t('electronOnly'), true); return; }
+  const files = await window.api.pickFiles();
+  if (!files || !files.length) return;
+
+  const insertType = await showInsertChoice();
+  if (!insertType) return;
+
+  toast(t('processingFiles'));
+  const nb = getNb();
+  const sec = nb?.sections?.find(s => s.id === nb.activeSecId);
+  const info = getPage(S.activePgId);
+  if (!info || !sec) return;
+
+  let addedPages = false;
+  let firstNewPageId = null;
+  let addedObjects = 0;
+
+  for (const f of files) {
+    if (f.kind === 'pdf') {
+      try {
+        const pdfImageUrls = await parsePdfToImages(f.dataUrl);
+
+        if (insertType === 'page') {
+          const pages = pagesOfSec(sec, nb);
+          const curIdx = pages.indexOf(info.page);
+          const insertIdx = curIdx + 1;
+
+          pdfImageUrls.forEach((imgObj, i) => {
+            const newPg = makePage('blank'); // better default for full page images
+            newPg.bgImg = imgObj.url;
+            newPg.w = CFG.PAGE_W; // normalize width to standard A4 (approx 840)
+            newPg.h = Math.round(CFG.PAGE_W * (imgObj.h / (imgObj.w || 1))) + 56;
+            nb.pages.push(newPg);
+            sec.pgIds.splice(insertIdx + i, 0, newPg.id);
+            if (!firstNewPageId) firstNewPageId = newPg.id;
+          });
+          addedPages = true;
+          if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+        } else {
+          const pages = pagesOfSec(sec, nb);
+          let curIdx = pages.indexOf(info.page);
+          const MAX_PER_PAGE = 5;
+          for (let start = 0; start < pdfImageUrls.length; start += MAX_PER_PAGE) {
+            const chunk = pdfImageUrls.slice(start, start + MAX_PER_PAGE);
+            let targetPgInfo;
+            if (start === 0) {
+              targetPgInfo = info;
+            } else {
+              curIdx++;
+              if (curIdx < pages.length) {
+                targetPgInfo = getPage(pages[curIdx].id);
+              } else {
+                const newPg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
+                nb.pages.push(newPg);
+                sec.pgIds.splice(curIdx, 0, newPg.id);
+                targetPgInfo = { page: newPg };
+                addedPages = true;
+                if (!firstNewPageId) firstNewPageId = newPg.id;
+                pages.splice(curIdx, 0, newPg);
+              }
+            }
+
+            const objLayer = E('pg-scroll').querySelector(`[data-pgid="${targetPgInfo.page.id}"]`)?.querySelector('.j-objects');
+            let currY = 80;
+            let pageHLimit = (targetPgInfo.page.h || CFG.PAGE_H);
+            let ohLimit = (pageHLimit - 120) / chunk.length - 20;
+
+            pushPageHistory(targetPgInfo.page);
+            chunk.forEach((imgObj, idx) => {
+              let oh = Math.min(ohLimit, 400);
+              let ow = oh * (imgObj.w / imgObj.h);
+              if (ow > 600) { ow = 600; oh = ow * (imgObj.h / imgObj.w); }
+
+              const obj = { id: uid(), kind: 'image', src: imgObj.url, name: f.name, x: 80, y: currY, w: ow, h: oh, rot: 0 };
+              if (!targetPgInfo.page.objects) targetPgInfo.page.objects = [];
+              targetPgInfo.page.objects.push(obj);
+              if (objLayer) placeObject(objLayer, obj, targetPgInfo.page);
+              addedObjects++;
+              currY += oh + 20;
+            });
+          }
+        }
+      } catch (err) {
+        console.error('PDF Parse error:', err);
+        toast(t('pdfError'), true);
+      }
+    } else if (f.kind === 'image') {
+      if (insertType === 'page') {
+        const pages = pagesOfSec(sec, nb);
+        const curIdx = pages.indexOf(info.page);
+        const newPg = makePage('blank');
+        newPg.bgImg = f.dataUrl;
+        const tmpImg = new Image();
+        tmpImg.src = f.dataUrl;
+        await new Promise(r => tmpImg.onload = r);
+        newPg.w = CFG.PAGE_W; // normalize to roughly standard page
+        newPg.h = Math.round(CFG.PAGE_W * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1))) + 56;
+        nb.pages.push(newPg);
+        sec.pgIds.splice(curIdx + 1, 0, newPg.id);
+        if (!firstNewPageId) firstNewPageId = newPg.id;
+        addedPages = true;
+        if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      } else {
+        // Die Objekt-Ebene fehlt, wenn die Zielseite gerade nicht gezeichnet
+        // ist. Das Bild trotzdem ins Datenmodell legen – vorher wurde es in
+        // dem Fall stillschweigend ganz verworfen.
+        const objLayer = E('pg-scroll').querySelector('[data-pgid="' + info.page.id + '"]')?.querySelector('.j-objects');
+        pushPageHistory(info.page);
+        const tmpImg = new Image();
+        tmpImg.src = f.dataUrl;
+        await new Promise(r => tmpImg.onload = r);
+        let ow = 200;
+        let oh = ow * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1));
+        const obj = { id: uid(), kind: 'image', src: f.dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
+        if (!info.page.objects) info.page.objects = [];
+        info.page.objects.push(obj);
+        if (objLayer) placeObject(objLayer, obj, info.page);
+        addedObjects++;
+      }
+    }
+  }
+
+  // Ein einziger Ort für „es hat sich etwas geändert“.
+  // Vorher hing das an mehreren Stellen im Ablauf und wurde ausgerechnet
+  // beim häufigsten Fall vergessen: ein PDF als Objekte einfügen, das noch
+  // auf die vorhandenen Seiten passt. Dann war addedPages false, das Heft
+  // galt als unverändert – und die Bilder wurden weder gespeichert noch in
+  // die Cloud geladen. In der App sah man sie (sie hingen im DOM), auf der
+  // Website tauchten sie nie auf und nach einem Neustart waren sie weg.
+  if ((addedPages || addedObjects > 0) && window.markCurrentNotebookDirty) {
+    window.markCurrentNotebookDirty();
+  }
+
+  if (addedPages) {
+    renderSideTree();
+    openSection(sec, firstNewPageId);
+    toast(t('insertedAsPages'));
+  } else if (addedObjects > 0) {
+    updateUndoRedoUI();
+    S.mode = 'cursor';
+    applyMode();
+    QA('.tb-mode').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cursor'));
+    E('pen-opts').style.display = 'none';
+    E('eraser-opts').style.display = 'none';
+    E('text-opts').style.display = 'flex';
+    toast(addedObjects + ' ' + t('objectsInserted'));
+  }
+});
+
+/* ── SAVE / LOAD / PDF ── */
+function syncAll() { QA('.j-page').forEach(pgEl => { const info = getPage(pgEl.dataset.pgid); if (!info) return; const txt = pgEl.querySelector('.j-text'); if (txt) info.page.textContent = txt.innerHTML; info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[info.page.id] || [])); }); }
+async function doLoad() { 
+  if (!window.api) { toast(t('electronOnly'), true); return; } 
+  const data = await window.api.load(); 
+  if (!data) { toast(t('cancelled'), true); return; } 
+  
+  // Treat either an explicit "loadedSingle" flag OR a file that contains
+  // exactly one notebook in the `notebooks` array as a single-notebook load.
+  if ((data.loadedSingle && data.notebooks && data.notebooks.length === 1) || (data.notebooks && data.notebooks.length === 1 && !data.loadedSingle)) {
+    // Single notebook loaded - add to existing notebooks if not already present
+    const loadedNb = data.notebooks[0];
+    const existing = S.notebooks.find(nb => nb.id === loadedNb.id);
+    if (existing) {
+      // Replace existing notebook with loaded one
+      const idx = S.notebooks.indexOf(existing);
+      S.notebooks[idx] = loadedNb;
+      toast(t('notebookUpdated'));
+    } else {
+      // Check if name already exists
+      const nameExists = S.notebooks.find(nb => nb.name === loadedNb.name);
+      if (nameExists) {
+        toast(t('nameExists'), true);
+        return;
+      }
+      S.notebooks.push(loadedNb);
+      toast(t('notebookLoaded'));
+    }
+
+    // Persist the loaded notebook in the overview registry so it comes back after restart
+    if (data.sourcePath) {
+      await Registry.add(loadedNb, data.sourcePath);
+    }
+  } else {
+    // Old format - replace all
+    S.notebooks = data.notebooks || []; 
+  }
+  S.activeNbId = null; 
+  showHome(); 
+}
+if (E('btn-load')) E('btn-load').addEventListener('click', doLoad);
+E('btn-load-home').addEventListener('click', doLoad);
+/* ══════════════════════════════════════════════════════════════════
+   PDF-EXPORT
+   Die Seiten werden genauso aufgebaut wie in der App: Papierhintergrund,
+   Handschrift, eingefügte Bilder und Text. Die frühere Fassung gab nur
+   Text und Hintergrundbild aus – Zeichnungen fehlten im PDF komplett.
+
+   794 × 1123 px entsprechen bei 96 dpi genau DIN A4, deshalb passen die
+   Seiten ohne Umrechnung in die Druckausgabe (printToPDF, A4, ohne Rand).
+   ══════════════════════════════════════════════════════════════════ */
+
+// Zeichnet die Striche einer Seite auf ein durchsichtiges Bild.
+// Gleiche Logik wie redrawStrokes(), aber mit fester Skalierung statt
+// Bildschirm-Pixelverhältnis, damit die Auflösung fürs Drucken reicht.
+function renderInkToDataUrl(page, scale = 2) {
+  const strokes = page.inkStrokes || [];
+  if (!strokes.length) return null;
+
+  const w = page.w || CFG.PAGE_W;
+  const h = page.h || CFG.PAGE_H;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * scale);
+  canvas.height = Math.round(h * scale);
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  let i = 0;
+  while (i < strokes.length) {
+    const s = strokes[i];
+
+    if (s.isHL) {
+      // Marker gruppiert und gemeinsam transparent, sonst überlagern sie sich
+      const chunk = [];
+      while (i < strokes.length && strokes[i].isHL) { chunk.push(strokes[i]); i++; }
+
+      const off = document.createElement('canvas');
+      off.width = canvas.width;
+      off.height = canvas.height;
+      const oc = off.getContext('2d');
+      oc.scale(scale, scale);
+      chunk.forEach(hs => {
+        applyStrokeStyles(oc, hs);
+        oc.globalAlpha = 1;
+        traceStrokePath(oc, hs);
+      });
+
+      ctx.save();
+      ctx.globalAlpha = 0.38;
+      ctx.drawImage(off, 0, 0, w, h);
+      ctx.restore();
+    } else if (s.isEraser) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      applyStrokeStyles(ctx, { ...s, color: 'rgba(0,0,0,1)' });
+      traceStrokePath(ctx, s);
+      ctx.restore();
+      i++;
+    } else {
+      ctx.save();
+      applyStrokeStyles(ctx, s);
+      ctx.globalAlpha = s.alpha || 1;
+      traceStrokePath(ctx, s);
+      ctx.restore();
+      i++;
+    }
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+function escapeAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildPdfPage(nb, sec, page, index) {
+  const bgId = page.bg || sec?.defaultBg || nb.defaultBg || 'ruled';
+  const lh = lhForBg(bgId);
+  const pt = ptForBg(bgId);
+  const rightPad = rightPadForBg(bgId);
+  const w = page.w || CFG.PAGE_W;
+  const h = page.h || CFG.PAGE_H;
+
+  let html = `<div class="pg bg-${bgId}" data-pgid="${escapeAttr(page.id)}" style="width:${w}px;height:${h}px">`;
+
+  if (page.bgImg) {
+    html += `<img class="pg-bgimg" src="${escapeAttr(page.bgImg)}">`;
+  }
+
+  html += `<div class="ph"><span>${t('page') || 'Seite'} ${index + 1}</span><span>${fmt(page.date)}</span></div>`;
+
+  // Text mit derselben Geometrie wie im Editor
+  if (page.textContent) {
+    html += `<div class="tx" style="line-height:${lh}px;padding-top:${pt}px;right:${rightPad}px">`
+      + page.textContent + '</div>';
+  }
+
+  // Eingefügte Bilder
+  for (const obj of (page.objects || [])) {
+    if (!obj || !obj.src) continue;
+    const rot = obj.rot ? `transform:rotate(${obj.rot}deg);` : '';
+    html += `<img class="obj" src="${escapeAttr(obj.src)}" style="left:${obj.x || 0}px;top:${obj.y || 0}px;`
+      + `width:${obj.w || 200}px;height:${obj.h || 200}px;${rot}">`;
+  }
+
+  // Handschrift zuletzt, damit sie über allem liegt – wie in der App
+  const ink = renderInkToDataUrl(page);
+  if (ink) html += `<img class="ink" src="${ink}">`;
+
+  html += '</div>';
+
+  // Überschriftengrößen hängen an der Zeilenhöhe des Hintergrunds
+  const sel = `[data-pgid="${page.id}"] .tx`;
+  html += `<style>${sel} h1,${sel} p.j-title-1{font-size:${Math.round(lh * .75)}px}`
+    + `${sel} h2,${sel} p.j-title-2{font-size:${Math.round(lh * .65)}px}`
+    + `${sel} h3,${sel} p.j-title-3{font-size:${Math.round(lh * .58)}px}</style>`;
+
+  return html;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WELCHE SEITEN WERDEN EXPORTIERT?
+
+   Ein Export umfasst nicht mehr zwangsläufig das ganze Heft: man kann
+   eine einzelne Seite, einen Bereich oder alles ausgeben. Damit sich
+   Auswahl und Ergebnis decken, gibt es genau EINE maßgebliche Liste –
+   dieselbe, aus der auch das PDF gebaut wird.
+
+   Leere Seiten stehen nicht drin: sie landeten noch nie im PDF, und sie
+   mitzuzählen würde die Seitenzahlen der Auswahl verschieben.
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * @returns {Array<{page: object, sec: object, indexInSection: number}>}
+ *   in Ausgabereihenfolge; Position im Array + 1 = die Seitenzahl, die im
+ *   Export-Dialog steht.
+ */
+function exportPageList(nb) {
+  if (!nb) return [];
+  getSections(nb);
+
+  const list = [];
+  for (const sec of nb.sections) {
+    const pages = pagesOfSec(sec, nb).filter(pg => !pageIsEmpty(pg));
+    pages.forEach((page, indexInSection) => list.push({ page, sec, indexInSection }));
+  }
+  return list;
+}
+
+/**
+ * Liest eine Eingabe wie „1-3, 5, 8-10" als Menge von Seitenzahlen.
+ * @returns {Set<number>|null} null, wenn die Eingabe unbrauchbar ist.
+ */
+function parsePageRange(text, total) {
+  if (typeof text !== 'string') return null;
+
+  // Auch Gedankenstriche und Semikolons annehmen – die tippt man leicht
+  const cleaned = text.replace(/[–—]/g, '-').replace(/;/g, ',').trim();
+  if (!cleaned) return null;
+
+  const numbers = new Set();
+
+  for (const rawPart of cleaned.split(',')) {
+    const part = rawPart.trim();
+    if (!part) continue;
+
+    const range = part.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (range) {
+      let from = parseInt(range[1], 10);
+      let to = parseInt(range[2], 10);
+      if (from > to) [from, to] = [to, from];
+      for (let n = from; n <= to; n++) {
+        if (n >= 1 && n <= total) numbers.add(n);
+      }
+      continue;
+    }
+
+    if (/^\d+$/.test(part)) {
+      const n = parseInt(part, 10);
+      if (n >= 1 && n <= total) numbers.add(n);
+      continue;
+    }
+
+    return null;   // etwas, das keine Seitenangabe ist
+  }
+
+  return numbers.size ? numbers : null;
+}
+
+/**
+ * @param {object} nb
+ * @param {object} [options]
+ * @param {Set<string>} [options.pageIds] Nur diese Seiten ausgeben. Ohne
+ *   Angabe das ganze Heft. Die Seitenzahl in der Kopfzeile bleibt dabei
+ *   die des vollständigen Hefts – eine herausgegriffene Seite 7 heißt im
+ *   PDF also weiterhin „Seite 7" und nicht „Seite 1".
+ */
+function buildPdf(nb, options = {}) {
+  getSections(nb);
+
+  const selected = options.pageIds instanceof Set ? options.pageIds : null;
+
+  let body = '';
+  for (const sec of nb.sections) {
+    const pages = pagesOfSec(sec, nb).filter(pg => !pageIsEmpty(pg));
+    const wanted = selected ? pages.filter(pg => selected.has(pg.id)) : pages;
+    if (!wanted.length) continue;
+
+    if (nb.sections.length > 1) {
+      body += `<div class="sh">${escapeAttr(sec.name)}</div>`;
+    }
+    pages.forEach((pg, i) => {
+      if (selected && !selected.has(pg.id)) return;
+      body += buildPdfPage(nb, sec, pg, i);
+    });
+  }
+
+  if (!body) {
+    body = `<div class="pg bg-blank" style="width:${CFG.PAGE_W}px;height:${CFG.PAGE_H}px">`
+      + `<div class="tx" style="line-height:32px;padding-top:19px;right:32px">${t('pdfEmpty') || 'Dieses Notizbuch enthält noch keine Inhalte.'}</div></div>`;
+  }
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0 }
+  * { box-sizing: border-box; margin: 0; padding: 0 }
+  body { background: #fff; font-family: 'Crimson Pro', Georgia, serif; -webkit-print-color-adjust: exact; print-color-adjust: exact }
+
+  .sh { padding: 6mm 18mm 3mm; font-size: 17pt; font-style: italic; color: #8a6030;
+        border-bottom: 1px solid #d4c8b0; page-break-after: avoid }
+
+  .pg { position: relative; overflow: hidden; page-break-after: always; break-after: page }
+  .pg:last-child { page-break-after: auto }
+
+  .pg.bg-ruled, .pg.bg-grid, .pg.bg-dots { background: #faf7f0 }
+  .pg.bg-blank { background: #fff }
+  .pg.bg-craft { background: #f0e8d5 }
+
+  .pg.bg-ruled::before { content: ''; position: absolute; inset: 0; z-index: 1;
+    background-image: repeating-linear-gradient(to bottom, transparent, transparent 31px, #e2dbd0 31px, #e2dbd0 32px);
+    background-position: 0 83px }
+  .pg.bg-ruled::after { content: ''; position: absolute; left: 64px; top: 0; bottom: 0; width: 1px;
+    background: rgba(190,120,120,.18); z-index: 1 }
+  .pg.bg-grid::before { content: ''; position: absolute; inset: 0; z-index: 1;
+    background-image: linear-gradient(to bottom, #ddd6c8 1px, transparent 1px), linear-gradient(to right, #ddd6c8 1px, transparent 1px);
+    background-size: 24px 24px; background-position: 0 75px, 0 0 }
+  .pg.bg-dots::before { content: ''; position: absolute; inset: 0; z-index: 1;
+    background-image: radial-gradient(circle, #ddd6c8 1.2px, transparent 1.2px);
+    background-size: 24px 24px; background-position: 0 63px }
+
+  .pg-bgimg { position: absolute; top: 56px; left: 0; width: 100%; height: calc(100% - 56px);
+              object-fit: contain; z-index: 1 }
+
+  .ph { position: absolute; top: 0; left: 0; right: 0; height: 56px; padding: 0 72px; z-index: 20;
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 2px solid #e2dbd0;
+        font-family: 'DM Mono', Consolas, monospace; font-size: 9px; color: #b0a898; letter-spacing: .5px }
+
+  .tx { position: absolute; top: 64px; left: 72px; bottom: 24px; z-index: 5;
+        font-family: 'Crimson Pro', Georgia, serif; font-size: 17px; color: #1a1510;
+        white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word }
+  .tx * { line-height: inherit }
+  .tx h1, .tx p.j-title-1 { font-family: 'Cormorant Garamond', 'Crimson Pro', serif; font-weight: 400;
+        font-style: italic; color: #2a1f14; border-bottom: 1px solid #e2dbd0; display: block }
+  .tx h2, .tx p.j-title-2 { font-weight: 600; color: #2a1f14; display: block }
+  .tx h3, .tx p.j-title-3 { font-weight: 600; font-style: italic; color: #3a2e22; display: block }
+
+  .obj { position: absolute; object-fit: contain; z-index: 15 }
+  .ink { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 18 }
+</style></head><body>${body}</body></html>`;
+}
+
+function pageIsVisuallyEmpty(page) {
+  if (pageIsEmpty(page)) return true;
+  if (!page || page.bgImg || page.objects?.length) return false;
+
+  const plainText = (page.textContent || '').replace(/<[^>]+>/g, '').replace(/\s/g, '');
+  if (plainText.length) return false;
+
+  // Zeichenfläche ggf. erst wieder aufbauen, sonst wäre eine entlastete
+  // Seite fälschlich "leer"
+  if (window.PageCanvases) PageCanvases.ensure(page.id);
+
+  const canvas = E('pg-scroll')?.querySelector('[data-pgid="' + page.id + '"]')?.querySelector('.j-canvas');
+  if (!canvas) return false;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+
+  const w = canvas.width || 0;
+  const h = canvas.height || 0;
+  if (!w || !h) return true;
+
+  try {
+    const data = ctx.getImageData(0, 0, w, h).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+

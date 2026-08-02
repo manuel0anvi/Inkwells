@@ -1,0 +1,19 @@
+{
+  "//": [
+    "Nur für die Regelprüfung im Emulator (scripts/test-rules.js).",
+    "Ausgeliefert wird nichts davon: die Website liegt auf GitHub Pages,",
+    "die App wird mit electron-builder gepackt."
+  ],
+  "firestore": {
+    "rules": "website/firestore.rules"
+  },
+  "database": {
+    "rules": "website/database.rules.json"
+  },
+  "emulators": {
+    "firestore": { "port": 8089 },
+    "database": { "port": 9009 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

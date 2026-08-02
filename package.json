@@ -1,0 +1,36 @@
+{
+  "name": "inkwell",
+  "version": "1.1.0",
+  "description": "Inkwell - Digital Notebook",
+  "author": "Manuel",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "node scripts/serve-website.js",
+    "test": "node scripts/test-doc-split.js && node scripts/test-collab-text.js && node scripts/test-collab-caret.js && node scripts/test-collab-sync.js && node scripts/test-shared-save.js",
+    "build": "npm test && node scripts/sync-share.js --check && node scripts/build-release.js",
+    "sync-share": "node scripts/sync-share.js",
+    "build-yjs": "node scripts/build-yjs.js",
+    "deploy-web": "node scripts/deploy-website.js",
+    "test:rules": "firebase emulators:exec --project inkwell-rules-test --only firestore,database \"node scripts/test-rules.js\""
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "manuel0anvi",
+      "repo": "inkwell"
+    }
+  ],
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "pdfjs-dist": "^3.11.174"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "esbuild": "^0.28.1",
+    "firebase": "^12.17.0",
+    "yjs": "^13.6.31"
+  }
+}

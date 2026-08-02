@@ -1,0 +1,556 @@
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#c9a227;
+  --gold-light:#d4a857;
+  --gold-dark:#9c7c1b;
+  --gold-dim:rgba(201,162,39,0.15);
+  --navy:#0c0e18;
+  --navy-card:#151724;
+  --navy-border:rgba(201,162,39,0.15);
+  --cream:#faf8f3;
+  --text-muted:rgba(250,248,243,0.65);
+  --text-body:rgba(250,248,243,0.85)
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--navy);color:var(--cream);font-family:'Jost',sans-serif;font-weight:300;line-height:1.7;overflow-x:hidden}
+
+/* Nichts darf breiter werden als der Bildschirm. Ohne das reicht ein
+   einziges zu breites Bild oder eine lange Adresse, und die ganze Seite
+   lässt sich seitlich schieben. */
+img,svg,video{max-width:100%}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:18px 56px;background:rgba(12,14,24,0.97);backdrop-filter:blur(8px);border-bottom:0.5px solid var(--navy-border)}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:'Cormorant Garamond',serif;font-size:20px;font-style:italic;color:var(--gold-light);letter-spacing:0.06em}
+.nav-logo svg, .nav-logo img{width:26px;height:26px;object-fit:contain}
+.nav-right{display:flex;align-items:center;gap:16px}
+.nav-dl{background:transparent;border:0.5px solid var(--gold);color:var(--gold-light);padding:7px 18px;font-family:'Jost',sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;transition:background .2s}
+.nav-dl:hover{background:var(--gold-dim)}
+.lang-sw{display:flex;align-items:center;gap:1px;border:0.5px solid var(--navy-border);padding:2px}
+.lb{background:transparent;border:none;color:var(--text-muted);font-family:'Jost',sans-serif;font-size:10px;letter-spacing:0.1em;padding:5px 8px;cursor:pointer;transition:color .2s,background .2s;text-transform:uppercase}
+.lb:hover{color:var(--gold-light)}
+.lb.active{background:var(--gold-dim);color:var(--gold-light)}
+
+/* Die Regeln für schmale Bildschirme stehen gesammelt am Ende der Datei.
+   Hier stand früher ein zweiter, fast gleicher Media-Block – einer davon
+   sprach sogar eine Klasse an (.lang-select-mobile), die es in keiner
+   Seite gibt. Zwei Orte für dieselbe Sache laufen auseinander. */
+
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 40px 100px;position:relative;overflow:hidden}
+/* Auf dem Handy ist 100vh die Höhe OHNE die ein- und ausfahrenden
+   Browserleisten – der Bereich ist dadurch höher als das Sichtfeld und die
+   untere Zeile liegt beim Laden angeschnitten. svh misst, was wirklich zu
+   sehen ist. */
+@supports (min-height: 100svh) {
+  .hero{min-height:100svh}
+}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 30%,rgba(201,162,39,.07) 0%,transparent 70%),radial-gradient(ellipse 40% 60% at 20% 80%,rgba(201,162,39,.04) 0%,transparent 60%);pointer-events:none}
+.hero-badge{display:inline-block;border:0.5px solid var(--navy-border);color:var(--gold);font-size:11px;letter-spacing:.2em;text-transform:uppercase;padding:6px 18px;margin-bottom:40px;opacity:0;animation:fu .7s .1s forwards}
+.hero-icon{width:84px;height:84px;margin-bottom:34px;opacity:0;animation:fu .7s .2s forwards}
+.hero-icon img{width:100%;height:100%;object-fit:contain}
+.hero h1{font-family:'Cormorant Garamond',serif;font-size:clamp(68px,10vw,120px);font-weight:300;font-style:italic;line-height:.9;color:var(--cream);margin-bottom:26px;opacity:0;animation:fu .7s .3s forwards}
+.hero h1 span{color:var(--gold-light)}
+.hero-tagline{font-family:'Cormorant Infant',serif;font-style:italic;font-size:21px;font-weight:300;color:var(--text-body);max-width:500px;margin:0 auto 52px;opacity:0;animation:fu .7s .4s forwards}
+.hero-actions{display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;opacity:0;animation:fu .7s .55s forwards;margin:20px 0}
+.btn-p{display:inline-flex;align-items:center;gap:12px;background:var(--gold);color:var(--navy);text-decoration:none;font-family:'Jost',sans-serif;font-size:14px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:18px 46px;transition:background .2s,transform .15s;cursor:pointer;border:none}
+.btn-p:hover, .btn-p:active, .btn-p:focus{background:var(--cream);color:var(--navy);transform:translateY(-2px);outline:none;box-shadow:0 6px 20px rgba(201,162,39,0.3)}
+.btn-g{display:inline-flex;align-items:center;gap:8px;color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;transition:color .2s;cursor:pointer;padding:18px 24px}
+.btn-g:hover, .btn-g:active, .btn-g:focus{color:var(--gold);outline:none}
+.hero-meta{margin-top:52px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);opacity:0;animation:fu .7s .7s forwards}
+.hero-meta span{color:var(--gold);margin:0 5px}
+
+.ornament{text-align:center;padding:40px 0 70px;color:var(--gold);font-size:17px;opacity:.4}
+
+.features{max-width:1000px;margin:0 auto;padding:0 40px 120px}
+.sec-label{text-align:center;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:16px}
+.sec-title{text-align:center;font-family:'Cormorant Garamond',serif;font-size:clamp(34px,5vw,52px);font-weight:300;font-style:italic;color:var(--cream);margin-bottom:64px;line-height:1.1}
+/* min(…,100%) statt einer festen Mindestbreite: sonst ist eine Spalte auf
+   einem schmalen Handy breiter als der Bildschirm und die Seite schiebt. */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:1px;border:0.5px solid var(--navy-border)}
+.fc{padding:38px 34px;background:var(--navy-card);border:0.5px solid transparent;transition:border-color .3s,background .3s;text-align:left}
+.fc:hover{border-color:var(--navy-border);background:rgba(201,162,39,.04)}
+.fi{width:34px;height:34px;color:var(--gold);margin-bottom:18px}
+.fc h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;font-style:italic;color:var(--cream);margin-bottom:9px}
+.fc p{font-size:16px;color:var(--text-body);line-height:1.65}
+
+.dl-section{max-width:720px;margin:0 auto;padding:80px 40px 80px;text-align:center;position:relative}
+.dl-section::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:0.5px;height:56px;background:linear-gradient(to bottom,transparent,var(--gold))}
+.ver-badge{display:inline-block;border:0.5px solid var(--navy-border);color:var(--gold);font-size:12px;letter-spacing:.18em;text-transform:uppercase;padding:5px 15px;margin-bottom:30px}
+.dl-section h2{font-family:'Cormorant Garamond',serif;font-size:clamp(32px,5vw,50px);font-weight:300;font-style:italic;margin-bottom:14px;color:var(--cream)}
+.dl-section>p{font-size:16px;color:var(--text-body);margin-bottom:44px;max-width:440px;margin-left:auto;margin-right:auto}
+.dl-box{background:var(--navy-card);border:0.5px solid var(--navy-border);padding:36px}
+.dl-plat{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.pl-icon{width:42px;height:42px;background:var(--gold-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--gold-light)}
+.pl-icon svg{width:20px;height:20px}
+.pl-info{text-align:left}
+.pl-info strong{display:block;font-size:15px;font-weight:400;color:var(--cream);font-family:'Cormorant Garamond',serif;font-style:italic}
+.pl-info span{font-size:12px;color:var(--text-muted)}
+.dl-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);letter-spacing:.07em;border-top:0.5px solid var(--navy-border);padding-top:18px;margin-top:18px}
+
+.ver-section{max-width:720px;margin:0 auto;padding:0 40px 140px}
+.ver-section h3{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:300;font-style:italic;color:var(--cream);margin-bottom:6px;text-align:center}
+.ver-section>p{font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:28px}
+.ver-list{display:flex;flex-direction:column;gap:1px;border:0.5px solid var(--navy-border)}
+.vr{background:var(--navy-card);padding:16px 22px;display:flex;align-items:center;gap:14px;transition:background .2s;flex-wrap:wrap;justify-content:space-between}
+.vr:hover{background:rgba(201,162,39,.04)}
+.vr.latest{border-left:2px solid var(--gold)}
+.v-tag{font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;color:var(--cream);min-width:72px}
+.v-date{font-size:12px;color:var(--text-muted);letter-spacing:.05em;min-width:90px}
+.v-new{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);border:0.5px solid var(--gold-dim);padding:3px 10px;white-space:nowrap}
+.v-dl{display:inline-flex;align-items:center;gap:6px;background:transparent;border:0.5px solid var(--navy-border);color:var(--text-body);text-decoration:none;font-family:'Jost',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;white-space:nowrap;transition:border-color .2s,color .2s;cursor:pointer}
+.v-dl:hover{border-color:var(--gold);color:var(--gold-light)}
+.v-dl svg{width:12px;height:12px;flex-shrink:0}
+.v-loading,.v-error{text-align:center;padding:36px;font-size:12px;color:var(--text-muted);letter-spacing:.1em;text-transform:uppercase}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(8,10,16,.78);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:300;padding:24px}
+.modal-backdrop.open{display:flex}
+/* max-height + overflow: auf einem Handy ist ein Dialog schnell höher als
+   der Bildschirm. Ohne das ragt er oben und unten heraus und die Knöpfe
+   sind nicht erreichbar – scrollen ließ er sich nämlich nicht. */
+.modal-card{width:min(620px,100%);max-height:calc(100vh - 48px);overflow-y:auto;background:linear-gradient(180deg,rgba(24,26,38,.98),rgba(16,18,30,.98));border:0.5px solid var(--navy-border);box-shadow:0 18px 40px rgba(0,0,0,.35);padding:24px 22px;text-align:left}
+@supports (max-height: 100dvh) {
+  .modal-card{max-height:calc(100dvh - 48px)}
+}
+.modal-kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,170,40,.85);margin-bottom:10px}
+.modal-card h4{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:400;font-size:30px;line-height:1.1;color:var(--cream);margin-bottom:12px}
+.modal-card p{font-size:14px;color:var(--text-body);line-height:1.65;margin-bottom:12px}
+.modal-note{font-size:12px;color:rgba(255,170,40,.9);border:0.5px solid rgba(255,170,40,.25);background:rgba(255,170,40,.07);padding:10px 12px;margin-bottom:14px}
+.modal-version{display:inline-block;border:0.5px solid var(--navy-border);font-size:12px;letter-spacing:.08em;color:var(--gold-light);padding:6px 10px;margin:4px 0 14px}
+.modal-actions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.btn-m{border:0.5px solid var(--navy-border);background:transparent;color:var(--text-body);font-family:'Jost',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:10px 15px;cursor:pointer;transition:border-color .2s,color .2s,background .2s}
+.btn-m:hover{border-color:var(--gold);color:var(--gold-light)}
+.btn-m.warn{border-color:rgba(255,170,40,.65);color:#ffd289;background:rgba(255,170,40,.09)}
+.btn-m.warn:hover{background:rgba(255,170,40,.16)}
+
+/* ── Auswahl mit Erklärtext (Freigabe- und Export-Dialog) ─────────────
+   Gegenstück zu .opt-radio in src/css/modals.css. Ein Raster mit fester
+   erster Spalte hält die Auswahlpunkte ganz links und exakt untereinander;
+   mit flex rutschte die zweite Zeile nach rechts, sobald die Texte
+   unterschiedlich lang waren. */
+.opt-radio-list{display:flex;flex-direction:column;gap:12px}
+.opt-radio{
+  display:grid;
+  grid-template-columns:16px minmax(0,1fr);
+  column-gap:10px;
+  align-items:start;
+  cursor:pointer;
+  margin:0;
+}
+.opt-radio > input[type="radio"]{
+  width:16px;height:16px;margin:2px 0 0;flex:none;
+  accent-color:var(--gold-light);cursor:pointer;
+}
+.opt-radio-body{min-width:0}
+.opt-radio-title{display:block;font-size:14px;color:var(--cream)}
+.opt-radio-hint{display:block;font-size:12px;color:var(--text-muted);line-height:1.5}
+.opt-radio-input{
+  grid-column:2;margin-top:6px;width:100%;
+  padding:8px 11px;background:rgba(0,0,0,0.28);
+  border:0.5px solid var(--navy-border);border-radius:5px;color:var(--cream);
+  font-family:'DM Mono',Consolas,monospace;font-size:12px;
+}
+.opt-radio-input:disabled{opacity:.45}
+
+/* General layouts for other subpages (Community & Datenschutz) */
+.page-container{
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 140px 40px 100px;
+  min-height: 100vh;
+}
+.page-header{
+  text-align: center;
+  margin-bottom: 60px;
+}
+.page-title{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(38px, 6vw, 56px);
+  font-weight: 300;
+  font-style: italic;
+  color: var(--cream);
+  margin-bottom: 16px;
+  line-height: 1.1;
+}
+.page-subtitle{
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-size: 19px;
+  color: var(--text-body);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Datenschutz Specific Layout */
+.privacy-content{
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  padding: 48px;
+  border-radius: 8px;
+}
+.privacy-section{
+  margin-bottom: 38px;
+}
+.privacy-section:last-child{
+  margin-bottom: 0;
+}
+.privacy-section h2{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--gold-light);
+  margin-bottom: 16px;
+  border-bottom: 0.5px solid var(--navy-border);
+  padding-bottom: 8px;
+}
+.privacy-section p{
+  font-size: 14px;
+  color: var(--text-body);
+  line-height: 1.8;
+  margin-bottom: 14px;
+}
+.privacy-section ul{
+  margin-left: 20px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: var(--text-body);
+}
+.privacy-section li{
+  margin-bottom: 6px;
+}
+.privacy-section li strong{
+  color: var(--gold-light);
+  font-weight: 500;
+}
+
+/* Stand-Datum unter dem Seitentitel */
+.privacy-updated{
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 18px;
+}
+
+/* Kurzübersicht über dem Volltext */
+.privacy-summary{
+  background: var(--gold-dim);
+  border: 0.5px solid rgba(201,162,39,0.35);
+  border-radius: 8px;
+  padding: 32px 36px;
+  margin-bottom: 28px;
+}
+.privacy-summary h2{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--gold-light);
+  margin-bottom: 20px;
+}
+.privacy-summary-list{
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: 10px 28px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.privacy-summary-list dt{
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  padding-top: 3px;
+}
+.privacy-summary-list dd{
+  margin: 0;
+  color: var(--text-body);
+}
+
+/* Tabellen im Datenschutztext */
+.privacy-table-scroll{
+  overflow-x: auto;
+  margin: 8px 0 16px;
+  -webkit-overflow-scrolling: touch;
+}
+.privacy-table{
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 460px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.privacy-table th{
+  text-align: left;
+  font-family: 'Jost', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  font-weight: 500;
+  padding: 10px 14px 10px 0;
+  border-bottom: 0.5px solid var(--navy-border);
+  white-space: nowrap;
+}
+.privacy-table td{
+  color: var(--text-body);
+  padding: 11px 14px 11px 0;
+  border-bottom: 0.5px solid rgba(255,255,255,0.04);
+  vertical-align: top;
+}
+.privacy-table tr:last-child td{
+  border-bottom: none;
+}
+
+/* Weiterführende Links */
+.privacy-links{
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+.privacy-links li{
+  margin-bottom: 8px;
+}
+.privacy-links a{
+  color: var(--gold-light);
+  text-decoration: none;
+  border-bottom: 0.5px solid rgba(201,162,39,0.4);
+  padding-bottom: 1px;
+  transition: border-color .2s;
+}
+.privacy-links a:hover{
+  border-bottom-color: var(--gold-light);
+}
+
+/* Ergänzender Hinweis am Abschnittsende */
+.privacy-note{
+  border-left: 2px solid var(--gold);
+  padding-left: 14px;
+  color: var(--text-muted) !important;
+  font-size: 13px !important;
+}
+
+/* Community Specific Layout */
+.community-gallery-title{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  font-style: italic;
+  color: var(--cream);
+  margin: 50px 0 24px;
+  border-bottom: 0.5px solid var(--navy-border);
+  padding-bottom: 8px;
+  text-align: left;
+}
+.community-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 24px;
+  margin-bottom: 40px;
+}
+.forum-list{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.forum-card{
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  padding: 22px 26px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  transition: transform .2s, border-color .2s;
+  text-decoration: none;
+  color: inherit;
+  text-align: left;
+}
+.forum-card:hover{
+  border-color: var(--gold);
+  transform: translateX(4px);
+}
+.forum-info h4{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--cream);
+  margin-bottom: 4px;
+}
+.forum-info span{
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.forum-stats{
+  text-align: right;
+  flex-shrink: 0;
+}
+.forum-stats strong{
+  display: block;
+  font-size: 16px;
+  color: var(--gold-light);
+}
+.forum-stats span{
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Call-to-action Block */
+.cta-block{
+  background: linear-gradient(135deg, rgba(201,162,39,0.06) 0%, rgba(21,23,36,0.98) 100%);
+  border: 0.5px solid var(--gold);
+  padding: 40px;
+  text-align: center;
+  margin-top: 60px;
+  border-radius: 8px;
+}
+.cta-block h3{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  font-style: italic;
+  color: var(--gold-light);
+  margin-bottom: 12px;
+}
+.cta-block p{
+  font-size: 14px;
+  color: var(--text-body);
+  max-width: 500px;
+  margin: 0 auto 24px;
+}
+
+footer{border-top:0.5px solid var(--navy-border);padding:32px 56px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px}
+footer p{font-size:12px;color:var(--text-muted)}
+footer a{color:var(--text-muted);text-decoration:none;font-size:12px;transition:color .2s}
+footer a:hover{color:var(--gold-light)}
+.fl{display:flex;gap:24px}
+
+@keyframes fu{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SCHMALE BILDSCHIRME
+
+   Drei Stufen, weil sich Tablet und Handy deutlich unterscheiden:
+     ≤ 1024px  Tablet – nur die großzügigen Außenabstände zurücknehmen
+     ≤ 768px   Handy quer / kleines Tablet – Navigation auf Symbole
+     ≤ 480px   Handy hoch – alles einspaltig, Knöpfe über die volle Breite
+   ══════════════════════════════════════════════════════════════════════ */
+
+@media(max-width:1024px){
+  nav{padding:16px 28px}
+  footer{padding:28px 28px}
+  .hero,.features,.dl-section,.ver-section,.page-container{padding-left:28px;padding-right:28px}
+  .privacy-content{padding:34px 28px}
+}
+
+@media(max-width:768px){
+  /* Navigation: Beschriftungen weg, nur noch Symbole – sonst passt die
+     Leiste auf keinem Handy in eine Zeile. */
+  nav{padding:12px 16px !important;gap:8px}
+  .nav-logo span{display:none !important}
+  #btn-open-login span, .nav-dl span{display:none !important}
+  #btn-open-login, .nav-dl{
+    padding:8px !important;
+    border-radius:50% !important;
+    display:inline-flex !important;
+    align-items:center;
+    justify-content:center;
+    width:36px;
+    height:36px;
+    flex-shrink:0;
+  }
+  .dl-icon-mobile{display:inline-block !important}
+  .lang-sw{display:none !important}
+  .lang-sw-mobile-custom{display:inline-block !important}
+  .nav-right{gap:10px}
+
+  .hero,.features,.dl-section,.ver-section,.page-container{padding-left:20px;padding-right:20px}
+  .hero{padding-top:104px;padding-bottom:72px}
+  .page-container{padding-top:112px;padding-bottom:72px}
+  .hero-tagline{font-size:19px;margin-bottom:38px}
+  .hero-badge{margin-bottom:30px}
+  .hero-icon{width:68px;height:68px;margin-bottom:26px}
+  .hero-meta{margin-top:38px}
+
+  .features{padding-bottom:80px}
+  .sec-title{margin-bottom:44px}
+  .fc{padding:28px 24px}
+
+  .dl-box{padding:22px 16px}
+  .dl-meta{flex-wrap:wrap;gap:6px}
+  .ver-section{padding-bottom:90px}
+
+  /* Version und Datum in eine Zeile, der Knopf darunter über die volle
+     Breite. Untereinander gestapelt brauchte jede Version drei Zeilen und
+     die Liste wurde endlos lang. */
+  .vr{
+    padding:14px 16px;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    align-items:center;
+    gap:8px 12px;
+  }
+  .vr .v-tag{min-width:0}
+  .vr .v-date{min-width:0}
+  .vr .v-dl{grid-column:1 / -1;justify-content:center}
+
+  .privacy-content{padding:24px 18px}
+  .privacy-summary{padding:22px 18px}
+  .privacy-summary-list{grid-template-columns:1fr;gap:2px 0}
+  .privacy-summary-list dd{margin-bottom:12px}
+
+  /* Die Tabellen bleiben seitlich scrollbar (drei Spalten passen auf kein
+     Handy), werden aber kompakter, damit weniger geschoben werden muss. */
+  .privacy-table{min-width:400px;font-size:12px}
+  .privacy-table th{font-size:9px;padding-right:10px}
+  .privacy-table td{padding-right:10px}
+  .privacy-table-scroll{
+    border:0.5px solid var(--navy-border);
+    border-radius:6px;
+    padding:0 12px;
+  }
+
+  .modal-backdrop{padding:14px}
+  .modal-card{padding:18px 16px;max-height:calc(100vh - 28px)}
+  .modal-card h4{font-size:25px}
+
+  footer{padding:24px 20px;flex-direction:column;text-align:center}
+  .fl{flex-wrap:wrap;justify-content:center;gap:18px}
+
+  .forum-card{flex-direction:column;align-items:flex-start;gap:8px}
+  .forum-stats{text-align:left}
+  .community-gallery-title{margin-top:36px;font-size:24px}
+  .cta-block{padding:28px 20px;margin-top:40px}
+}
+
+@media(max-width:480px){
+  /* „Inkwell" bei 68px passt auf einem 320px-Bildschirm gerade so – mit
+     Rand daneben aber nicht mehr. Deshalb hier kleiner werden dürfen. */
+  .hero h1{font-size:clamp(52px,17vw,88px)}
+  .hero,.features,.dl-section,.ver-section,.page-container{padding-left:16px;padding-right:16px}
+
+  /* Nebeneinander wird auf einem Handy zu eng: der Download-Knopf soll die
+     volle Breite bekommen, der GitHub-Link darunter stehen. */
+  .hero-actions{flex-direction:column;align-items:stretch;gap:6px;width:100%}
+  .btn-p{width:100%;justify-content:center;padding:16px 22px}
+  .btn-g{justify-content:center;padding:14px 20px}
+
+  .hero-tagline{font-size:17px}
+  .hero-meta{font-size:10px;letter-spacing:.08em}
+  .sec-title{margin-bottom:36px}
+  .fc{padding:24px 20px}
+  .fc p{font-size:15px}
+
+  .privacy-content{padding:20px 14px}
+  .privacy-summary{padding:18px 14px}
+  .privacy-section h2{font-size:21px}
+
+  .modal-card h4{font-size:22px}
+  .modal-actions{gap:8px}
+  .modal-actions .btn-m{flex:1;text-align:center}
+
+  .fl{gap:14px}
+}

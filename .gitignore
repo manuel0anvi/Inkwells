@@ -1,0 +1,29 @@
+# ── Abhängigkeiten ──────────────────────────────────────────────────
+node_modules/
+
+# ── Zugangsdaten ────────────────────────────────────────────────────
+# Enthält das Google-Client-Secret. Darf NIE ins Repo.
+# Vorlage zum Kopieren: src/core/cloudConfig.local.example.js
+src/core/cloudConfig.local.js
+
+# ── Erzeugte Ordner ─────────────────────────────────────────────────
+# Arbeitsplatz von scripts/deploy-website.js (Klon des website-Branch)
+.deploy-website/
+.deploy-website-alt/
+
+# Build-Ausgabe von electron-builder
+dist/
+release/
+
+# ── Firebase ────────────────────────────────────────────────────────
+.firebase/
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+
+# ── Betriebssystem / Editor ─────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp

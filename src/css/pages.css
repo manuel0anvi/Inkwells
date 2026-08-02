@@ -1,0 +1,353 @@
+/* Module: Page Content & Drawing */
+
+.j-page {
+  position: relative;
+  width: 794px;
+  min-height: 1123px;
+  box-shadow: var(--shad);
+  flex-shrink: 0;
+  overflow: hidden
+}
+
+.j-page.bg-ruled {
+  background: var(--paper)
+}
+
+.j-page.bg-grid {
+  background: var(--paper)
+}
+
+.j-page.bg-dots {
+  background: var(--paper)
+}
+
+.j-page.bg-blank {
+  background: #fff
+}
+
+.j-page.bg-craft {
+  background: #f0e8d5
+}
+
+.j-page.bg-ruled::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: repeating-linear-gradient(to bottom, transparent, transparent 31px, var(--pl) 31px, var(--pl) 32px);
+  background-position: 0 83px
+}
+
+.j-page.bg-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: linear-gradient(to bottom, var(--pg) 1px, transparent 1px), linear-gradient(to right, var(--pg) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 75px, 0 0
+}
+
+.j-page.bg-dots::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: radial-gradient(circle, var(--pg) 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+  background-position: 0 63px
+}
+
+.j-page.bg-ruled::after {
+  content: '';
+  position: absolute;
+  left: 64px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--pm);
+  pointer-events: none;
+  z-index: 1
+}
+
+.j-page-hdr {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  border-bottom: 2px solid var(--pl);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 72px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.j-page-num,
+.j-page-date {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: #b0a898;
+  letter-spacing: .5px
+}
+
+.j-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  display: block;
+  touch-action: pan-y
+}
+
+.j-text {
+  position: absolute;
+  top: 64px;
+  left: 72px;
+  right: 32px;
+  bottom: 24px;
+  z-index: 5;
+  outline: none;
+  font-family: 'Crimson Pro', Georgia, 'Times New Roman', serif;
+  font-size: 17px;
+  line-height: 32px;
+  padding-top: 19px;
+  color: var(--ptx);
+  caret-color: #c0693a;
+  word-break: break-word;
+  overflow: visible;
+  pointer-events: none;
+  margin: 0
+}
+
+.j-text * {
+  line-height: inherit
+}
+
+.j-text h1,
+.j-text p.j-title-1 {
+  font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  color: #2a1f14;
+  display: block;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--pl)
+}
+
+.j-text h2,
+.j-text p.j-title-2 {
+  font-family: 'Crimson Pro', serif;
+  font-weight: 600;
+  color: #2a1f14;
+  display: block;
+  line-height: inherit;
+  margin: 0;
+  padding: 0
+}
+
+.j-text h3,
+.j-text p.j-title-3 {
+  font-family: 'Crimson Pro', serif;
+  font-weight: 600;
+  font-style: italic;
+  color: #3a2e22;
+  display: block;
+  line-height: inherit;
+  margin: 0;
+  padding: 0
+}
+
+.j-objects {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none
+}
+
+.obj-wrap {
+  position: absolute;
+  cursor: default;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.obj-wrap.selected {
+  outline: 1.5px dashed var(--gold);
+  outline-offset: 3px
+}
+
+.obj-wrap img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 2px
+}
+
+.obj-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--gold);
+  border: 1.5px solid var(--sh);
+  border-radius: 2px;
+  z-index: 10;
+  touch-action: none;
+}
+
+.obj-handle.tl {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize
+}
+
+.obj-handle.tr {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize
+}
+
+.obj-handle.bl {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize
+}
+
+.obj-handle.br {
+  bottom: -7px;
+  right: -7px;
+  cursor: nwse-resize
+}
+
+.obj-handle.rot {
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gb);
+  border-radius: 50%;
+  cursor: grab;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px
+}
+
+.obj-delete {
+  position: absolute;
+  top: -26px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  background: var(--red);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 11
+}
+
+.pg-menu-btn {
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  color: #b0a898;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all .12s;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%)
+}
+
+.pg-menu-btn:hover {
+  background: rgba(0, 0, 0, .08);
+  color: #4a3d2e
+}
+
+.add-page-btn-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  transform: none;
+  width: 100%;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s ease;
+  background: linear-gradient(to top, #1a1a24 60%, transparent)
+}
+
+.add-page-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--sp);
+  border: 1.5px solid var(--sb2);
+  border-radius: 10px;
+  color: var(--md);
+  cursor: pointer;
+  padding: 14px 32px;
+  font-size: 14px;
+  font-family: 'Crimson Pro', serif;
+  font-style: italic;
+  transition: all .15s;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, .6)
+}
+
+.add-page-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(200, 169, 110, .05)
+}
+
+.snap-line {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.snap-line.v {
+  width: 1px;
+  background: #e91e63;
+  height: 100%;
+  top: 0;
+}
+
+.snap-line.h {
+  height: 1px;
+  background: #e91e63;
+  width: 100%;
+  left: 0;
+}
+
+.ws-debug-layer {
+  position: absolute;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  color: rgba(120, 120, 120, .55);
+  pointer-events: none;
+  user-select: none;
+  z-index: 12;
+}

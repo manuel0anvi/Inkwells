@@ -1,0 +1,696 @@
+'use strict';
+
+/* ── TEXT RENDERING & EDITING ── */
+function lhForBg(bg) { return (bg === 'grid' || bg === 'dots') ? 24 : 32; }
+function ptForBg(bg) { return Math.round(lhForBg(bg) - 17 * .78); }
+function rightPadForBg(bg) { return (bg === 'grid' || bg === 'dots' || bg === 'blank' || bg === 'craft') ? 72 : 32; }
+
+function applyTextLayoutForBg(textDiv, bgId) {
+  if (!textDiv) return;
+  const lh = lhForBg(bgId);
+  textDiv.style.lineHeight = lh + 'px';
+  textDiv.style.paddingTop = ptForBg(bgId) + 'px';
+  textDiv.style.right = rightPadForBg(bgId) + 'px';
+}
+
+function approxCharWidth(textDiv) {
+  const cs = getComputedStyle(textDiv);
+  const c = document.createElement('canvas').getContext('2d');
+  c.font = cs.font || (cs.fontStyle + ' ' + cs.fontVariant + ' ' + cs.fontWeight + ' ' + cs.fontSize + '/' + cs.lineHeight + ' ' + cs.fontFamily);
+  return Math.max(2, c.measureText(' ').width || 4);
+}
+
+/**
+ * Setzt die Schreibmarke auf einen Abstand in sichtbaren Zeichen.
+ *
+ * >>> Warum das nicht mehr nur den ersten Kindknoten ansieht <<<
+ * Der Editor hält reinen Text, sobald nur getippt wurde – dann ist
+ * textDiv.firstChild ein Textknoten und alles war einfach. Sobald aber
+ * Absätze oder Auszeichnungen dazukommen, ist der erste Kindknoten ein
+ * <p>, und setStart(p, 37) warf einen Fehler. In geteilten Dokumenten
+ * fiel das auf: nach jeder fremden Änderung sprang die eigene Marke an
+ * den Anfang, weil genau dieser Fehler dort still verschluckt wurde.
+ * rangeForTextOffset kann beides – also darüber gehen.
+ */
+function setPlainCaret(textDiv, charIndex) {
+  if (!textDiv.firstChild) textDiv.appendChild(document.createTextNode(''));
+
+  const range = rangeForTextOffset(textDiv, Math.max(0, charIndex));
+  if (!range) return;
+
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function getCaretTextOffset(rootEl) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  if (!rootEl.contains(range.startContainer)) return null;
+  const pre = range.cloneRange();
+  pre.selectNodeContents(rootEl);
+  pre.setEnd(range.startContainer, range.startOffset);
+  return pre.toString().length;
+}
+
+/**
+ * Umkehrung von getCaretTextOffset: findet zu einem Textabstand die
+ * Stelle im DOM. Gebraucht für die Schreibmarken der anderen in einem
+ * geteilten Dokument (ui/collab.js) – dort kommt nur eine Zahl an, und
+ * daraus muss eine Bildschirmposition werden.
+ *
+ * @param {HTMLElement} rootEl
+ * @param {number} offset Abstand in sichtbaren Zeichen
+ * @returns {Range|null}
+ */
+function rangeForTextOffset(rootEl, offset) {
+  if (!rootEl) return null;
+  const target = Math.max(0, offset);
+
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null);
+  let seen = 0;
+  let node = walker.nextNode();
+  let last = null;
+
+  while (node) {
+    const len = (node.nodeValue || '').length;
+    if (seen + len >= target) {
+      const range = document.createRange();
+      range.setStart(node, target - seen);
+      range.collapse(true);
+      return range;
+    }
+    seen += len;
+    last = node;
+    node = walker.nextNode();
+  }
+
+  // Hinter dem Ende: ans letzte Zeichen setzen. Kommt vor, wenn der andere
+  // gerade etwas gelöscht hat und die Meldung noch unterwegs war.
+  if (last) {
+    const range = document.createRange();
+    range.setStart(last, (last.nodeValue || '').length);
+    range.collapse(true);
+    return range;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(rootEl);
+  range.collapse(true);
+  return range;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   FLACHER TEXT  ―  eine Position, die bei allen dasselbe bedeutet
+
+   getCaretTextOffset zählt nur die Zeichen in den Textknoten. Damit ist
+   eine Position an einer Zeilengrenze MEHRDEUTIG: bei
+   <p>abc</p><p>def</p> ergibt „hinter c" und „vor d" beide Male die
+   Zahl 3, und ein leerer Absatz dazwischen hat gar keine eigene Zahl.
+
+   Für die eigene Schreibmarke reicht das – sie wird im selben DOM wieder
+   gesetzt, da fällt es nicht auf. Für die Marke eines ANDEREN reicht es
+   nicht: rangeForTextOffset nimmt bei Gleichstand immer das frühere
+   Stück, die fremde Marke landete dadurch verlässlich eine Zeile zu
+   hoch, am Ende der Zeile davor. Genau deshalb saß sie „nie richtig".
+
+   Hier deshalb ein zweites Maß: der Inhalt als eine Zeichenkette, in der
+   jede Zeilengrenze ein echtes \n ist – so, wie der Text auf dem Papier
+   steht. Anfang und Ende einer Zeile sind damit verschiedene Zahlen, und
+   eine leere Zeile hat ihre eigene. Dasselbe Maß trägt die Zeilensperre
+   (ui/collab.js): „diese und die nächste Zeile" ist darin ein einfacher
+   Bereich von–bis.
+
+   Eine Zeile ist ein unmittelbares Kind von .j-text (Absatz, Überschrift)
+   bzw. der Abschnitt zwischen zwei <br>. Tiefer verschachtelte Blöcke
+   baut dieser Editor nicht.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const FLAT_BLOCK_TAGS = new Set([
+  'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'LI', 'UL', 'OL', 'BLOCKQUOTE', 'PRE', 'SECTION', 'FIGURE', 'TABLE', 'TR', 'HR'
+]);
+
+/**
+ * Zerlegt den Inhalt in Textstücke und Zeilengrenzen – in Lesereihenfolge.
+ *
+ * @returns {{text: string, parts: Array<object>}}
+ *   text  der Inhalt mit \n an jeder Zeilengrenze
+ *   parts Ankerpunkte: {type:'text', node, at, len} für Textknoten,
+ *         {type:'empty', host, at} für eine leere Zeile (dort gibt es
+ *         keinen Textknoten, auf den man zeigen könnte).
+ */
+function flatTextParts(root) {
+  const parts = [];
+  let text = '';
+
+  const addText = (node) => {
+    const value = node.nodeValue || '';
+    if (!value.length) return;
+    parts.push({ type: 'text', node, at: text.length, len: value.length });
+    text += value;
+  };
+
+  const addBreak = () => { text += '\n'; };
+
+  // Inline-Inhalt einer Zeile: Textknoten, <b>, <i>, <span> … und <br>
+  const walkInline = (el) => {
+    const kids = el.childNodes;
+    for (let i = 0; i < kids.length; i++) {
+      const child = kids[i];
+      if (child.nodeType === Node.TEXT_NODE) { addText(child); continue; }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue;
+
+      if (child.tagName === 'BR') {
+        /* Ein <br> am Ende eines Blocks ist der Platzhalter, den
+           contenteditable für eine leere Zeile setzt – kein zusätzlicher
+           Umbruch. Sonst zählte jede leere Zeile doppelt. */
+        if (i === kids.length - 1) continue;
+        addBreak();
+        continue;
+      }
+      if (child.tagName === 'STYLE' || child.tagName === 'SCRIPT') continue;
+      walkInline(child);
+    }
+  };
+
+  const kids = root.childNodes;
+  let started = false;
+  for (let i = 0; i < kids.length; i++) {
+    const child = kids[i];
+
+    if (child.nodeType === Node.ELEMENT_NODE
+        && (child.tagName === 'STYLE' || child.tagName === 'SCRIPT')) continue;
+
+    const isBlock = child.nodeType === Node.ELEMENT_NODE
+                 && FLAT_BLOCK_TAGS.has(child.tagName);
+
+    if (isBlock) {
+      if (started) addBreak();
+      const before = text.length;
+      walkInline(child);
+      // Nichts herausgekommen? Dann ist das eine leere Zeile, und die
+      // braucht trotzdem einen Anker – sonst ist sie nicht ansteuerbar.
+      if (text.length === before) parts.push({ type: 'empty', host: child, at: before });
+      started = true;
+      continue;
+    }
+
+    if (child.nodeType === Node.TEXT_NODE) { addText(child); started = true; continue; }
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+
+    if (child.tagName === 'BR') {
+      if (i < kids.length - 1) addBreak();
+      started = true;
+      continue;
+    }
+    walkInline(child);
+    started = true;
+  }
+
+  return { text, parts };
+}
+
+/** Nur der flache Text – für Zeilengrenzen und die Sperre. */
+function flatTextOf(root) {
+  return root ? flatTextParts(root).text : '';
+}
+
+/**
+ * Wo steht die Schreibmarke im flachen Text?
+ * @returns {number|null} null, wenn sie gar nicht in diesem Feld steht.
+ */
+function flatCaretPos(root) {
+  if (!root) return null;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.startContainer)) return null;
+  return flatPosOfPoint(root, range.startContainer, range.startOffset);
+}
+
+/** Umrechnung DOM-Punkt → Position im flachen Text. */
+function flatPosOfPoint(root, container, offset) {
+  const info = flatTextParts(root);
+
+  if (container.nodeType === Node.TEXT_NODE) {
+    for (const part of info.parts) {
+      if (part.type === 'text' && part.node === container) {
+        return part.at + Math.max(0, Math.min(offset, part.len));
+      }
+    }
+  }
+
+  /* Der Punkt steht in einem Element – eine leere Zeile, oder zwischen
+     zwei Kindknoten. Dann das erste Stück suchen, das im Dokument NICHT
+     vor ihm liegt; dessen Anfang ist die gesuchte Stelle. */
+  let probe;
+  try {
+    probe = document.createRange();
+    probe.setStart(container, offset);
+    probe.collapse(true);
+  } catch (err) { return null; }
+
+  for (const part of info.parts) {
+    const at = document.createRange();
+    if (part.type === 'text') at.setStart(part.node, 0);
+    else at.selectNodeContents(part.host);
+    at.collapse(true);
+    if (probe.compareBoundaryPoints(Range.START_TO_START, at) <= 0) return part.at;
+  }
+  return info.text.length;
+}
+
+/**
+ * Umkehrung: zu einer Position im flachen Text die Stelle im DOM.
+ * @returns {Range|null}
+ */
+function flatRangeAt(root, pos) {
+  if (!root) return null;
+  const info = flatTextParts(root);
+  const target = Math.max(0, Math.min(Number(pos) || 0, info.text.length));
+  const range = document.createRange();
+
+  /* Die Position liegt IN einem Stück: Anfang eingeschlossen, Ende
+     ausgeschlossen. Dadurch gewinnt am Zeilenanfang die neue Zeile –
+     genau der Fall, an dem die alte Umrechnung scheiterte. */
+  for (const part of info.parts) {
+    if (part.type === 'text' && target >= part.at && target < part.at + part.len) {
+      range.setStart(part.node, target - part.at);
+      range.collapse(true);
+      return range;
+    }
+    if (part.type === 'empty' && part.at === target) {
+      range.selectNodeContents(part.host);
+      range.collapse(true);
+      return range;
+    }
+  }
+
+  // Zeilenende oder Textende: ans Ende des letzten Stücks davor
+  let best = null;
+  for (const part of info.parts) {
+    const end = part.type === 'text' ? part.at + part.len : part.at;
+    if (end <= target) best = part;
+  }
+  if (best && best.type === 'text') {
+    range.setStart(best.node, best.len);
+    range.collapse(true);
+    return range;
+  }
+  if (best && best.type === 'empty') {
+    range.selectNodeContents(best.host);
+    range.collapse(true);
+    return range;
+  }
+
+  range.selectNodeContents(root);
+  range.collapse(true);
+  return range;
+}
+
+/** Setzt die eigene Schreibmarke auf eine Position im flachen Text. */
+function setFlatCaret(root, pos) {
+  const range = flatRangeAt(root, pos);
+  if (!range) return false;
+  const sel = window.getSelection();
+  if (!sel) return false;
+  sel.removeAllRanges();
+  sel.addRange(range);
+  return true;
+}
+
+/** Rechteck eines Zeichenbereichs; `kante` sagt, welche Seite gilt. */
+function rectOfSpan(textDiv, von, bis, kante) {
+  const a = flatRangeAt(textDiv, von);
+  const b = flatRangeAt(textDiv, bis);
+  if (!a || !b) return null;
+
+  const span = document.createRange();
+  try {
+    span.setStart(a.startContainer, a.startOffset);
+    span.setEnd(b.startContainer, b.startOffset);
+  } catch (err) { return null; }
+
+  const rects = span.getClientRects();
+  if (!rects || !rects.length) return null;
+
+  const r = kante === 'links' ? rects[0] : rects[rects.length - 1];
+  if (!r || (!r.height && !r.width)) return null;
+  return new DOMRect(kante === 'links' ? r.left : r.right, r.top, 0, r.height);
+}
+
+function caretRectAt(textDiv, pos, text) {
+  const inhalt = (typeof text === 'string') ? text : flatTextOf(textDiv);
+  const stelle = Math.max(0, Math.min(Number(pos) || 0, inhalt.length));
+
+  /* Steht hinter der Stelle noch ein Zeichen DERSELBEN Zeile, gilt
+     dessen linke Kante – dort erscheint auch das nächste Getippte. */
+  if (stelle < inhalt.length && inhalt[stelle] !== '\n') {
+    const r = rectOfSpan(textDiv, stelle, stelle + 1, 'links');
+    if (r) return r;
+  }
+
+  // Am Zeilenende: hinter das Zeichen davor
+  if (stelle > 0 && inhalt[stelle - 1] !== '\n') {
+    const r = rectOfSpan(textDiv, stelle - 1, stelle, 'rechts');
+    if (r) return r;
+  }
+
+  /* Leere Zeile – es gibt kein Zeichen, an dem man sich festhalten
+     könnte. Dann das umgebende Element; das IST hier die Zeile. */
+  const range = flatRangeAt(textDiv, stelle);
+  const host = range && (range.startContainer.nodeType === 1
+    ? range.startContainer
+    : range.startContainer.parentElement);
+  if (!host || typeof host.getBoundingClientRect !== 'function') return null;
+
+  const box = host.getBoundingClientRect();
+  if (!box.height && !box.width) return null;
+  const lh = (parseInt(textDiv.style.lineHeight) || 24)
+    * ((typeof getZoom === 'function') ? getZoom() : 1);
+  return new DOMRect(box.left, box.top, 0, Math.min(box.height || lh, lh));
+}
+
+/**
+ * Rechnet ein gemessenes Rechteck auf die ZEILE um, in der es liegt –
+ * in den Maßen der Seite, also ohne Zoom.
+ *
+ * >>> Warum nicht einfach rect.top nehmen <<<
+ * Was getClientRects() für Text liefert, ist von Fall zu Fall
+ * verschieden: mal das Kästchen der Buchstaben (bei Zeilenhöhe 32 und
+ * Schriftgröße 17 nur rund 21 px hoch, mittig in der Zeile), mal die
+ * ganze Zeile. Wer die Oberkante davon nimmt, sitzt im einen Fall 5 px
+ * zu tief und im anderen 7 px zu hoch – und genau so sah es aus.
+ *
+ * Verlässlich ist dagegen die MITTE: sie ist in beiden Fällen dieselbe,
+ * weil der Zeilendurchschuss gleichmäßig über und unter den Buchstaben
+ * liegt. Von dort aus eine volle Zeilenhöhe – das deckt sich mit dem
+ * Linienraster des Papiers.
+ */
+function lineBoxOf(pgEl, textDiv, rect, zoom) {
+  const lh = parseInt(textDiv.style.lineHeight) || 32;
+  const pageRect = pgEl.getBoundingClientRect();
+  const mitte = (rect.top + rect.height / 2 - pageRect.top) / zoom;
+  return { top: mitte - lh / 2, height: lh, left: (rect.left - pageRect.left) / zoom };
+}
+
+/* Meldet höchstens alle paar Sekunden, dass die Texte auseinanderlaufen.
+   Ohne diese Bremse käme die Zeile bei jedem Durchgang neu. */
+let letzterVersatz = 0;
+function meldeVersatz(person, laenge) {
+  const jetzt = Date.now();
+  if (jetzt - letzterVersatz < 5000) return;
+  letzterVersatz = jetzt;
+  console.warn('[Collab] Die Fassungen laufen auseinander: '
+    + (person.name || person.email || '?') + ' meldet Stelle ' + person.offset
+    + ', hier ist der Text aber nur ' + laenge + ' Zeichen lang. '
+    + 'Die fremde Schreibmarke kann dadurch nicht richtig sitzen.');
+}
+
+/**
+ * Die Zeile an dieser Stelle – und die darauf folgenden.
+ *
+ * @param {string} text        flacher Text
+ * @param {number} pos
+ * @param {number} [extraLines=1] wie viele Zeilen danach noch dazugehören
+ * @returns {{from:number, to:number}} to ist ausschließlich
+ */
+function flatLineSpan(text, pos, extraLines = 1) {
+  const content = String(text || '');
+  const at = Math.max(0, Math.min(Number(pos) || 0, content.length));
+  const from = content.lastIndexOf('\n', at - 1) + 1;
+
+  let end = content.indexOf('\n', at);
+  if (end === -1) return { from, to: content.length };
+
+  for (let i = 0; i < extraLines; i++) {
+    const next = content.indexOf('\n', end + 1);
+    if (next === -1) { end = content.length; break; }
+    end = next;
+  }
+  return { from, to: end };
+}
+
+function getRenderedContentBottom(textDiv, top, pt, lh) {
+  if (!textDiv) return top + pt + lh;
+  const range = document.createRange();
+  range.selectNodeContents(textDiv);
+  const rects = range.getClientRects();
+  if (!rects || !rects.length) return top + pt + lh;
+  
+  let bottom = top + pt + lh;
+  for (const rc of rects) {
+    if (Number.isFinite(rc.bottom)) bottom = Math.max(bottom, rc.bottom);
+  }
+  return bottom;
+}
+
+function _createPWithSpacesOrBr(targetCol) {
+  const p = document.createElement('p');
+  if (targetCol > 0) p.appendChild(document.createTextNode(' '.repeat(targetCol)));
+  else p.appendChild(document.createElement('br'));
+  return p;
+}
+
+function _setRangeEndOfNode(range, node) {
+  if (node.lastChild && node.lastChild.nodeType === Node.TEXT_NODE) {
+    range.setStart(node.lastChild, node.lastChild.nodeValue.length);
+  } else {
+    range.selectNodeContents(node);
+  }
+  range.collapse(true);
+}
+
+function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page = null) {
+  if (!textDiv) return;
+  let didPad = false;
+  textDiv.focus();
+  const r = textDiv.getBoundingClientRect();
+  const cs = getComputedStyle(textDiv);
+  const scaleX = textDiv.offsetWidth > 0 ? (r.width / textDiv.offsetWidth) : 1;
+  const scaleY = textDiv.offsetHeight > 0 ? (r.height / textDiv.offsetHeight) : 1;
+  const lh = (parseFloat(cs.lineHeight) || 32) * scaleY;
+  const cw = approxCharWidth(textDiv) * scaleX;
+  const pt = (parseFloat(cs.paddingTop) || 0) * scaleY;
+
+  if (!isPlainTextEditable(textDiv)) {
+    let range = null;
+    const isInside = node => !!node && (node === textDiv || textDiv.contains(node));
+    const blocks = [...textDiv.children].filter(el => el.nodeType === Node.ELEMENT_NODE);
+    const lastRect = blocks.length ? blocks[blocks.length - 1].getBoundingClientRect() : null;
+    const clickedClearlyBelow = !!lastRect && clientY > (lastRect.bottom + Math.max(4, lh * 0.2));
+
+    if (!clickedClearlyBelow) {
+      const pos = document.caretPositionFromPoint?.(clientX, clientY);
+      const rPoint = document.caretRangeFromPoint?.(clientX, clientY);
+      if (pos && isInside(pos.offsetNode)) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+        range.collapse(true);
+      } else if (rPoint && isInside(rPoint.startContainer)) {
+        range = rPoint;
+        range.collapse(true);
+      }
+    }
+
+    if (range) {
+      if (range.startContainer === textDiv) {
+        const targetBlock = textDiv.childNodes[Math.min(range.startOffset, textDiv.childNodes.length - 1)];
+        if (targetBlock && targetBlock.nodeType === Node.ELEMENT_NODE) {
+          range.selectNodeContents(targetBlock);
+          range.collapse(false);
+        }
+      }
+
+      if (forceManual) {
+        const block = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+        if (block?.nodeType === Node.ELEMENT_NODE && block !== textDiv) {
+          const rect = block.getBoundingClientRect();
+          if (clientY > rect.bottom + 4 || clientY < rect.top - 4) range = null;
+        }
+      }
+
+      if (range) {
+        let lineEndX = r.left;
+        const ctrs = range.getClientRects();
+        if (ctrs.length > 0 && ctrs[0].right > 0) lineEndX = ctrs[0].right;
+        else if (range.getBoundingClientRect()?.right > 0) lineEndX = range.getBoundingClientRect().right;
+
+        if (clientX > lineEndX + cw * 0.7) {
+          const tn = document.createTextNode(' '.repeat(Math.max(1, Math.floor((clientX - lineEndX) / Math.max(2, cw)))));
+          range.insertNode(tn);
+          range.setStart(tn, tn.nodeValue.length);
+          range.collapse(true);
+        }
+      }
+    }
+
+    if (!range && forceManual) {
+      const targetCol = Math.max(0, Math.floor((clientX - r.left) / Math.max(2, cw)));
+
+      if (clickedClearlyBelow && blocks.length) {
+        const pxBelow = Math.max(0, clientY - blocks[blocks.length - 1].getBoundingClientRect().bottom);
+        const extraLines = Math.min(40, Math.max(1, Math.floor(pxBelow / Math.max(12, lh)) + 1));
+        let newBlock = null;
+        for (let i = 0; i < extraLines; i++) {
+          newBlock = _createPWithSpacesOrBr(i === extraLines - 1 ? targetCol : 0);
+          textDiv.appendChild(newBlock);
+        }
+        range = document.createRange();
+        _setRangeEndOfNode(range, newBlock);
+      } else {
+        const block = blocks.find(c => clientY < c.getBoundingClientRect().top + c.getBoundingClientRect().height * 0.5) || blocks[blocks.length - 1];
+        if (block) {
+          const spacer = _createPWithSpacesOrBr(targetCol);
+          if (clientY >= (block.getBoundingClientRect().top + block.getBoundingClientRect().height * 0.5)) block.insertAdjacentElement('afterend', spacer);
+          else block.insertAdjacentElement('beforebegin', spacer);
+          range = document.createRange();
+          _setRangeEndOfNode(range, spacer);
+        } else {
+          const p = _createPWithSpacesOrBr(targetCol);
+          textDiv.appendChild(p);
+          range = document.createRange();
+          _setRangeEndOfNode(range, p);
+        }
+      }
+    }
+
+    if (!range) {
+      range = document.createRange();
+      range.selectNodeContents(textDiv);
+      range.collapse(false);
+    }
+
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    return false;
+  }
+
+  // Handle plain text mode
+  const targetLine = Math.max(0, Math.floor((clientY - r.top - pt) / lh));
+  let targetCol = Math.max(0, Math.floor((clientX - r.left) / cw));
+  const nearLeftEdge = (clientX - r.left) <= Math.max(14, cw * 2.0);
+  if (nearLeftEdge) targetCol = 0;
+
+  const rawText = (textDiv.innerText || textDiv.textContent || '').replace(/\r/g, '');
+  const lines = rawText.length ? rawText.split('\n') : [''];
+  const isExistingLine = targetLine < lines.length;
+  const colAnchor = (!forceManual && Number.isFinite(textDiv._colAnchor)) ? textDiv._colAnchor : null;
+
+  if (nearLeftEdge && isExistingLine) {
+    let idx = 0;
+    for (let i = 0; i < targetLine; i++) idx += (lines[i]?.length || 0) + 1;
+    setPlainCaret(textDiv, idx);
+    textDiv._colAnchor = 0;
+    return false;
+  }
+
+  if (!forceManual && isExistingLine && lines[targetLine].length > 0) {
+    const farRight = clientX > (r.left + (lines[targetLine].length * cw) + cw * 0.7);
+    if (!farRight) {
+      const selPlain = window.getSelection();
+      const pos = document.caretPositionFromPoint?.(clientX, clientY) || document.caretRangeFromPoint?.(clientX, clientY);
+      const node = pos?.offsetNode || pos?.startContainer;
+      
+      if (pos && node && (node === textDiv || textDiv.contains(node)) && selPlain) {
+        const range = document.createRange();
+        range.setStart(node, pos.offset ?? pos.startOffset);
+        range.collapse(true);
+        selPlain.removeAllRanges();  
+        selPlain.addRange(range);
+        
+        const caret = getCaretTextOffset(textDiv);
+        if (caret !== null) {
+          textDiv._colAnchor = Math.max(0, caret - (rawText.lastIndexOf('\n', Math.max(0, caret - 1)) + 1));
+        }
+        return false;
+      }
+    }
+  }
+
+  if (colAnchor !== null && Math.abs(targetCol - colAnchor) <= 2) targetCol = colAnchor;
+
+  while (lines.length <= targetLine) { lines.push(''); didPad = true; }
+  
+  if (lines[targetLine].length < targetCol) { 
+    lines[targetLine] += ' '.repeat(targetCol - lines[targetLine].length); 
+    didPad = true; 
+  } else if (isExistingLine) {
+    targetCol = Math.min(targetCol, lines[targetLine].length);
+  }
+
+  textDiv.textContent = lines.join('\n');
+  let caretIndex = 0;
+  for (let i = 0; i < targetLine; i++) caretIndex += lines[i].length + 1;
+  setPlainCaret(textDiv, caretIndex + targetCol);
+  textDiv._colAnchor = targetCol;
+  
+  if (didPad && typeof updateWhitespaceDebugOverlays === 'function') updateWhitespaceDebugOverlays();
+  return didPad;
+}
+
+function isPlainTextEditable(textDiv) {
+  return [...textDiv.childNodes].every(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR'));
+}
+
+function applyHangingIndentWrap(textDiv) {
+  if (!isPlainTextEditable(textDiv)) return false;
+  const caret = getCaretTextOffset(textDiv);
+  if (caret === null) return false;
+  const raw = (textDiv.textContent || '').replace(/\r/g, '');
+  const lineStart = raw.lastIndexOf('\n', Math.max(0, caret - 1)) + 1;
+  const lineEndIdx = raw.indexOf('\n', caret);
+  const line = raw.slice(lineStart, lineEndIdx === -1 ? raw.length : lineEndIdx);
+  const indent = (line.match(/^[ \t]*/) || [''])[0];
+  if (!indent.length) return false;
+
+  const cs = getComputedStyle(textDiv);
+  const measureCanvas = document.createElement('canvas').getContext('2d');
+  measureCanvas.font = cs.font || `${cs.fontStyle} ${cs.fontVariant} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`;
+  
+  const avail = Math.max(24, textDiv.clientWidth - 2);
+  if (measureCanvas.measureText(line).width <= avail) return false;
+
+  let breakAt = line.lastIndexOf(' ');
+  while (breakAt > indent.length && measureCanvas.measureText(line.slice(0, breakAt)).width > avail) breakAt = line.lastIndexOf(' ', breakAt - 1);
+  if (breakAt <= indent.length) return false;
+
+  const replaced = line.slice(0, breakAt) + '\n' + indent + line.slice(breakAt + 1);
+  textDiv.textContent = raw.slice(0, lineStart) + replaced + raw.slice(lineEndIdx === -1 ? raw.length : lineEndIdx);
+
+  setPlainCaret(textDiv, caret > (lineStart + breakAt) ? caret + indent.length : caret);
+  return true;
+}
+
+function _visibleWhitespaceText(raw) {
+  return raw.replace(/\t/g, '⇥\t').replace(/ /g, '·').replace(/\n/g, '↵\n');
+}
+
+function updateWhitespaceDebugOverlays() {
+  if (typeof QA !== 'function') return;
+  QA('.ws-debug-layer').forEach(el => el.remove());
+  if (!window._showWhitespaceDebug) return;
+
+  QA('.j-page').forEach(pgEl => {
+    const textDiv = pgEl.querySelector('.j-text');
+    if (!textDiv) return;
+    const raw = (textDiv.innerText || textDiv.textContent || '').replace(/\r/g, '');
+
+    const ov = document.createElement('pre');
+    ov.className = 'ws-debug-layer';
+    Object.assign(ov.style, {
+      top: textDiv.style.top || '64px',
+      left: textDiv.style.left || '72px',
+      right: textDiv.style.right || '32px',
+      bottom: textDiv.style.bottom || '24px',
+      paddingTop: textDiv.style.paddingTop || '0px',
+      lineHeight: textDiv.style.lineHeight || '32px',
+      fontSize: textDiv.style.fontSize || '17px',
+      fontFamily: textDiv.style.fontFamily || "'Crimson Pro', serif"
+    });
+    ov.textContent = _visibleWhitespaceText(raw);
+    pgEl.appendChild(ov);
+  });
+}

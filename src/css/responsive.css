@@ -1,0 +1,166 @@
+/* Module: Responsive Design & Media Queries */
+
+/* Touch: make all interactive elements larger for fingers */
+@media (pointer:coarse) {
+
+  .tb-mode,
+  .tb-opt,
+  .sz-btn,
+  .strip-btn {
+    min-width: 36px;
+    min-height: 36px
+  }
+
+  .obj-handle {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px
+  }
+
+  .obj-handle.tl {
+    top: -12px;
+    left: -12px
+  }
+
+  .obj-handle.tr {
+    top: -12px;
+    right: -12px
+  }
+
+  .obj-handle.bl {
+    bottom: -12px;
+    left: -12px
+  }
+
+  .obj-handle.br {
+    bottom: -12px;
+    right: -12px
+  }
+
+  .obj-handle.rot {
+    width: 32px;
+    height: 32px;
+    top: -46px;
+    font-size: 16px
+  }
+
+  .obj-delete {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    top: -34px;
+    right: -12px
+  }
+
+  .sec-hdr {
+    padding: 10px 10px 8px;
+    min-height: 44px
+  }
+
+  .sec-edit-btn {
+    opacity: 1;
+    width: 32px;
+    height: 32px;
+    font-size: 14px
+  }
+
+  .mgr-pg-item {
+    padding: 10px 12px;
+    min-height: 48px
+  }
+
+  .mgr-pg-handle {
+    font-size: 20px;
+    padding: 0 10px
+  }
+
+  .mgr-drop-slot {
+    min-height: 8px
+  }
+
+  .mgr-drop-slot.over {
+    min-height: 28px
+  }
+
+  .nb-card-edit-btn {
+    opacity: 1;
+    width: 32px;
+    height: 28px;
+    font-size: 15px
+  }
+
+  .ctx-item {
+    padding: 12px 16px;
+    font-size: 15px
+  }
+}
+
+/* VERTICAL / PORTRAIT MODE (16:10, tablet) */
+@media (max-width:1100px) {
+  .side-panel.open .side-content {
+    width: 200px
+  }
+}
+
+@media (max-width:900px) {
+
+  /* Stack: nav takes less space, pages scale down automatically */
+  .side-panel.open .side-content {
+    width: min(180px, 42vw)
+  }
+
+  .side-head,
+  .side-tree {
+    min-width: 0
+  }
+
+  .side-add-sec {
+    padding: 4px 8px;
+    font-size: 9px
+  }
+
+  .toolbar {
+    padding: 4px 6px;
+    gap: 1px;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 4px
+  }
+
+  .tb-zone,
+  .tb-grp {
+    flex-wrap: nowrap
+  }
+
+  .tb-right {
+    margin-left: auto;
+    justify-content: flex-end
+  }
+
+  .tb-mode span,
+  .tb-mode:not(.active) span {
+    display: none
+  }
+
+  /* hide labels on narrow */
+  .tb-sep {
+    display: none
+  }
+  
+  /* Hide save text in vertical/portrait mode */
+  .save-text {
+    display: none !important;
+  }
+}
+
+@media (max-width:700px) {
+
+  /* Narrow portrait phone/tablet */
+  .side-panel.open .side-content {
+    width: min(160px, 46vw)
+  }
+
+  .tb-mode span {
+    display: none
+  }
+}
