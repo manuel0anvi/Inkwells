@@ -475,6 +475,29 @@ Azure unter **Authentifizierung → Plattform „Web" → Umleitungs-URIs**.
 > zweite Anmeldeschritt (`signInWithPopup`). Fehlt sie, bleibt das
 > Anmeldefenster auf einer Microsoft-Fehlerseite stehen.
 
+### Schritt 1c — inkwells.me als erlaubte Herkunft eintragen
+
+Nur für die **Website**. Firebase lässt seinen Anmeldeablauf ausschließlich
+von eingetragenen Herkünften aus zu. Abgefragt am 02.08.2026 standen dort:
+
+```
+localhost · inkwell-53ab9.firebaseapp.com · inkwell-53ab9.web.app
+```
+
+`inkwells.me` fehlt — der Knopf „Für geteilte Dokumente anmelden" auf der
+Website endet deshalb in `auth/unauthorized-domain`. Eintragen unter:
+
+**Firebase Console → Authentication → Settings → Authorized domains →
+Domain hinzufügen → `inkwells.me`**
+
+Die App ist davon nicht betroffen: sie liefert ihre Oberfläche über
+`http://localhost` aus, und `localhost` steht bereits in der Liste.
+
+> Die bisherige Anmeldung auf der Website (Google, über
+> `signInWithProviderToken`) braucht das **nicht** — erlaubte Herkünfte
+> prüft Firebase nur beim eigenen Anmeldeablauf. Deshalb ist der fehlende
+> Eintrag bis jetzt nie aufgefallen.
+
 > **Zu `email_verified`:** Microsoft liefert die Angabe bei persönlichen
 > Konten nicht verlässlich. Die Regeln lassen deshalb auch Anmeldungen
 > durch, deren `sign_in_provider` `google.com` oder `microsoft.com` ist.
