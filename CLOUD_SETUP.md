@@ -186,14 +186,24 @@ Ein Login ohne stündliche Neuanmeldung braucht ein Refresh-Token, und Google
 gibt das nur gegen ein **Client-Secret** heraus. Die App kann das inzwischen —
 der Weg ist eingebaut, aber bewusst **standardmäßig aus**:
 
+Das Secret steht **nicht** in `cloudConfig.js`, denn diese Datei liegt im
+öffentlichen Repo. Es kommt in eine eigene Datei daneben, die `.gitignore`
+aussperrt — jeder trägt seinen Wert also selbst ein:
+
 ```js
-// src/core/cloudConfig.js
-const GOOGLE_CONFIG = {
-  CLIENT_SECRET: '',   // leer  = Sitzung ~1 Stunde (Standard)
-                       // gefüllt = dauerhafte Sitzung
+// src/core/cloudConfig.local.js   (nicht im Repo)
+window.GOOGLE_CLIENT_SECRET_LOCAL = 'GOCSPX-…';
 ```
 
-Steht dort ein Secret, wechselt die App automatisch vom Implicit-Flow zu
+Anlegen lässt sie sich am schnellsten, indem man die Vorlage
+`src/core/cloudConfig.local.example.js` kopiert und in
+`cloudConfig.local.js` umbenennt.
+
+Fehlt die Datei, bleibt `GOOGLE_CONFIG.CLIENT_SECRET` leer und alles läuft
+weiter — nur eben mit stündlicher Neuanmeldung. In der Konsole steht dann ein
+404 auf `cloudConfig.local.js`; der ist erwartet und harmlos.
+
+Steht ein Secret darin, wechselt die App automatisch vom Implicit-Flow zu
 *Authorization Code + PKCE* mit `access_type=offline` und erneuert das Token
 still im Hintergrund — genau wie bei Microsoft.
 

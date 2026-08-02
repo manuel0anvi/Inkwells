@@ -18,6 +18,14 @@ Inkwell ist eine hybride Notiz-App, die es ermöglicht, sowohl getippten Text al
   - `css/`: Styling der verschiedenen Module.
   - `lib/`: Externe Bibliotheken wie PDF.js.
 
+## Branches
+
+| Branch | Inhalt |
+| --- | --- |
+| `app` | Quellcode der Desktop-App und der Website — hier wird entwickelt |
+| `website` | nur der *Inhalt* von `website/`, daraus baut GitHub Pages inkwells.me. Wird von `npm run deploy-web` beschrieben, nicht von Hand |
+| `main` | nur die README |
+
 ## Entwicklung
 
 Node.js wird benötigt. Einmalig:
@@ -25,6 +33,16 @@ Node.js wird benötigt. Einmalig:
 ```
 npm install
 ```
+
+### Zugangsdaten eintragen
+
+Das Google-Client-Secret liegt **nicht** im Repo. Ohne diesen Schritt läuft
+alles, nur muss die Google-Anmeldung stündlich erneuert werden.
+
+Die Vorlage `src/core/cloudConfig.local.example.js` kopieren, in
+`src/core/cloudConfig.local.js` umbenennen und das Secret eintragen. Die
+Datei steht in `.gitignore` und bleibt auf dem eigenen Rechner. Wo das
+Secret herkommt, steht in `CLOUD_SETUP.md`, Abschnitt 4.
 
 ### Desktop-App starten
 
