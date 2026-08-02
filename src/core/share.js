@@ -320,7 +320,8 @@ function hasRealIdentity() {
 }
 
 /**
- * Auch bei Firebase abmelden. Wird von CloudSync.signOut() aufgerufen.
+ * Auch bei Firebase abmelden. Beim Abmelden aufgerufen – in der App von
+ * CloudSync.signOut(), auf der Website von inkwellLogout().
  *
  * Ohne das blieb die Firebase-Sitzung nach dem Abmelden bestehen. Wer sich
  * danach mit einer anderen Adresse anmeldete, bekam die geteilten Dokumente
@@ -338,11 +339,16 @@ async function signOutIdentity() {
  * Der einzige Weg, der bei Microsoft funktioniert: Firebase muss die
  * Anmeldung selbst begonnen haben (Begründung ausführlich über
  * signInWithProviderToken). Es öffnet dafür ein Fenster auf
- * inkwell-53ab9.firebaseapp.com; main.js gibt genau dieses frei.
+ * inkwell-53ab9.firebaseapp.com.
  *
- * Das setzt voraus, dass die Oberfläche von einer erlaubten Herkunft
- * kommt – deshalb liegt sie unter http://localhost und nicht mehr unter
- * file:// (siehe startUiServer in main.js).
+ * >>> Setzt eine in Firebase erlaubte Herkunft voraus <<<
+ * Firebase Console → Authentication → Settings → Authorized domains.
+ *   · App     : liefert ihre Oberfläche deshalb über http://localhost aus
+ *               statt über file:// – siehe startUiServer() in main.js.
+ *               main.js gibt zusätzlich das Anmeldefenster frei, sonst
+ *               blockt Electron window.open.
+ *   · Website : steht inkwells.me dort nicht, kommt
+ *               auth/unauthorized-domain zurück.
  *
  * Muss aus einem Klick heraus aufgerufen werden; ein Fenster ohne
  * Zutun des Nutzers wird geblockt.
@@ -353,9 +359,10 @@ async function signInMicrosoftInteractive(loginHint = '') {
   const provider = new OAuthProvider('microsoft.com');
   provider.addScope('email');
 
-  /* Wie im Rest der App nur persönliche Konten (cloudConfig.js,
-     MICROSOFT_CONFIG.TENANT). Ein Geschäfts- oder Schulkonto liefe hier
-     sonst in dieselbe unerklärte Fehlerseite wie bei der Anmeldung. */
+  /* Nur persönliche Konten, wie überall sonst in Inkwell (TENANT in
+     src/core/cloudConfig.js bzw. website/js/config.js). Ein Geschäfts-
+     oder Schulkonto liefe hier sonst in dieselbe unerklärte Fehlerseite
+     wie bei der Anmeldung. */
   const params = { tenant: 'consumers' };
   if (loginHint) params.login_hint = loginHint;
   provider.setCustomParameters(params);
