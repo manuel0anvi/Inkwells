@@ -65,6 +65,55 @@ git log --oneline --graph        # Verlauf
 git blame src/core/share.js      # wer schrieb welche Zeile
 ```
 
+### Beide gleichzeitig — niemand muss warten
+
+Das ist der Normalfall, nicht der Ausnahmefall. Wird ein Push abgelehnt
+(*„updates were rejected"*), heißt das nur: der andere war schneller. Dann
+
+```
+git pull        # Git fügt beides zusammen
+git push
+```
+
+Git nimmt dabei **nicht** eine der beiden Fassungen, sondern führt sie
+zusammen — auch innerhalb derselben Datei, solange nicht dieselben Zeilen
+betroffen sind.
+
+Nur wenn beide *dieselbe Stelle* geändert haben, meldet Git einen Konflikt und
+markiert genau diese eine Stelle:
+
+```
+<<<<<<< HEAD
+  console.log('meine Fassung');
+=======
+  console.log('seine Fassung');
+>>>>>>> abc1234
+```
+
+Der Rest der Datei ist davon nicht betroffen. Man behält, was stimmt, löscht
+die drei Markierungszeilen und schreibt fest:
+
+```
+git add -A
+git commit
+git push
+```
+
+VS Code zeigt für diese Stellen Knöpfe an: *Accept Current* / *Accept
+Incoming* / *Accept Both*.
+
+### Damit es selten dazu kommt
+
+Claude Code schreibt gern große Blöcke am Stück um — das erhöht die Gefahr,
+dass sich zwei Änderungen überschneiden. Was hilft:
+
+- **Vorher absprechen, wer welchen Bereich anfasst.** Nicht beide gleichzeitig
+  Claude auf dieselbe Datei loslassen — das ist die einzige Konstellation, die
+  wirklich weh tut.
+- **Oft festschreiben und hochladen.** Kleine Häppchen führen sich problemlos
+  zusammen, ein Tagewerk am Stück nicht.
+- **Vor dem Anfangen `git pull`.** Dann baut man auf dem aktuellen Stand auf.
+
 ## Entwicklung
 
 Node.js wird benötigt. Einmalig:
