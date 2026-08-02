@@ -9,10 +9,21 @@
    unter window.InkwellShare meldet.
 
    ── Zwei Wege in einem Dialog ───────────────────────────────────────
-   Oben der Link („Was darf, wer den Link hat?"), darunter einzelne
-   E-Mail-Adressen mit Rolle. Die Personenliste zeigt beide gemischt –
-   sonst könnte der Besitzer genau die Leute nicht entfernen, die er nie
-   eingeladen hat.
+   Oben der Link („Jeder mit dem Link" + Rolle), darunter einzelne
+   E-Mail-Adressen mit derselben Rollenauswahl. Die Personenliste zeigt
+   beide gemischt – sonst könnte der Besitzer genau die Leute nicht
+   entfernen, die er nie eingeladen hat.
+
+   ── Warum es keinen „Freigeben"-Knopf mehr gibt ────────────────────
+   Früher musste man erst eine Rolle wählen und DANN „Freigabe erstellen"
+   drücken, später „Freigabe aktualisieren". Der zweite Knopf lud dabei
+   das ganze Heft neu hoch und überschrieb, was die anderen im Raum
+   geschrieben hatten – deshalb die Rückfrage davor.
+
+   Beides ist weg. Jede Änderung wirkt sofort, und der INHALT geht nur
+   noch beim allerersten Freigeben mit hinauf. Danach hält ihn die
+   Live-Sitzung aktuell (ui/sharedDocs.js), und niemandes Arbeit wird
+   mehr durch einen Knopfdruck überschrieben.
 
    ── Was aus der Zeit davor bleibt ──────────────────────────────────
    Die alten, eingefrorenen Lesekopien (shared_notebooks) laufen weiter.
@@ -26,12 +37,13 @@
   if (!overlay) return;
 
   const closeBtn = E('share-close');
-  const createBtn = E('share-create');
   const revokeBtn = E('share-revoke');
   const copyBtn = E('share-copy');
   const renewBtn = E('share-renew');
   const linkRow = E('share-link-row');
   const linkInput = E('share-link');
+  const linkOn = E('share-link-on');
+  const linkRole = E('share-link-role');
   const statusEl = E('share-status');
   const peopleEl = E('share-people');
   const inviteMail = E('share-invite-mail');
@@ -166,17 +178,51 @@
     return t('shareNeedsAccount');
   }
 
+  /* ── Link-Zeile: Schalter + Rolle ⇄ linkMode ──────────────────────
+     In Firestore ist es EIN Wert ('off' | 'view' | 'edit'), in der
+     Oberfläche sind es zwei Bedienelemente. Hier die Übersetzung.
+     ─────────────────────────────────────────────────────────────── */
+
   function selectedLinkMode() {
-    const checked = document.querySelector('input[name="app-link-mode"]:checked');
-    return checked ? checked.value : 'off';
+    if (!linkOn?.checked) return 'off';
+    return linkRole?.value === 'edit' ? 'edit' : 'view';
   }
 
-  function setLinkModeRadio(mode) {
-    const radio = document.querySelector(`input[name="app-link-mode"][value="${mode}"]`);
-    if (radio) radio.checked = true;
+  function showLinkMode(mode) {
+    const on = mode === 'view' || mode === 'edit';
+    if (linkOn) linkOn.checked = on;
+    if (linkRole) {
+      // Beim Ausschalten die zuletzt gewählte Rolle stehen lassen: wer
+      // versehentlich abschaltet, findet beim Einschalten alles vor.
+      if (on) linkRole.value = mode;
+      linkRole.disabled = !on;
+    }
+  }
+
+  /* Solange in Firestore geschrieben wird, keine zweite Änderung
+     annehmen. Ohne diese Bremse konnten sich zwei Schreibvorgänge
+     überholen, und am Ende stand die ältere Rolle im Dokument. */
+  function setBusy(busy) {
+    for (const section of [linkSection, peopleSection]) {
+      section?.classList.toggle('busy', !!busy);
+    }
   }
 
   /* ── Dialog ───────────────────────────────────────────────────────── */
+
+  /**
+   * Ist überhaupt eine Verbindung da? Freigeben geht ausschließlich
+   * online – jeder Schritt hier schreibt nach Firestore.
+   *
+   * Ohne diese Frage lief der Dialog erst in die 15-Sekunden-Grenze von
+   * whenShareReady() und meldete dann etwas über Firebase. Wer kein Netz
+   * hatte, wartete also eine Viertelminute auf eine Auskunft, die nach
+   * dem ersten Blick feststand.
+   */
+  function isOffline() {
+    if (typeof CloudSync_ !== 'undefined' && CloudSync_ && CloudSync_.isOnline === false) return true;
+    return navigator.onLine === false;
+  }
 
   async function openShareDialog(nb) {
     if (!nb) return;
@@ -188,25 +234,33 @@
     linkRow.style.display = 'none';
     linkInput.value = '';
     revokeBtn.style.display = 'none';
-    createBtn.textContent = t('shareCreate');
+    setBusy(false);
 
     const entry = shareFor(nb.id);
-    setLinkModeRadio(entry?.linkMode || 'off');
+    showLinkMode(entry?.linkMode || 'off');
 
     // Ältere Lesekopie? Dann unten den Knopf zum Aufheben zeigen.
     legacyBox.style.display = entry?.shareId ? 'block' : 'none';
 
     overlay.style.display = 'flex';
 
+    // Ohne Netz sofort Bescheid geben, statt in eine Zeitgrenze zu laufen
+    if (isOffline()) {
+      needsAccountEl.textContent = t('shareOffline');
+      needsAccountEl.style.display = 'block';
+      linkSection.style.display = 'none';
+      peopleSection.style.display = 'none';
+      return;
+    }
+
     /* Ohne echte Anmeldung bei Firebase geht nichts davon. Vorher aber
        einen Versuch, sie nachzuholen: das ID-Token wird beim Anmelden
        eingesammelt, und wer schon vorher angemeldet war, hatte nie eines. */
     statusEl.textContent = t('shareCheckingAccount');
 
-    let api = null;
     let signedIn = false;
     try {
-      api = await whenShareReady();
+      await whenShareReady();
       signedIn = await CloudSync_.ensureFirebaseIdentity();
     } catch (err) {
       statusEl.textContent = describeError(err);
@@ -217,7 +271,6 @@
     needsAccountEl.style.display = signedIn ? 'none' : 'block';
     linkSection.style.display = signedIn ? '' : 'none';
     peopleSection.style.display = signedIn ? '' : 'none';
-    createBtn.disabled = !signedIn;
     if (!signedIn) return;
 
     if (entry?.docId) await loadHead(entry.docId);
@@ -277,8 +330,7 @@
   function renderFromHead() {
     if (!head) return;
 
-    setLinkModeRadio(head.linkMode);
-    createBtn.textContent = t('shareUpdate');
+    showLinkMode(head.linkMode);
     revokeBtn.style.display = 'inline-block';
     statusEl.textContent = t('shareActive');
 
@@ -376,73 +428,85 @@
 
   /* ── Aktionen ─────────────────────────────────────────────────────── */
 
-  async function submitShare() {
-    if (!shareNb) return;
+  /**
+   * Sorgt dafür, dass es das geteilte Dokument gibt, und gibt seinen Kopf
+   * zurück. Beim allerersten Mal geht dabei der Inhalt mit hinauf.
+   *
+   * Von hier aus laufen alle Wege: Link einschalten, Rolle ändern,
+   * jemanden einladen. Damit gibt es keinen Zustand mehr, in dem man
+   * etwas einstellt und es erst durch einen zweiten Knopfdruck gilt.
+   *
+   * @returns {Promise<boolean>} ob ein Dokument bereitsteht
+   */
+  async function ensureDocument() {
+    if (head) return true;
+    if (!shareNb) return false;
 
-    const linkMode = selectedLinkMode();
     const entry = shareFor(shareNb.id);
-
-    /* >>> Nachfragen, bevor fremde Arbeit verschwindet <<<
-       „Freigabe aktualisieren" schreibt den Inhalt vollständig neu – der
-       Stand aus diesem Heft ersetzt alles, was im Raum steht. Solange der
-       Besitzer selbst nicht an der Live-Bearbeitung teilnimmt (er öffnet
-       sein eigenes Heft aus der Datei, nicht aus dem Raum), kennt er die
-       Änderungen der anderen gar nicht. Vorher passierte das lautlos. */
-    if (head && head.memberEmails.length) {
-      const ok = await showConfirm(
-        t('shareOverwriteConfirm').replace('{n}', String(head.memberEmails.length))
-      );
-      if (!ok) return;
+    if (entry?.docId) {
+      await loadHead(entry.docId);
+      return !!head;
     }
 
-    createBtn.disabled = true;
     statusEl.textContent = t('shareWorking');
 
-    try {
-      // Der Editor-Stand muss erst ins Datenmodell, sonst fehlt in der
-      // Freigabe genau das, was gerade getippt wurde.
-      if (S.activeNbId === shareNb.id && typeof syncAll === 'function') {
-        try { syncAll(); } catch (e) { console.warn('[Share] syncAll:', e); }
-      }
-
-      const api = await whenShareReady();
-      const result = await api.shareDocument(shareNb, {
-        docId: entry?.docId,
-        linkMode
-      });
-
-      await remember(shareNb.id, {
-        docId: result.docId,
-        linkId: result.linkId,
-        url: result.url,
-        linkMode: result.linkMode
-      });
-
-      await loadHead(result.docId);
-      statusEl.textContent = entry?.docId ? t('shareUpdated') : t('shareDone');
-      toast(entry?.docId ? t('shareUpdated') : t('shareDone'));
-    } catch (err) {
-      console.error('[Share] Freigeben fehlgeschlagen:', err);
-      statusEl.textContent = describeError(err);
-    } finally {
-      createBtn.disabled = false;
+    // Der Editor-Stand muss erst ins Datenmodell, sonst fehlt in der
+    // Freigabe genau das, was gerade getippt wurde.
+    if (S.activeNbId === shareNb.id && typeof syncAll === 'function') {
+      try { syncAll(); } catch (e) { console.warn('[Share] syncAll:', e); }
     }
+
+    const api = await whenShareReady();
+    const result = await api.shareDocument(shareNb, { linkMode: 'off' });
+
+    await remember(shareNb.id, {
+      docId: result.docId,
+      linkId: result.linkId,
+      url: result.url,
+      linkMode: result.linkMode
+    });
+
+    await loadHead(result.docId);
+
+    /* Das Heft ist gerade offen? Dann jetzt in die Live-Sitzung wechseln.
+       Ohne das hielte erst das nächste Öffnen den Raum aktuell – wer
+       unmittelbar nach dem Freigeben weiterschrieb, schriebe an den
+       Eingeladenen vorbei. */
+    if (S.activeNbId === shareNb.id && typeof window.onNotebookOpened === 'function') {
+      window.onNotebookOpened(shareNb);
+    }
+
+    return !!head;
   }
 
-  /** Nur das Linkrecht umstellen, ohne den Inhalt neu hochzuladen. */
+  /** Link ein-/ausschalten oder sein Recht umstellen – sofort wirksam. */
   async function applyLinkMode() {
-    if (!head) return;                       // noch gar nicht freigegeben
+    if (!shareNb) return;
+
+    // Die Rollenauswahl gehört zum Schalter – sofort mitziehen, nicht
+    // erst, wenn Firestore geantwortet hat.
+    if (linkRole) linkRole.disabled = !linkOn?.checked;
+
     const wanted = selectedLinkMode();
-    if (wanted === head.linkMode) return;
+    setBusy(true);
 
     try {
+      if (!await ensureDocument()) return;
+      if (wanted === head.linkMode) { statusEl.textContent = t('shareActive'); return; }
+
       const api = await whenShareReady();
       await api.setLinkMode(head.docId, wanted);
       await remember(shareNb.id, { linkMode: wanted });
       await loadHead(head.docId);
+
+      statusEl.textContent = wanted === 'off' ? t('shareLinkOffDone') : t('shareSaved');
     } catch (err) {
       console.error('[Share] Linkrecht ändern fehlgeschlagen:', err);
       statusEl.textContent = describeError(err);
+      // Nicht durchgekommen: die Anzeige darf nichts anderes behaupten
+      showLinkMode(head ? head.linkMode : 'off');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -464,14 +528,19 @@
   }
 
   async function addPerson() {
-    if (!head) { statusEl.textContent = t('shareCreateFirst'); return; }
-
     const email = (inviteMail.value || '').trim();
+    if (!email) return;
     const role = inviteRole.value === 'edit' ? 'edit' : 'view';
 
-    inviteAdd.disabled = true;
+    setBusy(true);
     try {
+      // Die Adresse zuerst prüfen: sonst entstünde für einen Tippfehler
+      // ein leeres geteiltes Dokument, das niemand je zu sehen bekäme.
       const api = await whenShareReady();
+      if (!api.looksLikeEmail(api.normalizeEmail(email))) throw new Error('BAD_EMAIL');
+
+      if (!await ensureDocument()) return;
+
       await api.setMember(head.docId, email, role);
       inviteMail.value = '';
       await loadHead(head.docId);
@@ -479,18 +548,23 @@
     } catch (err) {
       statusEl.textContent = describeError(err);
     } finally {
-      inviteAdd.disabled = false;
+      setBusy(false);
     }
   }
 
   async function changeRole(email, role) {
     if (!head) return;
+    setBusy(true);
     try {
       const api = await whenShareReady();
       await api.setMember(head.docId, email, role);
       await loadHead(head.docId);
+      statusEl.textContent = t('shareSaved');
     } catch (err) {
       statusEl.textContent = describeError(err);
+      renderPeople();     // die alte Rolle wieder anzeigen
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -533,9 +607,8 @@
       linkRow.style.display = 'none';
       linkInput.value = '';
       revokeBtn.style.display = 'none';
-      createBtn.textContent = t('shareCreate');
       peopleEl.innerHTML = '';
-      setLinkModeRadio('off');
+      showLinkMode('off');
       statusEl.textContent = t('shareRevoked');
       toast(t('shareRevoked'));
     } catch (err) {
@@ -618,7 +691,6 @@
 
   closeBtn?.addEventListener('click', closeShareDialog);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShareDialog(); });
-  createBtn?.addEventListener('click', submitShare);
   revokeBtn?.addEventListener('click', revokeShare);
   copyBtn?.addEventListener('click', copyLink);
   renewBtn?.addEventListener('click', renewLink);
@@ -629,9 +701,10 @@
     if (e.key === 'Enter') { e.preventDefault(); addPerson(); }
   });
 
-  document.querySelectorAll('input[name="app-link-mode"]').forEach(radio => {
-    radio.addEventListener('change', applyLinkMode);
-  });
+  // Beides führt zum selben Schreibvorgang – die Auswahl ist gesperrt,
+  // solange der Schalter aus ist, kann also nicht allein auslösen.
+  linkOn?.addEventListener('change', applyLinkMode);
+  linkRole?.addEventListener('change', applyLinkMode);
 
   // Aus dem geöffneten Heft heraus freigeben. Bisher führte der einzige Weg
   // über das Kontextmenü auf der Startseite – man musste das Heft also erst

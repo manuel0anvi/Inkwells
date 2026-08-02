@@ -602,6 +602,20 @@
       <button class="modal-close-x" id="account-close">✕</button>
     </div>
     
+    <!-- Läuft gerade eine Anmeldung? ────────────────────────────────
+         Zwischen dem Klick und dem fertigen Konto liegen mehrere Sekunden:
+         der Browser geht auf, man meldet sich an, kommt zurück, und erst
+         dann holt die App Token und Profil. In dieser Zeit stand hier
+         weiter „Mit Google anmelden" – es sah aus, als sei nichts
+         passiert, und mancher klickte ein zweites Mal. -->
+    <div id="auth-working" style="display:none; flex-direction:column; align-items:center; gap:14px; padding:32px 16px;">
+      <div class="auth-spinner"></div>
+      <div id="auth-working-text" style="font-size:13px; color:var(--text-muted); text-align:center; line-height:1.6; white-space:pre-line;" data-i18n="authWorking">
+        Anmeldung läuft…
+      </div>
+      <button id="auth-working-cancel" class="settings-btn" style="padding:6px 14px; font-size:12px;" data-i18n="cancel">Abbrechen</button>
+    </div>
+
     <!-- Unauthenticated State -->
     <div id="auth-logged-out" style="display:flex; flex-direction:column; gap: 12px; padding: 16px;">
 
@@ -659,12 +673,11 @@
         </div>
       </div>
 
+      <!-- Kein Schalter mehr: wer angemeldet ist, speichert online. Ein
+           Konto, das nichts sichert, hatte keinen Zweck – und wer nicht
+           sichern will, meldet sich ab. -->
       <div class="settings-row" style="background:var(--sidebar-bg); padding:12px; border-radius:6px; margin: 4px 0;">
-        <label class="toggle-switch">
-          <input type="checkbox" id="auth-cloud-enabled">
-          <span class="toggle-slider"></span>
-        </label>
-        <div style="display:flex; flex-direction:column; gap:2px; margin-left:12px;">
+        <div style="display:flex; flex-direction:column; gap:2px;">
            <span class="toggle-label" style="font-weight:600;font-size:14px;" data-i18n="cloudStorage">Cloud-Speicher</span>
            <span id="auth-cloud-status" style="font-size:11px;color:var(--text-muted);" data-i18n="statusUnknown">Status unbekannt</span>
         </div>
@@ -714,33 +727,21 @@
         Zum Teilen musst du in Inkwell mit deinem Google- oder Microsoft-Konto angemeldet sein.
       </p>
 
+      <!-- ── Über einen Link ──────────────────────────────────────────
+           Ein Schalter und daneben dieselbe Rollenauswahl wie bei den
+           eingeladenen Personen. Vorher standen hier drei Auswahlpunkte
+           („Kein Link" war einer davon) – dieselbe Frage in einer anderen
+           Form, und man musste sie zweimal lernen. -->
       <div class="share-section" id="share-link-section">
-        <div class="share-section-label" data-i18n="shareLinkLabel">Was darf, wer den Link hat?</div>
-
-        <div class="opt-radio-list">
-          <label class="opt-radio">
-            <input type="radio" name="app-link-mode" value="off" checked>
-            <span class="opt-radio-body">
-              <span class="opt-radio-title" data-i18n="shareLinkOff">Kein Link</span>
-              <span class="opt-radio-hint" data-i18n="shareLinkOffHint">Nur die Leute, die du unten einträgst, kommen an das Heft.</span>
-            </span>
+        <div class="share-link-head">
+          <label class="share-link-toggle">
+            <input type="checkbox" id="share-link-on">
+            <span data-i18n="shareLinkAnyone">Jeder mit dem Link</span>
           </label>
-
-          <label class="opt-radio">
-            <input type="radio" name="app-link-mode" value="view">
-            <span class="opt-radio-body">
-              <span class="opt-radio-title" data-i18n="shareLinkView">Nur ansehen</span>
-              <span class="opt-radio-hint" data-i18n="shareLinkViewHint">Wer den Link hat, kann das Heft lesen – auch ohne Konto.</span>
-            </span>
-          </label>
-
-          <label class="opt-radio">
-            <input type="radio" name="app-link-mode" value="edit">
-            <span class="opt-radio-body">
-              <span class="opt-radio-title" data-i18n="shareLinkEdit">Ansehen und bearbeiten</span>
-              <span class="opt-radio-hint" data-i18n="shareLinkEditHint">Angemeldete Empfänger können in der Inkwell-App mitarbeiten.</span>
-            </span>
-          </label>
+          <select id="share-link-role" class="share-role-select" disabled>
+            <option value="view" data-i18n="roleView">Nur lesen</option>
+            <option value="edit" data-i18n="roleEdit">Bearbeiten</option>
+          </select>
         </div>
 
         <div id="share-link-row" style="display:none; gap:8px; margin-top:10px;">
@@ -757,7 +758,7 @@
           <input id="share-invite-mail" type="email" autocomplete="off" spellcheck="false"
                  data-i18n-ph="shareInvitePlaceholder" placeholder="name@example.com"
                  style="flex:1 1 180px; min-width:0; padding:9px 12px; background:var(--sc); border:1px solid var(--sb); border-radius:6px; color:var(--hi); font-size:12px;">
-          <select id="share-invite-role" style="flex:0 0 auto; padding:9px 10px; background:var(--sc); border:1px solid var(--sb); border-radius:6px; color:var(--hi); font-size:12px;">
+          <select id="share-invite-role" class="share-role-select" style="flex:0 0 auto;">
             <option value="view" data-i18n="roleView">Nur lesen</option>
             <option value="edit" data-i18n="roleEdit">Bearbeiten</option>
           </select>
@@ -782,9 +783,12 @@
 
       <div id="share-status" style="font-size:12px; color:var(--gold); min-height:18px;"></div>
 
+      <!-- „Freigabe erstellen" und „Freigabe aktualisieren" gibt es nicht
+           mehr: der Schalter oben und das Hinzufügen einer Adresse wirken
+           unmittelbar. Nur das Aufheben bleibt ein eigener Knopf – es ist
+           der einzige Schritt hier, der etwas wegnimmt. -->
       <div style="display:flex; justify-content:flex-end; gap:10px;">
         <button class="settings-btn" id="share-revoke" style="display:none; color:#d9534f; border-color:rgba(217,83,79,0.3);" data-i18n="shareRevoke">Freigabe aufheben</button>
-        <button class="settings-btn" id="share-create" data-i18n="shareCreate">Freigabe erstellen</button>
       </div>
     </div>
   </div>
