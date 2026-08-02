@@ -157,7 +157,10 @@ const PRIVACY = {
         p: [
           'Beiträge und Antworten im Forum werden in einer Datenbank bei Google Firebase (Cloud Firestore) gespeichert. Sie sind für alle Besucherinnen und Besucher öffentlich lesbar – auch ohne Anmeldung.',
           'Gespeichert werden der von dir angegebene Name beziehungsweise dein Pseudonym, Titel und Text des Beitrags sowie der Zeitpunkt. Du kannst auch anonym schreiben; dann wird kein Name gespeichert. Bist du angemeldet, wird dein Google- oder Microsoft-Anzeigename vorgeschlagen – du kannst ihn überschreiben.',
-          'Bitte schreibe keine persönlichen oder vertraulichen Angaben in öffentliche Beiträge. Soll ein Beitrag gelöscht werden, melde dich über das GitHub-Repository.'
+          'Bitte schreibe keine persönlichen oder vertraulichen Angaben in öffentliche Beiträge. Soll ein Beitrag gelöscht werden, melde dich über den Community-Bereich.'
+        ],
+        links: [
+          { label: 'Community', href: '../community/' }
         ]
       },
       {
@@ -170,7 +173,7 @@ const PRIVACY = {
           '<strong>Auskunft und Übertragbarkeit:</strong> Deine Notizbücher liegen bereits als lesbare Dateien bei dir und in deinem Cloud-Ordner „Inkwell“ (Drive / OneDrive) – du kannst sie jederzeit kopieren oder als PDF beziehungsweise Word-Dokument ausgeben.',
           '<strong>Löschung:</strong> Lokale Dateien löschen, den Ordner „Inkwell“ in Google Drive oder OneDrive löschen, bestehende Freigaben aufheben, in der App abmelden.',
           '<strong>Widerruf der Einwilligung:</strong> Cloud-Sicherung ausschalten und Inkwell in deinen Google- oder Microsoft-Kontoeinstellungen den Zugriff entziehen.',
-          '<strong>Forumsbeiträge:</strong> Löschung über das GitHub-Repository anfragen.'
+          '<strong>Forumsbeiträge:</strong> Löschung über den Community-Bereich anfragen.'
         ]
       },
       {
@@ -334,7 +337,10 @@ const PRIVACY = {
         p: [
           'Posts and replies in the forum are stored in a Google Firebase (Cloud Firestore) database. They are publicly readable by every visitor, including people who are not signed in.',
           'Stored are the name or pseudonym you enter, the title and body of the post, and the timestamp. You can also post anonymously, in which case no name is stored. If you are signed in, your Google or Microsoft display name is suggested — you can overwrite it.',
-          'Please do not put personal or confidential information into public posts. To have a post removed, get in touch through the GitHub repository.'
+          'Please do not put personal or confidential information into public posts. To have a post removed, get in touch through the Community section.'
+        ],
+        links: [
+          { label: 'Community', href: '../community/' }
         ]
       },
       {
@@ -347,7 +353,7 @@ const PRIVACY = {
           '<strong>Access and portability:</strong> your notebooks already exist as readable files on your device and in your cloud "Inkwell" folder (Drive / OneDrive) — copy them whenever you like, or export them as PDF or Word.',
           '<strong>Erasure:</strong> delete the local files, delete the "Inkwell" folder in Drive or OneDrive, revoke any shares, sign out in the app.',
           '<strong>Withdrawing consent:</strong> turn off cloud backup and revoke Inkwell\'s access in your Google or Microsoft account settings.',
-          '<strong>Forum posts:</strong> request removal through the GitHub repository.'
+          '<strong>Forum posts:</strong> request removal through the Community section.'
         ]
       },
       {
@@ -511,7 +517,10 @@ const PRIVACY = {
         p: [
           'I messaggi e le risposte del forum vengono salvati in un database Google Firebase (Cloud Firestore). Sono leggibili pubblicamente da chiunque, anche senza accesso.',
           'Vengono salvati il nome o lo pseudonimo che indichi, il titolo e il testo del messaggio e l\'orario. Puoi anche scrivere in forma anonima: in quel caso non viene salvato alcun nome. Se hai effettuato l\'accesso, viene proposto il tuo nome Google o Microsoft — puoi sostituirlo.',
-          'Non inserire informazioni personali o riservate nei messaggi pubblici. Per far rimuovere un messaggio, scrivi tramite il repository GitHub.'
+          'Non inserire informazioni personali o riservate nei messaggi pubblici. Per far rimuovere un messaggio, scrivi tramite la sezione Community.'
+        ],
+        links: [
+          { label: 'Community', href: '../community/' }
         ]
       },
       {
@@ -524,7 +533,7 @@ const PRIVACY = {
           '<strong>Accesso e portabilità:</strong> i tuoi quaderni esistono già come file leggibili sul tuo dispositivo e nella cartella cloud "Inkwell" (Drive / OneDrive) — puoi copiarli quando vuoi oppure esportarli in PDF o Word.',
           '<strong>Cancellazione:</strong> elimina i file locali, elimina la cartella "Inkwell" in Drive o OneDrive, revoca le condivisioni attive, esci dall\'app.',
           '<strong>Revoca del consenso:</strong> disattiva il backup cloud e revoca l\'accesso di Inkwell nelle impostazioni del tuo account Google o Microsoft.',
-          '<strong>Messaggi del forum:</strong> richiedi la rimozione tramite il repository GitHub.'
+          '<strong>Messaggi del forum:</strong> richiedi la rimozione tramite la sezione Community.'
         ]
       },
       {
