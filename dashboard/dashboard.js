@@ -1103,14 +1103,22 @@ function switchDashTab(which) {
    sich nur über Firebases eigenen Ablauf herstellen, und der braucht einen
    Klick – ein Fenster ohne Zutun blockt der Browser. Deshalb hier ein
    eigener Knopf statt eines stillen Nachholers. */
-function renderMicrosoftLinkButton(grid, hint) {
-  if (!grid) return;
+function renderMicrosoftLinkButton(hint) {
+  if (!hint) return;
   if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'microsoft') return;
   if (!isInkwellLoggedIn()) return;
 
   const btn = document.createElement('button');
-  btn.className = 'btn-p';
-  btn.style.cssText = 'margin-top:14px;';
+  btn.id = 'shared-ms-link';
+  /* Gleicher Zuschnitt wie „Link erzeugen" im Freigabe-Fenster.
+
+     Der Knopf steht bewusst NEBEN dem Raster, nicht darin: als Kind von
+     .nb-grid wurde er auf Kartenbreite gezogen, und die Beschriftung brach
+     dreizeilig um. Und er kommt NACH dem Hinweis – erst der Satz, der
+     erklärt, warum es ihn gibt, dann der Knopf. */
+  btn.className = 'btn-m';
+  btn.style.cssText = 'padding:8px 18px; font-size:12px; margin:0 0 24px;'
+    + 'background:var(--gold-dim); border-color:var(--gold-light); color:var(--gold-light);';
   btn.textContent = t('shared_link_microsoft') || 'Für geteilte Dokumente anmelden';
 
   btn.addEventListener('click', async () => {
@@ -1137,7 +1145,7 @@ function renderMicrosoftLinkButton(grid, hint) {
     }
   });
 
-  grid.appendChild(btn);
+  hint.insertAdjacentElement('afterend', btn);
 }
 
 function renderSharedDocs() {
@@ -1145,11 +1153,13 @@ function renderSharedDocs() {
   const hint = document.getElementById('shared-hint');
   if (!grid) return;
   grid.innerHTML = '';
+  // Liegt außerhalb des Rasters, wird von grid.innerHTML also nicht geleert
+  document.getElementById('shared-ms-link')?.remove();
 
   const api = window.InkwellShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
-    renderMicrosoftLinkButton(grid, hint);
+    renderMicrosoftLinkButton(hint);
     return;
   }
 
