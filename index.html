@@ -174,8 +174,10 @@
       <div style="margin-top:16px;">
         <label for="admin-password" id="admin-modal-pw-label"
                style="display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-light); margin-bottom:6px;">Passwort</label>
-        <input type="password" id="admin-password" required autocomplete="current-password"
-               style="width:100%; background:var(--navy-card); border:0.5px solid var(--navy-border); color:var(--cream); font-family:'Jost',sans-serif; font-size:14px; padding:10px 12px; border-radius:4px;">
+        <span class="pw-field">
+          <input type="password" id="admin-password" required autocomplete="current-password"
+                 style="background:var(--navy-card); border:0.5px solid var(--navy-border); color:var(--cream); font-family:'Jost',sans-serif; font-size:14px; padding:10px 12px; border-radius:4px;">
+        </span>
       </div>
       <p id="admin-modal-error" style="display:none; font-size:12px; color:#d9534f; margin:10px 0 0; line-height:1.5;"></p>
       <div class="modal-actions" style="margin-top:18px;">
@@ -509,8 +511,16 @@ function applyAdminModalLabels() {
 
 function openAdminModal() {
   applyAdminModalLabels();
+  setupPasswordEyes(adminModal);
   adminError.style.display = 'none';
-  document.getElementById('admin-password').value = '';
+
+  // Beim erneuten Öffnen wieder verdeckt starten, auch wenn zuletzt das
+  // Auge aktiv war – sonst steht das Passwort beim nächsten Mal offen da.
+  const passwordInput = document.getElementById('admin-password');
+  passwordInput.value = '';
+  passwordInput.type = 'password';
+  const eye = adminModal.querySelector('.pw-eye');
+  if (eye) eye.classList.remove('revealed');
 
   loginModal.classList.remove('open');
   loginModal.setAttribute('aria-hidden', 'true');

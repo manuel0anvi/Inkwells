@@ -554,3 +554,31 @@ footer a:hover{color:var(--gold-light)}
 
   .fl{gap:14px}
 }
+
+/* ── Passwortfeld mit Auge ───────────────────────────────────────────
+   Genutzt im Anmeldefenster des Adminbereichs (index.html) und beim
+   Passwortwechsel (admin/index.html).
+
+   Der Knopf liegt IM Feld, deshalb bekommt das Feld rechts so viel
+   Innenabstand, wie der Knopf breit ist – sonst verschwinden die letzten
+   Zeichen darunter. Das Auge ist bewusst kein <input type="checkbox">:
+   es schaltet nur die Sichtbarkeit um und gehört nicht ins Formular. */
+.pw-field{position:relative;display:block}
+.pw-field input{width:100%;padding-right:44px !important}
+.pw-eye{
+  position:absolute;top:50%;right:6px;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;
+  width:32px;height:32px;padding:0;
+  background:transparent;border:0;cursor:pointer;
+  color:var(--text-muted);transition:color .2s
+}
+.pw-eye:hover{color:var(--gold-light)}
+.pw-eye svg{width:17px;height:17px;display:block}
+/* Zwei Symbole übereinander: sichtbar ist immer nur eines. */
+.pw-eye .eye-off{display:none}
+.pw-eye.revealed .eye-on{display:none}
+.pw-eye.revealed .eye-off{display:block}
+
+/* Edge/IE blenden ein eigenes Auge ein – sonst stünden dort zwei. */
+.pw-field input::-ms-reveal,
+.pw-field input::-ms-clear{display:none}

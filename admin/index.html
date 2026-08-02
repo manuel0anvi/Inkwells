@@ -14,6 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Cormorant+Infant:ital,wght@0,300;1,300&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../css/style.css">
+<!-- Beiträge und Antworten sehen hier genauso aus wie im Forum. -->
+<link rel="stylesheet" href="../css/forum.css">
 
 <style>
 /* Die Seite bleibt verborgen, bis feststeht, dass jemand angemeldet ist.
@@ -29,26 +31,14 @@ body[data-admin="no"] .admin-page { display: none; }
 }
 body[data-admin="yes"] .admin-gate { display: none; }
 
-/* Logo oben rechts – der Weg aus dem Adminbereich heraus. */
-.admin-nav { justify-content: space-between; }
-.admin-nav-label {
-  font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 22px;
-  color: var(--gold-light);
-}
-.admin-exit {
-  display: flex; align-items: center; gap: 10px; background: transparent;
-  border: 0; cursor: pointer; padding: 4px; color: var(--cream);
-  font-family: 'Jost', sans-serif; font-size: 15px; letter-spacing: .06em;
-}
-.admin-exit img { width: 28px; height: 28px; }
-.admin-exit:hover { color: var(--gold-light); }
-
-.admin-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 32px; }
+/* Die Reiter sitzen in der Kopfzeile, links daneben steht das Logo wie
+   auf allen anderen Seiten. */
+.admin-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .admin-tab {
   background: transparent; border: 0.5px solid var(--navy-border); color: var(--text-muted);
   font-family: 'Jost', sans-serif; font-size: 11px; letter-spacing: .12em;
-  text-transform: uppercase; padding: 10px 18px; cursor: pointer;
-  transition: border-color .2s, color .2s;
+  text-transform: uppercase; padding: 8px 14px; cursor: pointer; border-radius: 4px;
+  transition: border-color .2s, color .2s, background .2s;
 }
 .admin-tab:hover { border-color: var(--gold); color: var(--gold-light); }
 .admin-tab.active { border-color: var(--gold); color: var(--gold-light); background: var(--gold-dim); }
@@ -62,7 +52,7 @@ body[data-admin="yes"] .admin-gate { display: none; }
 }
 
 .admin-field { margin-bottom: 18px; }
-.admin-field label {
+.admin-field > label {
   display: block; font-family: 'Jost', sans-serif; font-size: 11px;
   letter-spacing: .1em; text-transform: uppercase; color: var(--gold-light);
   margin-bottom: 6px;
@@ -77,36 +67,6 @@ body[data-admin="yes"] .admin-gate { display: none; }
   outline: none; border-color: var(--gold);
 }
 
-.admin-card {
-  border: 0.5px solid var(--navy-border); background: var(--navy-card);
-  border-radius: 6px; padding: 18px 20px; margin-bottom: 16px;
-}
-.admin-card-head {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  gap: 14px; margin-bottom: 8px; flex-wrap: wrap;
-}
-.admin-card-meta { font-size: 12px; color: var(--text-muted); }
-.admin-card h3 {
-  font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 400;
-  font-size: 22px; color: var(--cream); margin: 0 0 6px;
-}
-.admin-card-body { font-size: 14px; color: var(--text-body); white-space: pre-wrap; margin-bottom: 12px; }
-
-.admin-del {
-  background: transparent; border: 0.5px solid rgba(217,83,79,0.4); color: #d9534f;
-  font-family: 'Jost', sans-serif; font-size: 10px; letter-spacing: .1em;
-  text-transform: uppercase; padding: 6px 10px; cursor: pointer; white-space: nowrap;
-  transition: background .2s, border-color .2s;
-}
-.admin-del:hover { background: rgba(217,83,79,0.12); border-color: #d9534f; }
-
-.admin-reply {
-  border-left: 2px solid var(--navy-border); padding: 8px 0 8px 14px; margin-bottom: 10px;
-  display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
-}
-.admin-reply-meta { font-size: 11px; color: var(--gold-light); margin-bottom: 4px; }
-.admin-reply-text { font-size: 13px; color: var(--text-body); white-space: pre-wrap; }
-
 .admin-section-block {
   border: 0.5px solid var(--navy-border); border-radius: 6px;
   padding: 16px 18px; margin-bottom: 14px; background: rgba(21,23,36,0.5);
@@ -119,58 +79,133 @@ body[data-admin="yes"] .admin-gate { display: none; }
 .admin-badge {
   display: inline-block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
   border: 0.5px solid var(--navy-border); color: var(--text-muted);
-  padding: 4px 8px; border-radius: 3px; margin-left: 10px;
+  padding: 4px 8px; border-radius: 3px; margin-top: 8px;
 }
 .admin-badge.on { border-color: var(--gold); color: var(--gold-light); }
 
 .admin-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
 
-@media (max-width: 720px) {
-  nav.admin-nav { padding: 14px 20px; }
-  .admin-nav-label { font-size: 18px; }
+/* Hinweiszeile über dem Antwortfeld: hier gibt es keine Namenswahl. */
+.admin-as-note {
+  font-size: 11px; letter-spacing: .06em; color: var(--gold-light);
+  margin: 0 0 8px;
+}
+
+@media (max-width: 900px) {
+  /* Auf schmalen Bildschirmen bricht die Kopfzeile um, statt die Reiter
+     zusammenzuquetschen. */
+  nav { flex-wrap: wrap; gap: 12px; padding: 14px 20px; }
+  .admin-tab { padding: 7px 11px; font-size: 10px; letter-spacing: .08em; }
 }
 </style>
 </head>
 <body data-admin="pending">
 
-<nav class="admin-nav">
-  <span class="admin-nav-label" id="admin-nav-label">Verwaltung</span>
-  <!-- Zum Verlassen: Logo anklicken. Fragt vorher nach. -->
-  <button type="button" class="admin-exit" id="admin-exit-btn" title="Adminbereich verlassen">
-    <span>Inkwell</span>
+<nav>
+  <!-- Logo links wie überall. Der Klick führt aus dem Adminbereich
+       hinaus – mit Rückfrage, damit das nicht versehentlich passiert. -->
+  <a href="#" class="nav-logo" id="admin-exit-btn" title="Adminbereich verlassen">
     <img src="../icon.png" alt="Inkwell Logo">
-  </button>
+    <span>Inkwell</span>
+  </a>
+  <div class="nav-right">
+    <div class="admin-tabs">
+      <button type="button" class="admin-tab active" data-panel="moderation" data-i18n="admin_tab_moderation">Community</button>
+      <button type="button" class="admin-tab" data-panel="privacy" data-i18n="admin_tab_privacy">Datenschutz</button>
+      <button type="button" class="admin-tab" data-panel="password" data-i18n="admin_tab_password">Passwort</button>
+    </div>
+    <div class="lang-sw">
+      <button class="lb active" onclick="setLang('de')">DE</button>
+      <button class="lb" onclick="setLang('en')">EN</button>
+      <button class="lb" onclick="setLang('it')">IT</button>
+    </div>
+    <div class="lang-sw-mobile-custom" style="display: none; position: relative;">
+      <button id="lang-btn-mobile" onclick="toggleMobileLangMenu(event)" style="background: transparent; border: 0.5px solid var(--gold); color: var(--gold-light); font-family: 'Jost', sans-serif; font-size: 11px; padding: 6px 12px; text-transform: uppercase; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; height: 36px; letter-spacing: 0.14em;">
+        <span style="font-size: 11px; font-weight: 500; text-transform: uppercase; display: inline !important;">DE</span>
+      </button>
+      <div id="lang-dropdown-mobile" style="display: none; position: absolute; top: 42px; right: 0; background: var(--navy-card); border: 0.5px solid var(--navy-border); box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-radius: 4px; padding: 4px; z-index: 1000; min-width: 60px;">
+        <button class="lb" onclick="setLang('de'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">DE</button>
+        <button class="lb" onclick="setLang('en'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">EN</button>
+        <button class="lb" onclick="setLang('it'); toggleMobileLangMenu()" style="display: block; width: 100%; text-align: center; padding: 8px 12px;">IT</button>
+      </div>
+    </div>
+  </div>
 </nav>
 
-<div class="admin-gate" id="admin-gate">Prüfe Anmeldung…</div>
+<div class="admin-gate" id="admin-gate">…</div>
 
 <div class="admin-page">
   <div class="page-container">
     <div class="page-header">
-      <h1 class="page-title" id="admin-title">Verwaltung</h1>
-      <p class="page-subtitle" id="admin-subtitle">Angemeldet als Inkwell Team.</p>
+      <h1 class="page-title" data-i18n="admin_page_title">Verwaltung</h1>
+      <p class="page-subtitle" data-i18n="admin_page_sub">Angemeldet als Inkwell Team.</p>
     </div>
 
-    <div class="admin-tabs">
-      <button type="button" class="admin-tab active" data-panel="moderation" id="tab-moderation">Community</button>
-      <button type="button" class="admin-tab" data-panel="privacy" id="tab-privacy">Datenschutz</button>
-      <button type="button" class="admin-tab" data-panel="password" id="tab-password">Passwort</button>
-    </div>
-
-    <!-- ── Community ────────────────────────────────────────────── -->
+    <!-- ── Community ────────────────────────────────────────────────
+         Gleiche Darstellung wie community/index.html (css/forum.css),
+         zusätzlich mit Löschknöpfen. -->
     <section class="admin-panel active" id="panel-moderation">
-      <div class="admin-actions" style="margin-top:0; margin-bottom:20px;">
-        <button type="button" class="btn-m" id="mod-refresh">Neu laden</button>
+
+      <button type="button" class="forum-new-btn" id="admin-new-post-btn">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span data-i18n="admin_post_new">Neuer Beitrag</span>
+      </button>
+
+      <div id="admin-post-form-card" class="forum-form-card">
+        <p class="admin-as-note" data-i18n="admin_post_as">Wird als „Inkwell Team“ veröffentlicht.</p>
+        <form id="admin-new-post-form">
+          <div class="forum-input-group">
+            <div class="forum-input-header">
+              <label for="admin-post-title" data-i18n="community_post_title">Titel</label>
+              <span class="forum-char-counter" id="admin-post-title-counter"></span>
+            </div>
+            <input type="text" id="admin-post-title" maxlength="120" required>
+          </div>
+
+          <div class="forum-input-group">
+            <label for="admin-post-type" data-i18n="community_post_type">Art des Beitrags</label>
+            <select id="admin-post-type">
+              <option value="question" data-i18n="community_type_question">Frage / Diskussion</option>
+              <option value="bug" data-i18n="community_type_bug">Fehler melden (Bug)</option>
+            </select>
+          </div>
+
+          <div class="forum-input-group">
+            <div class="forum-input-header">
+              <label for="admin-post-content" data-i18n="community_post_content">Nachricht</label>
+              <span class="forum-char-counter" id="admin-post-content-counter"></span>
+            </div>
+            <textarea id="admin-post-content" rows="5" maxlength="2000" required></textarea>
+          </div>
+
+          <div style="display:flex; gap:12px; justify-content:flex-end;">
+            <button type="button" class="btn-m" id="admin-post-cancel" data-i18n="downgrade_cancel">Abbrechen</button>
+            <button type="submit" class="btn-m warn" id="admin-post-submit" data-i18n="admin_post_submit">Beitrag veröffentlichen</button>
+          </div>
+        </form>
       </div>
-      <div id="mod-list"></div>
+
+      <div class="forum-filter-bar">
+        <button id="admin-filter-all" class="forum-filter-btn active" data-i18n="community_filter_all">Alle Beiträge</button>
+        <button id="admin-filter-question" class="forum-filter-btn" data-i18n="community_filter_questions">Fragen &amp; Diskussionen</button>
+        <button id="admin-filter-bug" class="forum-filter-btn" data-i18n="community_filter_bugs">Fehlerberichte</button>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <button type="button" class="btn-m" id="admin-refresh" data-i18n="admin_mod_refresh">Neu laden</button>
+      </div>
+
+      <div id="admin-feed-list"></div>
     </section>
 
-    <!-- ── Datenschutz ──────────────────────────────────────────── -->
+    <!-- ── Datenschutz ──────────────────────────────────────────────── -->
     <section class="admin-panel" id="panel-privacy">
-      <p class="admin-hint" id="privacy-hint"></p>
+      <p class="admin-hint" data-i18n="admin_privacy_hint"></p>
 
       <div class="admin-field">
-        <label for="privacy-lang-select" id="lbl-privacy-lang">Sprache</label>
+        <label for="privacy-lang-select" data-i18n="admin_privacy_lang">Sprache</label>
         <select id="privacy-lang-select">
           <option value="de">Deutsch</option>
           <option value="en">English</option>
@@ -180,54 +215,54 @@ body[data-admin="yes"] .admin-gate { display: none; }
       </div>
 
       <div class="admin-field">
-        <label for="privacy-updated-input" id="lbl-privacy-updated">Stand (JJJJ-MM-TT)</label>
+        <label for="privacy-updated-input" data-i18n="admin_privacy_updated">Stand (JJJJ-MM-TT)</label>
         <input type="text" id="privacy-updated-input" placeholder="2026-08-02" maxlength="10">
       </div>
 
       <div class="admin-field">
-        <label for="privacy-title-input" id="lbl-privacy-title">Überschrift</label>
+        <label for="privacy-title-input" data-i18n="admin_privacy_title_field">Überschrift</label>
         <input type="text" id="privacy-title-input" maxlength="120">
       </div>
 
       <div class="admin-field">
-        <label for="privacy-subtitle-input" id="lbl-privacy-subtitle">Unterzeile</label>
+        <label for="privacy-subtitle-input" data-i18n="admin_privacy_subtitle">Unterzeile</label>
         <textarea id="privacy-subtitle-input" rows="2" maxlength="400"></textarea>
       </div>
 
       <div class="admin-field">
-        <label id="lbl-privacy-summary">Kurzübersicht</label>
+        <label data-i18n="admin_privacy_summary">Kurzübersicht</label>
         <div id="privacy-summary-fields"></div>
       </div>
 
       <div class="admin-field">
-        <label id="lbl-privacy-sections">Abschnitte</label>
+        <label data-i18n="admin_privacy_sections">Abschnitte</label>
         <div id="privacy-section-fields"></div>
       </div>
 
       <div class="admin-actions">
-        <button type="button" class="btn-p" id="privacy-save">Speichern</button>
-        <button type="button" class="btn-m warn" id="privacy-reset">Auf Originaltext zurücksetzen</button>
+        <button type="button" class="btn-p" id="privacy-save" data-i18n="admin_privacy_save">Speichern</button>
+        <button type="button" class="btn-m warn" id="privacy-reset" data-i18n="admin_privacy_reset">Auf Originaltext zurücksetzen</button>
       </div>
       <p class="admin-status" id="privacy-status"></p>
     </section>
 
-    <!-- ── Passwort ─────────────────────────────────────────────── -->
+    <!-- ── Passwort ─────────────────────────────────────────────────── -->
     <section class="admin-panel" id="panel-password">
-      <form id="password-form" autocomplete="off">
+      <form id="password-form" autocomplete="off" style="max-width:460px;">
         <div class="admin-field">
-          <label for="pw-current" id="lbl-pw-current">Aktuelles Passwort</label>
-          <input type="password" id="pw-current" required autocomplete="current-password">
+          <label for="pw-current" data-i18n="admin_pw_current">Aktuelles Passwort</label>
+          <span class="pw-field"><input type="password" id="pw-current" required autocomplete="current-password"></span>
         </div>
         <div class="admin-field">
-          <label for="pw-new" id="lbl-pw-new">Neues Passwort</label>
-          <input type="password" id="pw-new" required minlength="8" autocomplete="new-password">
+          <label for="pw-new" data-i18n="admin_pw_new">Neues Passwort</label>
+          <span class="pw-field"><input type="password" id="pw-new" required minlength="8" autocomplete="new-password"></span>
         </div>
         <div class="admin-field">
-          <label for="pw-repeat" id="lbl-pw-repeat">Neues Passwort wiederholen</label>
-          <input type="password" id="pw-repeat" required minlength="8" autocomplete="new-password">
+          <label for="pw-repeat" data-i18n="admin_pw_repeat">Neues Passwort wiederholen</label>
+          <span class="pw-field"><input type="password" id="pw-repeat" required minlength="8" autocomplete="new-password"></span>
         </div>
         <div class="admin-actions">
-          <button type="submit" class="btn-p" id="pw-submit">Passwort ändern</button>
+          <button type="submit" class="btn-p" id="pw-submit" data-i18n="admin_pw_submit">Passwort ändern</button>
         </div>
         <p class="admin-status" id="pw-status"></p>
       </form>
@@ -246,6 +281,12 @@ body[data-admin="yes"] .admin-gate { display: none; }
 <!-- Scripts -->
 <script src="../js/i18n.js"></script>
 <script src="../js/config.js"></script>
+<!-- providers.js und common.js wegen des Sprachmenüs in der Kopfzeile
+     (toggleMobileLangMenu) – dieselbe Reihenfolge wie auf den anderen
+     Seiten. Die Anmeldelogik darin läuft hier ins Leere, weil es den
+     Knopf "btn-open-login" auf dieser Seite nicht gibt. -->
+<script src="../js/providers.js"></script>
+<script src="../js/common.js"></script>
 <script src="../js/privacy-content.js"></script>
 <script src="../js/admin.js"></script>
 <script type="module" src="../js/firebase.js"></script>
@@ -258,52 +299,39 @@ body[data-admin="yes"] .admin-gate { display: none; }
    Kennung (siehe website/firestore.rules). Wer diese Seite ohne gültige
    Anmeldung öffnet, sieht sie gar nicht erst – und käme selbst dann nicht
    an die Daten.
+
+   Die Beitragsliste ist bewusst dieselbe Darstellung wie im Forum: gleiche
+   Klassen, gleiche Stildatei (css/forum.css). Moderiert wird dort, wo man
+   die Beiträge auch liest.
    ══════════════════════════════════════════════════════════════════════ */
 
 let adminApi = null;
 let posts = [];
+let currentFilter = 'all';
 
 /* Arbeitsfassung der Datenschutzerklärung, je Sprache. Wird beim ersten
-   Öffnen aus Firestore oder aus js/privacy-content.js befüllt. */
+   Öffnen des Reiters aus Firestore oder aus js/privacy-content.js befüllt. */
 let privacyDraft = null;
 let privacyUpdated = '';
 let privacyFromDb = false;
 
-/* ── Beschriftungen ─────────────────────────────────────────────────
-   Die Seite wird nicht über data-i18n gefüllt, weil viele Texte in
-   erzeugten Elementen stehen. Stattdessen einmal zentral setzen und bei
-   jedem Sprachwechsel erneut aufrufen. */
-function applyAdminLabels() {
-  const set = (id, key) => {
-    const node = document.getElementById(id);
-    if (node) node.textContent = t(key);
-  };
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
-  document.title = 'Inkwell — ' + t('admin_page_title');
-  set('admin-nav-label', 'admin_page_title');
-  set('admin-title', 'admin_page_title');
-  set('admin-subtitle', 'admin_page_sub');
-  set('tab-moderation', 'admin_tab_moderation');
-  set('tab-privacy', 'admin_tab_privacy');
-  set('tab-password', 'admin_tab_password');
-  set('mod-refresh', 'admin_mod_refresh');
-
-  set('privacy-hint', 'admin_privacy_hint');
-  set('lbl-privacy-lang', 'admin_privacy_lang');
-  set('lbl-privacy-updated', 'admin_privacy_updated');
-  set('lbl-privacy-title', 'admin_privacy_title_field');
-  set('lbl-privacy-subtitle', 'admin_privacy_subtitle');
-  set('lbl-privacy-summary', 'admin_privacy_summary');
-  set('lbl-privacy-sections', 'admin_privacy_sections');
-  set('privacy-save', 'admin_privacy_save');
-  set('privacy-reset', 'admin_privacy_reset');
-
-  set('lbl-pw-current', 'admin_pw_current');
-  set('lbl-pw-new', 'admin_pw_new');
-  set('lbl-pw-repeat', 'admin_pw_repeat');
-  set('pw-submit', 'admin_pw_submit');
-
-  updatePrivacyBadge();
+function formatDate(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = lang === 'de' ? 'de-DE' : lang === 'it' ? 'it-IT' : 'en-GB';
+  return date.toLocaleDateString(locale, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
 }
 
 function showStatus(id, message, kind) {
@@ -329,164 +357,196 @@ function switchPanel(name) {
    COMMUNITY
    ══════════════════════════════════════════════════════════════════════ */
 
-function formatDate(value) {
-  if (!value) return '';
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const locale = lang === 'de' ? 'de-DE' : lang === 'it' ? 'it-IT' : 'en-GB';
-  return date.toLocaleDateString(locale, {
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+function updateCounter(inputId, max) {
+  const input = document.getElementById(inputId);
+  const counter = document.getElementById(inputId + '-counter');
+  if (!input || !counter) return;
+  counter.textContent = tf('community_chars_left_of', {
+    left: Math.max(0, max - (input.value || '').length),
+    max
   });
 }
 
-async function loadModeration() {
-  const list = document.getElementById('mod-list');
-  list.textContent = t('admin_mod_loading');
+function setFilter(filter) {
+  currentFilter = filter;
+  for (const btn of document.querySelectorAll('.forum-filter-btn')) {
+    btn.classList.toggle('active', btn.id === 'admin-filter-' + filter);
+  }
+  renderFeed();
+}
+
+function toggleAdminPostForm() {
+  const card = document.getElementById('admin-post-form-card');
+  card.classList.toggle('open');
+}
+
+/* Antworten auf- und zuklappen. Die Liste startet zugeklappt, sonst wird
+   die Seite bei vielen Antworten unübersichtlich lang. */
+function toggleRepliesList(postId) {
+  const list = document.getElementById('admin-replies-' + postId);
+  const icon = document.getElementById('admin-replies-icon-' + postId);
+  if (!list) return;
+
+  const open = list.style.display !== 'none';
+  list.style.display = open ? 'none' : 'flex';
+  if (icon) icon.textContent = open ? '▼' : '▲';
+}
+
+function toggleReplyForm(postId) {
+  const form = document.getElementById('admin-reply-form-' + postId);
+  if (form) form.classList.toggle('open');
+}
+
+async function loadPosts() {
+  const list = document.getElementById('admin-feed-list');
+  list.innerHTML = `<div class="v-loading">${escapeHtml(t('admin_mod_loading'))}</div>`;
 
   try {
     posts = await adminApi.listPosts();
-    renderModeration();
+    renderFeed();
   } catch (err) {
-    list.textContent = describeAdminError(err);
-    list.style.color = '#d9534f';
+    list.innerHTML = `<div class="forum-error">${escapeHtml(describeAdminError(err))}</div>`;
   }
 }
 
-/* Baut die Liste mit createElement statt innerHTML: Beitragstexte kommen
-   von Fremden, und so kann daraus grundsätzlich kein Markup werden. */
-function renderModeration() {
-  const list = document.getElementById('mod-list');
-  list.textContent = '';
-  list.style.color = '';
+function renderFeed() {
+  const container = document.getElementById('admin-feed-list');
+  const filtered = posts.filter(p => currentFilter === 'all' || p.type === currentFilter);
 
-  if (!posts.length) {
-    list.textContent = t('admin_mod_empty');
+  if (!filtered.length) {
+    container.innerHTML = `<div class="v-loading" style="border:0.5px solid var(--navy-border); background:var(--navy-card);">${escapeHtml(t('admin_mod_empty'))}</div>`;
     return;
   }
 
-  for (const post of posts) {
-    const card = document.createElement('div');
-    card.className = 'admin-card';
+  container.innerHTML = filtered.map(post => {
+    const badge = post.type === 'question' ? t('community_type_question') : t('community_type_bug');
+    const replies = post.replies || [];
 
-    const head = document.createElement('div');
-    head.className = 'admin-card-head';
+    const replyItems = replies.map(reply => `
+      <div class="reply-item">
+        <div class="reply-meta">
+          <strong>${escapeHtml(reply.author)}</strong>
+          <span>${escapeHtml(formatDate(reply.created_at))}</span>
+          <button type="button" class="forum-del-btn" data-del-reply="${escapeHtml(post.id)}" data-reply-id="${escapeHtml(reply.id)}">${escapeHtml(t('admin_mod_delete_reply'))}</button>
+        </div>
+        <div class="reply-text">${escapeHtml(reply.content)}</div>
+      </div>`).join('');
 
-    const headText = document.createElement('div');
-    const title = document.createElement('h3');
-    title.textContent = post.title;
-    const meta = document.createElement('div');
-    meta.className = 'admin-card-meta';
-    meta.textContent = `${post.author} · ${formatDate(post.created_at)} · ${post.type}`;
-    headText.append(title, meta);
+    return `
+      <div class="post-item-card ${post.type}">
+        <div class="post-meta-line">
+          <span class="post-badge ${post.type}">${escapeHtml(badge)}</span>
+          <span class="post-author-time">von <strong>${escapeHtml(post.author)}</strong> ${escapeHtml(formatDate(post.created_at))}</span>
+          <button type="button" class="forum-del-btn" data-del-post="${escapeHtml(post.id)}">${escapeHtml(t('admin_mod_delete_post'))}</button>
+        </div>
+        <h3>${escapeHtml(post.title)}</h3>
+        <div class="post-body-text">${escapeHtml(post.content)}</div>
 
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'admin-del';
-    delBtn.textContent = t('admin_mod_delete_post');
-    delBtn.addEventListener('click', () => removePost(post));
+        <div class="replies-section">
+          <div class="replies-header">
+            <span class="replies-title" style="cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:4px;" data-toggle-replies="${escapeHtml(post.id)}">
+              ${replies.length} ${escapeHtml(t('admin_mod_replies'))}
+              ${replies.length ? `<span id="admin-replies-icon-${escapeHtml(post.id)}">▼</span>` : ''}
+            </span>
+            <button type="button" class="reply-toggle-btn" data-toggle-reply-form="${escapeHtml(post.id)}">
+              ${escapeHtml(t('admin_mod_reply_send'))}
+            </button>
+          </div>
 
-    head.append(headText, delBtn);
+          ${replies.length ? `<div id="admin-replies-${escapeHtml(post.id)}" style="display:none; flex-direction:column; gap:8px; margin-bottom:14px;">${replyItems}</div>` : ''}
 
-    const body = document.createElement('div');
-    body.className = 'admin-card-body';
-    body.textContent = post.content;
+          <form class="reply-form" id="admin-reply-form-${escapeHtml(post.id)}" data-reply-post="${escapeHtml(post.id)}">
+            <p class="admin-as-note">${escapeHtml(t('admin_mod_reply_as'))}</p>
+            <div class="forum-input-group" style="margin:0;">
+              <textarea class="admin-reply-text" rows="2" maxlength="500" required placeholder="${escapeHtml(t('community_add_reply'))}"></textarea>
+            </div>
+            <button type="submit" class="reply-submit-btn">${escapeHtml(t('admin_mod_reply_send'))}</button>
+          </form>
+        </div>
+      </div>`;
+  }).join('');
+}
 
-    card.append(head, body);
+/* Ein einziger Zuhörer für die ganze Liste statt einer je Knopf: die Liste
+   wird bei jedem Laden neu gebaut, einzeln angehängte Zuhörer müssten
+   jedes Mal mit aufgeräumt werden. */
+document.getElementById('admin-feed-list').addEventListener('click', (event) => {
+  const target = event.target.closest('[data-del-post], [data-del-reply], [data-toggle-replies], [data-toggle-reply-form]');
+  if (!target) return;
 
-    // Antworten
-    if (post.replies && post.replies.length) {
-      const repliesTitle = document.createElement('div');
-      repliesTitle.className = 'admin-card-meta';
-      repliesTitle.style.marginBottom = '8px';
-      repliesTitle.textContent = `${post.replies.length} ${t('admin_mod_replies')}`;
-      card.appendChild(repliesTitle);
+  if (target.dataset.delPost) removePost(target.dataset.delPost);
+  else if (target.dataset.delReply) removeReply(target.dataset.delReply, target.dataset.replyId);
+  else if (target.dataset.toggleReplies) toggleRepliesList(target.dataset.toggleReplies);
+  else if (target.dataset.toggleReplyForm) toggleReplyForm(target.dataset.toggleReplyForm);
+});
 
-      for (const reply of post.replies) {
-        const row = document.createElement('div');
-        row.className = 'admin-reply';
+document.getElementById('admin-feed-list').addEventListener('submit', async (event) => {
+  const form = event.target.closest('[data-reply-post]');
+  if (!form) return;
+  event.preventDefault();
 
-        const texts = document.createElement('div');
-        const rMeta = document.createElement('div');
-        rMeta.className = 'admin-reply-meta';
-        rMeta.textContent = `${reply.author} · ${formatDate(reply.created_at)}`;
-        const rText = document.createElement('div');
-        rText.className = 'admin-reply-text';
-        rText.textContent = reply.content;
-        texts.append(rMeta, rText);
+  const postId = form.dataset.replyPost;
+  const textarea = form.querySelector('.admin-reply-text');
+  const button = form.querySelector('.reply-submit-btn');
+  const content = textarea.value.trim();
+  if (!content) return;
 
-        const rDel = document.createElement('button');
-        rDel.type = 'button';
-        rDel.className = 'admin-del';
-        rDel.textContent = t('admin_mod_delete_reply');
-        rDel.addEventListener('click', () => removeReply(post, reply));
+  button.disabled = true;
+  try {
+    await adminApi.createReply(postId, { author: ADMIN_DISPLAY_NAME, content });
+    textarea.value = '';
+    await loadPosts();
+  } catch (err) {
+    alert(describeAdminError(err));
+  } finally {
+    button.disabled = false;
+  }
+});
 
-        row.append(texts, rDel);
-        card.appendChild(row);
-      }
-    }
+async function handleCreatePost(event) {
+  event.preventDefault();
 
-    // Antwort als Inkwell Team
-    const form = document.createElement('form');
-    form.style.marginTop = '14px';
+  const title = document.getElementById('admin-post-title').value.trim();
+  const type = document.getElementById('admin-post-type').value;
+  const content = document.getElementById('admin-post-content').value.trim();
+  if (!title || !content) return;
 
-    const field = document.createElement('div');
-    field.className = 'admin-field';
-    field.style.marginBottom = '10px';
+  const button = document.getElementById('admin-post-submit');
+  button.disabled = true;
 
-    const label = document.createElement('label');
-    label.textContent = t('admin_mod_reply_as');
-    const textarea = document.createElement('textarea');
-    textarea.rows = 2;
-    textarea.maxLength = 500;
-    textarea.required = true;
-    field.append(label, textarea);
-
-    const send = document.createElement('button');
-    send.type = 'submit';
-    send.className = 'btn-m';
-    send.textContent = t('admin_mod_reply_send');
-
-    form.append(field, send);
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const content = textarea.value.trim();
-      if (!content) return;
-
-      send.disabled = true;
-      try {
-        await adminApi.createReply(post.id, { author: ADMIN_DISPLAY_NAME, content });
-        textarea.value = '';
-        await loadModeration();
-      } catch (err) {
-        alert(describeAdminError(err));
-      } finally {
-        send.disabled = false;
-      }
-    });
-
-    card.appendChild(form);
-    list.appendChild(card);
+  try {
+    await adminApi.createPost({ type, title, content, author: ADMIN_DISPLAY_NAME });
+    document.getElementById('admin-new-post-form').reset();
+    updateCounter('admin-post-title', 120);
+    updateCounter('admin-post-content', 2000);
+    toggleAdminPostForm();
+    await loadPosts();
+  } catch (err) {
+    alert(describeAdminError(err));
+  } finally {
+    button.disabled = false;
   }
 }
 
-async function removePost(post) {
+async function removePost(postId) {
+  const post = posts.find(p => p.id === postId);
   const ok = await askConfirm({
     title: t('admin_del_post_title'),
-    body: `„${post.title}“ — ${t('admin_del_post_body')}`,
+    body: post ? `„${post.title}“ — ${t('admin_del_post_body')}` : t('admin_del_post_body'),
     confirm: t('admin_del_confirm'),
     danger: true
   });
   if (!ok) return;
 
   try {
-    await adminApi.deletePost(post.id);
-    await loadModeration();
+    await adminApi.deletePost(postId);
+    await loadPosts();
   } catch (err) {
     alert(describeAdminError(err));
   }
 }
 
-async function removeReply(post, reply) {
+async function removeReply(postId, replyId) {
   const ok = await askConfirm({
     title: t('admin_del_reply_title'),
     body: t('admin_del_reply_body'),
@@ -496,8 +556,8 @@ async function removeReply(post, reply) {
   if (!ok) return;
 
   try {
-    await adminApi.deleteReply(post.id, reply.id);
-    await loadModeration();
+    await adminApi.deleteReply(postId, replyId);
+    await loadPosts();
   } catch (err) {
     alert(describeAdminError(err));
   }
@@ -551,8 +611,7 @@ function currentPrivacyLang() {
 function renderPrivacyEditor() {
   if (!privacyDraft) return;
 
-  const code = currentPrivacyLang();
-  const data = privacyDraft[code] || privacyDraft.de;
+  const data = privacyDraft[currentPrivacyLang()] || privacyDraft.de;
 
   /* Überschrift, Unterzeile und Datum schreiben ihre Änderung sofort in die
      Arbeitsfassung. Würden sie erst beim Speichern ausgelesen, wären sie
@@ -733,11 +792,13 @@ async function handlePasswordChange(event) {
 /* ══════════════════════════════════════════════════════════════════════
    VERLASSEN
 
-   Der Weg hinaus führt über das Logo oben rechts – mit Rückfrage, damit
+   Der Weg hinaus führt über das Logo oben links – mit Rückfrage, damit
    ein versehentlicher Klick nicht die Sitzung beendet.
    ══════════════════════════════════════════════════════════════════════ */
 
-async function exitAdmin() {
+async function exitAdmin(event) {
+  if (event) event.preventDefault();
+
   const ok = await askConfirm({
     title: t('admin_exit_title'),
     body: t('admin_exit_body'),
@@ -758,26 +819,43 @@ async function exitAdmin() {
    ══════════════════════════════════════════════════════════════════════ */
 
 document.getElementById('admin-exit-btn').addEventListener('click', exitAdmin);
-document.getElementById('mod-refresh').addEventListener('click', loadModeration);
+document.getElementById('admin-refresh').addEventListener('click', loadPosts);
+document.getElementById('admin-new-post-btn').addEventListener('click', toggleAdminPostForm);
+document.getElementById('admin-post-cancel').addEventListener('click', toggleAdminPostForm);
+document.getElementById('admin-new-post-form').addEventListener('submit', handleCreatePost);
 document.getElementById('privacy-save').addEventListener('click', savePrivacyDraft);
 document.getElementById('privacy-reset').addEventListener('click', resetPrivacyDraft);
 document.getElementById('password-form').addEventListener('submit', handlePasswordChange);
 document.getElementById('privacy-lang-select').addEventListener('change', renderPrivacyEditor);
 
+document.getElementById('admin-post-title').addEventListener('input', () => updateCounter('admin-post-title', 120));
+document.getElementById('admin-post-content').addEventListener('input', () => updateCounter('admin-post-content', 2000));
+
 for (const tab of document.querySelectorAll('.admin-tab')) {
   tab.addEventListener('click', () => switchPanel(tab.dataset.panel));
 }
+for (const btn of document.querySelectorAll('.forum-filter-btn')) {
+  btn.addEventListener('click', () => setFilter(btn.id.replace('admin-filter-', '')));
+}
 
+/* Beim Sprachwechsel erneuern sich die festen Texte über data-i18n von
+   selbst (js/i18n.js). Was hier erzeugt wurde, muss neu gezeichnet
+   werden – Beitragsliste, Zähler und der Datenschutz-Editor. */
 if (typeof addLangChangeListener === 'function') {
   addLangChangeListener(() => {
-    applyAdminLabels();
-    renderModeration();
-    if (privacyDraft) renderPrivacyEditor();
+    document.title = 'Inkwell — ' + t('admin_page_title');
+    updateCounter('admin-post-title', 120);
+    updateCounter('admin-post-content', 2000);
+    if (posts.length) renderFeed();
+    if (privacyDraft) { updatePrivacyBadge(); renderPrivacyEditor(); }
   });
 }
 
 (async () => {
-  applyAdminLabels();
+  document.getElementById('admin-gate').textContent = '…';
+  setupPasswordEyes();
+  updateCounter('admin-post-title', 120);
+  updateCounter('admin-post-content', 2000);
 
   try {
     adminApi = await whenAdminApiReady();
@@ -796,7 +874,8 @@ if (typeof addLangChangeListener === 'function') {
   }
 
   document.body.dataset.admin = 'yes';
-  loadModeration();
+  document.title = 'Inkwell — ' + t('admin_page_title');
+  loadPosts();
 
   // Wird die Sitzung anderswo beendet (etwa in einem zweiten Tab),
   // schließt sich der Adminbereich auch hier.

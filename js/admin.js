@@ -133,6 +133,59 @@ function checkAuthorName(name, admin) {
   return t('community_name_reserved');
 }
 
+/* ── Passwortfelder aufdecken ───────────────────────────────────────
+   Hängt an jedes <input type="password"> innerhalb eines .pw-field ein
+   Auge zum Umschalten. Wird von index.html (Anmeldefenster) und
+   admin/index.html (Passwortwechsel) benutzt.
+
+   Die Symbole stehen beide im Knopf; welches man sieht, entscheidet die
+   Klasse "revealed" (siehe css/style.css). Das spart das Austauschen von
+   Markup beim Klicken. */
+const PW_EYE_SVG =
+    '<svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+  + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>'
+  + '<circle cx="12" cy="12" r="3"></circle></svg>'
+  + '<svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+  + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>'
+  + '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>'
+  + '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>'
+  + '<line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+
+function setupPasswordEyes(root) {
+  const scope = root || document;
+
+  for (const field of scope.querySelectorAll('.pw-field')) {
+    const input = field.querySelector('input');
+    // Zweimal aufrufen darf nichts verdoppeln – die Adminseite baut ihre
+    // Felder beim Sprachwechsel neu auf.
+    if (!input || field.querySelector('.pw-eye')) continue;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pw-eye';
+    button.innerHTML = PW_EYE_SVG;
+    button.setAttribute('aria-label', t('admin_pw_show'));
+    button.title = t('admin_pw_show');
+
+    button.addEventListener('click', () => {
+      const revealed = input.type === 'password';
+      input.type = revealed ? 'text' : 'password';
+      button.classList.toggle('revealed', revealed);
+
+      const label = revealed ? t('admin_pw_hide') : t('admin_pw_show');
+      button.setAttribute('aria-label', label);
+      button.title = label;
+
+      // Der Klick nimmt dem Feld sonst den Blinker – lästig beim Tippen.
+      input.focus();
+    });
+
+    field.appendChild(button);
+  }
+}
+
 /* ── Bestätigungsfenster ────────────────────────────────────────────
    Ersetzt confirm(): das sieht in jedem Browser anders aus und passt
    nicht zum Rest der Seite. Baut sein Fenster selbst und räumt es hinter
