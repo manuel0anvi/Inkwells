@@ -58,7 +58,8 @@ vm.runInContext(fs.readFileSync(path.join(root, 'src', 'lib', 'yjs.bundle.js'), 
 vm.runInContext(fs.readFileSync(path.join(root, 'src', 'ui', 'collab.js'), 'utf8'), ctx);
 
 const Y = ctx.Y;
-const { _textDelta: textDelta, _seedUpdate: seedUpdate } = ctx.window.Collab;
+const { _textDelta: textDelta, _shiftedPos: shiftedPos,
+        _seedUpdate: seedUpdate } = ctx.window.Collab;
 
 let failed = 0;
 function check(label, actual, expected) {
@@ -94,6 +95,37 @@ const html = '<p>Hallo Welt</p><p>Zweite Zeile</p>';
 check('Wort im HTML geändert',
   textDelta(html, '<p>Hallo Erde</p><p>Zweite Zeile</p>'),
   { at: 9, remove: 4, insert: 'Erde' });
+
+/* ── 1b. Die eigene Marke wandert mit ───────────────────────────────
+   Tippt der andere etwas VOR der eigenen Schreibmarke, rutscht der ganze
+   Text dahinter weiter. Die Marke wurde bisher auf dieselbe ZAHL
+   zurückgesetzt und blieb damit stehen, während der Text unter ihr
+   weiterwanderte – nach ein paar fremden Anschlägen stand sie mitten im
+   Wort davor oder eine Zeile höher, und das Nächste, was man tippte,
+   landete dort statt an der Stelle, auf die man sah. */
+
+console.log('\nDie eigene Marke bei fremden Änderungen');
+
+check('Fremdes Einfügen davor schiebt mit',
+  shiftedPos('abc def', 'abcXY def', 5), 7);
+check('Fremdes Einfügen dahinter lässt sie stehen',
+  shiftedPos('abc def', 'abc defXY', 2), 2);
+check('Fremdes Löschen davor zieht zurück',
+  shiftedPos('abcXY def', 'abc def', 7), 5);
+check('Nichts geändert, nichts bewegt',
+  shiftedPos('abc def', 'abc def', 4), 4);
+
+/* Genau an der Marke eingefügt: das Fremde steht davor, die eigene Marke
+   rückt nach rechts – so sieht es auf dem Papier auch aus. */
+check('Genau an der Marke eingefügt', shiftedPos('abcdef', 'abcXdef', 3), 4);
+
+/* Ersetzt jemand einen Bereich, in dem die Marke steht, gibt es keine
+   Stelle mehr, die ihr entspricht. Dann ans Ende des Neuen – dort steht
+   die Zeile jetzt. */
+check('Mitten im Ersetzten', shiftedPos('abcdef', 'aXYZf', 3), 4);
+
+// Eine ganze Zeile weiter vorn – der Fall aus der Live-Sitzung
+check('Neue Zeile davor', shiftedPos('eins\nzwei', 'eins\nneu\nzwei', 7), 11);
 
 /* ── 2. Der erste Yjs-Stand ─────────────────────────────────────────── */
 

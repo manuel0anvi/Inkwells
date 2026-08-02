@@ -178,6 +178,39 @@
     return { at: start, remove: endOld - start, insert: next.slice(start, endNew) };
   }
 
+  /**
+   * Wo liegt eine Stelle, nachdem sich der Text davor geändert hat?
+   *
+   * >>> Warum die eigene Marke das braucht <<<
+   * Tippt der andere etwas VOR der eigenen Schreibmarke, rutscht der
+   * ganze Text dahinter weiter – die Marke muss um denselben Betrag mit.
+   * Bisher wurde sie nach einer fremden Änderung auf dieselbe ZAHL
+   * zurückgesetzt: sie blieb stehen, während der Text unter ihr
+   * weiterwanderte. Nach ein paar fremden Anschlägen stand sie mitten im
+   * vorigen Wort oder gleich eine Zeile höher, und das Nächste, was man
+   * tippte, landete dort statt an der Stelle, auf die man sah – genau
+   * das „der Text geht in die falsche Zeile".
+   *
+   * @param {string} vorher
+   * @param {string} nachher
+   * @param {number} stelle
+   */
+  function shiftedPos(vorher, nachher, stelle) {
+    const d = textDelta(vorher, nachher);
+    if (!d) return stelle;
+
+    // Die Änderung liegt ganz hinter der Marke – die bleibt, wo sie ist
+    if (stelle < d.at) return stelle;
+
+    // Ganz davor: um den Längenunterschied mitwandern. Der Gleichstand
+    // (stelle === d.at) gehört hierher: fremd Eingefügtes schiebt die
+    // eigene Marke nach rechts, so wie es auf dem Papier auch aussieht.
+    if (stelle >= d.at + d.remove) return stelle + d.insert.length - d.remove;
+
+    // Mitten im Ersetzten: ans Ende des Neuen, dort steht die Zeile jetzt
+    return d.at + d.insert.length;
+  }
+
   /** Trägt eine lokale Textänderung in den gemeinsamen Text ein. */
   function applyLocalText(pageId, nextText) {
     const entry = docs.get(pageId);
@@ -687,7 +720,25 @@
     return others.map(person => {
       const frisch = opCarets.get(person.uid);
       if (!frisch || jetzt - frisch.at > OP_CARET_TTL_MS) return person;
-      return { ...person, ...frisch };
+
+      /* Stelle, Anker und Sperre gehören ZUSAMMEN – sie sind an ein und
+         demselben Text gemessen. Vorher wurde nur überschrieben, was in
+         der Textänderung stand: kam sie ohne Sperre (der andere hatte
+         gerade gescrollt, dann findet visualLineSpan die Zeile nicht),
+         blieb die Sperre aus der Anwesenheit stehen und wurde in
+         peopleOnPage um den Versatz der NEUEN Stelle verschoben. Das
+         Band landete dadurch auf einer Zeile, an der nie jemand saß.
+         Deshalb hier alles aus einer Quelle – lieber kurz keine Sperre
+         als eine falsche. */
+      return {
+        ...person,
+        pageId: frisch.pageId,
+        offset: frisch.offset,
+        cx: typeof frisch.cx === 'string' ? frisch.cx : '',
+        lockFrom: Number.isFinite(frisch.lockFrom) ? frisch.lockFrom : -1,
+        lockTo: Number.isFinite(frisch.lockTo) ? frisch.lockTo : -1,
+        lockAt: Number.isFinite(frisch.lockAt) ? frisch.lockAt : 0
+      };
     });
   }
 
@@ -930,12 +981,21 @@
     const caret = hadFocus && typeof flatCaretPos === 'function'
       ? flatCaretPos(textDiv) : null;
 
+    /* Der Text VOR der fremden Änderung. Nur damit lässt sich hinterher
+       ausrechnen, wohin die eigene Marke gewandert ist – siehe shiftedPos. */
+    const vorher = (caret !== null && typeof flatTextOf === 'function')
+      ? flatTextOf(textDiv) : null;
+
     entry.applying = true;
     textDiv.innerHTML = nextText;
     entry.applying = false;
 
     if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
-      try { setFlatCaret(textDiv, caret); } catch (e) { /* Text war zu stark umgebaut */ }
+      let ziel = caret;
+      if (vorher !== null) {
+        try { ziel = shiftedPos(vorher, flatTextOf(textDiv), caret); } catch (e) { ziel = caret; }
+      }
+      try { setFlatCaret(textDiv, ziel); } catch (e) { /* Text war zu stark umgebaut */ }
     }
     if (typeof renderSideTree === 'function') renderSideTree();
 
@@ -2027,6 +2087,7 @@
     syncNow: syncStructure,
     // offengelegt für scripts/test-collab-text.js
     _textDelta: textDelta,
+    _shiftedPos: shiftedPos,
     _seedUpdate: seedUpdate
   };
 })();
