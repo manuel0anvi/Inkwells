@@ -283,6 +283,10 @@ function shareMarkFor(nb) {
     : null;
   if (!entry || !(entry.docId || entry.shareId)) return null;
 
+  /* 'off' heißt: das Dokument gibt es zwar noch, aber es führt niemand mehr
+     hinein – kein Link, niemand eingeladen. Dann ist es auch nicht mehr
+     freigegeben und bekommt kein Zeichen. */
+  if (entry.access === 'off') return null;
   if (entry.access === 'view' || entry.access === 'edit') return entry.access;
 
   // Noch kein `access` gemerkt: die alte Lesekopie ist immer nur lesbar,
