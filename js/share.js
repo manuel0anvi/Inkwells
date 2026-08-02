@@ -213,6 +213,30 @@ function emailFromIdToken(idToken) {
   }
 }
 
+/* >>> Was bei Microsoft NICHT funktioniert – bitte nicht erneut versuchen <<<
+
+   Firebase nimmt für microsoft.com KEINE selbst besorgte Anmeldung an.
+   Am 02.08.2026 gegen den echten Endpunkt durchgemessen, mit einem
+   frischen Token und eingeschaltetem Anbieter:
+
+     id_token allein                → INVALID_CREDENTIAL_OR_PROVIDER_ID
+     id_token + access_token        → INVALID_CREDENTIAL_OR_PROVIDER_ID
+     access_token allein            → INVALID_CREDENTIAL_OR_PROVIDER_ID
+
+   Dass der Anbieter eingeschaltet ist, wurde dabei ebenfalls belegt:
+   accounts:createAuthUri liefert für microsoft.com eine Adresse mit
+   genau unserer Anwendungs-ID zurück.
+
+   Der Grund ist bauartbedingt: Google ist bei Firebase ein
+   eigenständiger Anbieter, dessen Token direkt geprüft werden.
+   Microsoft ist ein generischer OAuth-Anbieter – dessen Anmeldung muss
+   Firebase SELBST begonnen haben (createAuthUri liefert dazu eine
+   sessionId). Ohne die gibt es keinen Weg hinein.
+
+   Die Meldung dazu lautet ausgerechnet
+   „invalid-credential-or-provider-id" – dieselbe wie bei einem
+   abgeschalteten Anbieter. Das hat schon einmal zu einer langen,
+   ergebnislosen Suche in der Firebase Console geführt. */
 async function signInWithProviderToken({ provider, idToken, rawNonce } = {}) {
   if (!idToken) throw new Error('NO_ID_TOKEN');
 
@@ -284,7 +308,8 @@ function hasRealIdentity() {
 }
 
 /**
- * Auch bei Firebase abmelden. Wird von inkwellLogout() aufgerufen.
+ * Auch bei Firebase abmelden. Beim Abmelden aufgerufen – in der App von
+ * CloudSync.signOut(), auf der Website von inkwellLogout().
  *
  * Ohne das blieb die Firebase-Sitzung nach dem Abmelden bestehen. Wer sich
  * danach mit einer anderen Adresse anmeldete, bekam die geteilten Dokumente
@@ -299,15 +324,22 @@ async function signOutIdentity() {
 /**
  * Microsoft-Anmeldung über Firebases EIGENEN Ablauf.
  *
- * Der einzige Weg, der bei Microsoft funktioniert: ein selbst besorgtes
- * Token weist Firebase ab (Begründung über signInWithProviderToken).
+ * Der einzige Weg, der bei Microsoft funktioniert: Firebase muss die
+ * Anmeldung selbst begonnen haben (Begründung ausführlich über
+ * signInWithProviderToken). Es öffnet dafür ein Fenster auf
+ * inkwell-53ab9.firebaseapp.com.
  *
- * >>> Setzt voraus, dass die Herkunft in Firebase erlaubt ist <<<
+ * >>> Setzt eine in Firebase erlaubte Herkunft voraus <<<
  * Firebase Console → Authentication → Settings → Authorized domains.
- * Steht inkwells.me dort nicht, kommt auth/unauthorized-domain zurück.
+ *   · App     : liefert ihre Oberfläche deshalb über http://localhost aus
+ *               statt über file:// – siehe startUiServer() in main.js.
+ *               main.js gibt zusätzlich das Anmeldefenster frei, sonst
+ *               blockt Electron window.open.
+ *   · Website : steht inkwells.me dort nicht, kommt
+ *               auth/unauthorized-domain zurück.
  *
- * Muss aus einem Klick heraus aufgerufen werden; ein Fenster ohne Zutun
- * des Nutzers blockt der Browser.
+ * Muss aus einem Klick heraus aufgerufen werden; ein Fenster ohne
+ * Zutun des Nutzers wird geblockt.
  *
  * @param {string} [loginHint] Adresse, die vorgeschlagen wird
  */
@@ -315,7 +347,10 @@ async function signInMicrosoftInteractive(loginHint = '') {
   const provider = new OAuthProvider('microsoft.com');
   provider.addScope('email');
 
-  // Nur persönliche Konten, wie überall sonst in Inkwell (js/config.js)
+  /* Nur persönliche Konten, wie überall sonst in Inkwell (TENANT in
+     src/core/cloudConfig.js bzw. website/js/config.js). Ein Geschäfts-
+     oder Schulkonto liefe hier sonst in dieselbe unerklärte Fehlerseite
+     wie bei der Anmeldung. */
   const params = { tenant: 'consumers' };
   if (loginHint) params.login_hint = loginHint;
   provider.setCustomParameters(params);
@@ -1688,9 +1723,34 @@ async function loadLegacyDocument(docId, head) {
    europe-west1 sieht so aus, us-central1 endet auf firebaseio.com. */
 const RTDB_URL = 'https://inkwell-53ab9-default-rtdb.europe-west1.firebasedatabase.app';
 
-// So oft höchstens eine Positionsmeldung. Ohne die Bremse würde jede
-// Mausbewegung zu einem Schreibvorgang.
+/* So oft höchstens eine Meldung, wenn sich nur die SEITE ändert. Das
+   passiert beim Blättern und darf gemächlich sein. */
 const PRESENCE_THROTTLE_MS = 1000;
+
+/* Für die Stelle im Text gilt ein deutlich kürzerer Takt. Mit einer
+   Sekunde hinkte die fremde Schreibmarke dem Text hinterher: der Text
+   ging alle 300 ms über den Änderungsstrom hinaus, die Position nur jede
+   Sekunde über die Anwesenheit – beim Tippen stand die Marke dadurch
+   dauerhaft mehrere Wörter zu weit links. Dieselbe Meldung trägt auch
+   die Zeilensperre, und die muss erst recht zügig ankommen. */
+const CARET_THROTTLE_MS = 150;
+
+/* Eine Sperre, die sich nicht bewegt, muss trotzdem hin und wieder neu
+   gemeldet werden – sonst läuft ihr Nachlauf ab, während die Person noch
+   an derselben Zeile sitzt. Deutlich kürzer als LOCK_TTL_MS in
+   ui/collab.js, damit sich beides überlappt. */
+const LOCK_REFRESH_MS = 2000;
+
+/* Angaben, die an einer Änderung MITREISEN dürfen, aber nicht müssen:
+   Stelle der Schreibmarke (c) und die beanspruchten Zeilen (lf, lt).
+   Kennt die veröffentlichte Regel sie nicht, geht die Änderung ohne sie
+   noch einmal hinaus – siehe sendOp. */
+const OP_EXTRAS = ['c', 'lf', 'lt', 'cx'];
+
+/* Dasselbe für die Anwesenheit. Hier wiegt es schwerer: eine abgewiesene
+   Karte lässt joinDocRoom scheitern, und damit gäbe es überhaupt keine
+   Live-Sitzung mehr. */
+const PRESENCE_EXTRAS = ['lockFrom', 'lockTo', 'lockAt', 'cx'];
 
 // So viele zurückliegende Änderungen werden beim Betreten nachgeholt.
 const OP_BACKLOG = 200;
@@ -1761,16 +1821,43 @@ async function joinDocRoom(docId) {
     email: me.email,
     color: colorForUid(me.uid),
     pageId: '',
-    // Abstand der Schreibmarke in sichtbaren Zeichen. -1 heißt: gerade
-    // nicht im Text (zeichnet, blättert, Fenster nicht im Vordergrund).
+    /* Stelle der Schreibmarke im flachen Text (canvas/text.js). -1 heißt:
+       gerade nicht im Text (zeichnet, blättert, Fenster nicht im
+       Vordergrund). */
     offset: -1,
+    /* Die Zeile, an der gerade geschrieben wird, und die darauf folgende.
+       Solange lockAt frisch ist, fassen die anderen diesen Bereich nicht
+       an (ui/collab.js). -1 heißt: nichts gesperrt. */
+    lockFrom: -1,
+    lockTo: -1,
+    lockAt: 0,
+    /* Ein kurzes Stück Text um die Marke herum. Damit findet die
+       Gegenseite die Stelle auch dann wieder, wenn sich der Text seither
+       verschoben hat – etwa weil dort jemand gleichzeitig tippt. */
+    cx: '',
     at: rtNow()
   };
 
   // Verschwindet von selbst, sobald die Verbindung abreißt. Genau dafür
   // gibt es die Realtime Database hier.
   await onDisconnect(meRef).remove();
-  await set(meRef, card);
+
+  /* Ob die Zeilensperre überhaupt gemeldet werden darf. Weist die Regel
+     die Felder ab (ältere Fassung veröffentlicht), wird ohne sie
+     weitergearbeitet – ohne Sperre, aber mit allem Übrigen. Vorher wäre
+     hier die gesamte Live-Sitzung gescheitert. */
+  let lockFieldsOk = true;
+  try {
+    await set(meRef, card);
+  } catch (err) {
+    lockFieldsOk = false;
+    for (const key of PRESENCE_EXTRAS) delete card[key];
+    await set(meRef, card);
+    console.warn('[Share] Die veröffentlichten Regeln kennen die Felder '
+      + PRESENCE_EXTRAS.join(', ') + ' noch nicht – die Zeilensperre bleibt aus. '
+      + 'Abhilfe: website/database.rules.json in der Firebase Console unter '
+      + 'Realtime Database → Regeln veröffentlichen.');
+  }
 
   const stops = [];
   let lastPageWrite = 0;
@@ -1778,28 +1865,62 @@ async function joinDocRoom(docId) {
   let pageTimer = null;
   let left = false;
 
+  // Nur einmal darüber klagen, nicht bei jedem Tastendruck
+  let extrasWarned = false;
+
   /* ── Anwesenheit ── */
 
   /**
-   * Meldet, wo diese Person gerade ist: auf welcher Seite und an welcher
-   * Stelle im Text. Gebremst auf höchstens eine Meldung pro Sekunde –
-   * ohne das würde jeder Tastendruck zu einem Schreibvorgang.
+   * Meldet, wo diese Person gerade ist: auf welcher Seite, an welcher
+   * Stelle im Text und welche Zeilen sie dabei belegt.
+   *
+   * Gebremst wird nach Art der Änderung: eine reine Seitenänderung darf
+   * warten, eine Positionsänderung nicht. Mit einem gemeinsamen Takt von
+   * einer Sekunde lief die fremde Schreibmarke dem Text hinterher, und
+   * die Zeilensperre kam zu spät, um noch etwas zu verhindern.
    *
    * @param {string} pageId
-   * @param {number} [offset] Abstand in Zeichen, -1 = nicht im Text
+   * @param {number} [offset] Stelle im flachen Text, -1 = nicht im Text
+   * @param {{from:number,to:number}|null} [lock] gesperrter Bereich
+   * @param {string} [anchor] Zeichen um die Marke herum, als Anker
    */
-  function setPage(pageId, offset) {
+  function setPage(pageId, offset, lock, anchor) {
     if (left || !pageId) return;
 
     const nextOffset = Number.isFinite(offset) ? offset : card.offset;
-    if (pageId === card.pageId && nextOffset === card.offset) return;
+    // Ohne die passenden Regeln bleibt die Sperre ganz aus – siehe oben
+    const claim = lockFieldsOk ? lock : null;
+    const from = claim && Number.isFinite(claim.from) ? claim.from : -1;
+    const to = claim && Number.isFinite(claim.to) ? claim.to : -1;
 
+    const cx = lockFieldsOk ? String(anchor || '').slice(0, 64) : '';
+    const samePlace = pageId === card.pageId && nextOffset === card.offset
+                      && cx === card.cx;
+    const sameLock = !lockFieldsOk || (from === card.lockFrom && to === card.lockTo);
+
+    /* Nichts Neues – aber eine bestehende Sperre muss trotzdem regelmäßig
+       aufgefrischt werden, sonst läuft sie mitten im Schreiben ab. */
+    const stale = from >= 0 && (Date.now() - card.lockAt) > LOCK_REFRESH_MS;
+    if (samePlace && sameLock && !stale) return;
+
+    const wasPage = card.pageId;
     card.pageId = pageId;
     card.offset = nextOffset;
-    pendingPage = { pageId, offset: nextOffset };
+    if (lockFieldsOk) {
+      card.lockFrom = from;
+      card.lockTo = to;
+      card.cx = cx;
+      if (from >= 0) card.lockAt = Date.now();
+    }
+
+    pendingPage = lockFieldsOk
+      ? { pageId, offset: nextOffset, lockFrom: from, lockTo: to, lockAt: card.lockAt, cx }
+      : { pageId, offset: nextOffset };
 
     if (pageTimer) return;
-    const wait = Math.max(0, PRESENCE_THROTTLE_MS - (Date.now() - lastPageWrite));
+    const quick = pageId === wasPage;   // nur die Stelle hat sich verschoben
+    const gap = quick ? CARET_THROTTLE_MS : PRESENCE_THROTTLE_MS;
+    const wait = Math.max(0, gap - (Date.now() - lastPageWrite));
     pageTimer = setTimeout(() => {
       pageTimer = null;
       if (left) return;
@@ -1819,10 +1940,47 @@ async function joinDocRoom(docId) {
 
   /* ── Änderungsstrom ── */
 
+  /**
+   * Schickt eine Änderung in den Raum.
+   *
+   * >>> Warum hier ein zweiter Versuch steht <<<
+   * An einer Textänderung reisen Zusatzangaben mit: die Stelle der
+   * Schreibmarke und die beanspruchten Zeilen (OP_EXTRAS). Die Regel der
+   * Realtime Database weist aber JEDES Feld ab, das sie nicht kennt.
+   * Sind die veröffentlichten Regeln älter als die App, scheiterte damit
+   * die gesamte Textübertragung – wegen einer Zugabe, die nur die fremde
+   * Schreibmarke genauer macht. Der Text kam beim anderen nie an, und was
+   * man sah, war eine Marke, die auf Zeichen zeigte, die es dort nicht
+   * gab.
+   *
+   * Eine Zugabe darf die Hauptsache nicht umbringen. Also: scheitert es,
+   * geht dieselbe Änderung ohne die Zusatzangaben noch einmal hinaus.
+   */
   function sendOp(op) {
     if (left) return Promise.resolve();
-    return push(opsRef, { ...op, by: me.uid, at: rtNow() }).catch(err => {
-      console.warn('[Share] Änderung konnte nicht gesendet werden:', err?.message || err);
+    const full = { ...op, by: me.uid, at: rtNow() };
+
+    return push(opsRef, full).catch((err) => {
+      const extras = OP_EXTRAS.filter(key => key in op);
+      if (!extras.length) {
+        console.warn('[Share] Änderung konnte nicht gesendet werden:', err?.message || err);
+        return;
+      }
+
+      const plain = { ...full };
+      for (const key of extras) delete plain[key];
+
+      return push(opsRef, plain).then(() => {
+        if (extrasWarned) return;
+        extrasWarned = true;
+        console.warn('[Share] Die veröffentlichten Regeln kennen die Felder '
+          + OP_EXTRAS.join(', ') + ' noch nicht. Der Text wird übertragen, die fremde '
+          + 'Schreibmarke bleibt aber ungenau. Abhilfe: website/database.rules.json '
+          + 'in der Firebase Console unter Realtime Database → Regeln veröffentlichen.');
+      }).catch((zweiter) => {
+        console.warn('[Share] Änderung konnte nicht gesendet werden:',
+          zweiter?.message || zweiter);
+      });
     });
   }
 
