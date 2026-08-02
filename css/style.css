@@ -25,6 +25,19 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .nav-right{display:flex;align-items:center;gap:16px}
 .nav-dl{background:transparent;border:0.5px solid var(--gold);color:var(--gold-light);padding:7px 18px;font-family:'Jost',sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;text-decoration:none;transition:background .2s}
 .nav-dl:hover{background:var(--gold-dim)}
+
+/* ── Community in der Kopfzeile ──────────────────────────────────────
+   Stand vorher nur in der Fußzeile und wurde übersehen. Hebt sich durch
+   die gefüllte Fläche von den übrigen, nur umrandeten Knöpfen ab.
+
+   Das Symbol ist immer sichtbar, nicht nur auf dem Handy: unter 768px
+   fällt die Beschriftung weg (Regel weiter unten) und der Knopf wird zum
+   Kreis – ohne Symbol bliebe er dann leer. */
+.nav-community{display:inline-flex;align-items:center;gap:8px;background:var(--gold-dim);border-color:var(--gold-light)}
+.nav-community:hover{background:rgba(201,162,39,.28)}
+.nav-community svg{width:15px;height:15px;flex-shrink:0}
+/* Auf der Community-Seite selbst: zeigt an, wo man ist. */
+.nav-community[aria-current="page"]{background:rgba(201,162,39,.32);border-color:var(--gold);color:var(--cream)}
 .lang-sw{display:flex;align-items:center;gap:1px;border:0.5px solid var(--navy-border);padding:2px}
 .lb{background:transparent;border:none;color:var(--text-muted);font-family:'Jost',sans-serif;font-size:10px;letter-spacing:0.1em;padding:5px 8px;cursor:pointer;transition:color .2s,background .2s;text-transform:uppercase}
 .lb:hover{color:var(--gold-light)}
