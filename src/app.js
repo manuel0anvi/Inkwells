@@ -257,6 +257,60 @@ function lockedHere(page, textDiv, inputType) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   FREIGABE-ZEICHEN AM SEITENKOPF
+
+   Zeigt im geöffneten Heft, dass es weitergegeben wurde: ein Mensch,
+   wenn die anderen mitschreiben dürfen, sonst ein Auge für „nur lesen".
+
+   Die Auskunft kommt aus der örtlichen Merkliste (ui/share.js) – der
+   Seitenaufbau soll nicht auf Firestore warten müssen. Was die
+   Eingeladenen dürfen, steht allerdings nur dort; ui/share.js schreibt
+   es deshalb als `access` mit, sobald das Freigabefenster offen war.
+   ══════════════════════════════════════════════════════════ */
+const SHARE_MARK_SVG = {
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  view: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+};
+
+/** 'edit', 'view' oder null (nicht freigegeben) für das offene Heft. */
+function shareMarkFor(nb) {
+  // Ein fremdes Dokument hat man nicht selbst freigegeben – dort kein Zeichen
+  if (!nb) return null;
+  if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) return null;
+
+  const entry = typeof window.notebookShareEntry === 'function'
+    ? window.notebookShareEntry(nb.id)
+    : null;
+  if (!entry || !(entry.docId || entry.shareId)) return null;
+
+  if (entry.access === 'view' || entry.access === 'edit') return entry.access;
+
+  // Noch kein `access` gemerkt: die alte Lesekopie ist immer nur lesbar,
+  // sonst entscheidet das Linkrecht.
+  if (!entry.docId && entry.shareId) return 'view';
+  return entry.linkMode === 'view' ? 'view' : 'edit';
+}
+
+function shareMarkHTML(mark) {
+  if (!mark) return '';
+  const label = mark === 'view'
+    ? (t('shareMarkView') || 'Freigegeben – andere können nur lesen')
+    : (t('shareMarkEdit') || 'Freigegeben – andere können mitschreiben');
+  return '<span class="j-share-mark" title="' + label + '">' + SHARE_MARK_SVG[mark] + '</span>';
+}
+
+/** Nach dem Freigeben oder Aufheben die Zeichen nachziehen, ohne alles neu
+    aufzubauen – ui/share.js ruft das auf. */
+function refreshPageShareIcons() {
+  const mark = shareMarkFor(getNb());
+  for (const left of document.querySelectorAll('.j-page-left')) {
+    left.querySelector('.j-share-mark')?.remove();
+    if (mark) left.insertAdjacentHTML('beforeend', shareMarkHTML(mark));
+  }
+}
+window.refreshPageShareIcons = refreshPageShareIcons;
+
+/* ══════════════════════════════════════════════════════════
    PAGE DOM
    ══════════════════════════════════════════════════════════ */
 function appendPageDOM(page, index) {
@@ -268,7 +322,11 @@ function appendPageDOM(page, index) {
   const div = document.createElement('div'); div.className = 'j-page bg-' + bgId; div.dataset.pgid = page.id;
   div.style.width = targetW + 'px'; div.style.minHeight = targetH + 'px';
   const hdr = document.createElement('div'); hdr.className = 'j-page-hdr';
-  hdr.innerHTML = '<span class="j-page-num">Seite ' + (index + 1) + '</span><span class="j-page-date">' + fmt(page.date) + '</span>'
+  /* Seitenzahl und Freigabe-Zeichen bleiben zusammen in einer Gruppe –
+     sonst zöge das space-between des Kopfes das Zeichen in die Mitte. */
+  hdr.innerHTML = '<span class="j-page-left"><span class="j-page-num">Seite ' + (index + 1) + '</span>'
+    + shareMarkHTML(shareMarkFor(nb)) + '</span>'
+    + '<span class="j-page-date">' + fmt(page.date) + '</span>'
     + '<button class="pg-menu-btn" title="Seitenoptionen">⋯</button>';
   hdr.querySelector('.pg-menu-btn').addEventListener('click', e => {
     e.stopPropagation(); const r = e.target.getBoundingClientRect();

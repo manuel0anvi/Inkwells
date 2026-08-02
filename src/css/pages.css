@@ -96,6 +96,29 @@
   letter-spacing: .5px
 }
 
+/* Seitenzahl und Freigabe-Zeichen als eine Einheit links im Kopf */
+.j-page-left {
+  display: flex;
+  align-items: center;
+  gap: 6px
+}
+
+/* Das Heft ist freigegeben: Mensch = andere schreiben mit, Auge = nur lesen.
+   Zurückhaltend gehalten – es soll auffindbar sein, nicht ablenken. */
+.j-share-mark {
+  display: flex;
+  align-items: center;
+  color: #b0a898;
+  /* Der Kopf selbst lässt Klicks durch; für den Tooltip braucht es sie */
+  pointer-events: auto
+}
+
+.j-share-mark svg {
+  width: 11px;
+  height: 11px;
+  display: block
+}
+
 .j-canvas {
   position: absolute;
   top: 0;
