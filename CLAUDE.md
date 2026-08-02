@@ -72,3 +72,10 @@ der Live-Zusammenarbeit still etwas kaputt macht.
   prüfen — dort laufen sie wirklich.
 - In `website/firestore.rules` muss `adminUid()` die echte UID enthalten, nicht
   den Platzhalter. Vor jedem Deploy nachsehen.
+
+## Testen bei sichtbaren Änderungen (CSS, UI)
+
+Kurz das Wichtigste selbst prüfen, nicht jeden Zustand mit Headless-Browser
+und Screenshots durchspielen — das kostet mehr Zeit, als es bringt. Danach in
+zwei Sätzen sagen: was schon geprüft wurde und was der Nutzer selbst noch
+ansehen soll.
