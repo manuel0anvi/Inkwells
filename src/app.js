@@ -425,6 +425,12 @@ function appendPageDOM(page, index) {
      unterwegs. */
   textDiv.addEventListener('beforeinput', e => {
     if (S._isUndoingOrRedoing) return;
+    /* Nur-lesen wird hier NOCH einmal geprüft, obwohl contenteditable
+       schon auf false steht. Das Attribut wird beim Aufbau der Seite
+       gesetzt; das Recht kann sich danach jederzeit ändern (der Besitzer
+       stuft herab, der Besitzer verliert die Verbindung). Ein Riegel am
+       Ereignis gilt unabhängig davon, wann er gebraucht wird. */
+    if (S.readOnly) { e.preventDefault(); return; }
     if (lockedHere(page, textDiv, e.inputType)) { e.preventDefault(); return; }
     pushTypingHistory(page);
   });
@@ -437,7 +443,14 @@ function appendPageDOM(page, index) {
 
     /* Tab und Enter schreiben weiter unten selbst in den Text, teils ohne
        Umweg über beforeinput (commitPlainTextEdit setzt textContent
-       direkt). Die Sperre muss deshalb hier noch einmal gefragt werden. */
+       direkt). Ein solcher Schreibzugriff geht auch an contenteditable
+       vorbei – ohne Recht darf er deshalb gar nicht erst anfangen. */
+    if ((e.key === 'Tab' || e.key === 'Enter') && S.readOnly) {
+      e.preventDefault();
+      return;
+    }
+
+    // Dasselbe für die Zeilensperre des anderen
     if ((e.key === 'Tab' || e.key === 'Enter') && lockedHere(page, textDiv, 'insertText')) {
       e.preventDefault();
       return;
@@ -495,6 +508,7 @@ function appendPageDOM(page, index) {
   });
   textDiv.addEventListener('paste', e => {
     e.preventDefault();
+    if (S.readOnly) return;
     if (lockedHere(page, textDiv, 'insertFromPaste')) return;
     const text = (e.clipboardData || window.clipboardData).getData('text');
     if (!text) return;

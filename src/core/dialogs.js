@@ -233,6 +233,41 @@ function showJournal(nb) {
 }
 
 /**
+ * Setzt das Schreibrecht an allen Seiten, die schon auf dem Bildschirm
+ * stehen.
+ *
+ * >>> Warum das nötig ist <<<
+ * `contenteditable` wurde bisher nur EINMAL gesetzt, beim Aufbau der
+ * Seite (appendPageDOM in app.js). Stufte der Besitzer jemanden während
+ * der laufenden Sitzung auf „nur lesen" herab, wurde zwar S.readOnly
+ * umgelegt und die Werkzeugleiste abgeblendet – die Textfelder blieben
+ * aber beschreibbar. Die Oberfläche sah gesperrt aus, getippt werden
+ * konnte trotzdem, und beim nächsten Heraufstufen wäre das Getippte
+ * über syncStructure sogar noch bei allen anderen gelandet.
+ *
+ * @param {boolean} readOnly
+ */
+function applyEditableToPages(readOnly) {
+  const wrap = E('pages-wrap');
+  if (!wrap) return;
+
+  const felder = wrap.querySelectorAll('.j-text');
+  felder.forEach((textDiv, index) => {
+    textDiv.contentEditable = readOnly ? 'false' : 'true';
+    textDiv.spellcheck = !readOnly;
+    // Der Hinweis „Tippe hier…" steht nur auf der ersten Seite
+    textDiv.dataset.ph = (index === 0 && !readOnly) ? 'Tippe hier…' : '';
+  });
+
+  /* Wer gerade in einem Feld stand, das eben gesperrt wurde, schreibt
+     sonst munter weiter – der Fokus bleibt beim Umschalten stehen. */
+  if (readOnly) {
+    const aktiv = document.activeElement;
+    if (aktiv && aktiv.classList && aktiv.classList.contains('j-text')) aktiv.blur();
+  }
+}
+
+/**
  * Schaltet die Oberfläche zwischen „ganz normal" und „nur lesen" um.
  * Der Streifen über dem Editor sagt, von wem das Dokument kommt; die
  * Werkzeugleiste wird über die Klasse am <body> abgeblendet (layout.css).
@@ -245,6 +280,7 @@ function applyReadOnlyChrome(readOnly, sharedDoc) {
   S.sharedDoc = sharedDoc || null;
 
   document.body.classList.toggle('read-only', !!readOnly);
+  applyEditableToPages(!!readOnly);
 
   const bar = E('shared-bar');
   if (!bar) return;
