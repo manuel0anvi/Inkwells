@@ -1670,8 +1670,22 @@
     const focused = document.activeElement;
     const isText = focused && focused.classList && focused.classList.contains('j-text');
     const focusPgId = isText ? focused.closest('[data-pgid]')?.dataset.pgid : null;
-    const caret = (isText && typeof getCaretTextOffset === 'function')
-      ? getCaretTextOffset(focused) : null;
+
+    /* Gemessen wird mit DEMSELBEN Maß, mit dem unten wieder gesetzt wird.
+       Hier stand getCaretTextOffset, gesetzt wurde aber mit setFlatCaret –
+       zwei verschiedene Zählweisen: getCaretTextOffset zählt nur die
+       Zeichen in den Textknoten, das flache Maß zählt jede Zeilengrenze
+       als eigenes \n mit.
+
+       Die gemerkte Zahl war dadurch um die Anzahl der Zeilen ÜBER der
+       Marke zu klein, und genau so weit sprang die eigene Schreibmarke
+       beim Wiederherstellen nach oben. Ausgelöst wurde das von jeder
+       Struktur-Änderung des anderen – und eine davon kommt beim bloßen
+       Tippen ununterbrochen: läuft seine Seite über, legt die App die
+       nächste an. Es sah deshalb so aus, als zöge es einen dorthin, wo
+       der andere schreibt. */
+    const caret = (isText && typeof flatCaretPos === 'function')
+      ? flatCaretPos(focused) : null;
 
     openSection(sec);
 
