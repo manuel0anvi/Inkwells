@@ -1346,21 +1346,61 @@ async function updateDocHead(docId, patch) {
   await updateDoc(doc(db, DOCS, docId), { ...patch, updatedAt: serverTimestamp() });
 }
 
-/** Was darf, wer den Link hat? 'off' nimmt den Link ganz aus dem Verkehr. */
+/**
+ * Was darf, wer den Link hat? 'off' nimmt den Link ganz aus dem Verkehr.
+ *
+ * >>> Warum dabei auch die MITGLIEDER angefasst werden <<<
+ * Wer über den Link hereinkommt, wird von joinViaLink zum Mitglied
+ * gemacht – mit `memberVia: 'link'` und der Rolle, die der Link in dem
+ * Augenblick hergab. Danach hängt sein Zugriff nur noch an diesem
+ * Eintrag, nicht mehr am Link.
+ *
+ * Der Schalter änderte bisher aber nur `linkMode`. Wer schon drin war,
+ * behielt deshalb alles:
+ *
+ *   · Link auf „aus": es flog niemand hinaus, nur neue Besucher kamen
+ *     nicht mehr herein.
+ *   · Link von „lesen" auf „bearbeiten" (oder zurück): die Rolle der
+ *     bereits Eingetretenen blieb stehen.
+ *
+ * Es sah deshalb so aus, als wirke der Link-Schalter nur bei den per
+ * E-Mail Eingeladenen – bei denen wird `members` ja unmittelbar
+ * geschrieben. Jetzt zieht der Schalter alle über den Link Eingetretenen
+ * mit. Wer ausdrücklich per E-Mail eingeladen wurde (`memberVia` ist
+ * nicht 'link'), bleibt unberührt – seine Einladung hat mit dem Link
+ * nichts zu tun.
+ */
 async function setLinkMode(docId, mode) {
   const me = requireIdentity();
   const wanted = normalizeLinkMode(mode);
   const head = await loadDocumentHead(docId);
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
 
+  // Alle, die über den Link hereingekommen sind
+  const ueberLink = head.memberEmails.filter(e => head.memberVia[e] === 'link');
+
+  const members = { ...head.members };
+  const memberVia = { ...head.memberVia };
+  let memberEmails = head.memberEmails.slice();
+
   if (wanted === 'off') {
+    for (const e of ueberLink) {
+      delete members[e];
+      delete memberVia[e];
+    }
+    memberEmails = memberEmails.filter(e => !ueberLink.includes(e));
+
     if (head.linkId) await deleteDoc(doc(db, DOC_LINKS, head.linkId)).catch(() => {});
-    await updateDocHead(docId, { linkMode: 'off', linkId: '' });
+    await updateDocHead(docId, {
+      linkMode: 'off', linkId: '', memberEmails, members, memberVia
+    });
     return { linkMode: 'off', linkId: '', url: '' };
   }
 
+  for (const e of ueberLink) members[e] = wanted;
+
   const linkId = head.linkId || makeShareId();
-  await updateDocHead(docId, { linkMode: wanted, linkId });
+  await updateDocHead(docId, { linkMode: wanted, linkId, members });
   await writeLinkEntry(linkId, docId, me.uid);
   return { linkMode: wanted, linkId, url: docUrlFor(linkId) };
 }
@@ -1863,16 +1903,40 @@ async function joinDocRoom(docId, options = {}) {
      die Verbindung wegfällt. Genau deshalb greift er auch bei einem
      Rechner, der schon offline ist und nichts mehr senden kann.
 
-     Für JEDEN gleich, auch für den Besitzer: der Eintrag verschwindet.
-     Genau das ist das Zeichen, an dem die Eingeladenen ablesen, dass der
-     Besitzer nicht mehr da ist – gleich, ob ihm die Leitung abgerissen
-     ist oder ob er die App ordentlich zugemacht hat. Beides bedeutet für
-     sie dasselbe: kein Kontakt, also nur lesen (siehe onOwnerAway).
+     Bei allen anderen verschwindet der Eintrag einfach.
 
-     Registriert wird ERST nach dem set() oben: bis dahin gibt es auch
-     nichts wegzuräumen, ohne das set() existiert der Eintrag ja gar
-     nicht. */
-  await onDisconnect(meRef).remove();
+     >>> Beim Besitzer nicht <<<
+     Dort bleibt er stehen, mit lost = 1. Damit lassen sich zwei Dinge
+     unterscheiden, die vorher gleich aussahen:
+
+       · Der Besitzer macht die App ZU oder verlässt den Raum. Dann läuft
+         leave(): der Auftrag wird aufgehoben und der Eintrag entfernt,
+         es bleibt nichts stehen. Die Eingeladenen arbeiten weiter, wie
+         bei Google Docs – niemand muss aufpassen, wer zuerst geht.
+       · Dem Besitzer REISST die Leitung ab, oder er stürzt ab. Dann
+         kommt leave() nicht mehr dazu, und der Server führt den Auftrag
+         aus: der Eintrag bleibt mit lost = 1 stehen. Das ist das Zeichen
+         für die anderen, dass hier jemand die App offen hat und
+         womöglich örtlich weiterschreibt, ohne dass es ankommt. Solange
+         das so steht, dürfen sie nur lesen.
+
+     Registriert wird ERST nach dem set() oben: dort steht fest, welche
+     Felder die veröffentlichten Regeln annehmen. Bis zu diesem Punkt
+     gibt es auch nichts wegzuräumen – ohne das set() existiert der
+     Eintrag ja gar nicht. */
+  let ownerMarkOk = false;
+  if (options.isOwner) {
+    try {
+      await onDisconnect(meRef).set({ ...card, lost: 1, at: rtNow() });
+      ownerMarkOk = true;
+    } catch (err) {
+      console.warn('[Share] Die veröffentlichten Regeln kennen das Feld lost '
+        + 'noch nicht – ein Abbruch beim Besitzer fällt den Eingeladenen '
+        + 'dann nicht auf. Abhilfe: website/database.rules.json in der '
+        + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.');
+    }
+  }
+  if (!ownerMarkOk) await onDisconnect(meRef).remove();
 
   const stops = [];
   let lastPageWrite = 0;
@@ -1947,7 +2011,9 @@ async function joinDocRoom(docId, options = {}) {
   function onPresence(callback) {
     const stop = onValue(ref(rtdb, `presence/${docId}`), (snap) => {
       const all = snap.val() || {};
-      callback(Object.values(all).filter(p => p && p.uid !== me.uid));
+      // lost = die stehen gebliebene Marke eines Besitzers, dem die
+      // Leitung abgerissen ist. Anwesend ist er damit gerade nicht.
+      callback(Object.values(all).filter(p => p && p.uid !== me.uid && !p.lost));
     }, () => callback([]));
     stops.push(stop);
     return stop;
@@ -1958,18 +2024,24 @@ async function joinDocRoom(docId, options = {}) {
    * dürfen Eingeladene nur lesen (ui/sharedDocs.js).
    *
    * >>> Zwei Gründe, dasselbe Ergebnis <<<
-   * Es zählt nicht, WARUM der Kontakt fehlt, sondern nur DASS er fehlt:
+   * Gesperrt wird nur, wenn der Kontakt UNGEWOLLT fehlt:
    *
-   *   · Der Besitzer ist nicht im Raum. Der Server räumt seinen Eintrag
-   *     per onDisconnect weg, sobald seine Leitung abreißt; beim
-   *     ordentlichen Zumachen tut leave() dasselbe. Beide Fälle sehen
-   *     gleich aus, und beide bedeuten hier dasselbe: er könnte örtlich
-   *     weiterschreiben, ohne dass es jemand mitbekommt.
-   *   · Die EIGENE Leitung ist weg. Dann sagt der Anwesenheitseintrag des
-   *     Besitzers nichts mehr aus – er steht nur noch im Zwischenspeicher
-   *     und könnte längst überholt sein. Gefragt wird deshalb zusätzlich
+   *   · Dem Besitzer ist die Leitung abgerissen oder er ist abgestürzt.
+   *     Dann steht sein Eintrag mit lost = 1 da (siehe onDisconnect
+   *     oben): er hat die App offen und schreibt womöglich örtlich
+   *     weiter, ohne dass es ankommt. Wer jetzt hier tippt, baut einen
+   *     Konflikt auf, den nachher niemand auflösen kann.
+   *   · Die EIGENE Leitung ist weg. Dann sagt der Anwesenheitseintrag
+   *     nichts mehr aus – er steht nur noch im Zwischenspeicher und
+   *     könnte längst überholt sein. Gefragt wird deshalb zusätzlich
    *     `.info/connected`; das ist der einzige Wert, der auch ohne
    *     Verbindung stimmt, weil ihn die Bibliothek örtlich führt.
+   *
+   * >>> Und wann NICHT gesperrt wird <<<
+   * Wenn der Besitzer den Raum ordentlich verlässt oder die App zumacht.
+   * Dann räumt leave() seinen Eintrag weg und hebt den Auftrag auf – es
+   * bleibt gar nichts stehen. Weitergearbeitet wird wie bei Google Docs;
+   * dass der Besitzer gerade nicht da ist, geht niemanden etwas an.
    *
    * Bewusst NICHT über das Alter des Eintrags: setPage schreibt nur bei
    * einer Änderung, ein untätiger Besitzer frischt `at` also gar nicht
@@ -1985,8 +2057,8 @@ async function joinDocRoom(docId, options = {}) {
     if (!ownerUid || ownerUid === me.uid) { callback(false); return () => {}; }
 
     let connected = true;
-    let ownerHere = true;
-    const report = () => callback(!connected || !ownerHere);
+    let ownerLost = false;
+    const report = () => callback(!connected || ownerLost);
 
     const stopConn = onValue(ref(rtdb, '.info/connected'), (snap) => {
       connected = snap.val() === true;
@@ -1994,9 +2066,11 @@ async function joinDocRoom(docId, options = {}) {
     }, () => { connected = false; report(); });
 
     const stopOwner = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
-      ownerHere = snap.exists();
+      const eintrag = snap.val();
+      // Kein Eintrag = ordentlich gegangen. Nur die Marke zählt.
+      ownerLost = !!(eintrag && eintrag.lost);
       report();
-    }, () => { ownerHere = false; report(); });
+    }, () => { ownerLost = false; report(); });
 
     stops.push(stopConn, stopOwner);
     return () => { stopConn(); stopOwner(); };

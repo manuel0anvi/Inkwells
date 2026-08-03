@@ -183,6 +183,26 @@
         console.warn('[Init] Cloud-Upload vor dem Schließen unvollständig:', err);
       }
 
+      try {
+        /* >>> Den Raum ORDENTLICH verlassen <<<
+           Ohne das reißt beim Zumachen einfach die Leitung ab, und der
+           Server führt den hinterlegten Auftrag aus: beim Besitzer bleibt
+           die Marke lost = 1 stehen. Für alle Eingeladenen sieht das aus
+           wie ein Absturz, und sie dürfen nur noch lesen – obwohl er die
+           App bloß zugemacht hat.
+
+           leave() hebt den Auftrag auf und räumt den Eintrag weg. Kurze
+           Zeitgrenze: das Schließen darf daran nicht hängen bleiben. */
+        if (window.Collab?.isLive?.()) {
+          await Promise.race([
+            window.Collab.stop(),
+            new Promise(resolve => setTimeout(resolve, 1500))
+          ]);
+        }
+      } catch (err) {
+        console.warn('[Init] Raum nicht sauber verlassen:', err);
+      }
+
       window.api.confirmQuit();
     });
     console.log('[Init] ✓ Quit-Handler registriert');
