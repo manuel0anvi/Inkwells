@@ -250,18 +250,15 @@
      obwohl der Vorgang noch lief. */
   const _busyEntries = new Set();
 
+  // Aussehen steht in css/modals.css bei .trash-row-busy
   function setRowBusy(row, busy) {
     if (!row) return;
-    row.style.opacity = busy ? '0.45' : '';
-    row.style.pointerEvents = busy ? 'none' : '';
+    row.classList.toggle('trash-row-busy', busy);
     row.querySelector('.trash-row-spinner')?.remove();
     if (!busy) return;
 
     const spinner = document.createElement('span');
     spinner.className = 'trash-row-spinner';
-    spinner.style.cssText = 'width:14px;height:14px;flex-shrink:0;border-radius:50%;'
-      + 'border:2px solid var(--sb2);border-top-color:var(--gold);'
-      + 'animation:busy-spin .7s linear infinite;';
     row.appendChild(spinner);
   }
 

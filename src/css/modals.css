@@ -955,6 +955,31 @@
   font-size: 9px;
 }
 
+/* ═══ Papierkorb-Zeile arbeitet gerade ═══
+   Zurückholen und endgültiges Löschen fassen die Cloud an und brauchen
+   ihre Zeit. Solange blendet die Zeile ab und dreht einen Kreisel – wie
+   die Karte auf der Startseite (.nb-card-busy in css/layout.css).
+
+   Abgeblendet wird nur der INHALT, nicht der Kreisel. Vorher lag die
+   Blende auf der ganzen Zeile, und damit war ausgerechnet das Zeichen,
+   auf das man wartet, das blasseste darin. */
+.trash-row-busy { pointer-events: none }
+
+.trash-row-busy > *:not(.trash-row-spinner) {
+  opacity: .4;
+  filter: grayscale(1)
+}
+
+.trash-row-spinner {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 2px solid var(--sb2);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: busy-spin .7s linear infinite
+}
+
 /* ═══ Tastenkürzel-Übersicht ═══ */
 .sc-group { margin-bottom: 22px; }
 .sc-group:last-of-type { margin-bottom: 12px; }
