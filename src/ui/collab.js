@@ -207,8 +207,134 @@
     // eigene Marke nach rechts, so wie es auf dem Papier auch aussieht.
     if (stelle >= d.at + d.remove) return stelle + d.insert.length - d.remove;
 
-    // Mitten im Ersetzten: ans Ende des Neuen, dort steht die Zeile jetzt
-    return d.at + d.insert.length;
+    // Mitten im geänderten Bereich – die Marke am Text festmachen
+    return verankerteStelle(vorher, nachher, stelle);
+  }
+
+  // So viele Zeichen werden höchstens als Halt genommen
+  const HALT_MAX = 24;
+  // Kürzer als das ist kein Halt mehr, sondern Zufall
+  const HALT_MIN = 3;
+
+  /**
+   * Die eigene Marke liegt IM geänderten Bereich – wohin damit?
+   *
+   * >>> Warum hier nicht „ans Ende des Neuen" <<<
+   * Genau das stand hier, und es war der Grund für „mein Cursor springt
+   * dorthin, wo der andere schreibt". Das Ende des Neuen IST die Stelle,
+   * an der der andere gerade tippt.
+   *
+   * Und der Fall trat nicht etwa selten ein: textDelta vergleicht über
+   * gemeinsamen Anfang und gemeinsames Ende und fasst damit ALLES
+   * dazwischen zu einem einzigen Block zusammen. Unterscheiden sich die
+   * beiden Fassungen an ZWEI Stellen – sein Tippen oben, meines unten,
+   * der Normalfall beim gemeinsamen Schreiben –, dann reicht dieser eine
+   * Block über den halben Text, und die eigene Marke liegt fast immer
+   * darin. Sie wurde also bei fast jedem fremden Anschlag an sein
+   * Textende gezogen. Weil reportCaret die verrutschte Stelle danach
+   * weitermeldet, saß auch SEIN Bild meiner Marke und mein Sperrband
+   * falsch – ein Fehler, drei Beschwerden.
+   *
+   * Verlässlich ist stattdessen der Text unmittelbar um die Marke herum:
+   * erst die Zeichen davor, sonst die dahinter. Wird davon nichts
+   * wiedergefunden, bleibt die Marke lieber ungefähr stehen, als
+   * irgendwohin zu springen.
+   */
+  function verankerteStelle(vorher, nachher, stelle) {
+    /* Der Halt DAVOR: die Marke gehört hinter diese Zeichen. Von lang
+       nach kurz, damit der längste eindeutige Halt gewinnt. */
+    for (let len = Math.min(HALT_MAX, stelle); len >= HALT_MIN; len--) {
+      const halt = vorher.slice(stelle - len, stelle);
+      const treffer = naechsterTreffer(nachher, halt, stelle, len);
+      if (treffer !== -1) return treffer;
+    }
+
+    /* Nichts davor wiedergefunden – dann der Halt DAHINTER. Die Marke
+       gehört vor diese Zeichen. Hilft, wenn ausgerechnet das Wort vor
+       der Marke ersetzt wurde. */
+    for (let len = Math.min(HALT_MAX, vorher.length - stelle); len >= HALT_MIN; len--) {
+      const halt = vorher.slice(stelle, stelle + len);
+      const treffer = naechsterTreffer(nachher, halt, stelle, 0);
+      if (treffer !== -1) return treffer;
+    }
+
+    // Weder noch: ungefähr stehen bleiben ist besser als springen
+    return Math.min(stelle, nachher.length);
+  }
+
+  /**
+   * Die Fundstelle von `halt`, die der bisherigen Stelle am nächsten
+   * liegt. `versatz` sagt, wo die Marke bezogen auf den Fund sitzt.
+   */
+  function naechsterTreffer(text, halt, stelle, versatz) {
+    let beste = -1;
+    let abstand = Infinity;
+    for (let i = text.indexOf(halt); i !== -1; i = text.indexOf(halt, i + 1)) {
+      const kandidat = i + versatz;
+      const d = Math.abs(kandidat - stelle);
+      if (d < abstand) { abstand = d; beste = kandidat; }
+    }
+    return beste;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     AUFZEICHNUNG: was ein fremder Anschlag mit der eigenen Marke macht
+
+     Die Beschwerde „mein Cursor springt dorthin, wo der andere schreibt"
+     lässt sich von außen nicht nachstellen – sie hängt daran, wie weit
+     die beiden Fassungen im Augenblick auseinander sind. Hier wird
+     deshalb jeder Lauf mitgeschrieben. Im Fenster:
+
+         Collab.caretLog()
+
+     Interessant ist die Spalte `fall`: „innen" heißt, die Marke lag im
+     geänderten Bereich und musste über den Halt wiedergefunden werden.
+     Steht in `haltVorher` und `haltNachher` dasselbe, sitzt sie richtig.
+     ══════════════════════════════════════════════════════════════════ */
+
+  const CARET_LOG_MAX = 40;
+  const caretLog = [];
+
+  function merkeCaretLauf(vorher, nachher, caret, ziel, textDiv) {
+    if (vorher === null) return;
+    let d = null;
+    try { d = textDelta(vorher, nachher); } catch (e) { return; }
+
+    const fall = !d ? 'nichts'
+      : caret < d.at ? 'davor'
+      : caret >= d.at + d.remove ? 'dahinter'
+      : 'innen';
+
+    caretLog.push({
+      zeit: new Date().toLocaleTimeString(),
+      fall,
+      vonStelle: caret,
+      nachStelle: ziel,
+      sprung: ziel - caret,
+      aenderungBei: d ? d.at : null,
+      entfernt: d ? d.remove : null,
+      eingefuegt: d ? d.insert.length : null,
+      // Der Text um die Marke – vorher und nachher. Muss gleich bleiben.
+      haltVorher: JSON.stringify(vorher.slice(Math.max(0, caret - 10), caret)),
+      haltNachher: JSON.stringify(nachher.slice(Math.max(0, ziel - 10), ziel)),
+      // Wo steht der andere gerade? Zum Vergleich mit nachStelle.
+      andere: others.map(p => p.offset).join(',')
+    });
+    if (caretLog.length > CARET_LOG_MAX) caretLog.shift();
+  }
+
+  /** Die letzten Läufe ansehen – für die Fehlersuche im Fenster. */
+  function zeigeCaretLog() {
+    if (!caretLog.length) { console.log('[Collab] Noch nichts aufgezeichnet.'); return caretLog; }
+    console.table(caretLog);
+    const verdaechtig = caretLog.filter(e => e.haltVorher !== e.haltNachher);
+    if (!verdaechtig.length) {
+      console.log('[Collab] Die Marke hat jedes Mal ihren Text behalten.');
+    } else {
+      console.warn('[Collab] ' + verdaechtig.length + ' von ' + caretLog.length
+        + ' Läufen haben die Marke von ihrem Text weggezogen – diese Zeilen ansehen.');
+    }
+    return caretLog;
   }
 
   /** Trägt eine lokale Textänderung in den gemeinsamen Text ein. */
@@ -1023,10 +1149,12 @@
 
     if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
       let ziel = caret;
+      const nachher = flatTextOf(textDiv);
       if (vorher !== null) {
-        try { ziel = shiftedPos(vorher, flatTextOf(textDiv), caret); } catch (e) { ziel = caret; }
+        try { ziel = shiftedPos(vorher, nachher, caret); } catch (e) { ziel = caret; }
       }
       try { setFlatCaret(textDiv, ziel); } catch (e) { /* Text war zu stark umgebaut */ }
+      merkeCaretLauf(vorher, nachher, caret, ziel, textDiv);
     }
     if (typeof renderSideTree === 'function') renderSideTree();
 
@@ -2190,6 +2318,8 @@
     editBlockedBy, warnLocked, lockOwner, caretOf,
     // Sofort abgleichen, ohne auf den Takt zu warten (Tests, Schließen)
     syncNow: syncStructure,
+    // Fehlersuche: was fremde Anschläge mit der eigenen Marke gemacht haben
+    caretLog: zeigeCaretLog,
     // offengelegt für scripts/test-collab-text.js
     _textDelta: textDelta,
     _shiftedPos: shiftedPos,

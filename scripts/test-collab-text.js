@@ -119,13 +119,59 @@ check('Nichts geändert, nichts bewegt',
    rückt nach rechts – so sieht es auf dem Papier auch aus. */
 check('Genau an der Marke eingefügt', shiftedPos('abcdef', 'abcXdef', 3), 4);
 
-/* Ersetzt jemand einen Bereich, in dem die Marke steht, gibt es keine
-   Stelle mehr, die ihr entspricht. Dann ans Ende des Neuen – dort steht
-   die Zeile jetzt. */
-check('Mitten im Ersetzten', shiftedPos('abcdef', 'aXYZf', 3), 4);
+/* Ersetzt jemand genau den Bereich, in dem die Marke steht, gibt es
+   keine Stelle mehr, die ihr entspricht – weder davor noch dahinter ist
+   etwas wiederzufinden. Dann bleibt sie ungefähr stehen. Früher ging sie
+   ans Ende des Neuen; siehe den nächsten Abschnitt, warum das schädlich
+   war. */
+check('Mitten im Ersetzten', shiftedPos('abcdef', 'aXYZf', 3), 3);
 
 // Eine ganze Zeile weiter vorn – der Fall aus der Live-Sitzung
 check('Neue Zeile davor', shiftedPos('eins\nzwei', 'eins\nneu\nzwei', 7), 11);
+
+/* ══ Die eigene Marke darf NICHT zum anderen springen ════════════════
+
+   >>> Der Fehler, der hier festgehalten wird <<<
+   textDelta vergleicht über gemeinsamen Anfang und gemeinsames Ende und
+   fasst alles dazwischen zu EINEM Block zusammen. Unterscheiden sich die
+   beiden Fassungen an zwei Stellen – er tippt oben, ich unten, der
+   Normalfall beim gemeinsamen Schreiben –, reicht dieser Block über den
+   halben Text und die eigene Marke liegt darin.
+
+   Sie wurde dann „ans Ende des Neuen" gesetzt, und das ist genau die
+   Stelle, an der der ANDERE schreibt. Weil reportCaret die verrutschte
+   Stelle danach weitermeldet, saß auch sein Bild meiner Marke und mein
+   Sperrband falsch.
+   ══════════════════════════════════════════════════════════════════ */
+
+console.log('\nZwei Leute tippen gleichzeitig an verschiedenen Stellen');
+
+{
+  // Er hängt " XX" an Zeile 1, ich stehe in Zeile 3 hinter „Dri"
+  const vorher  = 'Erste\nZweite\nDritte';
+  const nachher = 'Erste XX\nZweite\nDritte YY';
+  const ziel = shiftedPos(vorher, nachher, 16);
+
+  check('Die Marke bleibt hinter „Dri"', nachher.slice(0, ziel), 'Erste XX\nZweite\nDri');
+  check('Und landet NICHT an seinem Text', ziel === nachher.length, false);
+}
+
+{
+  // Umgekehrt: er schreibt unten, ich stehe oben
+  const vorher  = 'Erste\nZweite\nDritte';
+  const nachher = 'Erste XX\nZweite\nDritte YY';
+  const ziel = shiftedPos(vorher, nachher, 3);
+  check('Marke vor beiden Änderungen bleibt stehen', ziel, 3);
+}
+
+{
+  /* Der Halt DAHINTER: ausgerechnet das Wort vor der Marke wird ersetzt,
+     der Text danach steht noch. Dann zählt der Text danach. */
+  const vorher  = 'Hallo Welt\nZweite';
+  const nachher = 'Servus Welt\nZweite XX';
+  const ziel = shiftedPos(vorher, nachher, 6);   // vor „Welt"
+  check('Marke bleibt vor „Welt"', nachher.slice(ziel, ziel + 4), 'Welt');
+}
 
 /* ── 2. Der erste Yjs-Stand ─────────────────────────────────────────── */
 
