@@ -1847,7 +1847,7 @@
    * @param {object} [opts]
    * @param {boolean}  [opts.isOwner]      ist DIESE Person der Besitzer?
    * @param {string}   [opts.ownerUid]     Kennung des Besitzers
-   * @param {Function} [opts.onOwnerLost]  Rückruf, wenn der Besitzer abbricht
+   * @param {Function} [opts.onOwnerAway]  Rückruf, wenn der Kontakt zum Besitzer fehlt
    */
   async function start(id, notebook, crdt, canEdit, opts = {}) {
     await stop();
@@ -1889,23 +1889,25 @@
 
     showLiveState();
 
-    /* >>> Der Besitzer ist mitten in der Arbeit weggebrochen <<<
-       Dann hat er die App offen, aber kein Netz – und schreibt womöglich
-       örtlich weiter. Würde hier jemand gleichzeitig ändern, gäbe es beim
-       Wiederverbinden zwei Fassungen derselben Seite. Solange die Marke
-       steht, wird deshalb nur gelesen; kommt er zurück, ebenso von selbst
-       wieder zurück. Erklärung des Zeichens in core/share.js.
+    /* >>> Ohne Kontakt zum Besitzer wird nur gelesen <<<
+       Egal ob ihm die Leitung abgerissen ist, er die App zugemacht hat,
+       oder die EIGENE Verbindung fehlt: ohne gesicherten Kontakt könnte
+       der Besitzer gerade örtlich weiterschreiben, ohne dass es jemand
+       mitbekommt. Würde hier gleichzeitig geändert, gäbe es beim
+       Wiederverbinden zwei Fassungen derselben Seite. Solange der Kontakt
+       fehlt, wird deshalb nur gelesen; kehrt er zurück, ebenso von selbst
+       wieder zurück. Erklärung in core/share.js (onOwnerAway).
 
        canEdit bleibt dabei unangetastet: es ist das dauerhafte Recht, das
        der Besitzer vergeben hat. Hier wird es nur vorübergehend nicht
        ausgeübt. */
-    /* Mit ?. gefragt: eine ältere core/share.js kennt onOwnerLost noch
+    /* Mit ?. gefragt: eine ältere core/share.js kennt onOwnerAway noch
        nicht. Dann bleibt es beim bisherigen Verhalten – lieber ohne diese
        Sperre als gar kein Live-Betrieb. */
-    room.onOwnerLost?.((lost) => {
-      setCanWrite(!!canEdit && !lost);
-      try { opts.onOwnerLost?.(!!lost); }
-      catch (err) { console.warn('[Collab] Rückmeldung zum Abbruch:', err); }
+    room.onOwnerAway?.((away) => {
+      setCanWrite(!!canEdit && !away);
+      try { opts.onOwnerAway?.(!!away); }
+      catch (err) { console.warn('[Collab] Rückmeldung zur Erreichbarkeit:', err); }
     });
 
     room.onPresence((list) => {

@@ -27,8 +27,6 @@
 
           "at":       { ".validate": "newData.isNumber()" },
 
-          "lost":     { ".validate": "newData.isNumber()" },
-
           "$other":   { ".validate": false }
         }
       }

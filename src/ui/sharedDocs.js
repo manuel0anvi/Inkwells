@@ -463,26 +463,27 @@
       Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit', {
         isOwner: false,
         ownerUid: fresh.owner,
-        onOwnerLost: applyOwnerHold
+        onOwnerAway: applyOwnerHold
       }).catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
     }
   }
 
-  /* ── Der Besitzer ist weggebrochen ──────────────────────────────────
-     Solange das so steht, hat er die App offen, aber kein Netz – und
-     schreibt womöglich örtlich weiter. Wer eingeladen ist, liest dann
-     nur, damit nicht zwei Fassungen derselben Seite entstehen. Das Recht
-     selbst bleibt bestehen; es ruht nur. Kommt der Besitzer zurück,
-     verschwindet seine Marke und alles gilt wieder wie vorher.
-     Erklärung des Zeichens in core/share.js (joinDocRoom).
+  /* ── Der Kontakt zum Besitzer fehlt ──────────────────────────────────
+     Egal ob ihm die Leitung abgerissen ist, er die App zugemacht hat,
+     oder die eigene Verbindung fehlt: ohne gesicherten Kontakt könnte der
+     Besitzer gerade örtlich weiterschreiben, ohne dass es jemand
+     mitbekommt. Wer eingeladen ist, liest dann nur, damit nicht zwei
+     Fassungen derselben Seite entstehen. Das Recht selbst bleibt
+     bestehen; es ruht nur. Kehrt der Kontakt zurück, gilt wieder alles
+     wie vorher. Erklärung in core/share.js (onOwnerAway).
 
      Gefragt wird S.sharedDoc.role und nicht das Recht von vorhin: der
      Besitzer kann es zwischendurch geändert haben (watchOpenDocument). */
-  function applyOwnerHold(lost) {
+  function applyOwnerHold(away) {
     if (!S.sharedDoc) return;
-    const was = !!S.sharedDoc.ownerLost;
-    const now = !!lost;
-    S.sharedDoc.ownerLost = now;
+    const was = !!S.sharedDoc.ownerAway;
+    const now = !!away;
+    S.sharedDoc.ownerAway = now;
 
     applyReadOnlyChrome(now || S.sharedDoc.role !== 'edit', S.sharedDoc);
 
@@ -800,10 +801,10 @@
          seine Änderungen kamen nirgends an. */
       if (role !== S.sharedDoc.role) {
         S.sharedDoc.role = role;
-        /* Ist der Besitzer gerade weggebrochen, ruht das Schreibrecht –
+        /* Fehlt gerade der Kontakt zum Besitzer, ruht das Schreibrecht –
            auch ein frisch heraufgestuftes. Sonst hübe diese Stelle die
            Sperre wieder auf, die applyOwnerHold eben gesetzt hat. */
-        const held = !!S.sharedDoc.ownerLost;
+        const held = !!S.sharedDoc.ownerAway;
         applyReadOnlyChrome(held || role !== 'edit', S.sharedDoc);
         if (window.Collab?.setCanWrite) window.Collab.setCanWrite(!held && role === 'edit');
         toast(role === 'edit' ? t('sharedNowEdit') : t('sharedNowView'));

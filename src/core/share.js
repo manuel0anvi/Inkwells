@@ -1805,8 +1805,8 @@ function colorForUid(uid) {
  * @param {string} docId
  * @param {object} [options]
  * @param {boolean} [options.isOwner]  ist DIESE Person der Besitzer?
- * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerLost
- * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerLost/sendOp/onOp/leave
+ * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerAway
+ * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/onOp/leave
  */
 async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
@@ -1860,38 +1860,19 @@ async function joinDocRoom(docId, options = {}) {
 
   /* ── Was geschieht, wenn die Leitung abreißt? ──────────────────────
      Der Auftrag wird JETZT hinterlegt und vom Server ausgeführt, sobald
-     die Verbindung wegfällt. Genau deshalb funktioniert das auch für
-     einen Rechner, der schon offline ist und nichts mehr senden kann.
+     die Verbindung wegfällt. Genau deshalb greift er auch bei einem
+     Rechner, der schon offline ist und nichts mehr senden kann.
 
-     Bei allen anderen verschwindet der Eintrag einfach.
+     Für JEDEN gleich, auch für den Besitzer: der Eintrag verschwindet.
+     Genau das ist das Zeichen, an dem die Eingeladenen ablesen, dass der
+     Besitzer nicht mehr da ist – gleich, ob ihm die Leitung abgerissen
+     ist oder ob er die App ordentlich zugemacht hat. Beides bedeutet für
+     sie dasselbe: kein Kontakt, also nur lesen (siehe onOwnerAway).
 
-     >>> Beim Besitzer nicht <<<
-     Dort bleibt er stehen, mit lost = 1. Das ist das Zeichen für die
-     Eingeladenen, dass der Besitzer die App zwar offen hat, aber ohne
-     Netz ist – und dann womöglich örtlich weiterschreibt. Solange das
-     so steht, dürfen die anderen nur lesen (ui/sharedDocs.js). Beim
-     ordentlichen Verlassen räumt leave() den Eintrag weg und hebt den
-     Auftrag auf; wer die App zumacht, hält damit niemanden auf.
-
-     Registriert wird ERST nach dem set() oben: dort steht fest, welche
-     Felder die veröffentlichten Regeln annehmen. Vorher gäbe es hier
-     bloß dieselbe Abweisung ein zweites Mal. Bis zu diesem Punkt gibt
-     es auch nichts wegzuräumen – ohne das set() existiert der Eintrag
-     ja gar nicht. */
-  let ownerMarkOk = false;
-  if (options.isOwner) {
-    try {
-      await onDisconnect(meRef).set({ ...card, lost: 1, at: rtNow() });
-      ownerMarkOk = true;
-    } catch (err) {
-      console.warn('[Share] Die veröffentlichten Regeln kennen das Feld lost '
-        + 'noch nicht – die Eingeladenen merken einen Abbruch beim Besitzer '
-        + 'nicht und dürfen weiterschreiben. Abhilfe: '
-        + 'website/database.rules.json in der Firebase Console unter '
-        + 'Realtime Database → Regeln veröffentlichen.');
-    }
-  }
-  if (!ownerMarkOk) await onDisconnect(meRef).remove();
+     Registriert wird ERST nach dem set() oben: bis dahin gibt es auch
+     nichts wegzuräumen, ohne das set() existiert der Eintrag ja gar
+     nicht. */
+  await onDisconnect(meRef).remove();
 
   const stops = [];
   let lastPageWrite = 0;
@@ -1966,34 +1947,59 @@ async function joinDocRoom(docId, options = {}) {
   function onPresence(callback) {
     const stop = onValue(ref(rtdb, `presence/${docId}`), (snap) => {
       const all = snap.val() || {};
-      // lost = die stehen gebliebene Marke eines Besitzers, dem die
-      // Verbindung abgerissen ist. Anwesend ist er damit gerade nicht.
-      callback(Object.values(all).filter(p => p && p.uid !== me.uid && !p.lost));
+      callback(Object.values(all).filter(p => p && p.uid !== me.uid));
     }, () => callback([]));
     stops.push(stop);
     return stop;
   }
 
   /**
-   * Meldet, ob dem Besitzer die Verbindung abgerissen ist, während er das
-   * Dokument offen hatte – siehe die Erklärung beim onDisconnect oben.
+   * Meldet, ob der Kontakt zum Besitzer fehlt. Solange das der Fall ist,
+   * dürfen Eingeladene nur lesen (ui/sharedDocs.js).
    *
-   * Ohne bekannte Besitzerkennung (oder beim Besitzer selbst) wird einmal
-   * `false` gemeldet und nichts weiter beobachtet: die Frage stellt sich
-   * dann nicht.
+   * >>> Zwei Gründe, dasselbe Ergebnis <<<
+   * Es zählt nicht, WARUM der Kontakt fehlt, sondern nur DASS er fehlt:
    *
-   * @param {(lost: boolean) => void} callback
+   *   · Der Besitzer ist nicht im Raum. Der Server räumt seinen Eintrag
+   *     per onDisconnect weg, sobald seine Leitung abreißt; beim
+   *     ordentlichen Zumachen tut leave() dasselbe. Beide Fälle sehen
+   *     gleich aus, und beide bedeuten hier dasselbe: er könnte örtlich
+   *     weiterschreiben, ohne dass es jemand mitbekommt.
+   *   · Die EIGENE Leitung ist weg. Dann sagt der Anwesenheitseintrag des
+   *     Besitzers nichts mehr aus – er steht nur noch im Zwischenspeicher
+   *     und könnte längst überholt sein. Gefragt wird deshalb zusätzlich
+   *     `.info/connected`; das ist der einzige Wert, der auch ohne
+   *     Verbindung stimmt, weil ihn die Bibliothek örtlich führt.
+   *
+   * Bewusst NICHT über das Alter des Eintrags: setPage schreibt nur bei
+   * einer Änderung, ein untätiger Besitzer frischt `at` also gar nicht
+   * auf. Er gälte nach kurzer Zeit als weg, obwohl er dasitzt.
+   *
+   * Beim Besitzer selbst wird einmal `false` gemeldet und nichts weiter
+   * beobachtet: er darf immer schreiben, auch offline.
+   *
+   * @param {(away: boolean) => void} callback
    */
-  function onOwnerLost(callback) {
+  function onOwnerAway(callback) {
     const ownerUid = options.ownerUid || '';
     if (!ownerUid || ownerUid === me.uid) { callback(false); return () => {}; }
 
-    const stop = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
-      const entry = snap.val();
-      callback(!!(entry && entry.lost));
-    }, () => callback(false));
-    stops.push(stop);
-    return stop;
+    let connected = true;
+    let ownerHere = true;
+    const report = () => callback(!connected || !ownerHere);
+
+    const stopConn = onValue(ref(rtdb, '.info/connected'), (snap) => {
+      connected = snap.val() === true;
+      report();
+    }, () => { connected = false; report(); });
+
+    const stopOwner = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+      ownerHere = snap.exists();
+      report();
+    }, () => { ownerHere = false; report(); });
+
+    stops.push(stopConn, stopOwner);
+    return () => { stopConn(); stopOwner(); };
   }
 
   /* ── Änderungsstrom ── */
@@ -2081,7 +2087,7 @@ async function joinDocRoom(docId, options = {}) {
 
   pruneOps();
 
-  return { me: card, setPage, onPresence, onOwnerLost, sendOp, onOp, leave };
+  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, leave };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────

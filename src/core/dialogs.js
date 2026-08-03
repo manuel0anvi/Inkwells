@@ -203,16 +203,16 @@ function applyReadOnlyChrome(readOnly, sharedDoc) {
     return;
   }
 
-  /* Der Besitzer ist mitten in der Arbeit weggebrochen: das Recht steht
-     weiter auf „bearbeiten", ausgeübt wird es gerade nicht. Der Streifen
-     muss den ruhenden Zustand zeigen, sonst steht dort „bearbeiten",
-     während nichts geht (Erklärung in ui/sharedDocs.js). */
-  const canEdit = sharedDoc.role === 'edit' && !sharedDoc.ownerLost;
+  /* Fehlt der Kontakt zum Besitzer, steht das Recht weiter auf
+     „bearbeiten", ausgeübt wird es gerade nicht. Der Streifen muss den
+     ruhenden Zustand zeigen, sonst steht dort „bearbeiten", während
+     nichts geht (Erklärung in ui/sharedDocs.js). */
+  const canEdit = sharedDoc.role === 'edit' && !sharedDoc.ownerAway;
   bar.style.display = 'flex';
 
   const roleEl = E('shared-bar-role');
   if (roleEl) {
-    roleEl.textContent = sharedDoc.ownerLost
+    roleEl.textContent = sharedDoc.ownerAway
       ? (t('roleOwnerOffline') || t('roleView'))
       : (canEdit ? t('roleEdit') : t('roleView'));
   }
