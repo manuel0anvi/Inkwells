@@ -220,6 +220,17 @@
   /* Zurückholen und endgültiges Löschen fassen beide die Cloud an und
      brauchen ihre Zeit. Ohne Zeichen blieb die Zeile unverändert stehen,
      als wäre der Klick ins Leere gegangen. */
+  /* Einträge, an denen gerade gearbeitet wird (zurückholen oder endgültig
+     löschen).
+     >>> Warum als Kennung und nicht an der Zeile <<<
+     Wie im Raster der Startseite (ui/homeGrid.js): der Kreisel hing an dem
+     DOM-Element. Sobald aber irgendein anderer Vorgang fertig wurde, baute
+     renderTrash() die ganze Liste neu – und die Zeile des noch laufenden
+     Eintrags war danach eine frische ohne Kreisel. Wer zwei Hefte kurz
+     nacheinander endgültig löscht, sah den zweiten Kreisel verschwinden,
+     obwohl der Vorgang noch lief. */
+  const _busyEntries = new Set();
+
   function setRowBusy(row, busy) {
     if (!row) return;
     row.style.opacity = busy ? '0.45' : '';
@@ -233,6 +244,17 @@
       + 'border:2px solid var(--sb2);border-top-color:var(--gold);'
       + 'animation:busy-spin .7s linear infinite;';
     row.appendChild(spinner);
+  }
+
+  /** Den Vorgang vormerken und die Zeile sofort abblenden. */
+  function startEntryBusy(entryId, row) {
+    _busyEntries.add(entryId);
+    setRowBusy(row, true);
+  }
+
+  function endEntryBusy(entryId, row) {
+    _busyEntries.delete(entryId);
+    setRowBusy(row, false);
   }
 
   function renderTrash() {
@@ -249,6 +271,8 @@
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 12px;'
         + 'background:var(--sidebar-bg);border-radius:6px;';
+      // Läuft hier noch etwas, muss der Kreisel den Neuaufbau überleben
+      const stillBusy = _busyEntries.has(entry.id);
 
       const dot = document.createElement('span');
       dot.style.cssText = `width:8px;height:32px;border-radius:3px;flex-shrink:0;background:${entry.color || 'var(--gold)'};`;
@@ -305,14 +329,15 @@
       restore.addEventListener('click', async () => {
         if (restore.disabled) return;
         restore.disabled = true;
-        setRowBusy(row, true);
+        startEntryBusy(entry.id, row);
         const nb = await Trash.restore(entry.id);
         restore.disabled = false;
         if (!nb) {
-          setRowBusy(row, false);
+          endEntryBusy(entry.id, row);
           toast(t('trashRestoreFailed') || 'Zurückholen fehlgeschlagen.', true);
           return;
         }
+        _busyEntries.delete(entry.id);
         renderTrash();
         updateTrashCount();
         renderHomeGrid();
@@ -329,13 +354,17 @@
           || '„{name}“ endgültig löschen? Das lässt sich nicht rückgängig machen.')
           .replace('{name}', entry.name));
         if (!ok) return;
-        setRowBusy(row, true);
+        startEntryBusy(entry.id, row);
         await Trash.deleteForever(entry.id);
+        _busyEntries.delete(entry.id);
         renderTrash();
         updateTrashCount();
         toast(t('trashDeletedForever') || 'Endgültig gelöscht.');
       });
       row.appendChild(del);
+
+      // Erst ganz zum Schluss, damit der Kreisel hinter den Knöpfen sitzt
+      if (stillBusy) setRowBusy(row, true);
 
       trashList.appendChild(row);
     }

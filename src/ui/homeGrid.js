@@ -3,6 +3,26 @@
 /* ── HOME GRID ── */
 let _dragState = null;
 
+/* Hefte, die gerade in den Papierkorb wandern.
+   >>> Warum das hier steht und nicht an der Karte <<<
+   Der Kreisel hing an dem DOM-Element, das beim Löschen gefunden wurde.
+   Sobald aber irgendein anderes Löschen fertig wurde, baute
+   renderHomeGrid() das ganze Raster neu – und die Karte des noch
+   laufenden Hefts war danach ein frisches Element ohne die Klasse. Bei
+   zwei Löschungen kurz nacheinander verschwand der Kreisel des zweiten
+   also, sobald das erste durch war, obwohl es noch Sekunden weiterlief.
+   Als Kennung überlebt der Zustand jeden Neuaufbau. */
+const _deleting = new Set();
+
+/** Kreisel sofort zeigen oder wegnehmen, ohne das ganze Raster neu zu bauen.
+    Über dataset gesucht statt per Selektor: eine Heft-Kennung darf Zeichen
+    enthalten, die in einem CSS-Selektor gesondert behandelt werden müssten. */
+function markDeletingCard(nbId) {
+  const card = Array.from(document.querySelectorAll('.nb-card'))
+    .find(c => c.dataset.nbId === nbId);
+  card?.classList.toggle('nb-card-busy', _deleting.has(nbId));
+}
+
 function renderHomeGrid() {
   // Geteilte Dokumente liegen zwar mit in S.notebooks (der Editor holt sich
   // alles über getNb), gehören aber nicht auf die Seite „Meine Hefte".
@@ -12,7 +32,11 @@ function renderHomeGrid() {
   for (const nb of own) {
     const pageCount = (nb.pages || []).length;
     const pageLabel = pageCount !== 1 ? t('pages') : t('page');
-    const card = document.createElement('div'); card.className = 'nb-card' + (S.activeNbId === nb.id ? ' active' : ''); card.dataset.nbId = nb.id;
+    const card = document.createElement('div');
+    card.className = 'nb-card'
+      + (S.activeNbId === nb.id ? ' active' : '')
+      + (_deleting.has(nb.id) ? ' nb-card-busy' : '');
+    card.dataset.nbId = nb.id;
     card.style.setProperty('--nb-color', nb.color);
     card.innerHTML = `<div class="nb-card-spine" style="background:${nb.color}"></div>`
       + `<div class="nb-card-body">`
@@ -250,16 +274,20 @@ E('ctx-delete').addEventListener('click', async () => {
   /* Bis das Heft wirklich weg ist, vergehen Sekunden – es wandert örtlich
      und in der Cloud in den Papierkorb. Solange bleibt die Karte stehen,
      aber sichtbar abgeblendet und mit Kreisel (siehe css/layout.css).
-     Über den Namen gesucht statt per Selektor: eine Heft-Kennung darf
-     Zeichen enthalten, die in einem CSS-Selektor gesondert behandelt
-     werden müssten. */
-  const card = Array.from(document.querySelectorAll('.nb-card'))
-    .find(c => c.dataset.nbId === nb.id);
-  card?.classList.add('nb-card-busy');
+
+     Gemerkt wird die Kennung, nicht das Element: siehe _deleting oben. */
+  _deleting.add(nb.id);
+  markDeletingCard(nb.id);
 
   const ok = await Trash.moveToTrash(nb);
-  if (!ok) { card?.classList.remove('nb-card-busy'); toast(t('saveError'), true); return; }
+  if (!ok) {
+    _deleting.delete(nb.id);
+    markDeletingCard(nb.id);
+    toast(t('saveError'), true);
+    return;
+  }
 
+  _deleting.delete(nb.id);
   S.notebooks = S.notebooks.filter(n => n.id !== nb.id);
 
   if (S.activeNbId === nb.id) {
