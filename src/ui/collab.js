@@ -2155,6 +2155,69 @@
   function isLive() { return !!room; }
 
   /**
+   * Die fremden Marken, so knapp wie möglich – zum Abfotografieren.
+   *
+   * Die entscheidende Spalte ist `hierSteht`: der Text an der Stelle, die
+   * der andere gemeldet hat, aus MEINEM Text geschnitten. Tippt er gerade
+   * „Hallo" und hier steht an seiner Stelle etwas anderes, dann ist die
+   * ZAHL falsch – die Texte der beiden Seiten sind auseinander. Steht
+   * dort das Richtige, die Marke sitzt aber trotzdem woanders, dann liegt
+   * es an der Umrechnung in Bildpunkte.
+   */
+  function zeigeFremdeMarken() {
+    const leute = peopleNow();
+    if (!leute.length) { console.log('[Collab] Gerade ist niemand sonst da.'); return; }
+
+    const zeilen = leute.map(person => {
+      const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(person.pageId || '') + '"]');
+      const td = pgEl ? pgEl.querySelector('.j-text') : null;
+      const txt = td ? flatTextOf(td) : null;
+      const roh = person.offset;
+
+      // Die Stelle, wie sie nach der Anker-Umrechnung wirklich gilt
+      const hier = (td && Number.isFinite(roh) && roh >= 0)
+        ? (peopleOnPage(person.pageId, td).find(p => p.uid === person.uid) || person).offset
+        : roh;
+
+      let wo = '(nicht im Text)';
+      let zeile = null, spalte = null;
+      if (txt !== null && Number.isFinite(hier) && hier >= 0) {
+        wo = JSON.stringify(txt.slice(Math.max(0, hier - 12), hier))
+           + ' ▏ ' + JSON.stringify(txt.slice(hier, hier + 12));
+        try {
+          const rect = caretRectAt(td, hier, txt);
+          if (rect) {
+            const zoom = (typeof getZoom === 'function') ? getZoom() : 1;
+            const box = lineBoxOf(pgEl, td, rect, zoom);
+            const lh = parseInt(td.style.lineHeight) || 32;
+            const oben = 64 + (parseFloat(td.style.paddingTop) || 0);
+            zeile = Math.round((box.top - oben) / lh);
+            spalte = Math.round(box.left);
+          }
+        } catch (e) { /* egal */ }
+      }
+
+      return {
+        wer: person.name || person.email || '?',
+        gemeldet: roh,
+        giltHier: hier,
+        verschoben: (Number.isFinite(hier) && Number.isFinite(roh)) ? hier - roh : null,
+        textLaenge: txt === null ? null : txt.length,
+        ueberDasEnde: txt !== null && Number.isFinite(hier) && hier > txt.length,
+        hierSteht: wo,
+        zeile, spalteInPx: spalte,
+        sperre: (Number.isFinite(person.lockFrom) && person.lockFrom >= 0)
+          ? person.lockFrom + '–' + person.lockTo : 'keine'
+      };
+    });
+
+    console.table(zeilen);
+    console.log('[Collab] Stimmt „hierSteht" mit dem überein, was der andere gerade '
+      + 'tippt? Wenn nein, ist die gemeldete ZAHL falsch. Wenn ja, die Umrechnung.');
+    return zeilen;
+  }
+
+  /**
    * Selbstprüfung für die Stelle der Schreibmarke.
    *
    * Läuft in EINEM Fenster und braucht niemanden sonst: die eigene Marke
@@ -2167,14 +2230,24 @@
    *     Collab.checkCaret()
    */
   function checkCaret() {
-    const textDiv = document.activeElement;
+    /* >>> Warum das auch OHNE eigene Marke laufen muss <<<
+       Die wichtigste Frage ist „wo sitzt die Marke des ANDEREN und stimmt
+       das?", und dabei sieht man ihm zu, statt selbst zu tippen. Vorher
+       stieg die Prüfung genau dann aus („erst in den Text klicken") und
+       war für den einen Fall unbrauchbar, für den sie gebraucht wird.
+       Ohne eigene Marke wird jetzt nur der eigene Teil übersprungen. */
+    let textDiv = document.activeElement;
     if (!textDiv || !textDiv.classList || !textDiv.classList.contains('j-text')) {
-      console.log('[Collab] Erst in den Text klicken, dann noch einmal.');
+      textDiv = null;
+    }
+    if (!textDiv) {
+      zeigeFremdeMarken();
       return null;
     }
+
     const pgEl = textDiv.closest('[data-pgid]');
     const sel = window.getSelection();
-    if (!pgEl || !sel || !sel.rangeCount) return null;
+    if (!pgEl || !sel || !sel.rangeCount) { zeigeFremdeMarken(); return null; }
 
     const echt = sel.getRangeAt(0);
     const pos = flatCaretPos(textDiv);
@@ -2336,6 +2409,8 @@
   window.Collab = {
     start, stop, setCanWrite, noteTextChange, noteStroke, notePage, noteChange,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
+    // Nur die fremden Marken – die Tabelle zum Abfotografieren
+    fremdeMarken: zeigeFremdeMarken,
     // Zeilensperre – app.js fragt vor jeder Eingabe nach
     editBlockedBy, warnLocked, lockOwner, caretOf,
     // Sofort abgleichen, ohne auf den Takt zu warten (Tests, Schließen)
