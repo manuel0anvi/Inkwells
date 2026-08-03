@@ -137,14 +137,44 @@
          zeigte sie auf Zeichen, die es beim anderen noch gar nicht gab;
          traf sie danach ein, hinkte die Marke sichtbar hinterher. Im
          selben Paket kann beides nicht mehr auseinanderlaufen. */
-      const op = { k: 'y', p: pageId, u: toBase64(update) };
+      const u = toBase64(update);
+
+      /* >>> Passt das überhaupt durch den Kanal? <<<
+         Die Regel der Realtime Database lässt für `u` 200.000 Zeichen zu.
+         Struktur-Meldungen wurden schon immer vorher gemessen (sendLive),
+         der TEXT aber nicht: er ging ungeprüft hinaus, die Datenbank wies
+         ihn ab, und sendOp schrieb nur eine Warnung in die Konsole. Die
+         Änderung war damit für immer verloren.
+
+         Sichtbar war das als „ich schreibe, der andere sieht nichts – nur
+         mein Sperrband": Anwesenheit und Sperre laufen über einen anderen
+         Weg und kamen weiter an. Groß werden Textänderungen vor allem
+         beim ersten Stand einer vollen Seite und beim Einfügen langer
+         Abschnitte.
+
+         Was nicht durchpasst, geht denselben Weg wie ein Bild: erst nach
+         Firestore sichern, dann der Gegenseite sagen „hol diese Seite
+         neu". Langsamer, aber es kommt an. */
+      if (u.length > LIVE_OP_LIMIT) {
+        console.warn('[Collab] Textänderung zu groß für den Live-Kanal ('
+          + u.length + ' Zeichen) – Seite ' + pageId + ' geht über Firestore.');
+        sendViaFirestore(pageId);
+        return;
+      }
+
+      const op = { k: 'y', p: pageId, u };
       const hier = caretInfoFor(pageId);
       if (hier) {
         op.c = hier.offset;
         if (hier.anker) op.cx = hier.anker;
         if (hier.lock) { op.lf = hier.lock.from; op.lt = hier.lock.to; }
       }
-      room.sendOp(op);
+
+      /* Und wenn es trotzdem schiefgeht – ältere Regeln, Netz weg –, darf
+         die Änderung nicht einfach verschwinden. Dann derselbe Notweg. */
+      Promise.resolve(room.sendOp(op))
+        .then((ok) => { if (!ok) sendViaFirestore(pageId); })
+        .catch(() => sendViaFirestore(pageId));
     });
 
     docs.set(pageId, entry);
@@ -1043,16 +1073,16 @@
    * damit lässt sich der Anfang und das Ende der Zeile einschachteln.
    * Das hängt an keiner Maus und an keinem Bildausschnitt.
    *
-   * >>> Genau EINE Zeile <<<
-   * Anfangs waren es die eigene und die darauffolgende. Das war zu viel:
-   * gesperrt aussah, was niemand anfasste, und daneben weiterzuarbeiten
-   * ging nicht mehr. Jetzt gehört dem Schreibenden nur die Zeile, in der
-   * seine Marke steht.
+   * >>> Zwei Zeilen: die eigene und die darauffolgende <<<
+   * Wer schreibt, kommt gleich in der nächsten Zeile an – die gehört
+   * deshalb dazu. Wichtig ist nur, dass das BAND genauso weit reicht wie
+   * der gemeldete Bereich: hielt sich die Anzeige nicht daran, sah es
+   * aus, als sei etwas gesperrt, was niemand anfasst.
    */
   function visualLineSpan(textDiv, offset) {
     const text = flatTextOf(textDiv);
     // Nie über den Absatz hinaus: ein Umbruch beendet die Sperre ohnehin
-    const grenze = flatLineSpan(text, offset, 0);
+    const grenze = flatLineSpan(text, offset, 1);
 
     const caret = caretRectAt(textDiv, offset, text);
     if (!caret) return null;
@@ -1080,14 +1110,14 @@
     }
     const von = lo;
 
-    /* Ende DERSELBEN Zeile: die späteste Stelle, die noch dieselbe
-       Zeilenmitte hat. Nicht weiter – die Zeile darunter gehört ihm
-       nicht. */
+    /* Ende der Zeile DANACH: die späteste Stelle, die höchstens eine
+       Zeilenhöhe tiefer sitzt. Gibt es keine nächste Zeile, bleibt es
+       beim Ende der eigenen. */
     let lo2 = offset, hi2 = grenze.to;
     while (lo2 < hi2) {
       const mid = (lo2 + hi2 + 1) >> 1;
       const m = zeilenMitte(mid);
-      if (m !== null && Math.abs(m - mitte) < lh / 2) lo2 = mid;
+      if (m !== null && m < mitte + lh * 1.5) lo2 = mid;
       else hi2 = mid - 1;
     }
     const bis = lo2;

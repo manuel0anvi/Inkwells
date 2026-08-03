@@ -2093,31 +2093,42 @@ async function joinDocRoom(docId, options = {}) {
    *
    * Eine Zugabe darf die Hauptsache nicht umbringen. Also: scheitert es,
    * geht dieselbe Änderung ohne die Zusatzangaben noch einmal hinaus.
+   *
+   * >>> Warum das Ergebnis zurückgemeldet wird <<<
+   * Vorher endete jeder Fehlschlag in einer Warnung in der Konsole, und
+   * der Aufrufer hielt die Änderung für zugestellt. Sie war damit für
+   * immer verloren – der andere sah den Text nie, während Anwesenheit
+   * und Sperrband weiter ankamen. Wer das Ergebnis kennt, kann den
+   * Notweg über Firestore nehmen (ui/collab.js).
+   *
+   * @returns {Promise<boolean>} ob die Änderung im Raum steht
    */
   function sendOp(op) {
-    if (left) return Promise.resolve();
+    if (left) return Promise.resolve(false);
     const full = { ...op, by: me.uid, at: rtNow() };
 
-    return push(opsRef, full).catch((err) => {
+    return push(opsRef, full).then(() => true).catch((err) => {
       const extras = OP_EXTRAS.filter(key => key in op);
       if (!extras.length) {
         console.warn('[Share] Änderung konnte nicht gesendet werden:', err?.message || err);
-        return;
+        return false;
       }
 
       const plain = { ...full };
       for (const key of extras) delete plain[key];
 
       return push(opsRef, plain).then(() => {
-        if (extrasWarned) return;
+        if (extrasWarned) return true;
         extrasWarned = true;
         console.warn('[Share] Die veröffentlichten Regeln kennen die Felder '
           + OP_EXTRAS.join(', ') + ' noch nicht. Der Text wird übertragen, die fremde '
           + 'Schreibmarke bleibt aber ungenau. Abhilfe: website/database.rules.json '
           + 'in der Firebase Console unter Realtime Database → Regeln veröffentlichen.');
+        return true;
       }).catch((zweiter) => {
         console.warn('[Share] Änderung konnte nicht gesendet werden:',
           zweiter?.message || zweiter);
+        return false;
       });
     });
   }
