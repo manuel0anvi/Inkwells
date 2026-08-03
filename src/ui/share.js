@@ -226,6 +226,17 @@
 
   async function openShareDialog(nb) {
     if (!nb) return;
+
+    /* >>> Ein fremdes Dokument gibt man nicht selbst weiter <<<
+       Wer etwas freigegeben bekommen hat, ist nicht der Besitzer: die
+       Freigabe hängt am Besitzer, und nur er entscheidet, wer hereindarf.
+       Die Prüfung steht hier und nicht bei den Knöpfen, damit sie für
+       JEDEN Weg gilt – Werkzeugleiste, Kontextmenü und window.openShareDialog. */
+    if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) {
+      toast(t('shareNotYours'), true);
+      return;
+    }
+
     shareNb = nb;
     head = null;
 
@@ -712,11 +723,7 @@
   E('btn-doc-share')?.addEventListener('click', () => {
     const nb = getNb();
     if (!nb) { toast(t('noActiveNotebook'), true); return; }
-    // Ein fremdes Dokument gibt man nicht selbst weiter.
-    if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) {
-      toast(t('shareNotYours'), true);
-      return;
-    }
+    // Fremde Dokumente weist openShareDialog() selbst ab
     openShareDialog(nb);
   });
 
