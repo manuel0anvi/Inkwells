@@ -742,7 +742,10 @@ function setShareBusy(busy) {
   }
 }
 
-/** Freigeben geht nur online – jeder Schritt schreibt nach Firestore. */
+/* Ohne Verbindung geht weder das Freigeben (jeder Schritt schreibt nach
+   Firestore) noch die Liste der geteilten Dokumente (die liegen nur dort).
+   Gegenstück in der App: src/ui/sharedDocs.js – dort wird zusätzlich
+   CloudSync gefragt, das wirklich nachsieht; hier gibt es nur den Browser. */
 function shareIsOffline() {
   return navigator.onLine === false;
 }
@@ -1242,7 +1245,7 @@ function renderSharedDocs() {
      also nicht leer, sondern nicht zu beantworten – und „es hat niemand
      etwas geteilt" wäre dann schlicht gelogen. Gegenstück in der App:
      src/ui/sharedDocs.js (renderShared). */
-  if (isOffline()) {
+  if (shareIsOffline()) {
     hint.textContent = t('shared_needs_internet');
     return;
   }
