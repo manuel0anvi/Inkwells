@@ -338,15 +338,6 @@ const TRANSLATIONS = {
     sharedOwnerBack: 'Der Besitzer ist wieder da. Du kannst weiterarbeiten.',
 
     // Zwei Fassungen derselben Seite
-    conflictTitle: 'Zwei Fassungen',
-    conflictBody: 'Du hast ohne Verbindung weitergeschrieben, und jemand anders hat dieselben Seiten geändert. Welche Fassung soll gelten?',
-    conflictNote: 'Die nicht gewählte Fassung geht dabei verloren. Seiten, die nur du geändert hast, sind nicht betroffen.',
-    conflictPage: 'Seite {n}',
-    conflictMine: 'Meine',
-    conflictTheirs: 'Ihre',
-    conflictAllMine: 'Überall meine',
-    conflictAllTheirs: 'Überall ihre',
-    conflictApply: 'Übernehmen',
     sharedNotifyOne: '{name} hat „{title}" mit dir geteilt.',
     sharedNotifyMany: '{n} neue geteilte Dokumente.',
     sharedBlocked: 'Für dieses Dokument wurde dir der Zugriff entzogen.',
@@ -803,15 +794,6 @@ const TRANSLATIONS = {
     sharedOwnerBack: 'The owner is back. You can carry on working.',
 
     // Two versions of the same page
-    conflictTitle: 'Two versions',
-    conflictBody: 'You carried on writing without a connection, and somebody else changed the same pages. Which version should count?',
-    conflictNote: 'The version you do not pick will be lost. Pages only you changed are not affected.',
-    conflictPage: 'Page {n}',
-    conflictMine: 'Mine',
-    conflictTheirs: 'Theirs',
-    conflictAllMine: 'All mine',
-    conflictAllTheirs: 'All theirs',
-    conflictApply: 'Apply',
     sharedNotifyOne: '{name} shared “{title}” with you.',
     sharedNotifyMany: '{n} new shared documents.',
     sharedBlocked: 'Your access to this document has been revoked.',
@@ -1268,15 +1250,6 @@ const TRANSLATIONS = {
     sharedOwnerBack: 'Il proprietario è tornato. Puoi continuare a lavorare.',
 
     // Due versioni della stessa pagina
-    conflictTitle: 'Due versioni',
-    conflictBody: 'Hai continuato a scrivere senza connessione e un\'altra persona ha modificato le stesse pagine. Quale versione deve valere?',
-    conflictNote: 'La versione non scelta andrà persa. Le pagine modificate solo da te non sono coinvolte.',
-    conflictPage: 'Pagina {n}',
-    conflictMine: 'La mia',
-    conflictTheirs: 'La sua',
-    conflictAllMine: 'Tutte le mie',
-    conflictAllTheirs: 'Tutte le sue',
-    conflictApply: 'Applica',
     sharedNotifyOne: '{name} ha condiviso «{title}» con te.',
     sharedNotifyMany: '{n} nuovi documenti condivisi.',
     sharedBlocked: 'Il tuo accesso a questo documento è stato revocato.',
