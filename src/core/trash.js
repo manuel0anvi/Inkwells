@@ -146,6 +146,23 @@ const Trash = {
       return false;
     }
 
+    /* >>> Ein freigegebenes Heft nimmt seine Freigabe mit <<<
+       Vorher blieb sie stehen: das Heft lag beim Besitzer im Papierkorb,
+       die Eingeladenen sahen es aber weiter in ihrer Liste, konnten es
+       öffnen und darin schreiben – in ein Dokument, das seinen Besitzer
+       verloren hatte. Jetzt wird die Freigabe zuerst zurückgezogen; die
+       anderen fliegen dadurch hinaus (watchOpenDocument sieht den Kopf
+       verschwinden) und das Dokument fällt aus ihrer Liste. */
+    if (typeof window.unshareNotebook === 'function') {
+      try {
+        if (await window.unshareNotebook(notebook.id)) {
+          console.log('[Trash] Freigabe zurückgezogen:', notebook.name);
+        }
+      } catch (err) {
+        console.warn('[Trash] Freigabe nicht zurückgezogen:', err?.message || err);
+      }
+    }
+
     await this.load();
 
     const originalPath = FileManager_.getNotebookFilePath(notebook.id) || FileManager_.getNotebookPath(notebook);

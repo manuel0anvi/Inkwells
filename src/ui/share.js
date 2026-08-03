@@ -731,6 +731,42 @@
   window.openShareDialog = openShareDialog;
   window.notebookShareEntry = shareFor;
 
+  /**
+   * Zieht die Freigabe eines Hefts vollständig zurück – gebraucht beim
+   * Löschen (core/trash.js).
+   *
+   * >>> Warum das Löschen das mit erledigen muss <<<
+   * Vorher blieb die Freigabe stehen: das Heft war beim Besitzer im
+   * Papierkorb, die Eingeladenen sahen es aber weiter in ihrer Liste und
+   * konnten es öffnen und bearbeiten. Änderungen gingen dabei in ein
+   * Dokument, das seinen Besitzer verloren hatte.
+   *
+   * unshareDocument löscht Kopf, Inhalt und Link. Die Eingeladenen merken
+   * das von selbst: watchOpenDocument sieht den Kopf verschwinden und
+   * wirft hinaus, und aus der Liste fällt es beim nächsten Durchgang.
+   *
+   * @returns {Promise<boolean>} ob etwas zurückgezogen wurde
+   */
+  window.unshareNotebook = async function unshareNotebook(nbId) {
+    const entry = shareFor(nbId);
+    if (!entry || !entry.docId) return false;
+
+    try {
+      const api = await whenShareReady();
+      await api.unshareDocument(entry.docId);
+    } catch (err) {
+      /* Nicht der Besitzer, kein Netz, schon weg – in allen Fällen soll
+         das Löschen weiterlaufen. Der Eintrag hier wird trotzdem
+         aufgeräumt, sonst zeigt die Oberfläche eine Freigabe an, die es
+         nicht mehr gibt. */
+      console.warn('[Share] Freigabe beim Löschen nicht zurückgezogen:',
+        err?.message || err);
+    }
+
+    await remember(nbId, null);
+    return true;
+  };
+
   /* Auch die Empfängerseite braucht diese Auskunft (ui/sharedDocs.js).
      Dort stand bisher in JEDEM Fall „melde dich an" – auch dann, wenn man
      längst angemeldet war und nur Firebase den Nutzer nicht kannte. Damit
