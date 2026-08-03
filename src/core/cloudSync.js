@@ -1095,9 +1095,52 @@ class CloudSyncManager {
     return this.provider.listNotebookFiles(this._http, folderId);
   }
 
+  /**
+   * Gehört diese Datei zu diesem Heft?
+   *
+   * >>> Warum es dafür zwei Wege braucht <<<
+   * Beim HERUNTERLADEN kommt die Kennung eines Hefts aus dem Inhalt der
+   * Datei (_denormalizeNotebook). Beim SUCHEN kam sie bisher nur aus dem
+   * Dateinamen. Solange beide dasselbe sagen, fällt das nicht auf.
+   *
+   * Sagen sie es nicht – eine Datei aus einer älteren Fassung, eine von
+   * OneDrive bei Namensgleichheit umbenannte („… 1.json"), oder eine, die
+   * nach einem Wechsel des Anbieters unter dem anderen Muster liegt –,
+   * dann entsteht ein Heft, das sich herunterladen, aber nicht löschen
+   * lässt: der Papierkorb meldete „erledigt", ohne etwas getan zu haben,
+   * die Datei blieb im Hauptordner liegen, und sobald der Eintrag im
+   * Papierkorb weg war, kam das Heft beim nächsten Abgleich zurück.
+   *
+   * Der Inhalt wird nur gelesen, wenn der Name gar keine Kennung hergibt.
+   * Ein Name, der eine nennt, gilt – dann ist die Antwort schon klar.
+   */
+  async _fileBelongsTo(file, nbId) {
+    if (this.provider.matchesNotebook(file, { id: nbId, name: '' })) return true;
+    if (file.inkwellId) return false;
+
+    try {
+      const json = await this.provider.downloadFile(this._http, file.id);
+      return this._denormalizeNotebook(json, file)?.id === nbId;
+    } catch (err) {
+      console.warn('[CloudSync] Datei nicht lesbar:', file.name, err.message);
+      return false;
+    }
+  }
+
   async _findRemoteFile(notebook) {
     const files = await this._listNotebookFiles();
-    return files.find(f => this.provider.matchesNotebook(f, notebook)) || null;
+
+    // Der schnelle Weg zuerst – er trifft in aller Regel
+    const byName = files.find(f => this.provider.matchesNotebook(f, notebook));
+    if (byName) return byName;
+
+    for (const file of files) {
+      if (!await this._fileBelongsTo(file, notebook.id)) continue;
+      console.log('[CloudSync] Datei über ihren Inhalt zugeordnet:', file.name);
+      return file;
+    }
+
+    return null;
   }
 
   async _loadRemoteNotebooks() {
@@ -1296,7 +1339,9 @@ class CloudSyncManager {
         if (!folderId) continue;
         const files = await this.provider.listNotebookFiles(this._http, folderId);
         for (const file of files) {
-          if (!this.provider.matchesNotebook(file, { id: nbId, name: '' })) continue;
+          // Notfalls über den Inhalt – siehe _fileBelongsTo. Ohne das blieb
+          // genau die Datei liegen, die das Heft zurückgebracht hat.
+          if (!await this._fileBelongsTo(file, nbId)) continue;
           await this.provider.deleteFile(this._http, file.id);
           deleted = true;
         }

@@ -323,7 +323,14 @@ const OneDriveProvider = {
   },
 
   matchesNotebook(file, notebook) {
-    return file.inkwellId === notebook.id;
+    if (file.inkwellId) return file.inkwellId === notebook.id;
+
+    /* Ohne Trenner im Namen: die Form, die Google Drive schreibt. Solche
+       Dateien liegen hier, wenn zwischen den Anbietern gewechselt wurde.
+       Google Drive kennt denselben Rückfall (googleDrive.js) – hier fehlte
+       er, und die Datei war damit weder zu finden noch zu löschen. */
+    const base = String(file.name || '').replace(/\.(json|jrnl)$/i, '');
+    return !!notebook.id && base === notebook.id;
   },
 
   async upsertNotebook(http, { folderId, notebook, existingFileId }) {
