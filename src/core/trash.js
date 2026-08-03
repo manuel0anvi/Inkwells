@@ -198,7 +198,17 @@ const Trash = {
     const remote = await CloudSync_.loadTrashIndex();
     if (remote === null) return false;   // offline oder nicht angemeldet
 
-    const remoteById = new Map(remote.map(e => [e.id, e]));
+    /* >>> Gibt es die gemeinsame Liste überhaupt? <<<
+       Ein fehlender Eintrag bedeutet nur dann „anderswo erledigt", wenn
+       die Liste existiert. Gibt es sie gar nicht – frisch angemeldet, der
+       Anbieter gewechselt, die Datei von Hand entfernt –, dann weiß die
+       Cloud noch nichts, statt etwas anderes zu wissen.
+
+       Ohne diesen Unterschied wurde beim Anmelden der gesamte Papierkorb
+       geleert, samt der örtlichen Sicherungen. Danach hielt nichts mehr
+       die gelöschten Hefte davon ab, beim nächsten Abgleich zurückzukommen
+       – und zwar alle auf einmal. */
+    const remoteById = new Map(remote.entries.map(e => [e.id, e]));
     const merged = [];
     let changed = false;
 
@@ -212,7 +222,7 @@ const Trash = {
         continue;
       }
 
-      if (local.syncedToCloud) {
+      if (local.syncedToCloud && remote.exists) {
         // War schon in der gemeinsamen Liste, ist dort aber weg: anderswo
         // zurückgeholt oder endgültig gelöscht. Also auch hier entfernen.
         console.log('[Trash] Auf einem anderen Gerät erledigt:', local.name);

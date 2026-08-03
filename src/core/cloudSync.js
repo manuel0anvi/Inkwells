@@ -1311,6 +1311,20 @@ class CloudSyncManager {
       const trashFolderId = await this._getTrashFolder();
       await this.provider.moveFile(this._http, file.id, folderId, trashFolderId);
 
+      /* >>> Nachsehen, ob es wirklich weg ist <<<
+         Ein Verschieben, das die Cloud stillschweigend nicht ausführt, sah
+         bisher wie ein Erfolg aus: der Eintrag galt als erledigt und wurde
+         nie wieder versucht, während die Datei im Hauptordner liegen
+         blieb. Dort sieht sie die Website weiterhin, und beim nächsten
+         Abgleich holt sie das Heft zurück.
+
+         _findRemoteFile sieht nur im Hauptordner nach – ist die Datei
+         danach noch da, hat das Verschieben nichts bewirkt. */
+      if (await this._findRemoteFile({ id: nbId, name: '' })) {
+        console.warn('[CloudSync] Datei liegt nach dem Verschieben noch im Hauptordner:', nbId);
+        return { done: false, fileId: file.id };
+      }
+
       console.log('[CloudSync] Heft in den Cloud-Papierkorb verschoben:', nbId);
       return { done: true, fileId: file.id };
     } catch (err) {
@@ -1379,16 +1393,34 @@ class CloudSyncManager {
     }
   }
 
+  /**
+   * Die gemeinsame Papierkorb-Liste aus der Cloud.
+   *
+   * @returns {Promise<{entries: object[], exists: boolean}|null>}
+   *   null = nicht angemeldet, ohne Netz oder nicht lesbar.
+   *
+   * >>> Warum „gibt es nicht" und „ist leer" auseinandergehalten werden <<<
+   * Beides lieferte früher dieselbe leere Liste. Trash.syncWithCloud
+   * schließt aus einem fehlenden Eintrag aber, das Heft sei auf einem
+   * anderen Gerät zurückgeholt oder endgültig gelöscht worden – und wirft
+   * es aus dem Papierkorb.
+   *
+   * Gibt es die Liste gar nicht, ist dieser Schluss falsch: dann weiß die
+   * Cloud noch gar nichts, statt etwas anderes zu wissen. Genau das
+   * passierte nach einem Ab- und Anmelden und beim Wechsel des Anbieters –
+   * der Papierkorb wurde vollständig geleert, und beim nächsten Abgleich
+   * kam jedes je gelöschte Heft zurück.
+   */
   async loadTrashIndex() {
     if (!this._canSync() || !this.isOnline) return null;
 
     try {
       const folderId = await this._getFolder();
       const fileId = await this.provider.findIndexFile(this._http, folderId, TRASH_INDEX_NAME);
-      if (!fileId) return [];
+      if (!fileId) return { entries: [], exists: false };
 
       const json = await this.provider.downloadFile(this._http, fileId);
-      return Array.isArray(json?.entries) ? json.entries : [];
+      return { entries: Array.isArray(json?.entries) ? json.entries : [], exists: true };
     } catch (err) {
       console.warn('[CloudSync] Papierkorb-Liste nicht lesbar:', err.message);
       return null;
