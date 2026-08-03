@@ -141,10 +141,56 @@ function rangeForTextOffset(rootEl, offset) {
    Umformatieren selbst anlegt.
    ══════════════════════════════════════════════════════════════════════ */
 
+/* Rückfall, wenn der Browser nicht gefragt werden kann – in den Tests
+   gibt es kein getComputedStyle, und ein losgelöster Knoten hat noch
+   keine Darstellung. Die Liste ist bewusst großzügig. */
 const FLAT_BLOCK_TAGS = new Set([
   'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-  'LI', 'UL', 'OL', 'BLOCKQUOTE', 'PRE', 'SECTION', 'FIGURE', 'TABLE', 'TR', 'HR'
+  'LI', 'UL', 'OL', 'BLOCKQUOTE', 'PRE', 'SECTION', 'FIGURE', 'TABLE', 'TR', 'HR',
+  'DL', 'DT', 'DD', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER', 'NAV', 'MAIN',
+  'ADDRESS', 'FIGCAPTION', 'FIELDSET', 'FORM', 'CENTER', 'DETAILS', 'SUMMARY',
+  'CAPTION', 'THEAD', 'TBODY', 'TFOOT'
 ]);
+
+/* Was NICHT auf einer eigenen Zeile steht, obwohl es ein Element ist.
+   Nach der Darstellung geurteilt, nicht nach dem Namen. Tabellenzellen
+   gehören dazu: sie stehen nebeneinander, nicht untereinander. */
+const FLAT_INLINE_DISPLAYS = new Set([
+  'inline', 'inline-block', 'inline-flex', 'inline-grid', 'inline-table',
+  'contents', 'none', 'table-cell', 'table-column', 'table-column-group',
+  'ruby', 'ruby-base', 'ruby-text', 'ruby-base-container', 'ruby-text-container'
+]);
+
+/**
+ * Fängt dieses Element eine neue Zeile an?
+ *
+ * >>> Warum das nicht mehr an der Liste der Namen hängt <<<
+ * Vorher entschied allein FLAT_BLOCK_TAGS darüber. Jedes Element, das
+ * nicht darin stand, galt als inline – also als Teil derselben Zeile.
+ * Auf dem Papier war es aber sehr wohl eine eigene Zeile, und genau um
+ * diesen einen Umbruch war die gemeldete Zahl dann zu klein.
+ *
+ * Das trifft nicht etwa Ausgefallenes: `<dl>/<dt>/<dd>` kommt aus Word,
+ * `<article>/<header>/<address>` aus jeder Webseite, und Google Docs
+ * fügt `<span style="display:block">` ein. Nach einem einzigen solchen
+ * Einfügen sitzt jede fremde Schreibmarke unterhalb davon eine Zeile
+ * daneben – und das Sperrband mit ihr, denn es rechnet aus derselben
+ * Zahl. Dauerhaft, nicht nur beim gleichzeitigen Tippen.
+ *
+ * Gefragt wird deshalb der Browser: er weiß, was er umbricht. Nur wenn
+ * es ihn nicht gibt (Tests, loser Knoten), zählt wieder die Namensliste.
+ */
+function istFlatBlockEl(node) {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+  if (node.tagName === 'BR') return false;
+
+  if (typeof getComputedStyle === 'function') {
+    let display = '';
+    try { display = getComputedStyle(node).display || ''; } catch (err) { display = ''; }
+    if (display) return !FLAT_INLINE_DISPLAYS.has(display);
+  }
+  return FLAT_BLOCK_TAGS.has(node.tagName);
+}
 
 /**
  * Zerlegt den Inhalt in Textstücke und Zeilengrenzen – in Lesereihenfolge.
@@ -168,8 +214,15 @@ function flatTextParts(root) {
 
   const addBreak = () => { text += '\n'; };
 
-  const istBlock = (node) => node.nodeType === Node.ELEMENT_NODE
-                          && FLAT_BLOCK_TAGS.has(node.tagName);
+  /* Je Knoten einmal nachsehen: istHuelle fragt alle Kinder ab, und
+     gleich darauf wird jedes davon noch einmal geprüft. */
+  const gemerkt = new Map();
+  const istBlock = (node) => {
+    if (gemerkt.has(node)) return gemerkt.get(node);
+    const wert = istFlatBlockEl(node);
+    gemerkt.set(node, wert);
+    return wert;
+  };
 
   /* Ein Block, in dem WEITERE Blöcke stecken, ist keine Zeile, sondern
      bloß die Hülle darum – <ul> um seine <li>, <blockquote> um seine

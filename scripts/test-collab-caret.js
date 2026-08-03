@@ -217,7 +217,9 @@ const ctx = {
     createTreeWalker: () => ({ nextNode: () => null })
   },
   NodeFilter: { SHOW_TEXT: 4 },
-  getComputedStyle: () => ({}),
+  /* Der Browser sagt, was er umbricht. Hier: was am Knoten steht – ohne
+     Angabe bleibt es leer, dann greift die Namensliste als Rückfall. */
+  getComputedStyle: (node) => ({ display: (node && node.style && node.style.display) || '' }),
   DOMRect: DOMRectStub,
   getZoom: () => 1,
   window: {}
@@ -362,6 +364,56 @@ check('Jede Stelle in der Liste findet sich wieder',
    wenn es in einer Auszeichnung steckt statt unmittelbar im Absatz. */
 check('<br> am Absatzende bleibt der Platzhalter',
   flatTextOf(el('div', el('p', 'abc', el('b', 'def', el('br'))))), 'abcdef');
+
+/* ══ 4c. Eingefügtes: eine Zeile ist eine Zeile, egal wie sie heißt ═══
+   >>> Der Fehler, der hier festgehalten wird <<<
+   Ob etwas eine eigene Zeile ist, entschied allein eine Liste von
+   Namen. Alles, was nicht darin stand, galt als inline und bekam KEINEN
+   Umbruch – obwohl der Browser eine neue Zeile anfing.
+
+   Das trifft nichts Ausgefallenes: <dl>/<dt>/<dd> kommt aus Word,
+   <article>/<header>/<address> aus jeder Webseite, und Google Docs fügt
+   <span style="display:block"> ein. Ein einziges Einfügen genügte, und
+   jeder fehlende Umbruch machte die gemeldete Zahl um eins kleiner.
+   Ende der einen Zeile und Anfang der nächsten waren dieselbe Zahl –
+   die fremde Marke konnte gar nicht mehr richtig sitzen, und das
+   Sperrband ebenso wenig, denn es rechnet aus derselben Zahl.
+   ═══════════════════════════════════════════════════════════════════ */
+
+console.log('\nEingefügte Blöcke, die nicht in der Namensliste stehen');
+
+const dl = el('dl', el('dt', 'Begriff'), el('dd', 'Erklärung'));
+const adr = el('address', 'Anschrift');
+const ausWord = el('div', el('p', 'Davor'), dl, adr, el('p', 'Danach'));
+
+check('Jeder Block bekommt seine Zeile',
+  flatTextOf(ausWord), 'Davor\nBegriff\nErklärung\nAnschrift\nDanach');
+
+const begriff = dl.childNodes[0].childNodes[0];
+const erklaerung = dl.childNodes[1].childNodes[0];
+check('Ende der Zeile davor und Anfang der nächsten sind VERSCHIEDEN',
+  [flatPosOfPoint(ausWord, ausWord.childNodes[0].childNodes[0], 5),
+   flatPosOfPoint(ausWord, begriff, 0)], [5, 6]);
+check('Und weiter unten ebenso',
+  [flatPosOfPoint(ausWord, begriff, 7), flatPosOfPoint(ausWord, erklaerung, 0)], [13, 14]);
+
+/* Google Docs: ein <span>, das der Stil zum Block macht. Am Namen ist
+   das nicht zu erkennen – nur an der Darstellung. */
+const blockSpan = el('span', 'Zeile');
+blockSpan.style.display = 'block';
+const zweiterSpan = el('span', 'Noch eine');
+zweiterSpan.style.display = 'block';
+const ausDocs = el('div', el('p', 'Oben'), blockSpan, zweiterSpan);
+check('display:block zählt, der Name nicht',
+  flatTextOf(ausDocs), 'Oben\nZeile\nNoch eine');
+
+/* Und andersherum: was inline dargestellt wird, bleibt in der Zeile –
+   sonst käme mitten im Satz ein Umbruch dazu. */
+const inlineDiv = el('div', 'mitten');
+inlineDiv.style.display = 'inline';
+check('display:inline bricht nicht um',
+  flatTextOf(el('div', el('p', el('span', 'links'), inlineDiv, el('span', 'rechts')))),
+  'linksmittenrechts');
 
 /* ══ 5. Die Zeilensperre ════════════════════════════════════════════ */
 
