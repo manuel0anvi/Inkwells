@@ -66,8 +66,14 @@ der Live-Zusammenarbeit still etwas kaputt macht.
 
 - Kommentare und Bezeichner sind auf Deutsch und erklären das *Warum*, nicht
   das *Was*. Diesen Ton beibehalten.
-- `src/core/share.js` und `website/js/share.js` gehören zusammen. Wird an der
-  Live-Zusammenarbeit etwas geändert, muss `npm run sync-share` laufen.
+- `src/core/share.js` und `website/js/share.js` gehören zusammen — dasselbe
+  gilt für `docx.js`. Bearbeitet wird **immer die Fassung unter `src/core/`**,
+  die ist die Quelle. `npm run sync-share` erzeugt daraus die Kopie unter
+  `website/js/` und läuft vor `npm run deploy-web` von selbst.
+
+  Nicht andersherum: `website/` steht in `.gitignore` und erreicht den anderen
+  Rechner nie. Als Quelle würde es beim nächsten Abgleich den frisch geholten
+  Stand des anderen überschreiben — zweimal schon geschehen.
 - Regeländerungen an Firestore oder RTDB mit `npm run test:rules` im Emulator
   prüfen — dort laufen sie wirklich.
 - In `website/firestore.rules` muss `adminUid()` die echte UID enthalten, nicht

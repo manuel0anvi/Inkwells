@@ -2,11 +2,11 @@
 'use strict';
 
 /* ══════════════════════════════════════════════════════════════════════
-   Hält die gemeinsam genutzten Module von Website und App gleich.
+   Hält die gemeinsam genutzten Module von App und Website gleich.
 
    Manches wird an zwei Stellen gebraucht:
-     · website/js/share.js  ↔  src/core/share.js   Freigabe über Firestore
-     · website/js/docx.js   ↔  src/core/docx.js    Word-Export
+     · src/core/share.js  →  website/js/share.js   Freigabe über Firestore
+     · src/core/docx.js   →  website/js/docx.js    Word-Export
 
    Die App wird ohne den Ordner website/ ausgeliefert (electron-builder
    nimmt nur src/**), deshalb geht es nicht mit einer einzigen Datei.
@@ -15,11 +15,24 @@
    Skript hält beide gleich und meldet sich, wenn sie es nicht mehr sind.
 
    Aufruf:
-     npm run sync-share                  kopiert Website -> App
+     npm run sync-share                  kopiert App -> Website
      npm run check-share                 prüft nur, Rückgabewert 1 bei Abweichung
 
    Zum Prüfen NICHT `npm run sync-share --check` nehmen: npm behält das
    Flag für sich, das Skript schreibt dann doch. Siehe checkOnly unten.
+
+   >>> Warum die App die Quelle ist und nicht die Website <<<
+   src/core/ liegt in Git, website/ steht in .gitignore und bleibt auf
+   dem jeweiligen Rechner. Andersherum wäre die Quelle also die Fassung,
+   die den anderen Rechner NIE erreicht: wer `git pull` macht, bekommt
+   die neue App-Datei, seine örtliche Website-Datei bleibt alt – und das
+   nächste `npm run sync-share` schreibt den alten Stand über die frisch
+   geholte Arbeit. Zweimal ist genau das passiert, einmal mit 123 und
+   einmal mit 66 Zeilen Live-Zusammenarbeit.
+
+   In dieser Richtung kann das nicht mehr vorkommen: geschrieben wird nur
+   in die örtliche, ignorierte Kopie. Dort ist nichts zu verlieren, sie
+   entsteht jederzeit neu.
    ══════════════════════════════════════════════════════════════════════ */
 
 const fs = require('fs');
@@ -28,8 +41,8 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 
 const PAIRS = [
-  { source: ['website', 'js', 'share.js'], target: ['src', 'core', 'share.js'] },
-  { source: ['website', 'js', 'docx.js'], target: ['src', 'core', 'docx.js'] }
+  { source: ['src', 'core', 'share.js'], target: ['website', 'js', 'share.js'] },
+  { source: ['src', 'core', 'docx.js'], target: ['website', 'js', 'docx.js'] }
 ];
 
 function header(sourceRel) {
@@ -38,11 +51,11 @@ function header(sourceRel) {
 
    Wortgleiche Kopie von ${sourceRel}. Die App wird ohne den
    Ordner website/ ausgeliefert (siehe electron-builder.config.js),
-   deshalb braucht sie ein eigenes Exemplar.
+   deshalb braucht die Website ein eigenes Exemplar.
 
    Änderungen gehören nach ${sourceRel}. Danach:
        npm run sync-share
-   Der Build prüft beim Packen, ob beide Fassungen gleich sind.
+   Vor dem Veröffentlichen der Website läuft das von selbst.
    ══════════════════════════════════════════════════════════════════════ */
 
 `;
@@ -51,9 +64,8 @@ function header(sourceRel) {
 /* >>> Warum hier auch die npm-Umgebung gelesen wird <<<
    `npm run sync-share --check` sieht aus wie eine Prüfung, ist aber
    keine: npm behält das Flag für sich und reicht es NICHT ans Skript
-   weiter. Das Skript lief dadurch im Schreibmodus und hat in der App
-   still 123 Zeilen Live-Zusammenarbeit gelöscht – zweimal an einem
-   Abend, und beide Male hat der Aufrufende eine Prüfung erwartet.
+   weiter. Das Skript lief dadurch im Schreibmodus, und beide Male hat
+   der Aufrufende eine Prüfung erwartet.
 
    npm legt das geschluckte Flag aber in der Umgebung ab. Von dort ist
    die Absicht eindeutig abzulesen, und der Fehlgriff kann nicht mehr
@@ -61,6 +73,15 @@ function header(sourceRel) {
 const checkOnly = process.argv.includes('--check')
                || process.env.npm_config_check === 'true';
 let stale = 0;
+
+/* Ohne website/ ist nichts zu tun. Der Ordner steht in .gitignore; ein
+   frisch geklontes Repo hat ihn nicht, und für die App allein wird er
+   auch nicht gebraucht. Das ist kein Fehler, sondern der Normalfall auf
+   einem Rechner, an dem nur an der App gearbeitet wird. */
+if (!fs.existsSync(path.join(root, 'website'))) {
+  console.log('[sync-share] Kein Ordner website/ – nichts zu tun.');
+  process.exit(0);
+}
 
 for (const pair of PAIRS) {
   const source = path.join(root, ...pair.source);
@@ -87,6 +108,7 @@ for (const pair of PAIRS) {
     continue;
   }
 
+  fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, expected);
   console.log(`[sync-share] ${targetRel} aktualisiert.`);
 }

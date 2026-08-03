@@ -238,9 +238,11 @@ auf der die Person gerade ist.
   Dateien: erklären, *warum* etwas so ist, nicht *was* die Zeile tut.
 * **Drei Sprachen.** Neue Texte immer de/en/it — in
   `src/core/translations.js` (App) und `website/js/i18n.js` (Web).
-* **Geteilte Module.** `website/js/share.js` und `website/js/docx.js` sind
-  die Originale, `src/core/*` erzeugte Kopien. Nach jeder Änderung
-  `npm run sync-share`; der Build prüft das.
+* **Geteilte Module.** `src/core/share.js` und `src/core/docx.js` sind die
+  Originale, `website/js/*` erzeugte Kopien. Nach jeder Änderung
+  `npm run sync-share`; vor `npm run deploy-web` läuft es von selbst.
+  Nie andersherum bearbeiten — `website/` liegt nur örtlich und würde den
+  Stand des anderen überschreiben.
 * **Kein `npm install` ohne Rückfrage.** Das Projekt kommt bewusst mit sehr
   wenigen Abhängigkeiten aus. (Gilt auch für Yjs — vorher fragen.)
 * Lieber **eine Stufe fertig und geprüft** als fünf halb.

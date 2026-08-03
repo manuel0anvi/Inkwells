@@ -573,8 +573,8 @@ ab, dort eintragen und `npm run sync-share` laufen lassen.
 
 | Datei | Aufgabe |
 |-------|---------|
-| [`website/js/share.js`](website/js/share.js) | Anmeldung bei Firebase, Freigaben, geteilte Dokumente (die einzige Fassung) |
-| `src/core/share.js` | **erzeugte Kopie** für die App — `npm run sync-share` |
+| [`src/core/share.js`](src/core/share.js) | Anmeldung bei Firebase, Freigaben, geteilte Dokumente (die einzige Fassung) |
+| `website/js/share.js` | **erzeugte Kopie** für die Website — `npm run sync-share` |
 | [`website/js/viewer.js`](website/js/viewer.js) | Seitendarstellung, geteilt von Dashboard und Freigabe-Seite |
 | [`website/s/index.html`](website/s/index.html) | die öffentliche Leseansicht |
 | [`src/ui/share.js`](src/ui/share.js) | Freigabe-Dialog in der App |

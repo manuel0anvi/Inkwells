@@ -13,7 +13,15 @@
 
    Das ist nicht theoretisch: am 2.8.2026 hat ein `npm run sync-share`
    aus einem veralteten Ordner heraus 107 Zeilen Microsoft-Arbeit in
-   src/core/share.js gelöscht. Genau davor schützt dieser Aufruf.
+   src/core/share.js gelöscht, und am 3.8. wäre es 66 Zeilen ein weiteres
+   Mal gewesen.
+
+   Für die geteilten Module (share.js, docx.js) kann das seither nicht
+   mehr passieren: dort ist src/core/ die Quelle und website/js/ die
+   erzeugte Kopie, sync-share schreibt also nur noch in den örtlichen
+   Ordner. Alles ANDERE in website/ — Dashboard, Leseansicht, i18n,
+   Stile — hat weiterhin keinen anderen Weg von Rechner zu Rechner als
+   diesen Aufruf.
 
    ── Was es NICHT tut ──────────────────────────────────────────────
    Es überschreibt den Ordner nicht blind. Wer hier eigene, noch nicht
@@ -123,4 +131,9 @@ for (const { rel, vomBranch } of zuHolen) {
 
 console.log(`\n✓ ${zuHolen.length} Dateien geholt.`);
 console.log('Was der Branch nicht kennt, blieb unangetastet (Regeln, Sicherungskopien).');
-console.log('Zur Gegenprobe:  npm run check-share');
+/* Der Branch kann eine ältere share.js/docx.js mitgebracht haben. Die sind
+   erzeugte Kopien – einmal neu schreiben, statt eine Abweichung zu melden,
+   die niemand von Hand auflösen soll. */
+console.log('\nGeteilte Module wieder aus src/core/ erzeugen:');
+require('child_process').execFileSync(process.execPath,
+  [path.join(__dirname, 'sync-share.js')], { stdio: 'inherit' });

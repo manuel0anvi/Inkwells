@@ -1,16 +1,4 @@
 /* ══════════════════════════════════════════════════════════════════════
-   ⚠  ERZEUGTE DATEI – NICHT HIER BEARBEITEN
-
-   Wortgleiche Kopie von website/js/docx.js. Die App wird ohne den
-   Ordner website/ ausgeliefert (siehe electron-builder.config.js),
-   deshalb braucht sie ein eigenes Exemplar.
-
-   Änderungen gehören nach website/js/docx.js. Danach:
-       npm run sync-share
-   Der Build prüft beim Packen, ob beide Fassungen gleich sind.
-   ══════════════════════════════════════════════════════════════════════ */
-
-/* ══════════════════════════════════════════════════════════════════════
    HEFT ALS WORD-DOKUMENT (.docx)
 
    Erzeugt eine echte .docx-Datei – ohne Bibliothek, ohne Server. Eine
