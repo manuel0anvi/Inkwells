@@ -193,7 +193,26 @@
       .replace('{n}', entries.length));
     if (!ok) return;
 
-    await Trash.emptyAll();
+    /* Dasselbe Zeichen wie beim einzelnen endgültigen Löschen: jede Zeile
+       blendet ab und bekommt einen Kreisel, erledigte verschwinden einzeln.
+       Vorher stand die ganze Liste unverändert da, bis auch der letzte
+       Eintrag in der Cloud weg war – bei einem vollen Papierkorb dauert
+       das lange genug, dass der Klick ins Leere gegangen schien. */
+    const emptyBtn = E('trash-empty');
+    emptyBtn.disabled = true;
+    for (const entry of entries) _busyEntries.add(entry.id);
+    renderTrash();
+
+    await Trash.emptyAll({
+      onDeleted: (entry) => {
+        _busyEntries.delete(entry.id);
+        renderTrash();
+        updateTrashCount();
+      }
+    });
+
+    _busyEntries.clear();
+    emptyBtn.disabled = false;
     renderTrash();
     updateTrashCount();
     toast(t('trashEmptied') || 'Papierkorb geleert.');
@@ -304,9 +323,10 @@
 
       info.append(name, meta, expiry);
 
-      // Ohne lokale Datei stammt der Eintrag von einem anderen Gerät –
-      // der Inhalt kommt beim Zurückholen aus der Cloud.
-      if (!entry.trashPath) {
+      /* Ohne lokale Datei stammt der Eintrag von einem anderen Gerät –
+         der Inhalt kommt beim Zurückholen aus der Cloud. Liegt hier eine
+         Sicherung im Eintrag selbst, ist alles da und die Zeile schweigt. */
+      if (!entry.trashPath && !entry.snapshot) {
         const origin = document.createElement('span');
         origin.style.cssText = 'font-size:11px;color:var(--lo);';
         origin.textContent = entry.driveFileId

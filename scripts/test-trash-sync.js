@@ -49,10 +49,11 @@ function check(label, actual, expected) {
  * @param {object|null} index     was loadTrashIndex() liefert
  * @param {string[]|null} [inMainFolder]  was noch im Cloud-Hauptordner liegt
  */
-function makeTrash(entries, index, inMainFolder = []) {
+function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
   const deletedFiles = [];
   const saved = {};
   const trashed = [];
+  const deletedRemote = [];
 
   const ctx = {
     console: { log() {}, warn() {}, error(...a) { console.error('[trash]', ...a); } },
@@ -62,10 +63,17 @@ function makeTrash(entries, index, inMainFolder = []) {
     CloudSync_: {
       loadTrashIndex: async () => index,
       saveTrashIndex: async (list) => { saved.list = list; return true; },
-      trashRemoteNotebook: async (id) => { trashed.push(id); return { done: true, fileId: 'f1' }; },
+      // canMove: ob sich in den Cloud-Papierkorb verschieben lässt
+      trashRemoteNotebook: async (id) => {
+        trashed.push(id);
+        return cloud.canMove === false ? { done: false, fileId: null } : { done: true, fileId: 'f1' };
+      },
       listRemoteNotebookIds: async () => inMainFolder,
       deleteRemoteFile: async () => true,
-      deleteRemoteNotebookById: async () => true,
+      deleteRemoteNotebookById: async (id) => {
+        deletedRemote.push(id);
+        return cloud.canDelete !== false;
+      },
       untrashRemoteNotebook: async () => null
     },
 
@@ -86,7 +94,7 @@ function makeTrash(entries, index, inMainFolder = []) {
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'src/core/trash.js'), 'utf8'), ctx);
 
-  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed };
+  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed, deletedRemote };
 }
 
 /** Ein Eintrag, der schon einmal in der gemeinsamen Liste stand. */
@@ -177,6 +185,42 @@ function syncedEntry(id, name) {
   await clean.Trash.syncWithCloud();
 
   check('Es wird nichts unnötig wiederholt', clean.trashed, []);
+
+  console.log('\nVerschieben geht nicht – der Notweg');
+
+  /* Wenn das Verschieben in den Cloud-Papierkorb scheitert, bliebe die
+     Datei im Hauptordner liegen: in der App gelöscht, auf der Website
+     weiterhin da. Solange der Inhalt hier örtlich liegt, wird sie deshalb
+     in der Cloud gelöscht. */
+  const noMove = makeTrash(
+    [syncedEntry('nb1', 'Tagebuch')], { entries: nowInIndex, exists: true }, ['nb1'],
+    { canMove: false }
+  );
+  await noMove.Trash.syncWithCloud();
+
+  check('Die Cloud-Datei wird gelöscht', noMove.deletedRemote, ['nb1']);
+  check('Der Eintrag gilt als erledigt',
+    noMove.Trash.getAll().map(e => [e.cloudTrashed, e.cloudDeleted]), [[true, true]]);
+  check('Die örtliche Sicherung bleibt', noMove.deletedFiles, []);
+
+  console.log('\nOhne örtliche Sicherung wird nichts gelöscht');
+
+  /* Ein Eintrag von einem anderen Gerät: hier liegt kein Inhalt. Würde die
+     Cloud-Datei gelöscht, wäre das Heft endgültig weg – dann bleibt sie
+     lieber liegen und der nächste Abgleich versucht es erneut. */
+  const remoteOnly = syncedEntry('nb1', 'Tagebuch');
+  remoteOnly.trashPath = null;
+  remoteOnly.originalPath = null;
+  remoteOnly.cloudTrashed = false;
+
+  const foreign = makeTrash(
+    [remoteOnly], { entries: nowInIndex, exists: true }, ['nb1'], { canMove: false }
+  );
+  await foreign.Trash.syncWithCloud();
+
+  check('Es wurde nichts in der Cloud gelöscht', foreign.deletedRemote, []);
+  check('Der Eintrag bleibt offen',
+    foreign.Trash.getAll().map(e => !!e.cloudTrashed), [false]);
 
   console.log('\nOhne Netz wird nichts angefasst');
 

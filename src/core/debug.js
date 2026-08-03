@@ -114,6 +114,51 @@ window.journalDebug = {
       console.error('[Debug] Test save failed:', err);
       throw err;
     }
+  },
+
+  /* ── Papierkorb in der Cloud ─────────────────────────────────────────
+     Sagt in einem Rutsch, was auf der Cloud-Seite eines gelöschten Hefts
+     los ist: Anbieter, Ordner, was noch im Hauptordner liegt und wie die
+     Einträge vermerkt sind. Gedacht für den Fall, dass ein Heft in der App
+     gelöscht ist, in Drive oder OneDrive aber weiterhin steht.
+     ─────────────────────────────────────────────────────────────────── */
+  cloudTrash: async function() {
+    console.log('=== PAPIERKORB IN DER CLOUD ===');
+
+    if (typeof CloudSync_ === 'undefined' || !CloudSync_) {
+      console.error('[Debug] CloudSync_ gibt es nicht.');
+      return;
+    }
+
+    console.log('Anbieter:      ', CloudSync_.getProviderId?.());
+    console.log('Cloud an:      ', Settings.get('cloudEnabled'));
+    console.log('Angemeldet:    ', CloudSync_.isAuthenticated?.());
+    console.log('Eingerichtet:  ', CloudSync_.isConfigured?.());
+    console.log('Netz:          ', CloudSync_.isOnline);
+
+    try {
+      console.log('Hauptordner:   ', await CloudSync_._getFolder());
+      console.log('Papierkorb:    ', await CloudSync_._getTrashFolder());
+    } catch (err) {
+      console.error('[Debug] Ordner nicht erreichbar:', err.message);
+    }
+
+    const remoteIds = await CloudSync_.listRemoteNotebookIds();
+    console.log('Noch im Hauptordner:', remoteIds);
+
+    await Trash.load();
+    console.table(Trash.getAll().map(e => ({
+      name: e.name,
+      id: e.id,
+      cloudTrashed: !!e.cloudTrashed,
+      cloudDeleted: !!e.cloudDeleted,
+      driveFileId: e.driveFileId || '–',
+      // Das ist der Fehlerfall: gelöscht, liegt aber noch im Hauptordner
+      nochInDerCloud: Array.isArray(remoteIds) && remoteIds.includes(e.id)
+    })));
+
+    console.log('Zum Nachholen:  await Trash.syncWithCloud()');
+    console.log('===============================');
   }
 };
 
@@ -123,3 +168,4 @@ console.log('  journalDebug.save()      - Force save now');
 console.log('  journalDebug.markDirty() - Mark as dirty');
 console.log('  journalDebug.preview()   - Preview what would be saved');
 console.log('  journalDebug.testSave()  - Test file operations');
+console.log('  journalDebug.cloudTrash()- Papierkorb-Stand in der Cloud');

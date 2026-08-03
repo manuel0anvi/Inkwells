@@ -146,35 +146,38 @@ const Trash = {
       }
     }
 
-    // In Drive in den Papierkorb-Unterordner verschieben. Ohne das käme das
-    // Heft beim nächsten Abgleich zurück.
-    let driveFileId = null;
-    let cloudTrashed = false;
-    try {
-      if (typeof CloudSync_ !== 'undefined' && CloudSync_) {
-        const moved = await CloudSync_.trashRemoteNotebook(notebook.id);
-        driveFileId = moved?.fileId || null;
-        cloudTrashed = !!moved?.done;
-      }
-    } catch (err) {
-      console.warn('[Trash] Drive-Verschieben übersprungen:', err.message);
-    }
-
-    this._entries.push({
+    const entry = {
       id: notebook.id,
       name: notebook.name,
       color: notebook.color,
       pageCount: (notebook.pages || []).length,
       originalPath: originalPath || null,
       trashPath,
-      driveFileId,
+      driveFileId: null,
       // Ist die Cloud-Seite wirklich erledigt? Solange nicht, versucht es
       // syncWithCloud bei jedem Abgleich erneut.
-      cloudTrashed,
+      cloudTrashed: false,
+      // Notweg genommen: die Cloud-Datei ist gelöscht statt verschoben
+      cloudDeleted: false,
       deletedAt: new Date().toISOString(),
       // Sicherheitsnetz: falls die Datei fehlt, liegt der Inhalt hier
       snapshot: trashPath ? null : JSON.parse(JSON.stringify(notebook))
-    });
+    };
+
+    // In Drive in den Papierkorb-Unterordner verschieben. Ohne das käme das
+    // Heft beim nächsten Abgleich zurück.
+    try {
+      if (typeof CloudSync_ !== 'undefined' && CloudSync_) {
+        const res = await this._clearFromCloud(entry);
+        entry.driveFileId = res.fileId;
+        entry.cloudTrashed = res.done;
+        entry.cloudDeleted = res.deleted;
+      }
+    } catch (err) {
+      console.warn('[Trash] Drive-Verschieben übersprungen:', err.message);
+    }
+
+    this._entries.push(entry);
 
     await Registry.remove(notebook.id);   // schreibt die Registry-Datei
     await this.save();                    // ergänzt den Papierkorb darin
@@ -283,16 +286,50 @@ const Trash = {
       }
       if (entry.cloudTrashed) continue;
       try {
-        const moved = await CloudSync_.trashRemoteNotebook(entry.id);
-        if (!moved?.done) continue;              // kein Netz – beim nächsten Mal
-        if (moved.fileId) entry.driveFileId = moved.fileId;
+        const res = await this._clearFromCloud(entry);
+        if (!res.done) continue;                 // kein Netz – beim nächsten Mal
+        entry.driveFileId = res.fileId;
         entry.cloudTrashed = true;
+        entry.cloudDeleted = res.deleted;
         changed = true;
       } catch (err) {
         console.warn('[Trash] Drive-Verschieben nachgeholt fehlgeschlagen:', err.message);
       }
     }
     return changed;
+  },
+
+  /**
+   * Sorgt dafür, dass das Heft aus dem Hauptordner der Cloud verschwindet.
+   *
+   * Der gute Weg ist das Verschieben in den Cloud-Papierkorb: von dort holt
+   * es jedes Gerät zurück. Klappt das nicht, wird die Cloud-Datei gelöscht.
+   *
+   * >>> Warum es diesen Notweg braucht <<<
+   * Bleibt die Datei im Hauptordner liegen, ist das der schlechteste
+   * Ausgang: in der App ist das Heft gelöscht, in OneDrive und damit auf
+   * der Website steht es weiterhin da – dauerhaft, denn der Abgleich hakt
+   * den Eintrag irgendwann ab. Genau das ist unter Microsoft passiert.
+   *
+   * Gelöscht wird nur, solange der Inhalt hier örtlich liegt. Dann ist das
+   * Heft nicht verloren, es lässt sich nur eben nur noch von diesem Gerät
+   * aus zurückholen. Ohne örtliche Sicherung bleibt die Datei lieber liegen.
+   *
+   * @returns {Promise<{done: boolean, fileId: string|null, deleted: boolean}>}
+   */
+  async _clearFromCloud(entry) {
+    const moved = await CloudSync_.trashRemoteNotebook(entry.id);
+    if (moved?.done) return { done: true, fileId: moved.fileId || null, deleted: false };
+
+    const offen = { done: false, fileId: moved?.fileId || null, deleted: false };
+    if (!entry.trashPath && !entry.snapshot) return offen;
+
+    // Ohne Netz meldet auch das hier Fehlschlag – dann wird nichts gelöscht
+    const gone = await CloudSync_.deleteRemoteNotebookById(entry.id);
+    if (!gone) return offen;
+
+    console.warn('[Trash] Verschieben ging nicht – Cloud-Datei gelöscht:', entry.name);
+    return { done: true, fileId: null, deleted: true };
   },
 
   /** Holt ein Heft zurück. Gibt das Heft zurück oder null. */
@@ -372,11 +409,19 @@ const Trash = {
     if (options.pushIndex !== false) await this._pushIndex();
   },
 
-  async emptyAll() {
+  /**
+   * Leert den ganzen Papierkorb.
+   * @param {object} [options]
+   * @param {(entry: object) => void} [options.onDeleted] nach jedem Eintrag.
+   *   Die Anzeige braucht das: in der Cloud dauert jeder Eintrag seine Zeit,
+   *   und die Zeilen sollen einzeln verschwinden statt alle am Ende.
+   */
+  async emptyAll(options = {}) {
     await this.load();
     for (const entry of [...this._entries]) {
       // Liste erst am Ende einmal hochladen statt nach jedem Eintrag
       await this.deleteForever(entry.id, { pushIndex: false });
+      try { options.onDeleted?.(entry); } catch (e) { /* Anzeige darf nichts aufhalten */ }
     }
     await this._pushIndex();
   },
