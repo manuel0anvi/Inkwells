@@ -405,8 +405,14 @@
      sie etwas länger, und spätestens wenn der Schreibende aufhört, gibt er
      sie ausdrücklich frei (reportCaret im caretTimer) oder sein Eintrag
      verschwindet beim Verbindungsabbruch von selbst. Beide Richtungen
-     enden also von allein. */
-  const LOCK_TTL_MS = 5000;
+     enden also von allein.
+
+     Gerechnet ab der letzten MELDUNG, nicht ab dem letzten Anschlag:
+     wer weiterschreibt, frischt ununterbrochen auf. Nach dem Aufhören
+     kommen noch LOCK_CLAIM_MS lang Meldungen, danach läuft dieser
+     Nachlauf – zusammen bleibt eine Zeile also rund 14 Sekunden
+     belegt. */
+  const LOCK_TTL_MS = 10000;
 
   // Höchstens so oft ein Hinweis, wenn jemand in eine gesperrte Zeile tippt
   const LOCK_HINT_MS = 2500;
@@ -601,6 +607,26 @@
   // So lange nach dem letzten Anschlag gilt man noch als „am Schreiben"
   const LOCK_CLAIM_MS = 4000;
 
+  /**
+   * Schreibt diese Person gerade auf dieser Seite?
+   *
+   * >>> Warum daran auch die MARKE hängt und nicht nur die Sperre <<<
+   * Gezeigt wurde die fremde Schreibmarke, sobald jemand die Seite offen
+   * hatte – auch wenn er seit einer Viertelstunde nichts tut. Eine Marke,
+   * die nur herumsteht, sagt niemandem etwas; sie muss aber trotzdem
+   * ununterbrochen richtig sitzen, und gerade der ruhende Cursor steht
+   * gern an den Stellen, die sich am schlechtesten messen lassen (leere
+   * Zeile, Absatzgrenze).
+   *
+   * Beim Tippen ist die Stelle dagegen immer die hinter dem eben
+   * geschriebenen Zeichen – die lässt sich unmittelbar messen. Marke und
+   * Sperrband erscheinen deshalb zusammen und verschwinden zusammen.
+   */
+  function schreibtGerade(pageId) {
+    const last = typedAt.get(pageId) || 0;
+    return Date.now() - last <= LOCK_CLAIM_MS;
+  }
+
   /* Die eigene Position melden. Ausgelöst von jeder Bewegung der
      Schreibmarke – die Bremse sitzt in core/share.js, hier wird nur
      festgestellt, wo sie steht und welche Zeilen sie belegt. */
@@ -634,8 +660,7 @@
    */
   function lockSpanFor(pageId, textDiv, offset) {
     if (!canWrite || S.readOnly) return null;
-    const last = typedAt.get(pageId) || 0;
-    if (Date.now() - last > LOCK_CLAIM_MS) return null;
+    if (!schreibtGerade(pageId)) return null;
     if (typeof flatTextOf !== 'function') return null;
 
     try {
@@ -651,6 +676,12 @@
 
     const pgEl = focused.closest('[data-pgid]');
     if (!pgEl || pgEl.dataset.pgid !== pageId) return null;
+
+    /* Nicht am Schreiben: die Seite melden, aber keine Stelle. −1 heißt
+       „ist hier, zeigt aber nirgendwohin" – die anderen lassen die Marke
+       dann weg (renderCarets überspringt alles unter 0). Das Abzeichen am
+       Seitenrand bleibt davon unberührt. */
+    if (!schreibtGerade(pageId)) return { offset: -1, anker: '', lock: null };
 
     const offset = flatCaretPos(focused);
     if (offset === null) return null;

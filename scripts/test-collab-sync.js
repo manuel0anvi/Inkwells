@@ -715,8 +715,14 @@ function check(label, actual, expected) {
   check('Dahinter ist frei', s1.Collab.lockOwner('p1', 13, 20), null);
   check('Auf einer anderen Seite ist frei', s1.Collab.lockOwner('p2', 3, 3), null);
 
-  // Wer aufhört zu schreiben, gibt die Zeile nach dem Nachlauf wieder frei
-  presence.get('uidW').lockAt = Date.now() - 9000;
+  /* Wer aufhört zu schreiben, gibt die Zeile nach dem Nachlauf wieder
+     frei. Der Nachlauf ist LOCK_TTL_MS in ui/collab.js – 10 Sekunden.
+     Kurz davor muss sie noch stehen, deutlich danach weg sein. */
+  presence.get('uidW').lockAt = Date.now() - 8000;
+  announcePresence();
+  check('Kurz vor Ablauf noch gesperrt', !!s1.Collab.lockOwner('p1', 3, 3), true);
+
+  presence.get('uidW').lockAt = Date.now() - 14000;
   announcePresence();
   check('Nach dem Nachlauf wieder frei', s1.Collab.lockOwner('p1', 3, 3), null);
 
