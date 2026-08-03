@@ -734,6 +734,11 @@
      Cursor würde eine Zeile blockieren, obwohl niemand daran arbeitet. */
   const typedAt = new Map();
 
+  /* Wo die eigene Marke zuletzt stand, je Seite. Rückfall für
+     applyRemoteText, wenn die Auswahl im Augenblick nicht auslesbar ist –
+     ohne ihn landet die Marke beim Austausch des Inhalts auf Stelle 0. */
+  const letzteEigeneStelle = new Map();
+
   // So lange nach dem letzten Anschlag gilt man noch als „am Schreiben"
   const LOCK_CLAIM_MS = 4000;
 
@@ -815,6 +820,9 @@
 
     const offset = flatCaretPos(focused);
     if (offset === null) return null;
+
+    // Für den Rückfall in applyRemoteText mitschreiben
+    letzteEigeneStelle.set(pageId, offset);
 
     // Der Anker macht die Stelle beim anderen wiederauffindbar
     let anker = '';
@@ -1032,13 +1040,19 @@
    * Gemessen wird jetzt statt getroffen: zu einer Stelle liefert
    * caretRectAt die Mitte ihrer Bildschirmzeile. Zeichen derselben Zeile
    * haben dieselbe Mitte, und die Zeilennummer wächst mit der Stelle –
-   * damit lässt sich der Anfang der Zeile und das Ende der nächsten
-   * einschachteln. Das hängt an keiner Maus und an keinem Bildausschnitt.
+   * damit lässt sich der Anfang und das Ende der Zeile einschachteln.
+   * Das hängt an keiner Maus und an keinem Bildausschnitt.
+   *
+   * >>> Genau EINE Zeile <<<
+   * Anfangs waren es die eigene und die darauffolgende. Das war zu viel:
+   * gesperrt aussah, was niemand anfasste, und daneben weiterzuarbeiten
+   * ging nicht mehr. Jetzt gehört dem Schreibenden nur die Zeile, in der
+   * seine Marke steht.
    */
   function visualLineSpan(textDiv, offset) {
     const text = flatTextOf(textDiv);
     // Nie über den Absatz hinaus: ein Umbruch beendet die Sperre ohnehin
-    const grenze = flatLineSpan(text, offset, 1);
+    const grenze = flatLineSpan(text, offset, 0);
 
     const caret = caretRectAt(textDiv, offset, text);
     if (!caret) return null;
@@ -1066,14 +1080,14 @@
     }
     const von = lo;
 
-    /* Ende der Zeile DANACH: die späteste Stelle, die höchstens eine
-       Zeilenhöhe tiefer sitzt. Gibt es keine nächste Zeile, bleibt es
-       beim Ende der eigenen. */
+    /* Ende DERSELBEN Zeile: die späteste Stelle, die noch dieselbe
+       Zeilenmitte hat. Nicht weiter – die Zeile darunter gehört ihm
+       nicht. */
     let lo2 = offset, hi2 = grenze.to;
     while (lo2 < hi2) {
       const mid = (lo2 + hi2 + 1) >> 1;
       const m = zeilenMitte(mid);
-      if (m !== null && m < mitte + lh * 1.5) lo2 = mid;
+      if (m !== null && Math.abs(m - mitte) < lh / 2) lo2 = mid;
       else hi2 = mid - 1;
     }
     const bis = lo2;
@@ -1159,8 +1173,24 @@
        Zeilenanfang und Ende der Zeile davor dieselbe Zahl, die eigene
        Marke rutschte dadurch bei jeder fremden Änderung eine Zeile hoch. */
     const hadFocus = document.activeElement === textDiv;
-    const caret = hadFocus && typeof flatCaretPos === 'function'
+
+    /* >>> Warum es einen Rückfall braucht <<<
+       flatCaretPos gibt null zurück, sobald gerade keine Auswahl im Feld
+       steht – nach einem vorigen Umbau, nach einem Klick daneben, nach
+       einem Fensterwechsel. Dann wurde die Marke NICHT wiederhergestellt,
+       und weil das Feld den Fokus behielt, setzte der Browser sie beim
+       Austausch des Inhalts auf Stelle 0. Genau das war „mein Cursor
+       springt an den Anfang der Zeile, in der der andere schreibt" –
+       schreibt er in der ersten Zeile, ist Stelle 0 eben dort. Und das
+       Nächste, was man tippte, landete mitten in seinem Satz.
+
+       Deshalb die zuletzt bekannte eigene Stelle als Rückfall. */
+    let caret = (hadFocus && typeof flatCaretPos === 'function')
       ? flatCaretPos(textDiv) : null;
+    if (hadFocus && caret === null) {
+      const gemerkt = letzteEigeneStelle.get(pageId);
+      if (Number.isFinite(gemerkt)) caret = gemerkt;
+    }
 
     /* Der Text VOR der fremden Änderung. Nur damit lässt sich hinterher
        ausrechnen, wohin die eigene Marke gewandert ist – siehe shiftedPos. */
@@ -1177,8 +1207,23 @@
       if (vorher !== null) {
         try { ziel = shiftedPos(vorher, nachher, caret); } catch (e) { ziel = caret; }
       }
-      try { setFlatCaret(textDiv, ziel); } catch (e) { /* Text war zu stark umgebaut */ }
+      let gesetzt = false;
+      try { gesetzt = setFlatCaret(textDiv, ziel); } catch (e) { gesetzt = false; }
+
+      /* Ließ sich die Stelle nicht setzen, steht die Marke jetzt auf 0 –
+         der Browser hat sie beim Austausch des Inhalts dorthin gelegt.
+         Dort weiterzutippen hieße, in den Satz des anderen zu schreiben.
+         Lieber den Fokus abgeben: dann tut die nächste Taste nichts, statt
+         etwas Falsches. */
+      if (!gesetzt) {
+        try { textDiv.blur(); } catch (e) { /* egal */ }
+      } else {
+        letzteEigeneStelle.set(pageId, ziel);
+      }
       merkeCaretLauf(vorher, nachher, caret, ziel, textDiv);
+    } else if (hadFocus) {
+      // Fokus im Feld, aber keine bekannte Stelle – siehe oben
+      try { textDiv.blur(); } catch (e) { /* egal */ }
     }
     if (typeof renderSideTree === 'function') renderSideTree();
 
@@ -2033,6 +2078,7 @@
     fetchPending.clear();
     reloading.clear();
     typedAt.clear();
+    letzteEigeneStelle.clear();
     liveNb = null;
     snapshot = null;
 
