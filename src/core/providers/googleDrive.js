@@ -417,11 +417,18 @@ const GoogleDriveProvider = {
     return result?.id || existingFileId;
   },
 
+  /**
+   * Verschiebt eine Datei in einen anderen Ordner.
+   * Drive behält dabei die Kennung – sie wird trotzdem zurückgegeben, damit
+   * beide Anbieter dieselbe Zusage geben (bei OneDrive kann sie sich
+   * ändern, siehe providers/oneDrive.js).
+   */
   async moveFile(http, fileId, fromFolderId, toFolderId) {
     await http.json(
       `${DRIVE_API}/files/${fileId}?addParents=${toFolderId}&removeParents=${fromFolderId}&fields=id`,
       { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' }
     );
+    return fileId;
   },
 
   async deleteFile(http, fileId) {

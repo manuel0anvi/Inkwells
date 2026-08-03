@@ -421,12 +421,85 @@ const OneDriveProvider = {
     return result?.id || existingFileId;
   },
 
+  /**
+   * Verschiebt eine Datei in einen anderen Ordner.
+   *
+   * >>> Warum das mehr ist als ein PATCH <<<
+   * Mit der Berechtigung Files.ReadWrite.AppFolder nimmt Graph den PATCH
+   * auf parentReference zwar an, führt ihn aber nicht zuverlässig aus: die
+   * Antwort sieht nach Erfolg aus, die Datei liegt danach unverändert im
+   * alten Ordner. Daran scheiterte das Löschen unter Microsoft – in der App
+   * war das Heft weg, im OneDrive und damit auf der Website stand es weiter.
+   *
+   * Deshalb wird nachgesehen, wo die Datei WIRKLICH liegt, und im Zweifel am
+   * Zielort neu angelegt und die alte entfernt. Anlegen und Löschen erlaubt
+   * die App-Ordner-Berechtigung immer, denn beide Ordner liegen darin.
+   *
+   * @returns {Promise<string>} die Kennung der Datei am Zielort. Beim
+   *   Neuanlegen ist das eine ANDERE als vorher – der Aufrufer muss sie
+   *   übernehmen, sonst zeigt sein Vermerk auf eine gelöschte Datei.
+   */
   async moveFile(http, fileId, fromFolderId, toFolderId) {
-    await http.json(`${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${fileId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentReference: { id: toFolderId } })
-    });
+    try {
+      await http.json(`${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${fileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentReference: { id: toFolderId } })
+      });
+      if (await this._parentFolderOf(http, fileId) === toFolderId) return fileId;
+      console.warn('[OneDrive] Verschieben blieb ohne Wirkung – Datei wird am Zielort neu angelegt');
+    } catch (err) {
+      console.warn('[OneDrive] Verschieben abgelehnt:', err.message);
+    }
+
+    return this._recreateInFolder(http, fileId, toFolderId);
+  },
+
+  /** In welchem Ordner liegt die Datei gerade? null = keine Auskunft. */
+  async _parentFolderOf(http, fileId) {
+    try {
+      const item = await http.json(
+        `${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${fileId}?$select=id,parentReference`
+      );
+      return item?.parentReference?.id || null;
+    } catch (err) {
+      // Ohne Auskunft gilt das Verschieben als ungeklärt, nicht als erledigt
+      return null;
+    }
+  },
+
+  /** Legt die Datei im Zielordner neu an und entfernt danach die alte. */
+  async _recreateInFolder(http, fileId, toFolderId) {
+    const meta = await http.json(`${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${fileId}?$select=id,name`);
+    const name = meta?.name;
+    const data = await this.downloadFile(http, fileId);
+
+    /* Ohne Namen oder lesbaren Inhalt wird weder etwas angelegt noch etwas
+       gelöscht. Sonst wäre das Heft weg statt verschoben – und der Weg hier
+       läuft ausgerechnet dann, wenn ohnehin schon etwas schiefging. */
+    if (!name || data == null) throw new Error('Datei konnte zum Verschieben nicht gelesen werden');
+
+    const content = JSON.stringify(data);
+    const bytes = new TextEncoder().encode(content).length;
+
+    let newId;
+    if (bytes < 4 * 1024 * 1024) {
+      const saved = await http.json(
+        `${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${toFolderId}:/${encodeURIComponent(name)}:/content`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: content }
+      );
+      newId = saved?.id || null;
+    } else {
+      newId = await this._uploadLarge(http, {
+        folderId: toFolderId, existingFileId: null, desiredName: name, content
+      });
+    }
+
+    if (!newId) throw new Error('Datei konnte im Zielordner nicht angelegt werden');
+
+    // Erst jetzt – vorher gäbe es die Fassung am Zielort noch gar nicht
+    await this.deleteFile(http, fileId);
+    return newId;
   },
 
   async deleteFile(http, fileId) {

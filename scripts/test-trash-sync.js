@@ -47,10 +47,12 @@ function check(label, actual, expected) {
 /**
  * @param {object[]} entries      was örtlich im Papierkorb liegt
  * @param {object|null} index     was loadTrashIndex() liefert
+ * @param {string[]|null} [inMainFolder]  was noch im Cloud-Hauptordner liegt
  */
-function makeTrash(entries, index) {
+function makeTrash(entries, index, inMainFolder = []) {
   const deletedFiles = [];
   const saved = {};
+  const trashed = [];
 
   const ctx = {
     console: { log() {}, warn() {}, error(...a) { console.error('[trash]', ...a); } },
@@ -60,7 +62,8 @@ function makeTrash(entries, index) {
     CloudSync_: {
       loadTrashIndex: async () => index,
       saveTrashIndex: async (list) => { saved.list = list; return true; },
-      trashRemoteNotebook: async () => ({ done: true, fileId: 'f1' }),
+      trashRemoteNotebook: async (id) => { trashed.push(id); return { done: true, fileId: 'f1' }; },
+      listRemoteNotebookIds: async () => inMainFolder,
       deleteRemoteFile: async () => true,
       deleteRemoteNotebookById: async () => true,
       untrashRemoteNotebook: async () => null
@@ -83,7 +86,7 @@ function makeTrash(entries, index) {
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'src/core/trash.js'), 'utf8'), ctx);
 
-  return { ctx, Trash: ctx.Trash, deletedFiles, saved };
+  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed };
 }
 
 /** Ein Eintrag, der schon einmal in der gemeinsamen Liste stand. */
@@ -149,6 +152,31 @@ function syncedEntry(id, name) {
   await pending.Trash.syncWithCloud();
 
   check('Bleiben liegen', pending.Trash.getAll().map(e => e.id), ['nb3']);
+
+  console.log('\nAbgehakt, aber in der Cloud noch da');
+
+  /* Der Fehler unter Microsoft: das Verschieben meldete Erfolg, ohne etwas
+     zu tun. Der Eintrag galt als erledigt und wurde nie wieder angefasst –
+     in der App war das Heft weg, auf der Website stand es weiter da.
+     Liegt die Datei noch im Hauptordner, ist die Cloud-Seite eben offen. */
+  // So steht der Eintrag in der gemeinsamen Liste: abgehakt (stripLocalFields
+  // nimmt nur die Pfade heraus, den Vermerk nicht).
+  const nowInIndex = [{
+    id: 'nb1', name: 'Tagebuch', driveFileId: 'drive-nb1',
+    cloudTrashed: true, deletedAt: new Date().toISOString()
+  }];
+  const stuck = makeTrash([syncedEntry('nb1', 'Tagebuch')], { entries: nowInIndex, exists: true }, ['nb1']);
+  await stuck.Trash.syncWithCloud();
+
+  check('Es wird noch einmal verschoben', stuck.trashed, ['nb1']);
+  check('Der Eintrag bleibt im Papierkorb', stuck.Trash.getAll().map(e => e.id), ['nb1']);
+
+  console.log('\nAbgehakt und in der Cloud wirklich weg');
+
+  const clean = makeTrash([syncedEntry('nb1', 'Tagebuch')], { entries: nowInIndex, exists: true }, []);
+  await clean.Trash.syncWithCloud();
+
+  check('Es wird nichts unnötig wiederholt', clean.trashed, []);
 
   console.log('\nOhne Netz wird nichts angefasst');
 

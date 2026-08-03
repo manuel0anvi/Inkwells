@@ -1309,7 +1309,12 @@ class CloudSyncManager {
 
       const folderId = await this._getFolder();
       const trashFolderId = await this._getTrashFolder();
-      await this.provider.moveFile(this._http, file.id, folderId, trashFolderId);
+
+      /* Die Kennung kann sich beim Verschieben ändern: OneDrive führt den
+         Umzug im App-Ordner nicht immer aus und legt die Datei dann am
+         Zielort neu an. Der alte Wert zeigte danach ins Leere, und das
+         endgültige Löschen fand nichts mehr. */
+      const movedId = await this.provider.moveFile(this._http, file.id, folderId, trashFolderId) || file.id;
 
       /* >>> Nachsehen, ob es wirklich weg ist <<<
          Ein Verschieben, das die Cloud stillschweigend nicht ausführt, sah
@@ -1322,14 +1327,42 @@ class CloudSyncManager {
          danach noch da, hat das Verschieben nichts bewirkt. */
       if (await this._findRemoteFile({ id: nbId, name: '' })) {
         console.warn('[CloudSync] Datei liegt nach dem Verschieben noch im Hauptordner:', nbId);
-        return { done: false, fileId: file.id };
+        return { done: false, fileId: movedId };
       }
 
       console.log('[CloudSync] Heft in den Cloud-Papierkorb verschoben:', nbId);
-      return { done: true, fileId: file.id };
+      return { done: true, fileId: movedId };
     } catch (err) {
       console.warn('[CloudSync] Cloud-Papierkorb fehlgeschlagen:', err.message);
       return { done: false, fileId: null };
+    }
+  }
+
+  /**
+   * Die Kennungen aller Hefte, die noch im HAUPTORDNER der Cloud liegen.
+   *
+   * >>> Wofür der Papierkorb das braucht <<<
+   * Der Vermerk „cloudTrashed" hieß bisher nur „es wurde versucht". Blieb
+   * die Datei dabei liegen, wurde der Eintrag nie wieder angefasst: in der
+   * App war das Heft weg, in der Cloud und damit auf der Website stand es
+   * für immer weiter da. Damit lässt sich das nachträglich erkennen.
+   *
+   * @returns {Promise<string[]|null>} null = nicht angemeldet, ohne Netz
+   *   oder nicht lesbar. Eine leere Liste heißt: der Hauptordner ist leer.
+   */
+  async listRemoteNotebookIds() {
+    if (!this._canSync() || !this.isOnline) return null;
+
+    try {
+      const files = await this._listNotebookFiles();
+      // Derselbe Rückfall wie in matchesNotebook: ohne eigene Kennung ist
+      // der Dateiname ohne Endung die Kennung.
+      return files
+        .map(f => f.inkwellId || String(f.name || '').replace(/\.(json|jrnl)$/i, ''))
+        .filter(Boolean);
+    } catch (err) {
+      console.warn('[CloudSync] Hauptordner nicht lesbar:', err.message);
+      return null;
     }
   }
 
@@ -1374,8 +1407,10 @@ class CloudSyncManager {
     try {
       const folderId = await this._getFolder();
       const trashFolderId = await this._getTrashFolder();
-      await this.provider.moveFile(this._http, fileId, trashFolderId, folderId);
-      return this.provider.downloadFile(this._http, fileId);
+      // Auch hier kann die Datei am Zielort eine neue Kennung bekommen –
+      // heruntergeladen wird die, die jetzt wirklich im Hauptordner liegt.
+      const movedId = await this.provider.moveFile(this._http, fileId, trashFolderId, folderId) || fileId;
+      return this.provider.downloadFile(this._http, movedId);
     } catch (err) {
       console.warn('[CloudSync] Zurückholen aus dem Cloud-Papierkorb fehlgeschlagen:', err.message);
       return null;

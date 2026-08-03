@@ -266,8 +266,21 @@ const Trash = {
   async _catchUpCloudTrash() {
     if (typeof CloudSync_ === 'undefined' || !CloudSync_) return false;
 
+    /* >>> Auch die abgehakten Einträge nachsehen <<<
+       Ein Eintrag mit cloudTrashed galt als erledigt und wurde nie wieder
+       angefasst. Hatte das Verschieben in Wirklichkeit nichts bewirkt –
+       unter Microsoft der Normalfall, siehe providers/oneDrive.js –, blieb
+       die Datei für immer im Hauptordner: in der App gelöscht, auf der
+       Website weiterhin da. Ein Blick in den Hauptordner räumt das auf. */
+    const stillInMainFolder = await CloudSync_.listRemoteNotebookIds?.();
+
     let changed = false;
     for (const entry of this._entries) {
+      if (entry.cloudTrashed && stillInMainFolder?.includes(entry.id)) {
+        console.warn('[Trash] Liegt trotz Vermerk noch im Cloud-Hauptordner:', entry.name);
+        entry.cloudTrashed = false;
+        changed = true;
+      }
       if (entry.cloudTrashed) continue;
       try {
         const moved = await CloudSync_.trashRemoteNotebook(entry.id);
