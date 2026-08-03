@@ -1406,6 +1406,45 @@ class CloudSyncManager {
     return deleted;
   }
 
+  /**
+   * Liegt zu diesem Heft noch IRGENDEINE Datei in der Cloud – im
+   * Hauptordner oder im Papierkorb-Unterordner?
+   *
+   * Gebraucht beim endgültigen Löschen: erst wenn das sicher verneint
+   * ist, darf der Papierkorb-Eintrag verschwinden. Sonst bliebe die
+   * Datei liegen und niemand versuchte es je wieder.
+   *
+   * @returns {Promise<boolean|null>} null = nicht feststellbar (kein
+   *   Netz, nicht angemeldet, Ordner nicht lesbar). Dann NICHTS annehmen.
+   */
+  async remoteNotebookExists(nbId) {
+    if (!this._canSync() || !this.isOnline || !nbId) return null;
+
+    for (const getFolder of [() => this._getFolder(), () => this._getTrashFolder()]) {
+      let folderId;
+      try {
+        folderId = await getFolder();
+      } catch (err) {
+        return null;
+      }
+      if (!folderId) return null;
+
+      let files;
+      try {
+        files = await this.provider.listNotebookFiles(this._http, folderId);
+      } catch (err) {
+        console.warn('[CloudSync] Ordner nicht lesbar:', err.message);
+        return null;
+      }
+
+      for (const file of files) {
+        if (await this._fileBelongsTo(file, nbId)) return true;
+      }
+    }
+
+    return false;
+  }
+
   async untrashRemoteNotebook(fileId) {
     if (!this._canSync() || !this.isOnline || !fileId) return null;
 

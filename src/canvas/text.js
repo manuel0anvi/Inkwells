@@ -477,16 +477,54 @@ function lineBoxOf(pgEl, textDiv, rect, zoom) {
   return { top: mitte - lh / 2, height: lh, left: (rect.left - pageRect.left) / zoom };
 }
 
-/* Meldet höchstens alle paar Sekunden, dass die Texte auseinanderlaufen.
-   Ohne diese Bremse käme die Zeile bei jedem Durchgang neu. */
+/* ══════════════════════════════════════════════════════════════════════
+   Meldet, dass die Texte auseinanderlaufen – aber nur, wenn es etwas
+   bedeutet.
+
+   >>> Warum die Meldung so oft kam, ohne dass etwas kaputt war <<<
+   Sie schlug bei JEDEM Vorsprung an. Zwei davon sind aber der
+   Normalbetrieb und gehen von selbst vorbei:
+
+     · Der andere tippt. Seine Stelle kommt über die Anwesenheit alle
+       150 ms, sein Text über den Änderungsstrom alle 300 ms – die Stelle
+       ist also regelmäßig ein paar Zeichen weiter als der Text hier.
+       Beim nächsten Paket stimmt es wieder.
+     · Die Seite ist hier noch leer. Dann ist ihr Inhalt schlicht noch
+       nicht angekommen (frisch angelegt, gerade erst geöffnet). Über
+       einen Versatz zu klagen, wenn es noch gar keinen Text gibt, sagt
+       niemandem etwas.
+
+   Gemeldet wird deshalb nur ein Vorsprung, der GROSS ist und BLEIBT.
+   ══════════════════════════════════════════════════════════════════════ */
+
+// So weit darf die Stelle vorauseilen, ohne dass es der Rede wert ist
+const VERSATZ_TOLERANZ = 40;
+// Und so lange muss es schon so stehen
+const VERSATZ_DAUER_MS = 3000;
+
 let letzterVersatz = 0;
+const versatzSeit = new Map();      // uid -> seit wann es klemmt
+
 function meldeVersatz(person, laenge) {
+  const uid = person && person.uid ? person.uid : '?';
+
+  // Noch gar kein Text hier: die Seite ist einfach noch nicht da
+  if (!laenge) { versatzSeit.delete(uid); return; }
+
+  const vorsprung = (Number(person.offset) || 0) - laenge;
+  if (vorsprung <= VERSATZ_TOLERANZ) { versatzSeit.delete(uid); return; }
+
   const jetzt = Date.now();
+  const seit = versatzSeit.get(uid);
+  if (!seit) { versatzSeit.set(uid, jetzt); return; }
+  if (jetzt - seit < VERSATZ_DAUER_MS) return;
+
   if (jetzt - letzterVersatz < 5000) return;
   letzterVersatz = jetzt;
   console.warn('[Collab] Die Fassungen laufen auseinander: '
     + (person.name || person.email || '?') + ' meldet Stelle ' + person.offset
-    + ', hier ist der Text aber nur ' + laenge + ' Zeichen lang. '
+    + ', hier ist der Text aber nur ' + laenge + ' Zeichen lang – und das '
+    + 'seit ' + Math.round((jetzt - seit) / 1000) + ' Sekunden. '
     + 'Die fremde Schreibmarke kann dadurch nicht richtig sitzen.');
 }
 

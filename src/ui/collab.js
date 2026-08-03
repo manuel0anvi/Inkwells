@@ -643,24 +643,38 @@
     }
   }
 
-  /** Alle sichtbaren Zeilen eines Bereichs – eine je Bildschirmzeile. */
-  function spanRects(textDiv, from, to) {
-    const start = flatRangeAt(textDiv, from);
-    const end = flatRangeAt(textDiv, to);
-    if (!start || !end) return [];
+  // Mehr Zeilen als das kann eine Sperre nie umfassen – Notbremse
+  const LOCK_MAX_ZEILEN = 6;
 
-    const span = document.createRange();
-    try {
-      span.setStart(start.startContainer, start.startOffset);
-      span.setEnd(end.startContainer, end.startOffset);
-    } catch (err) { return []; }
+  /**
+   * Die Zeilenkästen eines gesperrten Bereichs – einer je Bildschirmzeile.
+   *
+   * >>> Warum nicht über die Rechtecke des Textes <<<
+   * Vorher kam jede Zeile aus getClientRects() des Bereichs. Eine LEERE
+   * Zeile hat aber keinen Text und damit auch kein Rechteck – für sie
+   * entstand kein Band. Gesperrt sind aber „diese Zeile und die
+   * nächste", und wenn die nächste gerade leer ist, sah man nur eine.
+   *
+   * Gerechnet wird deshalb aus der Geometrie: der Kasten der ersten Zeile
+   * und der der letzten, und dazwischen je eine Zeilenhöhe. Das deckt
+   * leere Zeilen genauso ab wie umbrochene.
+   */
+  function lockZeilen(pgEl, textDiv, from, to, zoom) {
+    const text = flatTextOf(textDiv);
+    const ersteR = caretRectAt(textDiv, from, text);
+    const letzteR = caretRectAt(textDiv, Math.max(from, to), text);
+    if (!ersteR || !letzteR) return [];
 
-    const rects = Array.from(span.getClientRects()).filter(r => r.height > 0);
-    if (rects.length) return rects;
+    const erste = lineBoxOf(pgEl, textDiv, ersteR, zoom);
+    const letzte = lineBoxOf(pgEl, textDiv, letzteR, zoom);
+    const hoehe = erste.height || 32;
 
-    // Leere Zeile: kein Inhalt, also auch kein Rechteck – die Marke nehmen
-    const caret = caretRectAt(textDiv, from);
-    return caret ? [caret] : [];
+    const zeilen = [erste];
+    for (let top = erste.top + hoehe; top <= letzte.top + hoehe / 2; top += hoehe) {
+      if (zeilen.length >= LOCK_MAX_ZEILEN) break;
+      zeilen.push({ top, height: hoehe, left: erste.left });
+    }
+    return zeilen;
   }
 
   function renderLocks() {
@@ -688,20 +702,10 @@
       const width = textRect.width / zoom;
 
       for (const person of people) {
-        let rects = [];
-        try { rects = spanRects(textDiv, person.lockFrom, person.lockTo); }
+        let zeilen = [];
+        try { zeilen = lockZeilen(pgEl, textDiv, person.lockFrom, person.lockTo, zoom); }
         catch (err) { continue; }
-        if (!rects.length) continue;
-
-        /* Mehrere Rechtecke derselben Zeile zusammenfassen: getClientRects
-           zerlegt eine Zeile an jeder Auszeichnung (fett, kursiv) in
-           Stücke, und daraus würden sonst mehrere Bänder übereinander. */
-        const zeilen = [];
-        for (const rect of rects) {
-          const box = lineBoxOf(pgEl, textDiv, rect, zoom);
-          const schon = zeilen.find(z => Math.abs(z.top - box.top) < box.height / 2);
-          if (!schon) zeilen.push(box);
-        }
+        if (!zeilen.length) continue;
 
         zeilen.forEach((box, i) => {
           const band = document.createElement('div');

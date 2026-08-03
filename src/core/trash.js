@@ -78,15 +78,24 @@ const Trash = {
   async purgeExpired() {
     await this.load();
 
-    const expired = this._entries.filter(e => this.isExpired(e));
+    const expired = this._entries.filter(e => !e.purged && this.isExpired(e));
     if (!expired.length) return 0;
 
+    /* Dieselbe Vorsicht wie beim Leeren von Hand: der Eintrag geht erst
+       weg, wenn die Cloud-Datei nachweislich weg ist. Sonst verfällt er
+       nach 30 Tagen still und lässt seine Datei für immer liegen. */
     for (const entry of expired) {
-      await this._destroy(entry);
-      console.log(`[Trash] Nach ${TRASH_RETENTION_DAYS} Tagen entfernt: ${entry.name}`);
+      if (await this._destroy(entry)) {
+        this._entries = this._entries.filter(e => e !== entry);
+        console.log(`[Trash] Nach ${TRASH_RETENTION_DAYS} Tagen entfernt: ${entry.name}`);
+      } else {
+        entry.purged = true;
+        entry.trashPath = null;
+        entry.snapshot = null;
+        console.warn('[Trash] Abgelaufen, Cloud-Datei wird nachgeholt:', entry.name);
+      }
     }
 
-    this._entries = this._entries.filter(e => !this.isExpired(e));
     await this.save();
     await this._pushIndex();
 
@@ -99,12 +108,17 @@ const Trash = {
     await Registry.save();
   },
 
+  /* `purged` = endgültig gelöscht, nur die Cloud-Datei steht noch aus.
+     Für Anzeige und Zählung ist so ein Eintrag nicht mehr da; er lebt
+     bloß weiter, damit _catchUpCloudTrash die Datei nachholen kann. */
   getAll() {
-    return [...this._entries].sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
+    return this._entries
+      .filter(e => !e.purged)
+      .sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
   },
 
   count() {
-    return this._entries.length;
+    return this._entries.filter(e => !e.purged).length;
   },
 
   find(id) {
@@ -216,6 +230,12 @@ const Trash = {
     let changed = false;
 
     for (const local of this._entries) {
+      /* Endgültig gelöscht, Cloud-Datei steht noch aus: steht bewusst
+         NICHT in der gemeinsamen Liste (siehe _pushIndex). Er darf hier
+         deshalb nicht als „anderswo erledigt" weggeräumt werden – dann
+         bliebe die Datei wieder für immer liegen. */
+      if (local.purged) { merged.push(local); continue; }
+
       const inRemote = remoteById.get(local.id);
 
       if (inRemote) {
@@ -278,7 +298,22 @@ const Trash = {
     const stillInMainFolder = await CloudSync_.listRemoteNotebookIds?.();
 
     let changed = false;
-    for (const entry of this._entries) {
+    for (const entry of [...this._entries]) {
+      /* Endgültig gelöscht, aber die Cloud-Datei stand noch aus. Jetzt
+         noch einmal – gelingt es, verschwindet der Eintrag ganz. */
+      if (entry.purged) {
+        try {
+          if (await this._destroy(entry)) {
+            this._entries = this._entries.filter(e => e !== entry);
+            console.log('[Trash] Cloud-Datei nachträglich gelöscht:', entry.name);
+            changed = true;
+          }
+        } catch (err) {
+          console.warn('[Trash] Nachholen des endgültigen Löschens:', err.message);
+        }
+        continue;
+      }
+
       if (entry.cloudTrashed && stillInMainFolder?.includes(entry.id)) {
         console.warn('[Trash] Liegt trotz Vermerk noch im Cloud-Hauptordner:', entry.name);
         entry.cloudTrashed = false;
@@ -396,15 +431,38 @@ const Trash = {
     return notebook;
   },
 
-  /** Entfernt einen Eintrag endgültig – lokal und in Drive. */
+  /**
+   * Entfernt einen Eintrag endgültig – lokal und in Drive.
+   *
+   * >>> Warum der Eintrag nicht immer sofort verschwindet <<<
+   * Vorher wurde er aus der Liste geworfen, ganz gleich ob die Cloud-Seite
+   * geklappt hat. War gerade kein Netz da, das Zugangsmerkmal abgelaufen
+   * oder ging der Aufruf schief, blieb die Datei im Papierkorb-Ordner der
+   * Cloud liegen – und der Eintrag, über den man es hätte nachholen
+   * können, war weg. Damit war sie dort für immer. Genau das war „im
+   * Google-Papierkorb bleiben die Dateien auch nach dem Leeren".
+   *
+   * Jetzt bleibt der Eintrag in dem Fall bestehen, nur als `purged`
+   * gekennzeichnet: örtlich ist alles gelöscht, aus der Anzeige ist er
+   * verschwunden, und beim nächsten Abgleich wird die Cloud-Datei erneut
+   * gelöscht. Erst wenn das gelingt, ist er ganz weg.
+   */
   async deleteForever(id, options = {}) {
     await this.load();
     const entry = this.find(id);
     if (!entry) return;
 
-    await this._destroy(entry);
+    const cloudFertig = await this._destroy(entry);
 
-    this._entries = this._entries.filter(e => e.id !== id);
+    if (cloudFertig) {
+      this._entries = this._entries.filter(e => e.id !== id);
+    } else {
+      console.warn('[Trash] Cloud-Datei noch nicht weg, wird nachgeholt:', entry.name);
+      entry.purged = true;
+      entry.trashPath = null;      // örtlich ist sie schon gelöscht
+      entry.snapshot = null;
+    }
+
     await this.save();
     if (options.pushIndex !== false) await this._pushIndex();
   },
@@ -426,7 +484,12 @@ const Trash = {
     await this._pushIndex();
   },
 
-  /** Löscht die Dateien eines Eintrags – lokal und in Drive. */
+  /**
+   * Löscht die Dateien eines Eintrags – lokal und in Drive.
+   *
+   * @returns {Promise<boolean>} ob die CLOUD-Seite erledigt ist. false
+   *   heißt: die Datei liegt dort noch, später noch einmal versuchen.
+   */
   async _destroy(entry) {
     if (entry.trashPath) {
       try {
@@ -436,27 +499,50 @@ const Trash = {
       }
     }
 
-    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return;
+    /* Ohne Cloud gibt es dort auch nichts zu löschen – das gilt als
+       erledigt. Wer nie angemeldet war, soll seinen Papierkorb leeren
+       können, ohne dass Einträge hängen bleiben. */
+    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return true;
+    if (!Settings.get('cloudEnabled') || !CloudSync_.isAuthenticated?.()
+        || !CloudSync_.isConfigured?.()) {
+      /* Kein Konto verbunden. Eine Datei-Kennung heißt aber, dass sehr
+         wohl etwas in der Cloud liegt – dann bleibt es offen, bis wieder
+         jemand angemeldet ist. */
+      return !entry.driveFileId;
+    }
 
     /* >>> Die Kennung allein reicht nicht <<<
        Wer beim Löschen kein Netz hatte, hat keine Datei-Kennung. Endgültig
        gelöscht wurde dann nur örtlich – die Datei blieb in der Cloud und
        kam beim nächsten Abgleich als „neues" Heft zurück. Deshalb zusätzlich
        über die Heft-Kennung suchen, in beiden Ordnern. */
-    let gone = false;
     if (entry.driveFileId) {
-      gone = await CloudSync_.deleteRemoteFile(entry.driveFileId);
+      await CloudSync_.deleteRemoteFile(entry.driveFileId);
     }
-    if (!gone) {
-      await CloudSync_.deleteRemoteNotebookById(entry.id);
-    }
+    /* Zusätzlich über die Heft-Kennung, in BEIDEN Ordnern. Bei einem
+       Umzug legt die Cloud die Datei am Zielort mitunter neu an – die
+       gemerkte Kennung zeigt dann auf die eine Fassung, während die
+       andere liegen bleibt. */
+    await CloudSync_.deleteRemoteNotebookById(entry.id);
+
+    /* >>> Und jetzt nachsehen, statt es zu glauben <<<
+       Beide Aufrufe melden auch dann Erfolg oder Misserfolg, wenn sie
+       schlicht nichts gefunden haben. Erst diese Gegenprobe sagt, ob zu
+       dem Heft wirklich nichts mehr in der Cloud liegt – im Hauptordner
+       wie im Papierkorb-Unterordner. Nur dann darf der Eintrag weg.
+       Sagt sie null (kein Netz, nicht lesbar), bleibt es offen. */
+    return await CloudSync_.remoteNotebookExists(entry.id) === false;
   },
 
   /** Schreibt die aktuelle Liste in die gemeinsame Datei in Drive. */
   async _pushIndex() {
     if (typeof CloudSync_ === 'undefined' || !CloudSync_) return;
     try {
-      await CloudSync_.saveTrashIndex(this._entries.map(stripLocalFields));
+      /* Endgültig gelöschte Einträge, bei denen nur die Cloud-Datei noch
+         aussteht, gehören NICHT in die gemeinsame Liste – sonst sähe das
+         andere Gerät ein Heft im Papierkorb, das es hier nicht mehr gibt. */
+      const sichtbar = this._entries.filter(e => !e.purged);
+      await CloudSync_.saveTrashIndex(sichtbar.map(stripLocalFields));
     } catch (err) {
       console.warn('[Trash] Gemeinsame Liste nicht aktualisiert:', err.message);
     }
