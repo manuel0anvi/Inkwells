@@ -39,6 +39,93 @@ function showMsHint() {
   });
 }
 
+/**
+ * Fragt Seite für Seite, welche Fassung gelten soll.
+ *
+ * @param {{id: string, label: string}[]} rows betroffene Seiten
+ * @returns {Promise<string[]>} Kennungen der Seiten, bei denen die
+ *          Fassung des anderen gewinnt
+ *
+ * >>> Warum es kein Abbrechen gibt <<<
+ * Weitergearbeitet wird in jedem Fall, und beide Fassungen nebeneinander
+ * kann das Heft nicht führen. „Abbrechen" hieße also nur: still das eine
+ * oder das andere nehmen – genau das, was dieses Fenster verhindert.
+ * Escape wählt deshalb nicht ab, sondern behält, was im Raum steht: das
+ * ist die Fassung, die alle anderen schon sehen.
+ */
+function showConflictDialog(rows) {
+  const list = E('conflict-list');
+  list.innerHTML = '';
+
+  // Vorbelegt auf die eigene Fassung – der Nutzer sitzt davor und weiß,
+  // was er geschrieben hat; über die des anderen kann er nur mutmaßen.
+  const keepMine = new Map(rows.map(row => [row.id, true]));
+
+  for (const row of rows) {
+    const line = document.createElement('div');
+    line.className = 'conflict-row';
+
+    const name = document.createElement('span');
+    name.textContent = row.label;
+
+    const pick = document.createElement('div');
+    pick.className = 'conflict-pick';
+
+    const mine = document.createElement('button');
+    mine.textContent = t('conflictMine');
+    const theirs = document.createElement('button');
+    theirs.textContent = t('conflictTheirs');
+
+    const paint = () => {
+      mine.classList.toggle('on', keepMine.get(row.id));
+      theirs.classList.toggle('on', !keepMine.get(row.id));
+    };
+    mine.onclick = () => { keepMine.set(row.id, true); paint(); };
+    theirs.onclick = () => { keepMine.set(row.id, false); paint(); };
+    paint();
+
+    pick.append(mine, theirs);
+    line.append(name, pick);
+    list.appendChild(line);
+  }
+
+  E('ov-conflict').style.display = 'flex';
+
+  return new Promise(res => {
+    const finish = () => {
+      E('ov-conflict').style.display = 'none';
+      off();
+      res(rows.filter(r => !keepMine.get(r.id)).map(r => r.id));
+    };
+    const all = (mine) => {
+      for (const row of rows) keepMine.set(row.id, mine);
+      // Die Zeilen neu zeichnen, damit die Schalter mitgehen
+      for (const btns of list.querySelectorAll('.conflict-pick')) {
+        btns.children[0].classList.toggle('on', mine);
+        btns.children[1].classList.toggle('on', !mine);
+      }
+    };
+    const escape = () => {
+      E('ov-conflict').style.display = 'none';
+      off();
+      res(rows.map(r => r.id));          // im Zweifel behält der Raum
+    };
+    const kd = e => { if (e.key === 'Enter') finish(); if (e.key === 'Escape') escape(); };
+
+    function off() {
+      E('conflict-ok').onclick = null;
+      E('conflict-all-mine').onclick = null;
+      E('conflict-all-theirs').onclick = null;
+      document.removeEventListener('keydown', kd);
+    }
+
+    E('conflict-ok').onclick = finish;
+    E('conflict-all-mine').onclick = () => all(true);
+    E('conflict-all-theirs').onclick = () => all(false);
+    document.addEventListener('keydown', kd);
+  });
+}
+
 // Returns 'save', 'leave', or null (cancelled)
 function showSaveConfirm(msg) {
   E('save-confirm-msg').textContent = msg;

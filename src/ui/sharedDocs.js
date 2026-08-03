@@ -517,10 +517,109 @@
     return (raw && typeof raw === 'object') ? raw : {};
   }
 
-  async function rememberFingerprint(docId, fingerprint) {
+  /* Mitgemerkt wird auch der Stand des Raums von damals. Stimmt der beim
+     nächsten Öffnen noch, hat niemand anders geschrieben – dann kann es
+     gar keine zwei Fassungen geben, und die Nachfrage entfällt, ohne das
+     ganze Dokument dafür zu laden. */
+  async function rememberFingerprint(docId, fingerprint, revision) {
     const all = fingerprintStore();
-    all[docId] = fingerprint;
+    all[docId] = { fingerprint, revision: Number(revision) || 0 };
     await Settings.update({ liveFingerprints: all }).catch(() => {});
+  }
+
+  /** Merkzettel lesen. Ältere Fassungen legten ihn ohne Umschlag ab. */
+  function storedEntry(docId) {
+    const raw = fingerprintStore()[docId];
+    if (!raw) return { fingerprint: null, revision: -1 };
+    if (raw.fingerprint) return { fingerprint: raw.fingerprint, revision: Number(raw.revision) || 0 };
+    // Kein Umschlag: der Stand des Raums ist unbekannt, also nachsehen.
+    return { fingerprint: raw, revision: -1 };
+  }
+
+  /* ── Zwei Fassungen derselben Seite ─────────────────────────────────
+     Verglichen wird immer über die Unterschrift EINER Seite, und zwar
+     genau die, an der auch saveDocumentContent entscheidet, ob eine Seite
+     geschrieben wird. Sonst meldete die Nachfrage Seiten, die gar nicht
+     hinaufgingen – oder schlimmer, sie überginge welche, die es täten. */
+  function sigOf(fp, pageId) {
+    return fp?.pages?.[pageId]?.sig || '';
+  }
+
+  /** Hat sich hier seit dem letzten Abgleich überhaupt etwas getan? */
+  function hasLocalChanges(stored, local) {
+    const ids = new Set([
+      ...Object.keys(stored?.pages || {}),
+      ...Object.keys(local?.pages || {})
+    ]);
+    for (const id of ids) if (sigOf(stored, id) !== sigOf(local, id)) return true;
+    return false;
+  }
+
+  /**
+   * Seiten, die HIER und im Raum verändert wurden, seit beide gleich
+   * waren – und zwar unterschiedlich.
+   *
+   * Bewusst nur Seiten, die es auf beiden Seiten gibt: eine Seite, die
+   * hier ohne Netz entstanden ist, kennt der Raum gar nicht, da gibt es
+   * nichts abzuwägen (adoptRoom behält sie ohnehin). Und eine, die es
+   * hier nicht mehr gibt, ist gelöscht – dafür bräuchte es eine eigene
+   * Frage, die nicht in dieses Fenster gehört.
+   */
+  function conflictingPages(stored, local, remote) {
+    const out = [];
+    for (const id of Object.keys(local?.pages || {})) {
+      if (!remote?.pages?.[id] || !stored?.pages?.[id]) continue;
+      const base = sigOf(stored, id);
+      const mine = sigOf(local, id);
+      const theirs = sigOf(remote, id);
+      if (mine !== base && theirs !== base && mine !== theirs) out.push(id);
+    }
+    return out;
+  }
+
+  /**
+   * Vergleichsstand so zuschneiden, dass nur das Gewählte hinaufgeht.
+   *
+   * saveDocumentContent schreibt jede Seite, deren Unterschrift von der
+   * im Vergleichsstand abweicht. Eine Seite, bei der die Fassung des
+   * anderen gelten soll, bekommt hier also die EIGENE Unterschrift
+   * eingetragen – damit gilt sie als unverändert und bleibt liegen. Der
+   * Raum behält seine Fassung, und Schritt 2 holt sie herüber.
+   */
+  /**
+   * Fragt nach, welche Fassung gelten soll, und gibt die Seiten zurück,
+   * bei denen die des anderen gewinnt.
+   *
+   * Die Seiten werden mit ihrer Nummer benannt, nicht mit ihrer Kennung –
+   * die sagt niemandem etwas. Gezählt wird über nb.pages, also so, wie
+   * die Seiten im Heft stehen.
+   */
+  async function askAboutClashes(nb, pageIds) {
+    const order = (nb.pages || []).map(p => String(p.id));
+    const rows = pageIds.map(id => ({
+      id,
+      label: t('conflictPage').replace('{n}', String(order.indexOf(id) + 1))
+    }));
+    // Nach Seitenzahl, damit die Liste der Reihenfolge im Heft folgt
+    rows.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+
+    try {
+      return await showConflictDialog(rows);
+    } catch (err) {
+      /* Geht das Fenster schief, darf das nicht dazu führen, dass die
+         eigene Fassung ungefragt gewinnt. Im Zweifel behält der Raum,
+         was er hat – das ist die Fassung, die alle anderen schon sehen. */
+      console.warn('[SharedDocs] Nachfrage nicht möglich:', err?.message || err);
+      return pageIds.slice();
+    }
+  }
+
+  function cedeBaseline(stored, local, keepTheirs) {
+    const pages = { ...(stored.pages || {}) };
+    for (const id of keepTheirs) {
+      if (local.pages?.[id]) pages[id] = local.pages[id];
+    }
+    return { ...stored, pages };
   }
 
   /**
@@ -588,11 +687,37 @@
       try { syncAll(); } catch (e) { console.warn('[SharedDocs] syncAll:', e); }
     }
 
-    // 1. Eigenes zuerst hinauf – nur wenn wir wissen, WAS neu ist.
-    const stored = fingerprintStore()[entry.docId] || null;
+    /* 1. Eigenes zuerst hinauf – nur wenn wir wissen, WAS neu ist.
+
+       >>> Vorher die Frage, ob jemand anders dieselbe Seite hatte <<<
+       Genau hier entsteht der Fall, den keine Marke im Raum abdecken
+       kann: die App war ZU, als die Verbindung wegfiel, wurde ohne Netz
+       wieder geöffnet und es wurde weitergeschrieben. Dann stand nichts
+       im Raum, was die anderen hätte bremsen können – sie haben ebenfalls
+       geschrieben. Ohne diese Frage überschriebe der Schritt hier ihre
+       Arbeit stillschweigend.
+
+       Geladen wird dafür nur, wenn es sich überhaupt lohnen kann: hier
+       muss sich etwas geändert haben UND der Raum muss weitergezählt
+       haben. Sonst ist die Sache ohne einen einzigen Abruf entschieden. */
+    const { fingerprint: stored, revision: storedRev } = storedEntry(entry.docId);
+    let baselineForUpload = stored;
+
     if (stored) {
+      const localFp = api.fingerprintNotebook(nb);
+
+      if (hasLocalChanges(stored, localFp) && head.revision !== storedRev) {
+        const peek = await api.loadDocument(entry.docId);
+        const clashes = conflictingPages(stored, localFp, peek.fingerprint);
+
+        if (clashes.length) {
+          const keepTheirs = await askAboutClashes(nb, clashes);
+          baselineForUpload = cedeBaseline(stored, localFp, keepTheirs);
+        }
+      }
+
       try {
-        await api.saveDocumentContent(entry.docId, nb, { baseline: stored });
+        await api.saveDocumentContent(entry.docId, nb, { baseline: baselineForUpload });
       } catch (err) {
         console.warn('[SharedDocs] Eigener Stand nicht hochgeladen:', err?.message || err);
       }
@@ -606,7 +731,7 @@
     crdtState = loaded.crdt || {};
     dirty = extras > 0;                 // eigene Seiten müssen noch hinauf
     live = { docId: entry.docId, nbId: nb.id, isOwner: true };
-    rememberFingerprint(entry.docId, loaded.fingerprint);
+    rememberFingerprint(entry.docId, loaded.fingerprint, loaded.head.revision);
 
     applyReadOnlyChrome(false, {
       docId: entry.docId,
@@ -976,7 +1101,7 @@
         baseline = result.fingerprint;
         // Damit der Besitzer beim nächsten Öffnen weiß, was er selbst
         // zuletzt hinaufgegeben hat (startOwnerSession, Schritt 1).
-        if (session.isOwner) rememberFingerprint(session.docId, result.fingerprint);
+        if (session.isOwner) rememberFingerprint(session.docId, result.fingerprint, result.revision);
       }
       open.revision = result.revision;
       outdatedWarned = false;

@@ -84,7 +84,7 @@ function fingerprintOf(notebook) {
  */
 function makeApp(setup = {}) {
   // Was das nachgebaute Firestore zu sehen bekommt
-  const calls = { save: [], pageText: [], collabStarts: [] };
+  const calls = { save: [], pageText: [], collabStarts: [], conflicts: [] };
 
   const notebook = setup.ownNotebook || makeNotebook('doc1');
   const roomNotebook = setup.roomNotebook || notebook;
@@ -111,6 +111,14 @@ function makeApp(setup = {}) {
     },
     syncAll() {},
     openSection() {},
+
+    /* Die Nachfrage bei zwei Fassungen (core/dialogs.js). Der Test
+       bestimmt die Antwort; zurück kommen die Seiten, bei denen die
+       Fassung des anderen gelten soll. Ohne Angabe: überall die eigene. */
+    showConflictDialog: async (rows) => {
+      calls.conflicts.push(rows.map(r => r.id));
+      return setup.conflictAnswer ? setup.conflictAnswer(rows) : [];
+    },
     getSections: (nb) => nb.sections,
     Settings: {
       get: (key) => settings[key] ?? 0,
@@ -376,6 +384,114 @@ function liveNb(app) {
   await wait(120);
 
   check('Die fremden Striche gelten als bekannt', app4.calls.save[0].baseline.pages.p1.strokes, 2);
+
+  /* ── Zwei Fassungen derselben Seite ──────────────────────────────────
+     Der Fall, den keine Marke im Raum abdecken kann: die App war ZU, als
+     die Verbindung wegfiel, wurde ohne Netz geöffnet und es wurde
+     weitergeschrieben. Der andere hat dieselbe Seite geändert. Vorher
+     überschrieb der Besitzer dessen Arbeit beim nächsten Öffnen still.
+
+     Aufgebaut wird jedes Mal gleich: Seite 1 haben beide angefasst,
+     Seite 2 nur der Besitzer. Nur Seite 1 darf zur Nachfrage führen. */
+
+  function clashSetup(answer, storedRevision) {
+    const mine = makeNotebook('doc1');
+    mine.id = 'nb-eigenes';
+    mine.origin = undefined;
+
+    // So sahen beide aus, als sie zuletzt gleich waren
+    const stored = fingerprintOf(mine);
+
+    mine.pages[0].textContent = '<p>Eins, ohne Netz</p>';   // beide
+    mine.pages[1].textContent = '<p>Zwei, ohne Netz</p>';   // nur ich
+
+    const room = makeNotebook('doc1');
+    room.id = 'nb-eigenes';
+    room.pages[0].textContent = '<p>Eins, von jemand anderem</p>';
+
+    return {
+      mine,
+      app: makeApp({
+        ownNotebook: mine,
+        roomNotebook: room,
+        conflictAnswer: answer,
+        storedFingerprint: storedRevision === undefined
+          ? stored
+          : { fingerprint: stored, revision: storedRevision }
+      })
+    };
+  }
+
+  console.log('\nBeide haben dieselbe Seite geändert');
+
+  // Der Kopf im Doppelgänger steht auf 7 – der Merkzettel auf 3, es hat
+  // sich im Raum also etwas getan.
+  const clashA = clashSetup(() => ['p1'], 3);       // ihre Fassung gewinnt
+  clashA.app.ctx.S.activeNbId = clashA.mine.id;
+  await clashA.app.ctx.window.onNotebookOpened(clashA.mine);
+  await wait(80);
+
+  check('Es wurde nachgefragt', clashA.app.calls.conflicts.length, 1);
+  check('Und zwar nur zu der Seite, die beide anfassten',
+    clashA.app.calls.conflicts[0], ['p1']);
+  check('Ihre Fassung gilt: die Seite bleibt liegen',
+    clashA.app.calls.save[0].baseline.pages.p1.sig, 'sig:<p>Eins, ohne Netz</p>');
+  check('Die eigene Seite geht trotzdem hinauf',
+    clashA.app.calls.save[0].baseline.pages.p2.sig, 'sig:<p>Zwei</p>');
+  check('Und im Heft steht danach ihre Fassung',
+    clashA.mine.pages[0].textContent, '<p>Eins, von jemand anderem</p>');
+
+  console.log('\nDieselbe Lage, aber die eigene Fassung soll gelten');
+
+  const clashB = clashSetup(() => [], 3);           // nichts abtreten
+  clashB.app.ctx.S.activeNbId = clashB.mine.id;
+  await clashB.app.ctx.window.onNotebookOpened(clashB.mine);
+  await wait(80);
+
+  check('Auch hier wurde gefragt', clashB.app.calls.conflicts.length, 1);
+  check('Die eigene Seite gilt als geändert und geht hinauf',
+    clashB.app.calls.save[0].baseline.pages.p1.sig, 'sig:<p>Eins</p>');
+
+  console.log('\nNur einer hat geändert');
+
+  const alone = makeNotebook('doc1');
+  alone.id = 'nb-eigenes';
+  alone.origin = undefined;
+  const aloneStored = fingerprintOf(alone);
+  alone.pages[1].textContent = '<p>Zwei, ohne Netz</p>';   // nur ich
+
+  const roomAlone = makeNotebook('doc1');
+  roomAlone.id = 'nb-eigenes';
+  roomAlone.pages[0].textContent = '<p>Eins, von jemand anderem</p>';  // nur er
+
+  const app5 = makeApp({
+    ownNotebook: alone, roomNotebook: roomAlone,
+    storedFingerprint: { fingerprint: aloneStored, revision: 3 }
+  });
+  app5.ctx.S.activeNbId = alone.id;
+  await app5.ctx.window.onNotebookOpened(alone);
+  await wait(80);
+
+  check('Keine Nachfrage, es gibt nichts abzuwägen', app5.calls.conflicts.length, 0);
+
+  console.log('\nIm Raum hat sich nichts getan');
+
+  const quiet = makeNotebook('doc1');
+  quiet.id = 'nb-eigenes';
+  quiet.origin = undefined;
+  const quietStored = fingerprintOf(quiet);
+  quiet.pages[0].textContent = '<p>Eins, ohne Netz</p>';
+
+  const app6 = makeApp({
+    ownNotebook: quiet, roomNotebook: makeNotebook('doc1'),
+    // Derselbe Stand wie im Kopf des Doppelgängers: niemand war seither da
+    storedFingerprint: { fingerprint: quietStored, revision: 7 }
+  });
+  app6.ctx.S.activeNbId = quiet.id;
+  await app6.ctx.window.onNotebookOpened(quiet);
+  await wait(80);
+
+  check('Ohne fremde Änderung wird nicht gefragt', app6.calls.conflicts.length, 0);
 
   if (failed > 0) {
     console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);

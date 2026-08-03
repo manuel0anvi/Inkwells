@@ -502,6 +502,25 @@
   </div>
 </div>
 
+<!-- ZWEI FASSUNGEN DERSELBEN SEITE
+     Kommt nur vor, wenn hier ohne Netz weitergeschrieben wurde, während
+     ein anderer dieselbe Seite im Raum geändert hat. Beides zu behalten
+     geht nicht – also wird gefragt, statt still zu überschreiben.
+     Aufgebaut wird die Liste in core/dialogs.js (showConflictDialog). -->
+<div class="overlay" id="ov-conflict" style="display:none">
+  <div class="modal confirm-modal">
+    <h3 style="margin:0 0 12px 0" data-i18n="conflictTitle">Zwei Fassungen</h3>
+    <p class="confirm-msg" data-i18n="conflictBody">Du hast ohne Verbindung weitergeschrieben, und jemand anders hat dieselben Seiten geändert. Welche Fassung soll gelten?</p>
+    <div id="conflict-list" class="conflict-list"></div>
+    <p class="confirm-note" data-i18n="conflictNote">Die nicht gewählte Fassung geht dabei verloren. Seiten, die nur du geändert hast, sind nicht betroffen.</p>
+    <div class="modal-btns">
+      <button id="conflict-all-theirs" data-i18n="conflictAllTheirs">Überall ihre</button>
+      <button id="conflict-all-mine" data-i18n="conflictAllMine">Überall meine</button>
+      <button id="conflict-ok" class="ok-btn" data-i18n="conflictApply">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
 <!-- MIGRATION DIALOG -->
 <div class="overlay" id="ov-migration" style="display:none">
   <div class="modal confirm-modal">
