@@ -576,6 +576,17 @@ function renderNotebook(nb) {
   webappViewer.style.display = 'block';
   window.scrollTo(0, 0);
 
+  /* Freigeben darf nur der Besitzer – bei einem fremden Heft ist der Knopf
+     also nicht bloß wirkungslos, sondern irreführend. Die Zeile steht hier
+     und nicht bei openSharedDoc(), weil der Betrachter auch für eigene
+     Hefte wieder geöffnet wird und der Knopf dann zurückkommen muss. */
+  const shareBtn = document.getElementById('viewer-share');
+  if (shareBtn) shareBtn.style.display = notebook.origin === 'shared' ? 'none' : '';
+
+  // Aus demselben Grund: „In der App öffnen" gehört zum fremden Heft und
+  // zeigte sonst beim nächsten eigenen noch auf das vorige.
+  if (notebook.origin !== 'shared') document.getElementById('viewer-open-app')?.remove();
+
   const viewerTitle = document.getElementById('viewer-title');
   viewerTitle.textContent = notebook.name || 'Untitled';
   viewerTitle.style.borderBottom = `3px solid ${notebook.color || 'var(--gold)'}`;
@@ -738,6 +749,13 @@ function shareIsOffline() {
 
 async function openShareDialog() {
   if (!currentNotebook) return;
+
+  /* >>> Ein fremdes Dokument gibt man nicht selbst weiter <<<
+     Der Betrachter zeigt eigene und freigegebene Hefte im selben Fenster,
+     und currentNotebook merkt sich beides. Ohne diese Frage stand der
+     Knopf „Freigeben" also auch über einem Heft, das einem gar nicht
+     gehört. Gegenstück in src/ui/share.js (openShareDialog). */
+  if (currentNotebook.origin === 'shared') return;
 
   shareHead = null;
   const overlay = shareEl('share-overlay');
@@ -1219,6 +1237,16 @@ function renderSharedDocs() {
   // Liegt außerhalb des Rasters, wird von grid.innerHTML also nicht geleert
   document.getElementById('shared-ms-link')?.remove();
 
+  /* Zuerst gefragt: geteilte Dokumente liegen nur in Firestore, es gibt
+     davon keine Fassung auf diesem Gerät. Ohne Verbindung ist die Liste
+     also nicht leer, sondern nicht zu beantworten – und „es hat niemand
+     etwas geteilt" wäre dann schlicht gelogen. Gegenstück in der App:
+     src/ui/sharedDocs.js (renderShared). */
+  if (isOffline()) {
+    hint.textContent = t('shared_needs_internet');
+    return;
+  }
+
   const api = window.InkwellShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
@@ -1278,6 +1306,11 @@ async function openSharedDoc(head) {
     const record = normalizeNotebookRecord(notebook);
     if (!record) throw new Error('SHARE_BROKEN');
 
+    /* Als fremd kennzeichnen, BEVOR es in den Betrachter geht: daran
+       erkennt renderNotebook(), dass der Knopf „Freigeben" wegbleiben
+       muss. Gleiches Wort wie in der App (src/core/data.js). */
+    record.origin = 'shared';
+
     // Der Betrachter zeigt ohnehin nur an – hier braucht es keine Sperre,
     // wohl aber den Hinweis, dass Bearbeiten in der App passiert.
     renderNotebook(record);
@@ -1325,6 +1358,14 @@ document.getElementById('dash-tab-shared').addEventListener('click', () => switc
 document.addEventListener('inkwell-identity-changed', () => {
   startWatchingShared().catch(() => {});
 });
+
+/* Kommt das Netz wieder, steht sonst weiter „nur mit Internet möglich" im
+   Reiter, obwohl längst wieder nachgesehen werden könnte – und umgekehrt. */
+for (const event of ['online', 'offline']) {
+  window.addEventListener(event, () => {
+    if (dashTab === 'shared') renderSharedDocs();
+  });
+}
 startWatchingShared().catch(err => console.warn('[SharedDocs] Start:', err?.message || err));
 
 // Notizbuch aus dem Link öffnen, sobald die Liste geladen ist
