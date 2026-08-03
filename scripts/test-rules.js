@@ -381,6 +381,15 @@ function headData(overrides = {}) {
     set(ref(rtOf(READER), 'presence/dok1/' + EDITOR.uid), { ...card }));
   await denied('Und nicht mit erfundenen Feldern',
     set(ref(rtOf(EDITOR), 'presence/dok1/' + EDITOR.uid), { ...card, schadhaft: 'x' }));
+
+  /* Die Marke, die der Server beim Verbindungsabbruch des Besitzers stehen
+     lässt (core/share.js, joinDocRoom). Sie kommt zwar von onDisconnect,
+     wird aber gegen dieselbe Regel geprüft – fehlt sie dort, bemerken die
+     Eingeladenen den Abbruch nicht und schreiben weiter. */
+  await ok('Die Abbruch-Marke des Besitzers ist erlaubt',
+    set(ref(rtOf(EDITOR), 'presence/dok1/' + EDITOR.uid), { ...card, lost: 1 }));
+  await denied('Aber auch sie muss eine Zahl sein',
+    set(ref(rtOf(EDITOR), 'presence/dok1/' + EDITOR.uid), { ...card, lost: 'ja' }));
   await ok('Mitlesen darf, wer angemeldet ist',
     get(ref(rtOf(READER), 'presence/dok1')));
   await denied('Ohne Anmeldung nicht',

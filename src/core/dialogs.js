@@ -167,11 +167,19 @@ function applyReadOnlyChrome(readOnly, sharedDoc) {
     return;
   }
 
-  const canEdit = sharedDoc.role === 'edit';
+  /* Der Besitzer ist mitten in der Arbeit weggebrochen: das Recht steht
+     weiter auf „bearbeiten", ausgeübt wird es gerade nicht. Der Streifen
+     muss den ruhenden Zustand zeigen, sonst steht dort „bearbeiten",
+     während nichts geht (Erklärung in ui/sharedDocs.js). */
+  const canEdit = sharedDoc.role === 'edit' && !sharedDoc.ownerLost;
   bar.style.display = 'flex';
 
   const roleEl = E('shared-bar-role');
-  if (roleEl) roleEl.textContent = canEdit ? t('roleEdit') : t('roleView');
+  if (roleEl) {
+    roleEl.textContent = sharedDoc.ownerLost
+      ? (t('roleOwnerOffline') || t('roleView'))
+      : (canEdit ? t('roleEdit') : t('roleView'));
+  }
 
   /* Beim Besitzer steht dort nicht „freigegeben von …" – er ist es ja
      selbst. Stattdessen der Hinweis, dass das Heft gerade live geteilt

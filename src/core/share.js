@@ -1815,9 +1815,12 @@ function colorForUid(uid) {
  * öffnet den Änderungsstrom.
  *
  * @param {string} docId
- * @returns {Promise<object>} Raum mit setPage/onPresence/sendOp/onOp/leave
+ * @param {object} [options]
+ * @param {boolean} [options.isOwner]  ist DIESE Person der Besitzer?
+ * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerLost
+ * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerLost/sendOp/onOp/leave
  */
-async function joinDocRoom(docId) {
+async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
   const { mod, db: rtdb } = await loadRealtime();
   const { ref, child, push, set, remove, onValue, onChildAdded, onDisconnect,
@@ -1850,10 +1853,6 @@ async function joinDocRoom(docId) {
     at: rtNow()
   };
 
-  // Verschwindet von selbst, sobald die Verbindung abreißt. Genau dafür
-  // gibt es die Realtime Database hier.
-  await onDisconnect(meRef).remove();
-
   /* Ob die Zeilensperre überhaupt gemeldet werden darf. Weist die Regel
      die Felder ab (ältere Fassung veröffentlicht), wird ohne sie
      weitergearbeitet – ohne Sperre, aber mit allem Übrigen. Vorher wäre
@@ -1870,6 +1869,41 @@ async function joinDocRoom(docId) {
       + 'Abhilfe: website/database.rules.json in der Firebase Console unter '
       + 'Realtime Database → Regeln veröffentlichen.');
   }
+
+  /* ── Was geschieht, wenn die Leitung abreißt? ──────────────────────
+     Der Auftrag wird JETZT hinterlegt und vom Server ausgeführt, sobald
+     die Verbindung wegfällt. Genau deshalb funktioniert das auch für
+     einen Rechner, der schon offline ist und nichts mehr senden kann.
+
+     Bei allen anderen verschwindet der Eintrag einfach.
+
+     >>> Beim Besitzer nicht <<<
+     Dort bleibt er stehen, mit lost = 1. Das ist das Zeichen für die
+     Eingeladenen, dass der Besitzer die App zwar offen hat, aber ohne
+     Netz ist – und dann womöglich örtlich weiterschreibt. Solange das
+     so steht, dürfen die anderen nur lesen (ui/sharedDocs.js). Beim
+     ordentlichen Verlassen räumt leave() den Eintrag weg und hebt den
+     Auftrag auf; wer die App zumacht, hält damit niemanden auf.
+
+     Registriert wird ERST nach dem set() oben: dort steht fest, welche
+     Felder die veröffentlichten Regeln annehmen. Vorher gäbe es hier
+     bloß dieselbe Abweisung ein zweites Mal. Bis zu diesem Punkt gibt
+     es auch nichts wegzuräumen – ohne das set() existiert der Eintrag
+     ja gar nicht. */
+  let ownerMarkOk = false;
+  if (options.isOwner) {
+    try {
+      await onDisconnect(meRef).set({ ...card, lost: 1, at: rtNow() });
+      ownerMarkOk = true;
+    } catch (err) {
+      console.warn('[Share] Die veröffentlichten Regeln kennen das Feld lost '
+        + 'noch nicht – die Eingeladenen merken einen Abbruch beim Besitzer '
+        + 'nicht und dürfen weiterschreiben. Abhilfe: '
+        + 'website/database.rules.json in der Firebase Console unter '
+        + 'Realtime Database → Regeln veröffentlichen.');
+    }
+  }
+  if (!ownerMarkOk) await onDisconnect(meRef).remove();
 
   const stops = [];
   let lastPageWrite = 0;
@@ -1944,8 +1978,32 @@ async function joinDocRoom(docId) {
   function onPresence(callback) {
     const stop = onValue(ref(rtdb, `presence/${docId}`), (snap) => {
       const all = snap.val() || {};
-      callback(Object.values(all).filter(p => p && p.uid !== me.uid));
+      // lost = die stehen gebliebene Marke eines Besitzers, dem die
+      // Verbindung abgerissen ist. Anwesend ist er damit gerade nicht.
+      callback(Object.values(all).filter(p => p && p.uid !== me.uid && !p.lost));
     }, () => callback([]));
+    stops.push(stop);
+    return stop;
+  }
+
+  /**
+   * Meldet, ob dem Besitzer die Verbindung abgerissen ist, während er das
+   * Dokument offen hatte – siehe die Erklärung beim onDisconnect oben.
+   *
+   * Ohne bekannte Besitzerkennung (oder beim Besitzer selbst) wird einmal
+   * `false` gemeldet und nichts weiter beobachtet: die Frage stellt sich
+   * dann nicht.
+   *
+   * @param {(lost: boolean) => void} callback
+   */
+  function onOwnerLost(callback) {
+    const ownerUid = options.ownerUid || '';
+    if (!ownerUid || ownerUid === me.uid) { callback(false); return () => {}; }
+
+    const stop = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+      const entry = snap.val();
+      callback(!!(entry && entry.lost));
+    }, () => callback(false));
     stops.push(stop);
     return stop;
   }
@@ -2035,7 +2093,7 @@ async function joinDocRoom(docId) {
 
   pruneOps();
 
-  return { me: card, setPage, onPresence, sendOp, onOp, leave };
+  return { me: card, setPage, onPresence, onOwnerLost, sendOp, onOp, leave };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────

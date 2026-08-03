@@ -1671,8 +1671,12 @@
    * @param {object} notebook  das geladene Heft
    * @param {object} crdt      gespeicherte Yjs-Stände je Seite
    * @param {boolean} canEdit  darf diese Person schreiben?
+   * @param {object} [opts]
+   * @param {boolean}  [opts.isOwner]      ist DIESE Person der Besitzer?
+   * @param {string}   [opts.ownerUid]     Kennung des Besitzers
+   * @param {Function} [opts.onOwnerLost]  Rückruf, wenn der Besitzer abbricht
    */
-  async function start(id, notebook, crdt, canEdit) {
+  async function start(id, notebook, crdt, canEdit, opts = {}) {
     await stop();
     docId = id;
     liveNb = notebook;
@@ -1691,7 +1695,10 @@
     }
 
     try {
-      room = await window.InkwellShare.joinDocRoom(id);
+      room = await window.InkwellShare.joinDocRoom(id, {
+        isOwner: !!opts.isOwner,
+        ownerUid: opts.ownerUid || ''
+      });
       lastError = '';
     } catch (err) {
       /* Bisher stand das nur in der Konsole – der Nutzer sah eine App, die
@@ -1708,6 +1715,25 @@
     }
 
     showLiveState();
+
+    /* >>> Der Besitzer ist mitten in der Arbeit weggebrochen <<<
+       Dann hat er die App offen, aber kein Netz – und schreibt womöglich
+       örtlich weiter. Würde hier jemand gleichzeitig ändern, gäbe es beim
+       Wiederverbinden zwei Fassungen derselben Seite. Solange die Marke
+       steht, wird deshalb nur gelesen; kommt er zurück, ebenso von selbst
+       wieder zurück. Erklärung des Zeichens in core/share.js.
+
+       canEdit bleibt dabei unangetastet: es ist das dauerhafte Recht, das
+       der Besitzer vergeben hat. Hier wird es nur vorübergehend nicht
+       ausgeübt. */
+    /* Mit ?. gefragt: eine ältere core/share.js kennt onOwnerLost noch
+       nicht. Dann bleibt es beim bisherigen Verhalten – lieber ohne diese
+       Sperre als gar kein Live-Betrieb. */
+    room.onOwnerLost?.((lost) => {
+      setCanWrite(!!canEdit && !lost);
+      try { opts.onOwnerLost?.(!!lost); }
+      catch (err) { console.warn('[Collab] Rückmeldung zum Abbruch:', err); }
+    });
 
     room.onPresence((list) => {
       /* Der Zeitstempel kommt von der Uhr des Servers, verglichen wird mit

@@ -64,6 +64,22 @@
     });
   }
 
+  /* ── Ohne Netz gibt es hier nichts ──────────────────────────────────
+     Geteilte Dokumente liegen ausschließlich in Firestore – anders als
+     die eigenen Hefte gibt es davon keine Fassung auf der Festplatte.
+     Ohne Verbindung ist die Liste also nicht bloß leer, sondern nicht
+     zu beantworten; wer sie dann sähe, sähe einen alten Stand, den er
+     bearbeiten könnte, ohne dass es je ankommt.
+
+     Gleiche Frage wie in ui/share.js: CloudSync sieht wirklich nach
+     (main.js: check-internet), navigator.onLine kennt nur die Buchse. */
+  function isOffline() {
+    if (typeof CloudSync_ !== 'undefined' && CloudSync_ && CloudSync_.isOnline === false) return true;
+    // typeof-Frage, weil das hier schon beim Laden aufgerufen wird – und
+    // die Prüfumgebung kennt kein navigator (wie core/cloudSync.js).
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
+  }
+
   /* ── Gelesen-Zeitpunkt ──────────────────────────────────────────────
      Es gibt keinen eigenen Benachrichtigungs-Speicher. Gemerkt wird nur,
      wann der Reiter zuletzt offen war; alles Neuere gilt als neu. Das
@@ -158,8 +174,29 @@
     if (!signedIn && activeTab === 'shared') switchTab('own');
   }
 
+  /* Der Verbindungszustand entscheidet mit, was im Reiter steht (siehe
+     isOffline). Gemerkt wird der letzte Stand, damit nicht bei jeder
+     Meldung von CloudSync neu gezeichnet wird – die kommen häufig. */
+  let wasOffline = isOffline();
+
+  function onCloudChange() {
+    refreshTabVisibility();
+    const now = isOffline();
+    if (now !== wasOffline) {
+      wasOffline = now;
+      if (activeTab === 'shared') renderShared();
+    }
+  }
+
   if (window.CloudSync_ && typeof CloudSync_.onChange === 'function') {
-    CloudSync_.onChange(refreshTabVisibility);
+    CloudSync_.onChange(onCloudChange);
+  }
+  // Rückfall, falls CloudSync gar nicht da ist – der Reiter soll trotzdem
+  // stimmen. Mit typeof gefragt, weil die Prüfumgebung nur ein knappes
+  // window nachbildet.
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('online', onCloudChange);
+    window.addEventListener('offline', onCloudChange);
   }
   refreshTabVisibility();
 
@@ -208,6 +245,13 @@
   function renderShared() {
     if (!sharedGrid) return;
     sharedGrid.innerHTML = '';
+
+    /* Zuerst gefragt, weil ohne Netz jede weitere Auskunft geraten wäre:
+       „nichts geteilt" und „nicht nachsehen können" sind zwei Dinge. */
+    if (isOffline()) {
+      sharedHint.textContent = t('sharedNeedsInternet');
+      return;
+    }
 
     const api = window.InkwellShare;
     const signedIn = !!(api && api.hasRealIdentity());
@@ -393,7 +437,7 @@
     const idx = S.notebooks.findIndex(nb => nb.id === notebook.id);
     if (idx >= 0) S.notebooks[idx] = notebook; else S.notebooks.push(notebook);
 
-    live = { docId: fresh.docId, nbId: notebook.id, isOwner: false };
+    live = { docId: fresh.docId, nbId: notebook.id, isOwner: false, ownerUid: fresh.owner };
 
     const finalRole = myRole(fresh) || role;
     applyReadOnlyChrome(finalRole !== 'edit', {
@@ -416,9 +460,34 @@
        der Raum verlangt eine Kennung, der Versuch endete nur mit einer
        roten Warnung im Streifen, obwohl alles in Ordnung ist. */
     if (window.Collab && api.hasRealIdentity()) {
-      Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit')
-        .catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
+      Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit', {
+        isOwner: false,
+        ownerUid: fresh.owner,
+        onOwnerLost: applyOwnerHold
+      }).catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
     }
+  }
+
+  /* ── Der Besitzer ist weggebrochen ──────────────────────────────────
+     Solange das so steht, hat er die App offen, aber kein Netz – und
+     schreibt womöglich örtlich weiter. Wer eingeladen ist, liest dann
+     nur, damit nicht zwei Fassungen derselben Seite entstehen. Das Recht
+     selbst bleibt bestehen; es ruht nur. Kommt der Besitzer zurück,
+     verschwindet seine Marke und alles gilt wieder wie vorher.
+     Erklärung des Zeichens in core/share.js (joinDocRoom).
+
+     Gefragt wird S.sharedDoc.role und nicht das Recht von vorhin: der
+     Besitzer kann es zwischendurch geändert haben (watchOpenDocument). */
+  function applyOwnerHold(lost) {
+    if (!S.sharedDoc) return;
+    const was = !!S.sharedDoc.ownerLost;
+    const now = !!lost;
+    S.sharedDoc.ownerLost = now;
+
+    applyReadOnlyChrome(now || S.sharedDoc.role !== 'edit', S.sharedDoc);
+
+    // Nur beim Wechsel melden – der erste Rückruf kommt beim Betreten
+    if (now !== was) toast(now ? t('sharedOwnerOffline') : t('sharedOwnerBack'));
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -557,9 +626,12 @@
 
     watchOpenDocument(entry.docId);
 
-    // 3. Der Raum
+    /* 3. Der Raum. isOwner hinterlegt beim Betreten den Auftrag, der bei
+       einem Verbindungsabbruch die Marke stehen lässt – daran erkennen die
+       Eingeladenen, dass hier jemand ohne Netz weiterschreiben könnte
+       (core/share.js, joinDocRoom). */
     if (window.Collab) {
-      Collab.start(entry.docId, nb, crdtState, true)
+      Collab.start(entry.docId, nb, crdtState, true, { isOwner: true, ownerUid: me.uid })
         .catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
     }
   }
@@ -722,8 +794,12 @@
          seine Änderungen kamen nirgends an. */
       if (role !== S.sharedDoc.role) {
         S.sharedDoc.role = role;
-        applyReadOnlyChrome(role !== 'edit', S.sharedDoc);
-        if (window.Collab?.setCanWrite) window.Collab.setCanWrite(role === 'edit');
+        /* Ist der Besitzer gerade weggebrochen, ruht das Schreibrecht –
+           auch ein frisch heraufgestuftes. Sonst hübe diese Stelle die
+           Sperre wieder auf, die applyOwnerHold eben gesetzt hat. */
+        const held = !!S.sharedDoc.ownerLost;
+        applyReadOnlyChrome(held || role !== 'edit', S.sharedDoc);
+        if (window.Collab?.setCanWrite) window.Collab.setCanWrite(!held && role === 'edit');
         toast(role === 'edit' ? t('sharedNowEdit') : t('sharedNowView'));
       }
       S.sharedDoc.revision = head.revision;
