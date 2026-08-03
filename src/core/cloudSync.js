@@ -1378,12 +1378,18 @@ class CloudSyncManager {
   async deleteRemoteNotebookById(nbId) {
     if (!this._canSync() || !this.isOnline || !nbId) return false;
 
-    try {
-      const folders = [await this._getFolder(), await this._getTrashFolder()];
-      let deleted = false;
+    /* >>> Die beiden Ordner getrennt behandeln <<<
+       Vorher wurden beide vorab geholt. War der Papierkorb-Ordner nicht zu
+       bekommen, brach der ganze Aufruf ab – auch für den HAUPTORDNER, und
+       genau der ist der, den die Website zeigt. Ein unerreichbarer
+       Nebenschauplatz darf das Wichtigste nicht verhindern. */
+    let deleted = false;
 
-      for (const folderId of folders) {
+    for (const getFolder of [() => this._getFolder(), () => this._getTrashFolder()]) {
+      try {
+        const folderId = await getFolder();
         if (!folderId) continue;
+
         const files = await this.provider.listNotebookFiles(this._http, folderId);
         for (const file of files) {
           // Notfalls über den Inhalt – siehe _fileBelongsTo. Ohne das blieb
@@ -1392,13 +1398,12 @@ class CloudSyncManager {
           await this.provider.deleteFile(this._http, file.id);
           deleted = true;
         }
+      } catch (err) {
+        console.warn('[CloudSync] Endgültiges Löschen über die Kennung fehlgeschlagen:', err.message);
       }
-
-      return deleted;
-    } catch (err) {
-      console.warn('[CloudSync] Endgültiges Löschen über die Kennung fehlgeschlagen:', err.message);
-      return false;
     }
+
+    return deleted;
   }
 
   async untrashRemoteNotebook(fileId) {

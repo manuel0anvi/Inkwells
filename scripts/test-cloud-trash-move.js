@@ -134,8 +134,63 @@ function makeDrive(moveWorks, readable = true) {
   return { http, items, deleted };
 }
 
+/**
+ * Ein nachgebautes OneDrive für den Papierkorb-ORDNER.
+ * Graph nimmt bei conflictBehavior nur fail, replace und rename an.
+ */
+function makeFolderApi(existing = null) {
+  const created = [];
+  let folder = existing;
+
+  const http = {
+    async json(url, options = {}) {
+      const method = options.method || 'GET';
+
+      if (method === 'GET' && url.endsWith(':/Papierkorb')) {
+        if (!folder) throw new Error('OneDrive Fehler 404: nicht gefunden');
+        return { id: folder, name: 'Papierkorb' };
+      }
+
+      if (method === 'POST' && url.endsWith('/children')) {
+        const body = JSON.parse(options.body);
+        const behavior = body['@microsoft.graph.conflictBehavior'];
+        if (!['fail', 'replace', 'rename'].includes(behavior)) {
+          throw new Error('OneDrive Fehler 400: The value for name@conflictBehavior is invalid.');
+        }
+        if (folder) throw new Error('OneDrive Fehler 409: nameAlreadyExists');
+        folder = 'ordner-neu';
+        created.push(body.name);
+        return { id: folder, name: body.name };
+      }
+
+      throw new Error(`Unerwarteter Aufruf: ${method} ${url}`);
+    },
+    async raw() { throw new Error('Unerwartet'); }
+  };
+
+  return { http, created, folderNow: () => folder };
+}
+
 (async () => {
-  console.log('Graph verschiebt wirklich');
+  console.log('Den Papierkorb-Ordner anlegen');
+
+  /* >>> Der Fehler, der alles blockierte <<<
+     Im Code stand conflictBehavior „return" – das gibt es nur in der alten
+     OneDrive-Schnittstelle. Graph lehnte damit den ganzen Aufruf mit 400 ab,
+     der Ordner entstand nie, und ohne ihn schlug unter Microsoft jedes
+     Löschen in der Cloud fehl (gemeldet am 3.8.2026). */
+  const fresh = makeFolderApi(null);
+  const madeId = await OneDrive.findOrCreateSubfolder(fresh.http, 'approot', 'Papierkorb');
+
+  check('Der Ordner wird angelegt', madeId, 'ordner-neu');
+  check('Und heißt richtig', fresh.created, ['Papierkorb']);
+
+  const there = makeFolderApi('ordner-alt');
+  check('Ein vorhandener wird genommen',
+    await OneDrive.findOrCreateSubfolder(there.http, 'approot', 'Papierkorb'), 'ordner-alt');
+  check('Und nicht noch einmal angelegt', there.created, []);
+
+  console.log('\nGraph verschiebt wirklich');
 
   const good = makeDrive(true);
   const sameId = await OneDrive.moveFile(good.http, 'f1', 'ordner-haupt', 'ordner-papierkorb');

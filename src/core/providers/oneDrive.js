@@ -254,24 +254,46 @@ const OneDriveProvider = {
   },
 
   async findOrCreateSubfolder(http, parentId, name) {
-    const encoded = encodeURIComponent(name);
+    const byPath = async () => {
+      try {
+        const existing = await http.json(
+          `${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${parentId}:/${encodeURIComponent(name)}`
+        );
+        return existing?.id || null;
+      } catch (err) {
+        if (/404/.test(err.message)) return null;   // nur "nicht gefunden" ist erwartbar
+        throw err;
+      }
+    };
+
+    const found = await byPath();
+    if (found) return found;
+
+    /* >>> conflictBehavior kennt nur fail, replace und rename <<<
+       Hier stand „return" – das gibt es in der alten OneDrive-Schnittstelle,
+       Graph lehnt damit den GANZEN Aufruf mit 400 ab. Der Papierkorb-Ordner
+       entstand dadurch nie, und ohne ihn schlug unter Microsoft jedes
+       Löschen in der Cloud fehl: das Heft war in der App weg und lag in
+       OneDrive und auf der Website weiterhin da. */
     try {
-      const existing = await http.json(`${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${parentId}:/${encoded}`);
-      if (existing?.id) return existing.id;
+      const created = await http.json(`${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${parentId}/children`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          folder: {},
+          '@microsoft.graph.conflictBehavior': 'fail'
+        })
+      });
+      if (created?.id) return created.id;
     } catch (err) {
-      if (!/404/.test(err.message)) throw err;   // nur "nicht gefunden" ist erwartbar
+      // 409 heißt: inzwischen angelegt. Dann steht der Ordner ja da.
+      if (!/409/.test(err.message)) throw err;
     }
 
-    const created = await http.json(`${MICROSOFT_CONFIG.GRAPH}/me/drive/items/${parentId}/children`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        folder: {},
-        '@microsoft.graph.conflictBehavior': 'return'
-      })
-    });
-    return created.id;
+    const again = await byPath();
+    if (again) return again;
+    throw new Error(`Ordner „${name}“ konnte nicht angelegt werden`);
   },
 
   /* ── Dateien ───────────────────────────────────────────────────── */
