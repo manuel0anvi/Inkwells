@@ -308,6 +308,61 @@ const mixed = el('div', el('p', 'ganz ', bold, ' gedruckt'));
 check('Flacher Text', flatTextOf(mixed), 'ganz dick gedruckt');
 check('Stelle im fetten Teil', flatPosOfPoint(mixed, bold.childNodes[0], 2), 7);
 
+/* ══ 4b. Blöcke IN Blöcken sind trotzdem eigene Zeilen ══════════════
+
+   >>> Der Fehler, der hier festgehalten wird <<<
+   Gezählt wurde nur die oberste Ebene. Alles, was tiefer lag, lief durch
+   dieselbe Schleife wie <b> oder <i> – also ohne Umbruch. Aus einer
+   Liste mit drei Punkten wurde „EinsZweiDrei": auf dem Papier drei
+   Zeilen, in der Rechnung eine.
+
+   Jeder verlorene Umbruch macht die gemeldete Zahl kleiner, und eine zu
+   kleine Zahl setzt die fremde Marke samt Sperrband um genau so viele
+   Zeilen zu weit nach oben – dauerhaft, nicht nur beim gleichzeitigen
+   Tippen. In den Text kommt so etwas über Listen, eingerückte Absätze
+   (daraus macht contenteditable ein <blockquote> um die Absätze herum)
+   und Tabellen.
+   ══════════════════════════════════════════════════════════════════ */
+
+console.log('\nVerschachtelte Blöcke');
+
+const liste = el('div',
+  el('p', 'Davor'),
+  el('ul', el('li', 'Eins'), el('li', 'Zwei'), el('li', 'Drei')),
+  el('p', 'Danach'));
+check('Listenpunkte sind eigene Zeilen',
+  flatTextOf(liste), 'Davor\nEins\nZwei\nDrei\nDanach');
+
+const zitat = el('div', el('blockquote', el('p', 'Eins'), el('p', 'Zwei')));
+check('Eingerückte Absätze bleiben zwei Zeilen',
+  flatTextOf(zitat), 'Eins\nZwei');
+
+const tiefeDivs = el('div', el('div', el('div', 'Eins'), el('div', 'Zwei')));
+check('Verschachtelte <div> bleiben zwei Zeilen',
+  flatTextOf(tiefeDivs), 'Eins\nZwei');
+
+/* Die Hülle darf KEINEN eigenen Umbruch bekommen – sonst stünde vor dem
+   ersten Listenpunkt eine leere Zeile, die niemand sieht. */
+const nurListe = el('div', el('ul', el('li', 'Eins'), el('li', 'Zwei')));
+check('Die Hülle zählt nicht als eigene Zeile',
+  flatTextOf(nurListe), 'Eins\nZwei');
+
+/* Und die Stellen müssen sich in der verschachtelten Fassung genauso
+   wiederfinden wie in der flachen. */
+const listenText = flatTextOf(liste);
+const listenRunde = [];
+for (let pos = 0; pos <= listenText.length; pos++) {
+  const range = flatRangeAt(liste, pos);
+  listenRunde.push(range ? flatPosOfPoint(liste, range.startContainer, range.startOffset) : null);
+}
+check('Jede Stelle in der Liste findet sich wieder',
+  listenRunde, Array.from({ length: listenText.length + 1 }, (_, i) => i));
+
+/* Ein <br> am Ende zählt weiterhin nicht doppelt – auch dann nicht,
+   wenn es in einer Auszeichnung steckt statt unmittelbar im Absatz. */
+check('<br> am Absatzende bleibt der Platzhalter',
+  flatTextOf(el('div', el('p', 'abc', el('b', 'def', el('br'))))), 'abcdef');
+
 /* ══ 5. Die Zeilensperre ════════════════════════════════════════════ */
 
 console.log('\nWelche Zeilen die Sperre umfasst');

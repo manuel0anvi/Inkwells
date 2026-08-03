@@ -122,9 +122,23 @@ function rangeForTextOffset(rootEl, offset) {
    (ui/collab.js): „diese und die nächste Zeile" ist darin ein einfacher
    Bereich von–bis.
 
-   Eine Zeile ist ein unmittelbares Kind von .j-text (Absatz, Überschrift)
-   bzw. der Abschnitt zwischen zwei <br>. Tiefer verschachtelte Blöcke
-   baut dieser Editor nicht.
+   Eine Zeile ist ein Block ohne weitere Blöcke darin (Absatz, Überschrift,
+   Listenpunkt) bzw. der Abschnitt zwischen zwei <br>.
+
+   >>> Warum auch VERSCHACHTELTE Blöcke zählen müssen <<<
+   Früher wurde nur die oberste Ebene als Zeile genommen; alles tiefer
+   Liegende lief durch dieselbe Schleife wie <b> oder <i>, also OHNE
+   Umbruch. Aus <ul><li>Eins</li><li>Zwei</li></ul> wurde damit
+   „EinsZwei" – auf dem Papier zwei Zeilen, in dieser Rechnung eine.
+
+   Jeder so verlorene Umbruch macht die gemeldete Zahl KLEINER. Die Marke
+   des anderen und sein Sperrband landeten dadurch um genau so viele
+   Zeilen zu weit oben, und seitlich irgendwo – und zwar dauerhaft, nicht
+   nur beim gleichzeitigen Tippen. Sichtbar wurde das an allem, was
+   Blöcke ineinander legt: Listen, eingerückte Absätze (execCommand
+   'indent' macht daraus ein <blockquote> um die Absätze herum),
+   Tabellen, und die <div>-Verschachtelungen, die contenteditable beim
+   Umformatieren selbst anlegt.
    ══════════════════════════════════════════════════════════════════════ */
 
 const FLAT_BLOCK_TAGS = new Set([
@@ -154,61 +168,75 @@ function flatTextParts(root) {
 
   const addBreak = () => { text += '\n'; };
 
-  // Inline-Inhalt einer Zeile: Textknoten, <b>, <i>, <span> … und <br>
-  const walkInline = (el) => {
+  const istBlock = (node) => node.nodeType === Node.ELEMENT_NODE
+                          && FLAT_BLOCK_TAGS.has(node.tagName);
+
+  /* Ein Block, in dem WEITERE Blöcke stecken, ist keine Zeile, sondern
+     bloß die Hülle darum – <ul> um seine <li>, <blockquote> um seine
+     Absätze. Die Zeilen sind die Blöcke darin. Ohne diese Unterscheidung
+     bekäme die Hülle einen Umbruch und ihr erstes Kind gleich noch
+     einen: eine Leerzeile, die niemand sieht. */
+  const istHuelle = (el) => {
+    const kids = el.childNodes;
+    for (let i = 0; i < kids.length; i++) if (istBlock(kids[i])) return true;
+    return false;
+  };
+
+  /* Steht nach diesem <br> im ganzen Block nichts mehr, ist es der
+     Platzhalter, den contenteditable für eine leere Zeile setzt – und
+     kein eigener Umbruch. Sonst zählte jede leere Zeile doppelt.
+     Geprüft wird bis zum Block hinauf und nicht nur beim unmittelbaren
+     Elternteil: in <p>abc<b>def<br></b></p> ist das <br> zwar letztes
+     Kind des <b>, aber eben auch letztes im Absatz. */
+  const letztesImBlock = (node, block) => {
+    let cur = node;
+    while (cur && cur !== block) {
+      if (cur.nextSibling) return false;
+      cur = cur.parentNode;
+    }
+    return true;
+  };
+
+  let started = false;
+
+  const walk = (el, block) => {
     const kids = el.childNodes;
     for (let i = 0; i < kids.length; i++) {
       const child = kids[i];
-      if (child.nodeType === Node.TEXT_NODE) { addText(child); continue; }
-      if (child.nodeType !== Node.ELEMENT_NODE) continue;
 
-      if (child.tagName === 'BR') {
-        /* Ein <br> am Ende eines Blocks ist der Platzhalter, den
-           contenteditable für eine leere Zeile setzt – kein zusätzlicher
-           Umbruch. Sonst zählte jede leere Zeile doppelt. */
-        if (i === kids.length - 1) continue;
-        addBreak();
+      if (child.nodeType === Node.TEXT_NODE) {
+        addText(child);
+        if (child.nodeValue) started = true;
         continue;
       }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue;
       if (child.tagName === 'STYLE' || child.tagName === 'SCRIPT') continue;
-      walkInline(child);
+
+      if (child.tagName === 'BR') {
+        if (letztesImBlock(child, block)) continue;
+        addBreak();
+        started = true;
+        continue;
+      }
+
+      if (istBlock(child)) {
+        if (istHuelle(child)) { walk(child, block); continue; }
+
+        if (started) addBreak();
+        const before = text.length;
+        walk(child, child);
+        // Nichts herausgekommen? Dann ist das eine leere Zeile, und die
+        // braucht trotzdem einen Anker – sonst ist sie nicht ansteuerbar.
+        if (text.length === before) parts.push({ type: 'empty', host: child, at: before });
+        started = true;
+        continue;
+      }
+
+      walk(child, block);   // <b>, <i>, <span> … – bleibt in derselben Zeile
     }
   };
 
-  const kids = root.childNodes;
-  let started = false;
-  for (let i = 0; i < kids.length; i++) {
-    const child = kids[i];
-
-    if (child.nodeType === Node.ELEMENT_NODE
-        && (child.tagName === 'STYLE' || child.tagName === 'SCRIPT')) continue;
-
-    const isBlock = child.nodeType === Node.ELEMENT_NODE
-                 && FLAT_BLOCK_TAGS.has(child.tagName);
-
-    if (isBlock) {
-      if (started) addBreak();
-      const before = text.length;
-      walkInline(child);
-      // Nichts herausgekommen? Dann ist das eine leere Zeile, und die
-      // braucht trotzdem einen Anker – sonst ist sie nicht ansteuerbar.
-      if (text.length === before) parts.push({ type: 'empty', host: child, at: before });
-      started = true;
-      continue;
-    }
-
-    if (child.nodeType === Node.TEXT_NODE) { addText(child); started = true; continue; }
-    if (child.nodeType !== Node.ELEMENT_NODE) continue;
-
-    if (child.tagName === 'BR') {
-      if (i < kids.length - 1) addBreak();
-      started = true;
-      continue;
-    }
-    walkInline(child);
-    started = true;
-  }
-
+  walk(root, root);
   return { text, parts };
 }
 
