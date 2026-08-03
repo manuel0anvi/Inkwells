@@ -220,8 +220,9 @@ async function doLoad() {
   S.activeNbId = null; 
   showHome(); 
 }
+// Der Knopf in der Übersicht ist weg; der im Heft bleibt.
 if (E('btn-load')) E('btn-load').addEventListener('click', doLoad);
-E('btn-load-home').addEventListener('click', doLoad);
+if (E('btn-load-home')) E('btn-load-home').addEventListener('click', doLoad);
 /* ══════════════════════════════════════════════════════════════════
    PDF-EXPORT
    Die Seiten werden genauso aufgebaut wie in der App: Papierhintergrund,

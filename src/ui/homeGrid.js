@@ -235,28 +235,9 @@ E('ctx-share')?.addEventListener('click', () => {
   if (nb && typeof openShareDialog === 'function') openShareDialog(nb);
 });
 
-// Remove from overview (keep file)
-E('ctx-remove').addEventListener('click', async () => {
-  hideCtxMenu();
-  const nb = getNb(_ctxNbId);
-  if (!nb) return;
-  
-  // Remove from S.notebooks
-  S.notebooks = S.notebooks.filter(n => n.id !== nb.id);
-  
-  // Remove from registry (but don't delete file)
-  await Registry.remove(nb.id);
-  
-  // Update UI
-  if (S.activeNbId === nb.id) {
-    S.activeNbId = null;
-    showHome();
-  } else {
-    renderHomeGrid();
-  }
-  
-  toast(t('removedFromOverview'));
-});
+/* „Aus Übersicht entfernen" gibt es nicht mehr: das Heft verschwand aus
+   der Liste, die Datei blieb liegen, und niemand fand sie wieder. Wer ein
+   Heft loswerden will, löscht es – der Papierkorb hält es 30 Tage. */
 
 // In den Papierkorb legen. Die Datei wird nicht mehr sofort gelöscht,
 // sondern in den Unterordner "Papierkorb" verschoben (siehe core/trash.js)
