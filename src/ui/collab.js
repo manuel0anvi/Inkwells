@@ -1009,11 +1009,27 @@
    * zum Ende der Seite" – das Band begann weit über der Marke und deckte
    * fast alles zu.
    *
-   * Verlässlich ist stattdessen, wo der Text tatsächlich umbricht. Das
-   * sagt der Browser, wenn man ihn an den Rändern der Zeile fragt: links
-   * für den Anfang, rechts eine Zeilenhöhe tiefer für das Ende der
-   * nächsten. Übertragen werden weiterhin Zeichenpositionen – nur die
-   * kommen bei allen an derselben Stelle an.
+   * Verlässlich ist stattdessen, wo der Text tatsächlich umbricht.
+   *
+   * >>> Warum das NICHT mehr über caretRangeFromPoint geht <<<
+   * Vorher wurde der Browser an den Rändern der Zeile gefragt: „welche
+   * Stelle liegt an diesem Bildpunkt?" Das ist eine Trefferprüfung, und
+   * die beachtet pointer-events. `.j-text` steht aber auf
+   * `pointer-events: none`, sobald ein anderes Werkzeug als der Cursor
+   * gewählt ist (css/pages.css und app.js) – der Punkt traf dann die
+   * Seite DAHINTER, nicht den Text.
+   *
+   * Die Sperre fiel damit lautlos aus: gemeldet wurde keine, und beim
+   * anderen blieb das zuletzt bekannte Band bis zum Ablauf des Nachlaufs
+   * stehen – auf einer Zeile, an der längst niemand mehr schrieb. Genau
+   * das war „das Band steht an der falschen Stelle". Dasselbe passierte,
+   * sobald die Zeile aus dem Bild gescrollt war.
+   *
+   * Gemessen wird jetzt statt getroffen: zu einer Stelle liefert
+   * caretRectAt die Mitte ihrer Bildschirmzeile. Zeichen derselben Zeile
+   * haben dieselbe Mitte, und die Zeilennummer wächst mit der Stelle –
+   * damit lässt sich der Anfang der Zeile und das Ende der nächsten
+   * einschachteln. Das hängt an keiner Maus und an keinem Bildausschnitt.
    */
   function visualLineSpan(textDiv, offset) {
     const text = flatTextOf(textDiv);
@@ -1023,38 +1039,42 @@
     const caret = caretRectAt(textDiv, offset, text);
     if (!caret) return null;
 
-    const box = textDiv.getBoundingClientRect();
     const zoom = (typeof getZoom === 'function') ? getZoom() : 1;
     const lh = (parseInt(textDiv.style.lineHeight) || 32) * zoom;
     const mitte = caret.top + caret.height / 2;
 
-    const stelleBei = (x, y) => {
-      let punkt = null;
-      if (typeof document.caretRangeFromPoint === 'function') {
-        punkt = document.caretRangeFromPoint(x, y);
-      } else if (typeof document.caretPositionFromPoint === 'function') {
-        const p = document.caretPositionFromPoint(x, y);
-        if (p && p.offsetNode) {
-          punkt = document.createRange();
-          punkt.setStart(p.offsetNode, p.offset);
-        }
-      }
-      if (!punkt || !textDiv.contains(punkt.startContainer)) return null;
-      return flatPosOfPoint(textDiv, punkt.startContainer, punkt.startOffset);
+    /** Mitte der Bildschirmzeile, auf der diese Stelle liegt. */
+    const zeilenMitte = (stelle) => {
+      let r = null;
+      try { r = caretRectAt(textDiv, stelle, text); } catch (e) { return null; }
+      return r ? r.top + r.height / 2 : null;
     };
 
-    const von = stelleBei(box.left + 1, mitte);
-    // Ende der NÄCHSTEN sichtbaren Zeile; gibt es keine, das der eigenen
-    let bis = stelleBei(box.right - 1, mitte + lh);
-    if (bis === null) bis = stelleBei(box.right - 1, mitte);
+    /* Anfang der eigenen Zeile: die früheste Stelle im Absatz, die noch
+       dieselbe Zeilenmitte hat. Halbieren geht, weil die Zeile mit der
+       Stelle nur wachsen kann. */
+    let lo = grenze.from, hi = offset;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const m = zeilenMitte(mid);
+      if (m !== null && Math.abs(m - mitte) < lh / 2) hi = mid;
+      else lo = mid + 1;
+    }
+    const von = lo;
 
-    /* >>> Warum hier NICHT auf die logische Zeile zurückgefallen wird <<<
-       Die Trefferprüfung scheitert, wenn die Zeile gerade nicht im Bild
-       ist – der andere hat gescrollt, eine Seite kam dazu. Vorher galt
-       dann die logische Zeile, und die reicht in diesem Editor oft über
-       die halbe Seite: das Band sprang bei jedem Scrollen auf und zu.
-       Keine Sperre ist in dem Fall ehrlicher als eine falsche. */
-    if (von === null || bis === null || bis < von) return null;
+    /* Ende der Zeile DANACH: die späteste Stelle, die höchstens eine
+       Zeilenhöhe tiefer sitzt. Gibt es keine nächste Zeile, bleibt es
+       beim Ende der eigenen. */
+    let lo2 = offset, hi2 = grenze.to;
+    while (lo2 < hi2) {
+      const mid = (lo2 + hi2 + 1) >> 1;
+      const m = zeilenMitte(mid);
+      if (m !== null && m < mitte + lh * 1.5) lo2 = mid;
+      else hi2 = mid - 1;
+    }
+    const bis = lo2;
+
+    if (bis < von) return null;
 
     return {
       from: Math.max(von, grenze.from),
