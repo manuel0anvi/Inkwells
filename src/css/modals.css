@@ -231,6 +231,16 @@
   color: var(--gold)
 }
 
+/* „+ Abschnitt" ganz unten im selben Menue – abgesetzt, weil es nicht
+   auswaehlt, sondern etwas Neues anlegt */
+.ctx-item-new {
+  border-top: 1px solid var(--sb);
+  margin-top: 3px;
+  padding-top: 7px;
+  color: var(--lo);
+  font-style: italic
+}
+
 .color-palette {
   display: flex;
   gap: 7px;
@@ -320,6 +330,175 @@
   gap: 14px
 }
 
+/* ── Zwei Spalten: links die Abschnitte, rechts die Seiten ──────────────
+   Nur die Verwaltung ist so aufgebaut. Der Übertragungs-Dialog benutzt
+   .sec-mgr-body weiterhin allein, deshalb steht hier alles unter
+   .sec-mgr-main bzw. #sec-mgr-body. */
+.sec-mgr-main {
+  flex: 1;
+  display: flex;
+  min-height: 0
+}
+
+.sec-mgr-side {
+  width: 190px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--sb);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 10px 10px 14px;
+  gap: 8px
+}
+
+.sec-mgr-side-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb) transparent
+}
+
+#sec-mgr-body {
+  padding: 10px 14px;
+  gap: 3px;
+  min-width: 0
+}
+
+.mgr-side-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background .12s
+}
+
+.mgr-side-row:hover {
+  background: var(--sh2)
+}
+
+.mgr-side-row.active {
+  background: var(--sc);
+  border-left-color: var(--gold)
+}
+
+.mgr-side-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0
+}
+
+/* „Alle Seiten" und „Ohne Abschnitt" sind keine Abschnitte, sondern
+   deren Aufhebung – ein Ring statt einer Füllung, wie in der Navigation */
+.mgr-side-dot.hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--gd)
+}
+
+.mgr-side-row.active .mgr-side-dot.hollow {
+  box-shadow: inset 0 0 0 1.5px var(--gold)
+}
+
+.mgr-side-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--hi);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.mgr-side-row.active .mgr-side-name {
+  color: var(--gold)
+}
+
+.mgr-side-count {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: var(--lo);
+  flex-shrink: 0
+}
+
+.mgr-side-tools {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity .12s
+}
+
+.mgr-side-row:hover .mgr-side-tools {
+  opacity: 1
+}
+
+.mgr-side-tool {
+  background: none;
+  border: none;
+  color: var(--lo);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: color .1s
+}
+
+.mgr-side-tool:hover {
+  color: var(--gold);
+  background: var(--sh2)
+}
+
+.mgr-side-tool.danger:hover {
+  color: var(--red)
+}
+
+.mgr-btn-wide {
+  width: 100%;
+  padding: 6px;
+  flex-shrink: 0
+}
+
+/* Das Etikett einer Seite, anklickbar */
+.mgr-pg-sec {
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Crimson Pro', serif;
+  font-size: 10px;
+  font-style: italic;
+  padding: 2px 9px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--hi);
+  background: color-mix(in srgb, var(--sec-color, var(--gd)) 22%, transparent);
+  border: 1px solid var(--sec-color, var(--gd));
+  transition: all .12s
+}
+
+.mgr-pg-sec:hover {
+  background: color-mix(in srgb, var(--sec-color, var(--gd)) 40%, transparent)
+}
+
+/* Ohne Etikett bleibt es blass – sonst sähe „kein Abschnitt" aus wie einer */
+.mgr-pg-sec.none {
+  color: var(--lo);
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--sb2)
+}
+
+.mgr-pg-sec.none:hover {
+  color: var(--md);
+  border-color: var(--gd);
+  background: var(--sh2)
+}
+
 .sec-mgr-footer {
   padding: 12px 22px;
   border-top: 1px solid var(--sb);
@@ -331,77 +510,6 @@
 
 #sec-mgr-done {
   border-radius: 12px;
-}
-
-.mgr-sec {
-  background: var(--sc);
-  border: 1px solid var(--sb2);
-  border-radius: 8px;
-  overflow: hidden
-}
-
-.mgr-sec-hdr {
-  display: flex;
-  align-items: center;
-  padding: 9px 14px;
-  background: var(--sh2);
-  border-bottom: 1px solid var(--sb);
-  gap: 8px
-}
-
-.mgr-sec-color {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0
-}
-
-.mgr-sec-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0
-}
-
-.mgr-sec-name {
-  font-size: 14px;
-  color: var(--hi);
-  flex: 1;
-  font-style: italic
-}
-
-.mgr-sec-count {
-  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
-  font-size: 10px;
-  color: var(--lo)
-}
-
-.mgr-sec-actions {
-  display: flex;
-  gap: 4px
-}
-
-.mgr-sec-handle {
-  color: var(--lo);
-  font-size: 16px;
-  cursor: grab;
-  flex-shrink: 0;
-  padding: 0 6px 0 2px;
-  letter-spacing: -1px;
-  user-select: none
-}
-
-.mgr-sec-handle:active {
-  cursor: grabbing
-}
-
-.mgr-sec.dragging {
-  opacity: .4
-}
-
-.mgr-sec.sec-drag-over {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 2px var(--gold)
 }
 
 .mgr-btn {
@@ -427,14 +535,6 @@
   border-color: transparent
 }
 
-.mgr-pg-list {
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-height: 44px
-}
-
 .mgr-pg-item {
   display: flex;
   align-items: center;
@@ -443,9 +543,8 @@
   border: 1px solid var(--sb);
   border-radius: 5px;
   gap: 8px;
-  /* Kein grab-Zeiger: Ziehen gibt es hier nicht. Er versprach seit jeher
-     etwas, das nirgends umgesetzt ist – das CSS dafuer liegt zwar bereit
-     (.dragging, .drag-over, .mgr-drop-slot), die Logik fehlt. */
+  /* Kein grab-Zeiger: Ziehen gibt es hier nicht. Der Hinweistext versprach
+     es seit jeher, umgesetzt war es nirgends. */
   user-select: none;
   transition: all .15s
 }
@@ -455,28 +554,22 @@
   border-color: var(--sb2)
 }
 
-.mgr-pg-item.dragging {
-  opacity: .3;
-  cursor: grabbing
+/* Der Farbstreifen des Abschnitts – dasselbe Zeichen wie am Seitenkopf.
+   Nur in der Verwaltung; der Übertragungs-Dialog teilt sich .mgr-pg-item. */
+#sec-mgr-body .mgr-pg-item {
+  border-left: 3px solid var(--sec-color, transparent)
 }
 
-.mgr-pg-item.drag-over {
-  border-color: var(--gold);
-  background: rgba(200, 169, 110, .1)
-}
-
-.mgr-pg-handle {
-  color: var(--lo);
-  font-size: 16px;
-  cursor: grab;
-  flex-shrink: 0
+#sec-mgr-body .mgr-pg-item.no-sec {
+  border-left-color: var(--sb)
 }
 
 .mgr-pg-num {
   font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
   font-size: 10px;
   color: var(--gd);
-  width: 22px;
+  min-width: 24px;
+  text-align: right;
   flex-shrink: 0
 }
 
@@ -505,24 +598,6 @@
   align-items: center;
   gap: 5px;
   flex-shrink: 0
-}
-
-.mgr-pg-actions {
-  display: flex;
-  gap: 3px;
-  flex-shrink: 0
-}
-
-.mgr-mv-select {
-  background: var(--sb);
-  border: 1px solid var(--sb2);
-  border-radius: 3px;
-  color: var(--md);
-  font-size: 10px;
-  padding: 2px 4px;
-  cursor: pointer;
-  outline: none;
-  max-width: 110px
 }
 
 .mgr-mv-btn {
@@ -554,19 +629,6 @@
 
 .mgr-pg-del:hover {
   color: var(--red)
-}
-
-.mgr-drop-slot {
-  height: 3px;
-  border-radius: 2px;
-  margin: 0 6px;
-  transition: all .12s
-}
-
-.mgr-drop-slot.over {
-  height: 20px;
-  background: rgba(200, 169, 110, .12);
-  border: 1.5px dashed var(--gold)
 }
 
 .mgr-sec-empty {

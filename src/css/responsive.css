@@ -75,17 +75,18 @@
     min-height: 48px
   }
 
-  .mgr-pg-handle {
-    font-size: 20px;
-    padding: 0 10px
+  /* Auf schmalem Schirm untereinander statt nebeneinander – 190px
+     Abschnittsspalte neben der Seitenliste wird sonst zu eng */
+  .sec-mgr-main {
+    flex-direction: column
   }
 
-  .mgr-drop-slot {
-    min-height: 8px
-  }
-
-  .mgr-drop-slot.over {
-    min-height: 28px
+  .sec-mgr-side {
+    width: auto;
+    max-height: 33%;
+    border-right: none;
+    border-bottom: 1px solid var(--sb);
+    padding: 10px 14px
   }
 
   .nb-card-edit-btn {

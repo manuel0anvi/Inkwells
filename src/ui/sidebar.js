@@ -200,7 +200,6 @@ function renumberVisiblePages() {
   });
 }
 
-let _secMgrFocusSecId = null;
 let _secMgrCtxMenu = null;
 
 /* ── Darf hier überhaupt etwas geändert werden? ──────────────────────
@@ -238,9 +237,9 @@ function ensureSecMgrCtxMenu() {
   return _secMgrCtxMenu;
 }
 
-function showSecMgrPageMenu(x, y, sec, page) {
+function showSecMgrPageMenu(x, y, page) {
   const nb = getNb();
-  if (!nb || !sec || !page) return;
+  if (!nb || !page) return;
   const menu = ensureSecMgrCtxMenu();
   menu.innerHTML = '';
 
@@ -256,23 +255,18 @@ function showSecMgrPageMenu(x, y, sec, page) {
     return btn;
   };
 
-  menu.appendChild(mkBtn(t('open'), async () => {
-    nb.activeSecId = sec.id;
-    openSection(sec, page.id);
-    closeSecMgr();
-  }));
+  menu.appendChild(mkBtn(t('open'), async () => { secMgrOpenPage(nb, page); }));
 
-  if (nb.sections.length > 1) {
-    /* Frueher musste man den Zielnamen ABTIPPEN (txtModal) und die
-       Eingabe wurde ueber den Namen verglichen – bei zwei aehnlich
-       benannten Abschnitten ein Gluecksspiel. Jetzt derselbe Weg wie am
-       Seitenkopf: ein Menue mit Farbpunkten. */
-    menu.appendChild(mkBtn(t('setSection'), async () => {
-      if (!mgrCanEdit()) return;
-      menu.style.display = 'none';
-      showPgSectionMenu(x, y, page);
-    }));
-  }
+  /* Frueher musste man den Zielnamen ABTIPPEN (txtModal) und die Eingabe
+     wurde ueber den Namen verglichen – bei zwei aehnlich benannten
+     Abschnitten ein Gluecksspiel. Jetzt derselbe Weg wie am Seitenkopf:
+     ein Menue mit Farbpunkten. Es steht auch ohne vorhandene Abschnitte
+     bereit, denn „Ohne Abschnitt" ist selbst eine Wahl. */
+  menu.appendChild(mkBtn(t('setSection'), async () => {
+    if (!mgrCanEdit()) return;
+    menu.style.display = 'none';
+    showPgSectionMenu(x, y, page, () => renderSecMgrBody());
+  }));
 
   // Mit dieser Seite vorausgewählt – meist will man genau die übertragen
   menu.appendChild(mkBtn(t('transferOpen'), async () => {
@@ -281,7 +275,7 @@ function showSecMgrPageMenu(x, y, sec, page) {
   }));
 
   menu.appendChild(mkBtn(t('deletePage'), async () => {
-    await deletePageFromSection(sec, page);
+    await deletePageFromManager(page);
   }, true));
 
   menu.style.left = x + 'px';
@@ -289,9 +283,12 @@ function showSecMgrPageMenu(x, y, sec, page) {
   menu.style.display = 'block';
 }
 
-async function deletePageFromSection(sec, page) {
+/* Seite aus der Verwaltung löschen.
+   Hieß deletePageFromSection und bekam den Abschnitt mit – unter Etiketten
+   spielt der keine Rolle mehr: gelöscht wird aus dem Heft. */
+async function deletePageFromManager(page) {
   const nb = getNb();
-  if (!nb || !sec || !page) return;
+  if (!nb || !page) return;
   if (!mgrCanEdit()) return;
   if ((nb.pages || []).length <= 1) {
     await showAlert(t('lastPageStays'));
@@ -319,21 +316,25 @@ async function deletePageFromSection(sec, page) {
   }
 
   renderSideTree();
-  renderSecMgrBody(sec.id);
+  renderSecMgrBody();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
 
+/** Eine neue Seite ans Ende des Hefts – mit Etikett (sec) oder ohne (null). */
 function addPageToSection(sec) {
   const nb = getNb();
-  if (!nb || !sec) return;
+  if (!nb) return;
   if (!mgrCanEdit()) return;
-  const pg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
+  const pg = makePage(sec?.defaultBg || nb.defaultBg || 'ruled');
   insertPageInto(nb, sec, pg);
 
-  if (nb.activeSecId === sec.id) openSection(sec, pg.id);
+  // Zeigt die Ansicht einen Ausschnitt, zu dem die Seite nicht gehört,
+  // bliebe sie unsichtbar – dann nur die Navigation nachziehen.
+  const gezeigt = activeSection(nb);
+  if (!gezeigt || (sec && String(gezeigt.id) === String(sec.id))) openSection(gezeigt, pg.id);
   else renderSideTree();
 
-  renderSecMgrBody(sec.id);
+  renderSecMgrBody();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
 
@@ -381,12 +382,9 @@ async function openPageTransfer(preselectedPageIds = []) {
   }
 
   // Das Ausgangsheft ist das offene – nur dort muss neu gezeichnet werden.
-  if (!choice.copy) {
-    const sec = nb.sections.find(s => s.id === nb.activeSecId) || nb.sections[0];
-    if (sec) openSection(sec);
-  }
+  if (!choice.copy) openSection(activeSection(nb));
   renderSideTree();
-  renderSecMgrBody(nb.activeSecId);
+  renderSecMgrBody();
 
   toast((choice.copy ? t('transferDoneCopy') : t('transferDoneMove'))
     .replace('{n}', String(res.moved))
@@ -418,127 +416,222 @@ function closeSecMgr() {
   if (_secMgrCtxMenu) _secMgrCtxMenu.style.display = 'none';
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ABSCHNITTSVERWALTUNG
+
+   Links die Abschnitte, rechts die Seiten. Ein Klick links schränkt die
+   Liste rechts ein; rechts trägt jede Seite ihre echte Seitenzahl im Heft
+   und ein anklickbares Etikett.
+
+   >>> Warum das umgebaut wurde <<<
+   Vorher war es je Abschnitt ein Kasten mit eigener Seitenliste – die
+   Kapitel-Sicht. Unter Etiketten stimmte daran dreierlei nicht: Seiten
+   ohne Abschnitt kamen ueberhaupt nicht vor, dieselbe Seite hätte in
+   mehreren Kästen stehen müssen, um ihren Platz im Heft zu zeigen, und
+   die Nummer links zählte je Abschnitt statt im Heft. Jetzt gibt es
+   genau eine Liste, in der Reihenfolge des Hefts.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Was rechts gezeigt wird: '*' alle, '' ohne Abschnitt, sonst eine secId. */
+let _secMgrFilter = '*';
+
+function secMgrFilteredPages(nb) {
+  const alle = notebookPages(nb);
+  if (_secMgrFilter === '*') return alle;
+  if (_secMgrFilter === '') return alle.filter(p => !p.secId);
+  return alle.filter(p => String(p.secId || '') === _secMgrFilter);
+}
+
 function renderSecMgrBody(focusSecId) {
   const nb = getNb();
-  const body = E('sec-mgr-body');
-  if (!nb || !body) return;
-
-  _secMgrFocusSecId = focusSecId || _secMgrFocusSecId;
+  if (!nb) return;
+  if (focusSecId) _secMgrFilter = String(focusSecId);
   getSections(nb);
-  body.innerHTML = '';
 
-  const mk = (tag, cls, txt) => {
-    const el = document.createElement(tag);
-    if (cls) el.className = cls;
-    if (txt) el.textContent = txt;
-    return el;
+  // Der gezeigte Abschnitt kann inzwischen gelöscht worden sein
+  if (_secMgrFilter !== '*' && _secMgrFilter !== ''
+      && !nb.sections.some(s => String(s.id) === _secMgrFilter)) _secMgrFilter = '*';
+
+  renderSecMgrSide(nb);
+  renderSecMgrPages(nb);
+}
+
+/* ── Links: die Abschnitte als Filter ── */
+function renderSecMgrSide(nb) {
+  const side = E('sec-mgr-side');
+  if (!side) return;
+  side.innerHTML = '';
+
+  const zeile = (key, farbe, name, anzahl) => {
+    const row = document.createElement('div');
+    row.className = 'mgr-side-row' + (_secMgrFilter === key ? ' active' : '');
+    const dot = document.createElement('span');
+    dot.className = 'mgr-side-dot' + (farbe ? '' : ' hollow');
+    if (farbe) dot.style.background = farbe;
+    const label = document.createElement('span');
+    label.className = 'mgr-side-name';
+    label.textContent = name;
+    const cnt = document.createElement('span');
+    cnt.className = 'mgr-side-count';
+    cnt.textContent = String(anzahl);
+    row.append(dot, label, cnt);
+    row.addEventListener('click', () => { _secMgrFilter = key; renderSecMgrBody(); });
+    side.appendChild(row);
+    return row;
   };
 
-  for (const sec of nb.sections) {
-    const secEl = mk('div', 'mgr-sec');
-    const hdr = mk('div', 'mgr-sec-hdr');
-    
-    const dot = mk('span', 'mgr-sec-dot');
-    // Bisher stand hier die Heftfarbe – alle Punkte sahen also gleich aus
-    dot.style.background = colorForSection(sec.id);
-    
-    const name = mk('span', 'mgr-sec-name', getSectionDisplayName(sec));
-    const count = mk('span', 'mgr-sec-count', pagesOfSec(sec, nb).length + ' ' + t('pages'));
-    const actions = mk('div', 'mgr-sec-actions');
+  zeile('*', null, t('allPages'), notebookPages(nb).length);
 
-    const renameBtn = mk('button', 'mgr-btn', t('rename'));
-    renameBtn.addEventListener('click', async () => {
+  for (const sec of nb.sections) {
+    const row = zeile(String(sec.id), colorForSection(sec.id),
+      getSectionDisplayName(sec), pagesOfSec(sec, nb).length);
+
+    const tools = document.createElement('span');
+    tools.className = 'mgr-side-tools';
+
+    const ren = document.createElement('button');
+    ren.type = 'button';
+    ren.className = 'mgr-side-tool';
+    ren.textContent = '✎';
+    ren.title = t('rename');
+    ren.addEventListener('click', async e => {
+      e.stopPropagation();
       if (!mgrCanEdit()) return;
       const nextName = await txtModal(t('rename'), sec.name || '');
       if (!nextName) return;
       sec.name = nextName;
       renderSideTree();
-      renderSecMgrBody(sec.id);
+      renderSecMgrBody();
       if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
     });
 
-    const delBtn = mk('button', 'mgr-btn danger', t('delete'));
-    delBtn.disabled = nb.sections.length <= 1;
-    delBtn.addEventListener('click', async () => {
-      if (nb.sections.length <= 1) return;
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'mgr-side-tool danger';
+    del.textContent = '✕';
+    del.title = t('delete');
+    del.addEventListener('click', async e => {
+      e.stopPropagation();
       if (!mgrCanEdit()) return;
-      // Auch hier stand confModal – siehe deletePageFromSection
-      const ok = await showConfirm(t('delete') + ' "' + getSectionDisplayName(sec) + '"?');
+      /* Frueher war der letzte Abschnitt unlöschbar und seine Seiten
+         wanderten in einen anderen – beides Reste der Kapitel-Sicht. Ein
+         Etikett darf man ersatzlos wegwerfen; die Seiten bleiben, wo sie
+         sind, und stehen danach unter „Ohne Abschnitt". */
+      const ok = await showConfirm(
+        t('deleteSectionAsk').replace('{name}', getSectionDisplayName(sec)));
       if (!ok) return;
 
-      const target = nb.sections.find(s => s.id !== sec.id);
-      if (!target) return;
-
-      // Die Seiten bleiben, wo sie sind – sie wechseln nur das Etikett
-      for (const pg of pagesOfSec(sec, nb)) setSectionOfPage(nb, pg.id, target.id);
+      for (const pg of pagesOfSec(sec, nb)) setSectionOfPage(nb, pg.id, '');
       nb.sections = nb.sections.filter(s => s.id !== sec.id);
 
-      if (nb.activeSecId === sec.id) {
-        nb.activeSecId = target.id;
-        openSection(target);
-      }
+      if (String(nb.activeSecId || '') === String(sec.id)) openSection(null);
+      if (_secMgrFilter === String(sec.id)) _secMgrFilter = '*';
 
       renderSideTree();
-      renderSecMgrBody(target.id);
+      renderSecMgrBody();
       if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
     });
 
-    const addPgBtn = mk('button', 'mgr-btn', '+ ' + t('addPage'));
-    addPgBtn.addEventListener('click', () => addPageToSection(sec));
-
-    actions.append(renameBtn, addPgBtn, delBtn);
-    hdr.append(dot, name, count, actions);
-    secEl.appendChild(hdr);
-
-    const pgList = mk('div', 'mgr-pg-list');
-    const secPages = pagesOfSec(sec, nb);
-    if (!secPages.length) {
-      pgList.appendChild(mk('div', 'mgr-sec-empty', t('noPagesYet')));
-    } else {
-      secPages.forEach((pg, idx) => {
-        const item = mk('div', 'mgr-pg-item');
-        item.innerHTML = '<span class="mgr-pg-num">S.' + (idx + 1) + '</span>'
-          + '<div class="mgr-pg-info"><span class="mgr-pg-date">' + new Date(pg.date).toLocaleDateString() + '</span>'
-          + '<span class="mgr-pg-preview">' + (pagePreview(pg) || 'Leer') + '</span></div>';
-
-        const right = mk('div', 'mgr-pg-right');
-
-        const openBtn = mk('button', 'mgr-mv-btn', t('open'));
-        openBtn.type = 'button';
-        openBtn.addEventListener('click', () => {
-          nb.activeSecId = sec.id;
-          openSection(sec, pg.id);
-          closeSecMgr();
-        });
-
-        const delPgBtn = mk('button', 'mgr-pg-del', '✕');
-        delPgBtn.type = 'button';
-        delPgBtn.title = t('deletePage');
-        delPgBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          await deletePageFromSection(sec, pg);
-        });
-
-        right.append(openBtn, delPgBtn);
-        item.appendChild(right);
-
-        item.addEventListener('contextmenu', e => {
-          e.preventDefault();
-          showSecMgrPageMenu(e.clientX, e.clientY, sec, pg);
-        });
-        pgList.appendChild(item);
-      });
-    }
-
-    secEl.appendChild(pgList);
-    body.appendChild(secEl);
-
-    if (focusSecId && focusSecId === sec.id) {
-      requestAnimationFrame(() => {
-        secEl.scrollIntoView({ block: 'nearest' });
-      });
-    }
+    tools.append(ren, del);
+    row.insertBefore(tools, row.querySelector('.mgr-side-count'));
   }
+
+  // Ohne Abschnitte gäbe es hier zwei Zeilen mit derselben Bedeutung
+  if (nb.sections.length) {
+    zeile('', null, t('noSection'), notebookPages(nb).filter(p => !p.secId).length);
+  }
+}
+
+/* ── Rechts: die Seiten, in Heft-Reihenfolge ── */
+function renderSecMgrPages(nb) {
+  const body = E('sec-mgr-body');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const pages = secMgrFilteredPages(nb);
+  if (!pages.length) {
+    const leer = document.createElement('div');
+    leer.className = 'mgr-sec-empty';
+    leer.textContent = t('noPagesYet');
+    body.appendChild(leer);
+    return;
+  }
+
+  for (const pg of pages) {
+    const sec = findSecForPage(pg.id, nb);
+    const item = document.createElement('div');
+    item.className = 'mgr-pg-item';
+    if (sec) item.style.setProperty('--sec-color', colorForSection(sec.id));
+    else item.classList.add('no-sec');
+
+    // Die Zahl gilt im HEFT – vorher zählte sie je Abschnitt und
+    // widersprach damit allem, was sonst „Seite 12" nennt
+    const num = document.createElement('span');
+    num.className = 'mgr-pg-num';
+    num.textContent = String(pageNumberOf(nb, pg.id));
+
+    const info = document.createElement('div');
+    info.className = 'mgr-pg-info';
+    const datum = document.createElement('span');
+    datum.className = 'mgr-pg-date';
+    datum.textContent = new Date(pg.date).toLocaleDateString();
+    const vorschau = document.createElement('span');
+    vorschau.className = 'mgr-pg-preview';
+    vorschau.textContent = pagePreview(pg) || t('emptyPage');
+    info.append(datum, vorschau);
+
+    // Das Etikett direkt hier umhängen – derselbe Weg wie am Seitenkopf
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'mgr-pg-sec' + (sec ? '' : ' none');
+    chip.textContent = sec ? getSectionDisplayName(sec) : t('noSection');
+    chip.title = t('setSection');
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!mgrCanEdit()) return;
+      const r = chip.getBoundingClientRect();
+      showPgSectionMenu(r.left, r.bottom + 4, pg, () => renderSecMgrBody());
+    });
+
+    const right = document.createElement('div');
+    right.className = 'mgr-pg-right';
+
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'mgr-mv-btn';
+    openBtn.textContent = t('open');
+    openBtn.addEventListener('click', () => { secMgrOpenPage(nb, pg); });
+
+    const delPgBtn = document.createElement('button');
+    delPgBtn.type = 'button';
+    delPgBtn.className = 'mgr-pg-del';
+    delPgBtn.textContent = '✕';
+    delPgBtn.title = t('deletePage');
+    delPgBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      await deletePageFromManager(pg);
+    });
+
+    right.append(openBtn, delPgBtn);
+    item.append(num, info, chip, right);
+
+    item.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      showSecMgrPageMenu(e.clientX, e.clientY, pg);
+    });
+    body.appendChild(item);
+  }
+}
+
+/* Eine Seite aus der Verwaltung heraus aufschlagen.
+   Steht die Ansicht auf einem Ausschnitt, zu dem die Seite nicht gehört,
+   wird auf alle Seiten zurückgeschaltet – sonst spränge man auf eine
+   Seite, die dort gar nicht zu sehen ist. */
+function secMgrOpenPage(nb, pg) {
+  const gezeigt = activeSection(nb);
+  const drin = !gezeigt || String(pg.secId || '') === String(gezeigt.id);
+  openSection(drin ? gezeigt : null, pg.id);
+  closeSecMgr();
 }
 
 function openSecMgr(sec) {
@@ -549,7 +642,8 @@ function openSecMgr(sec) {
   const addPageBtn = E('sec-mgr-add-page');
   if (!ov || !closeBtn || !doneBtn || !addSecBtn || !addPageBtn) return;
 
-  renderSecMgrBody(sec?.id || _secMgrFocusSecId);
+  _secMgrFilter = sec ? String(sec.id) : '*';
+  renderSecMgrBody();
   ov.style.display = 'grid';
 
   closeBtn.onclick = () => closeSecMgr();
@@ -560,8 +654,11 @@ function openSecMgr(sec) {
   addPageBtn.onclick = () => {
     const nb = getNb();
     if (!nb) return;
-    const target = nb.sections.find(s => s.id === (_secMgrFocusSecId || sec?.id)) || nb.sections[0];
-    if (!target) return;
+    /* Die neue Seite bekommt das Etikett des gerade gezeigten Ausschnitts –
+       und keines, wenn „Alle Seiten" oder „Ohne Abschnitt" gewählt ist.
+       Vorher fiel sie ersatzweise in nb.sections[0], also in einen
+       Abschnitt, den man gar nicht angesehen hatte. */
+    const target = nb.sections.find(s => String(s.id) === _secMgrFilter) || null;
     addPageToSection(target);
   };
   const transferBtn = E('sec-mgr-transfer');

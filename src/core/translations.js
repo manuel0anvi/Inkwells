@@ -89,8 +89,9 @@ const TRANSLATIONS = {
     
     // Section manager
     manageSectionsTitle: 'Abschnitte verwalten',
-    sectionManagerHint: 'Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft. Rechtsklick auf eine Seite für weitere Optionen.',
+    sectionManagerHint: 'Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft. Links auswählen, rechts umhängen. Rechtsklick auf eine Seite für weitere Optionen.',
     addSection: '+ Abschnitt',
+    deleteSectionAsk: 'Abschnitt "{name}" löschen? Die Seiten bleiben, sie verlieren nur das Etikett.',
     done: 'Fertig',
     
     // Page context menu
@@ -582,8 +583,9 @@ const TRANSLATIONS = {
     
     // Section manager
     manageSectionsTitle: 'Manage Sections',
-    sectionManagerHint: 'Sections are labels: a page keeps its place in the notebook. Right-click a page for more options.',
+    sectionManagerHint: 'Sections are labels: a page keeps its place in the notebook. Pick on the left, relabel on the right. Right-click a page for more options.',
     addSection: '+ Section',
+    deleteSectionAsk: 'Delete section "{name}"? The pages stay, they only lose the label.',
     done: 'Done',
     
     // Page context menu
@@ -1074,8 +1076,9 @@ const TRANSLATIONS = {
     
     // Section manager
     manageSectionsTitle: 'Gestisci Sezioni',
-    sectionManagerHint: 'Le sezioni sono etichette: una pagina mantiene il suo posto nel quaderno. Clic destro su una pagina per altre opzioni.',
+    sectionManagerHint: 'Le sezioni sono etichette: una pagina mantiene il suo posto nel quaderno. Scegli a sinistra, cambia etichetta a destra. Clic destro su una pagina per altre opzioni.',
     addSection: '+ Sezione',
+    deleteSectionAsk: 'Eliminare la sezione "{name}"? Le pagine restano e perdono soltanto la loro etichetta.',
     done: 'Fatto',
     
     // Page context menu

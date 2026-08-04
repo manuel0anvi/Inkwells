@@ -280,13 +280,22 @@
 <div class="overlay" id="ov-sec-mgr" style="display:none">
   <div class="modal sec-mgr-modal">
     <div class="sec-mgr-head">
-      <h3 id="sec-mgr-title" data-i18n="manageSectionsTitle">Abschnitt bearbeiten</h3>
+      <h3 id="sec-mgr-title" data-i18n="manageSectionsTitle">Abschnitte verwalten</h3>
       <button class="modal-close-x" id="sec-mgr-close">✕</button>
     </div>
-    <p class="sec-mgr-hint" data-i18n="sectionManagerHint">Seiten per Drag & Drop verschieben. Rechtsklick für weitere Optionen.</p>
-    <div class="sec-mgr-body" id="sec-mgr-body"></div>
+    <p class="sec-mgr-hint" data-i18n="sectionManagerHint">Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft.</p>
+    <!-- Links die Abschnitte als Filter, rechts die Seiten in
+         Heft-Reihenfolge. Früher stand hier je Abschnitt ein Kasten mit
+         eigener Seitenliste – das war die Kapitel-Sicht, und Seiten ohne
+         Abschnitt kamen darin ueberhaupt nicht vor. -->
+    <div class="sec-mgr-main">
+      <div class="sec-mgr-side">
+        <div class="sec-mgr-side-list" id="sec-mgr-side"></div>
+        <button id="sec-mgr-add-sec" class="mgr-btn mgr-btn-wide" data-i18n="addSection">+ Abschnitt</button>
+      </div>
+      <div class="sec-mgr-body" id="sec-mgr-body"></div>
+    </div>
     <div class="sec-mgr-footer">
-      <button id="sec-mgr-add-sec" class="mgr-btn" data-i18n="addSection">+ Abschnitt</button>
       <button id="sec-mgr-add-page" class="mgr-btn" data-i18n="addPage">+ Seite</button>
       <button id="sec-mgr-transfer" class="mgr-btn" data-i18n="transferOpen">In anderes Heft …</button>
       <button class="ok-btn" id="sec-mgr-done" data-i18n="done">Fertig</button>

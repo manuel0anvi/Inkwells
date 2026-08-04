@@ -40,7 +40,12 @@ function showPgCtxMenu(x, y, page, pgEl) {
    ══════════════════════════════════════════════════════════════════════ */
 let _pgSecMenu = null;
 
-function showPgSectionMenu(x, y, page) {
+/**
+ * @param {function} [onDone] Wird nach dem Umhängen gerufen – die
+ *   Abschnittsverwaltung zeichnet sich damit selbst nach, ohne dass dieses
+ *   Menü sie kennen müsste.
+ */
+function showPgSectionMenu(x, y, page, onDone) {
   if (S.readOnly) return;
   const nb = getNb();
   if (!nb || !page) return;
@@ -75,7 +80,7 @@ function showPgSectionMenu(x, y, page) {
   };
 
   const umhaengen = (secId) => {
-    if (!setSectionOfPage(nb, page.id, secId)) return;
+    if (!setSectionOfPage(nb, page.id, secId)) { if (onDone) onDone(); return; }
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 
     /* Steht die Ansicht auf einem Ausschnitt und die Seite gehört jetzt
@@ -84,6 +89,7 @@ function showPgSectionMenu(x, y, page) {
     const gezeigt = activeSection(nb);
     if (gezeigt && String(gezeigt.id) !== String(secId || '')) openSection(gezeigt);
     else { refreshPageSectionMarks(); renderSideTree(); }
+    if (onDone) onDone();
   };
 
   for (const sec of getSections(nb)) {
@@ -93,6 +99,23 @@ function showPgSectionMenu(x, y, page) {
     ));
   }
   menu.appendChild(eintrag(t('noSection'), null, !jetzt, () => umhaengen('')));
+
+  /* Ein Heft startet ohne Abschnitte – ohne diesen Eintrag stünde hier
+     nur „Ohne Abschnitt", und man müsste erst die Verwaltung aufmachen,
+     um überhaupt etwas etikettieren zu können. */
+  const neu = document.createElement('button');
+  neu.type = 'button';
+  neu.className = 'ctx-item ctx-item-new';
+  neu.textContent = t('addSection');
+  neu.addEventListener('click', async () => {
+    menu.style.display = 'none';
+    const name = await txtModal(t('newSection'), t('newSection'));
+    if (!name) return;
+    const sec = { id: uid(), name, pgIds: [], defaultBg: nb.defaultBg };
+    getSections(nb).push(sec);
+    umhaengen(sec.id);
+  });
+  menu.appendChild(neu);
 
   const margin = 8;
   menu.style.cssText = 'display:block;position:fixed;left:0;top:0;z-index:1000;visibility:hidden';
