@@ -591,11 +591,14 @@
 
     /* 1. Eigenes zuerst hinauf – nur wenn wir wissen, WAS neu ist.
 
-       Solange der Besitzer offline ist, dürfen die Eingeladenen nicht
-       schreiben (siehe die Marke in core/share.js, joinDocRoom) – ihre
-       Arbeit kann also nicht mit einer örtlichen Änderung des Besitzers
-       in Konflikt geraten. Deshalb genügt hier ein einfaches Überschreiben
-       ohne Rückfrage: was der Besitzer zuletzt gesehen hat, gilt. */
+       Ein Überschreiben ohne Rückfrage ist hier zulässig, weil die
+       Eingeladenen gar nicht geschrieben haben können: sobald der
+       Besitzer nicht im Raum ist – abgestürzt oder zugemacht –, dürfen
+       sie nur lesen (onOwnerAway in core/share.js). Was der Besitzer
+       zuletzt gesehen hat, ist damit auch der Stand des Raums.
+
+       Genau diese Zusicherung trägt die Regel. Fiele sie weg, müsste
+       hier verglichen werden, statt zu überschreiben. */
     const stored = fingerprintStore()[entry.docId] || null;
     if (stored) {
       try {

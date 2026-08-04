@@ -313,7 +313,7 @@ const TRANSLATIONS = {
     shareLegacyRevoke: 'Ältere Freigabe aufheben',
     roleView: 'Nur lesen',
     roleEdit: 'Bearbeiten',
-    roleOwnerOffline: 'Nur lesen – Besitzer ohne Verbindung',
+    roleOwnerOffline: 'Nur lesen – Besitzer nicht da',
 
     // Geteilte Dokumente – Empfängerseite
     sharedWithMe: 'Geteilte Dokumente',
@@ -334,7 +334,7 @@ const TRANSLATIONS = {
     sharedNowEdit: 'Du darfst dieses Dokument jetzt bearbeiten.',
     sharedNowView: 'Dein Bearbeitungsrecht wurde zurückgenommen.',
     sharedNeedsInternet: 'Geteilte Dokumente gibt es nur mit Internet – sie liegen nicht auf diesem Gerät. Sobald die Verbindung wieder steht, erscheinen sie hier von selbst.',
-    sharedOwnerOffline: 'Der Besitzer hat die Verbindung verloren. Solange er weg ist, kannst du nur lesen – sonst entstünden zwei Fassungen derselben Seite.',
+    sharedOwnerOffline: 'Der Besitzer ist nicht mehr da. Solange er weg ist, kannst du nur lesen – er könnte ohne Verbindung weiterschreiben, und es entstünden zwei Fassungen derselben Seite.',
     sharedOwnerBack: 'Der Besitzer ist wieder da. Du kannst weiterarbeiten.',
 
     // Zwei Fassungen derselben Seite
@@ -769,7 +769,7 @@ const TRANSLATIONS = {
     shareLegacyRevoke: 'Revoke older share',
     roleView: 'Read only',
     roleEdit: 'Edit',
-    roleOwnerOffline: 'Read only — owner disconnected',
+    roleOwnerOffline: 'Read only — owner away',
 
     // Shared documents – recipient side
     sharedWithMe: 'Shared with me',
@@ -790,7 +790,7 @@ const TRANSLATIONS = {
     sharedNowEdit: 'You can now edit this document.',
     sharedNowView: 'Your editing rights have been withdrawn.',
     sharedNeedsInternet: 'Shared documents need an internet connection — they are not stored on this device. They will reappear here on their own once you are back online.',
-    sharedOwnerOffline: 'The owner has lost their connection. While they are away you can only read — otherwise two versions of the same page would appear.',
+    sharedOwnerOffline: 'The owner is no longer here. While they are away you can only read — they might carry on writing without a connection, and two versions of the same page would appear.',
     sharedOwnerBack: 'The owner is back. You can carry on working.',
 
     // Two versions of the same page
@@ -1225,7 +1225,7 @@ const TRANSLATIONS = {
     shareLegacyRevoke: 'Revoca la condivisione precedente',
     roleView: 'Sola lettura',
     roleEdit: 'Modifica',
-    roleOwnerOffline: 'Sola lettura: il proprietario non è connesso',
+    roleOwnerOffline: 'Sola lettura: il proprietario è assente',
 
     // Documenti condivisi – lato destinatario
     sharedWithMe: 'Documenti condivisi',
@@ -1246,7 +1246,7 @@ const TRANSLATIONS = {
     sharedNowEdit: 'Ora puoi modificare questo documento.',
     sharedNowView: 'Il tuo diritto di modifica è stato revocato.',
     sharedNeedsInternet: 'I documenti condivisi esistono solo con una connessione a internet: non sono salvati su questo dispositivo. Torneranno qui da soli appena sarai di nuovo online.',
-    sharedOwnerOffline: 'Il proprietario ha perso la connessione. Finché non torna puoi solo leggere, altrimenti nascerebbero due versioni della stessa pagina.',
+    sharedOwnerOffline: 'Il proprietario è assente. Finché non torna puoi solo leggere: potrebbe continuare a scrivere senza connessione e nascerebbero due versioni della stessa pagina.',
     sharedOwnerBack: 'Il proprietario è tornato. Puoi continuare a lavorare.',
 
     // Due versioni della stessa pagina

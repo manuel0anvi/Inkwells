@@ -1905,20 +1905,17 @@ async function joinDocRoom(docId, options = {}) {
 
      Bei allen anderen verschwindet der Eintrag einfach.
 
-     >>> Beim Besitzer nicht <<<
-     Dort bleibt er stehen, mit lost = 1. Damit lassen sich zwei Dinge
-     unterscheiden, die vorher gleich aussahen:
+     >>> Beim Besitzer bleibt eine Marke stehen (lost = 1) <<<
+     Sie unterscheidet einen Abbruch vom ordentlichen Verlassen und ist
+     damit in der Konsole zu erkennen.
 
-       · Der Besitzer macht die App ZU oder verlässt den Raum. Dann läuft
-         leave(): der Auftrag wird aufgehoben und der Eintrag entfernt,
-         es bleibt nichts stehen. Die Eingeladenen arbeiten weiter, wie
-         bei Google Docs – niemand muss aufpassen, wer zuerst geht.
-       · Dem Besitzer REISST die Leitung ab, oder er stürzt ab. Dann
-         kommt leave() nicht mehr dazu, und der Server führt den Auftrag
-         aus: der Eintrag bleibt mit lost = 1 stehen. Das ist das Zeichen
-         für die anderen, dass hier jemand die App offen hat und
-         womöglich örtlich weiterschreibt, ohne dass es ankommt. Solange
-         das so steht, dürfen sie nur lesen.
+     Für die Frage, ob die Eingeladenen schreiben dürfen, macht das aber
+     KEINEN Unterschied – dort zählt schon die blosse Abwesenheit
+     (onOwnerAway). Der Grund steht dort ausführlich: ob abgestürzt oder
+     zugemacht, der Besitzer kann das Heft gleich darauf ohne Netz wieder
+     öffnen und örtlich weiterschreiben. Diesen einen Weg kann nichts
+     anderes absichern, denn eine App, die offline startet, hatte nie
+     eine Leitung, über die sie sich hätte melden können.
 
      Registriert wird ERST nach dem set() oben: dort steht fest, welche
      Felder die veröffentlichten Regeln annehmen. Bis zu diesem Punkt
@@ -2057,8 +2054,8 @@ async function joinDocRoom(docId, options = {}) {
     if (!ownerUid || ownerUid === me.uid) { callback(false); return () => {}; }
 
     let connected = true;
-    let ownerLost = false;
-    const report = () => callback(!connected || ownerLost);
+    let ownerHere = true;
+    const report = () => callback(!connected || !ownerHere);
 
     const stopConn = onValue(ref(rtdb, '.info/connected'), (snap) => {
       connected = snap.val() === true;
@@ -2066,11 +2063,22 @@ async function joinDocRoom(docId, options = {}) {
     }, () => { connected = false; report(); });
 
     const stopOwner = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+      /* >>> Kein Eintrag zählt schon als weg <<<
+         Ob der Besitzer abgestürzt ist oder ordentlich zugemacht hat,
+         macht für die Gefahr keinen Unterschied: in beiden Fällen kann
+         er das Heft gleich darauf ohne Netz wieder öffnen und örtlich
+         weiterschreiben, ohne dass es irgendjemand mitbekommt. Genau
+         dieser Weg lässt sich durch nichts anderes absichern – eine App,
+         die offline startet, hatte nie eine Leitung, über die sie sich
+         hätte melden können.
+
+         Die Marke (lost) bleibt trotzdem stehen und zählt hier mit: sie
+         schadet nicht, und ohne veröffentlichte Regel fällt der Auftrag
+         auf „Eintrag entfernen" zurück – was hier dasselbe bedeutet. */
       const eintrag = snap.val();
-      // Kein Eintrag = ordentlich gegangen. Nur die Marke zählt.
-      ownerLost = !!(eintrag && eintrag.lost);
+      ownerHere = snap.exists() && !eintrag?.lost;
       report();
-    }, () => { ownerLost = false; report(); });
+    }, () => { ownerHere = false; report(); });
 
     stops.push(stopConn, stopOwner);
     return () => { stopConn(); stopOwner(); };
