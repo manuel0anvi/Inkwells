@@ -248,21 +248,60 @@ function startUiServer() {
       });
     });
 
-    uiServer.on('error', reject);
+    /* >>> Der Port muss über Neustarts hinweg derselbe bleiben <<<
+       Hier stand Port 0, also jedes Mal ein anderer freier Port. Damit
+       änderte sich die HERKUNFT der Oberfläche bei jedem Start –
+       http://localhost:54321, beim nächsten Mal :54987. Firebase legt
+       seine Anmeldung im localStorage ab, und der gehört zur Herkunft:
+       die Microsoft-Anmeldung für die geteilten Dokumente war nach jedem
+       Neustart weg und musste von Hand wiederholt werden.
 
-    /* Port 0 = einen freien vom Betriebssystem. Ein fester Port würde sich
-       mit einem zweiten Exemplar (Profil) in die Quere kommen.
+       Der Port hängt am Profilnamen, damit ein zweites Exemplar nicht in
+       dasselbe Loch greift. Ist er trotzdem belegt, weicht der Server auf
+       einen freien aus – dann ist es wie vorher, aber die App startet.
 
        Gebunden wird auf "localhost", nicht auf 127.0.0.1: unter Windows
        löst localhost oft zuerst auf ::1 auf. Wäre nur 127.0.0.1 gebunden,
        liefe die Oberfläche ins Leere. Der Name muss außerdem localhost
        bleiben – nur der steht in Firebases Liste erlaubter Herkünfte. */
-    uiServer.listen(0, 'localhost', () => {
-      uiOrigin = `http://localhost:${uiServer.address().port}`;
-      console.log('[UI] Oberfläche liegt unter', uiOrigin);
-      resolve(uiOrigin);
+    const listen = (port, onError) => {
+      const onListening = () => {
+        uiServer.off('error', onError);
+        uiOrigin = `http://localhost:${uiServer.address().port}`;
+        console.log('[UI] Oberfläche liegt unter', uiOrigin);
+        resolve(uiOrigin);
+      };
+      uiServer.once('listening', onListening);
+      uiServer.once('error', (err) => {
+        uiServer.off('listening', onListening);
+        onError(err);
+      });
+      uiServer.listen(port, 'localhost');
+    };
+
+    listen(preferredUiPort(), (err) => {
+      if (err?.code !== 'EADDRINUSE') return reject(err);
+      console.warn('[UI] Bevorzugter Port belegt – es wird ein freier genommen. Die '
+        + 'Microsoft-Anmeldung für geteilte Dokumente gilt dann nur für diesen Start.');
+      listen(0, reject);
     });
   });
+}
+
+/**
+ * Immer derselbe Port für dasselbe Profil.
+ *
+ * Gewählt aus dem Bereich für kurzlebige Verbindungen, damit nichts
+ * Bekanntes im Weg steht. Der Profilname geht als einfache Streuung ein –
+ * es geht nur darum, dass zwei Profile nicht denselben Port wollen.
+ */
+function preferredUiPort() {
+  let hash = 0x811c9dc5;
+  for (const ch of `inkwell-ui:${PROFILE || ''}`) {
+    hash ^= ch.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return 49200 + (hash % 600);
 }
 
 function createWindow() {
@@ -299,14 +338,25 @@ function createWindow() {
   /* Firebase öffnet für die Anmeldung ein Fenster auf seiner eigenen
      Adresse und redet per postMessage mit uns zurück. Electron blockt
      window.open ohne diese Freigabe – die Anmeldung bliebe stumm hängen.
-     Freigegeben wird ausschließlich Firebases Anmeldehelfer. */
+     Freigegeben wird ausschließlich Firebases Anmeldehelfer.
+
+     >>> Warum das Fenster vorher schwarz war <<<
+     Es ging sofort auf, mit der dunklen Hintergrundfarbe der App, und
+     blieb so, bis Microsofts Anmeldeseite geladen war – über eine
+     langsame Leitung sekundenlang. Jetzt bleibt es unsichtbar, bis
+     wirklich etwas zu sehen ist, und die Farbe darunter ist hell wie die
+     Seite selbst. */
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\/[a-z0-9-]+\.firebaseapp\.com\/__\/auth\//i.test(url)) {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
-          width: 520, height: 680, autoHideMenuBar: true,
-          backgroundColor: '#12121a',
+          width: 520, height: 700,
+          parent: win, modal: false, center: true,
+          autoHideMenuBar: true, minimizable: false, maximizable: false,
+          title: 'Bei Microsoft anmelden',
+          backgroundColor: '#ffffff',
+          show: false,
           webPreferences: { nodeIntegration: false, contextIsolation: true }
         }
       };
@@ -314,6 +364,19 @@ function createWindow() {
     // Alles andere gehört in den Standardbrowser, nicht in die App
     shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
+  });
+
+  /* Mit show:false muss jemand das Fenster zeigen – das ist hier. Der
+     Titel wird festgehalten: die Anmeldeseiten setzen unterwegs ihre
+     eigenen, teils technischen Überschriften. */
+  win.webContents.on('did-create-window', (child) => {
+    child.once('ready-to-show', () => child.show());
+    // Falls die Seite gar nicht lädt, soll das Fenster trotzdem erscheinen
+    setTimeout(() => { if (!child.isDestroyed() && !child.isVisible()) child.show(); }, 4000);
+    child.on('page-title-updated', (event) => {
+      event.preventDefault();
+      child.setTitle('Bei Microsoft anmelden');
+    });
   });
 
   // Start maximized/fullscreen
