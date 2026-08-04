@@ -58,12 +58,62 @@ function getSections(nb) {
   return nb.sections;
 }
 
+/* ── Die Seiten eines Hefts, in Heft-Reihenfolge ─────────────────────
+   >>> Warum es diese Funktion braucht <<<
+   Es gibt heute ZWEI Reihenfolgen, und sie stimmen nicht überein:
+
+     · nb.pages ist reine Einfüge-Reihenfolge – überall nur push()
+     · angezeigt wird aneinandergehängt, was in den pgIds steht
+
+   Wer eine PDF-Seite in die Mitte einfügt, hat sie in pgIds an der
+   richtigen Stelle und in nb.pages ganz hinten. Weil head.pageOrder für
+   die Cloud aus nb.pages gebildet wird, steht dort die FALSCHE
+   Reihenfolge – website/js/viewer.js beschreibt das als Warnung und
+   umgeht es.
+
+   Dieselbe Schleife stand deshalb viermal im Haus abgeschrieben
+   (exportPageList, der Übertragungs-Dialog, getNotebookPages der Website
+   und sinngemäß head.pageOrder). Ab jetzt gibt es eine Stelle.
+
+   Seiten, die in keinem Abschnitt stehen, gehen nicht verloren: sie
+   hängen hinten an, in ihrer bisherigen Reihenfolge. */
+function notebookPages(nb) {
+  if (!nb || !Array.isArray(nb.pages)) return [];
+
+  const byId = new Map(nb.pages.map(p => [String(p.id), p]));
+  const out = [];
+  const seen = new Set();
+
+  for (const sec of (nb.sections || [])) {
+    for (const pgId of (sec.pgIds || [])) {
+      const key = String(pgId);
+      if (seen.has(key)) continue;          // in zwei Abschnitten: der erste gilt
+      const page = byId.get(key);
+      if (!page) continue;                  // Karteileiche
+      seen.add(key);
+      out.push(page);
+    }
+  }
+
+  for (const page of nb.pages) {
+    if (seen.has(String(page.id))) continue;
+    out.push(page);
+  }
+
+  return out;
+}
+
+/** Die Seitenzahl, wie sie im ganzen Heft gilt – 1-basiert, 0 = unbekannt. */
+function pageNumberOf(nb, pgId) {
+  return notebookPages(nb).findIndex(p => String(p.id) === String(pgId)) + 1;
+}
+
 function pagesOfSec(sec, nb) {
   return (sec.pgIds || []).map(id => nb.pages.find(p => p.id === id)).filter(Boolean);
 }
 
 function findSecForPage(pgId, nb) {
-  return (nb.sections || []).find(s => s.pgIds.includes(pgId));
+  return (nb.sections || []).find(s => (s.pgIds || []).includes(pgId));
 }
 
 /* ══════════════════════════════════════════════════════════════════════

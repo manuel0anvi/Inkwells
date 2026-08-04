@@ -47,7 +47,9 @@ function extract(name) {
 
 const NAMES = [
   'splitNotebook', 'assembleNotebook', 'fingerprintNotebook',
-  'signatureOf', 'isInlineData', 'splitIntoChunks'
+  'signatureOf', 'isInlineData', 'splitIntoChunks',
+  // Baut die Heft-Reihenfolge; splitNotebook hängt daran
+  'pagesInOrder'
 ];
 
 const sandbox = { INK_SHEET_LIMIT: 600000, CHUNK_SIZE: 700000, console };

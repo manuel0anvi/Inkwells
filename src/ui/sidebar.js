@@ -126,10 +126,20 @@ function setActivePg(pgId) {
   if (window.Collab) Collab.notePage(pgId);
 }
 
+/* Die Nummer kommt aus dem HEFT, nicht aus der Bildschirmposition.
+   Vorher zählte diese Stelle die gezeichneten Seiten durch – solange immer
+   ein ganzer Abschnitt zu sehen war, fiel das nicht auf. Sobald aber nur
+   ein Ausschnitt gezeigt wird, hieße die erste sichtbare Seite wieder
+   „Seite 1", obwohl sie im Heft die siebte ist. */
 function renumberVisiblePages() {
-  QA('#pages-wrap .j-page').forEach((pgEl, idx) => {
+  const nb = getNb();
+  if (!nb) return;
+  const order = notebookPages(nb);
+  QA('#pages-wrap .j-page').forEach((pgEl) => {
     const label = pgEl.querySelector('.j-page-num');
-    if (label) label.textContent = 'Seite ' + (idx + 1);
+    if (!label) return;
+    const no = order.findIndex(p => String(p.id) === pgEl.dataset.pgid) + 1;
+    label.textContent = t('pageNo').replace('{n}', String(no || '?'));
   });
 }
 

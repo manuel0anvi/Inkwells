@@ -179,6 +179,55 @@ function makeNotebook(ctx, name, n) {
       ctx.transferPages(from, ['gibtsnicht'], to).moved, 0);
   }
 
+  /* ── Die Reihenfolge des Hefts ───────────────────────────────────────
+     Es gab zwei Reihenfolgen, und sie stimmten nicht überein: nb.pages ist
+     reine Einfüge-Reihenfolge, angezeigt wurde aneinandergehängt, was in
+     den pgIds steht. Wer eine Seite in die Mitte einfügte, hatte sie in
+     pgIds richtig und in nb.pages ganz hinten – und weil head.pageOrder
+     aus nb.pages gebildet wird, stand in der Cloud die falsche.
+
+     notebookPages() ist ab jetzt die eine Wahrheit. */
+
+  console.log('\nDie Reihenfolge des Hefts');
+
+  {
+    const ctx = loadData();
+    const nb = {
+      id: 'nb', name: 'Mathe', defaultBg: 'ruled',
+      pages: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }, { id: 'mitte' }],
+      sections: [
+        { id: 's1', name: 'Regeln', pgIds: ['p1', 'mitte', 'p2'], defaultBg: 'ruled' },
+        { id: 's2', name: 'Übungen', pgIds: ['p3'], defaultBg: 'ruled' }
+      ]
+    };
+
+    check('Nicht die Einfüge-Reihenfolge, sondern die des Hefts',
+      ctx.notebookPages(nb).map(p => p.id), ['p1', 'mitte', 'p2', 'p3']);
+    check('Die Seitenzahl folgt daraus', ctx.pageNumberOf(nb, 'mitte'), 2);
+    check('Und für die letzte Seite', ctx.pageNumberOf(nb, 'p3'), 4);
+    check('Eine unbekannte Seite hat keine Nummer', ctx.pageNumberOf(nb, 'weg'), 0);
+
+    // Eine Seite, die in keinem Abschnitt steht, darf nicht verschwinden
+    const heimatlos = {
+      pages: [{ id: 'a' }, { id: 'ohne' }, { id: 'b' }],
+      sections: [{ id: 's1', pgIds: ['a', 'b'] }]
+    };
+    check('Seiten ohne Abschnitt hängen hinten an',
+      ctx.notebookPages(heimatlos).map(p => p.id), ['a', 'b', 'ohne']);
+
+    // Steht eine Seite versehentlich in zwei Abschnitten, zählt der erste
+    const doppelt = {
+      pages: [{ id: 'x' }, { id: 'y' }],
+      sections: [{ id: 's1', pgIds: ['x', 'y'] }, { id: 's2', pgIds: ['y'] }]
+    };
+    check('Doppelt eingetragene Seiten erscheinen nur einmal',
+      ctx.notebookPages(doppelt).map(p => p.id), ['x', 'y']);
+
+    check('Ein Heft ohne Abschnitte behält seine Reihenfolge',
+      ctx.notebookPages({ pages: [{ id: 'e' }, { id: 'f' }] }).map(p => p.id), ['e', 'f']);
+    check('Und ohne Seiten kommt nichts', ctx.notebookPages({ pages: [] }), []);
+  }
+
   console.log('\nEinsetzen an einer bestimmten Stelle');
 
   {

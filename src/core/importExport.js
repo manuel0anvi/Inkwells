@@ -305,7 +305,8 @@ function escapeAttr(value) {
     .replace(/"/g, '&quot;');
 }
 
-function buildPdfPage(nb, sec, page, index) {
+/** @param {number} pageNo Seitenzahl des HEFTS (1-basiert), nicht des Abschnitts */
+function buildPdfPage(nb, sec, page, pageNo) {
   const bgId = page.bg || sec?.defaultBg || nb.defaultBg || 'ruled';
   const lh = lhForBg(bgId);
   const pt = ptForBg(bgId);
@@ -319,7 +320,7 @@ function buildPdfPage(nb, sec, page, index) {
     html += `<img class="pg-bgimg" src="${escapeAttr(page.bgImg)}">`;
   }
 
-  html += `<div class="ph"><span>${t('page') || 'Seite'} ${index + 1}</span><span>${fmt(page.date)}</span></div>`;
+  html += `<div class="ph"><span>${t('page') || 'Seite'} ${pageNo}</span><span>${fmt(page.date)}</span></div>`;
 
   // Text mit derselben Geometrie wie im Editor
   if (page.textContent) {
@@ -366,19 +367,29 @@ function buildPdfPage(nb, sec, page, index) {
    ══════════════════════════════════════════════════════════════════ */
 
 /**
- * @returns {Array<{page: object, sec: object, indexInSection: number}>}
- *   in Ausgabereihenfolge; Position im Array + 1 = die Seitenzahl, die im
- *   Export-Dialog steht.
+ * @returns {Array<{page: object, sec: object, pageNo: number}>}
+ *   in Heft-Reihenfolge. `pageNo` ist die Seitenzahl des HEFTS – dieselbe,
+ *   die im Editor über der Seite steht.
+ *
+ * >>> Warum die Nummer jetzt vom Heft kommt <<<
+ * Vorher wurde je Abschnitt gezählt (`indexInSection`), im Export-Dialog
+ * dagegen über die ganze Liste. Der Dialog sagte deshalb „Seite 12 von 30",
+ * während auf ebendieser Seite im PDF „Seite 3" stand. Beide Zahlen kommen
+ * jetzt aus derselben Quelle: notebookPages() in core/data.js.
+ *
+ * Leere Seiten stehen weiterhin nicht in der Liste – sie landeten noch nie
+ * im PDF. Ihre Nummer wird aber NICHT übersprungen: eine herausgegriffene
+ * Seite 7 heißt im PDF weiterhin „Seite 7", auch wenn Seite 6 leer war.
  */
 function exportPageList(nb) {
   if (!nb) return [];
   getSections(nb);
 
   const list = [];
-  for (const sec of nb.sections) {
-    const pages = pagesOfSec(sec, nb).filter(pg => !pageIsEmpty(pg));
-    pages.forEach((page, indexInSection) => list.push({ page, sec, indexInSection }));
-  }
+  notebookPages(nb).forEach((page, idx) => {
+    if (pageIsEmpty(page)) return;
+    list.push({ page, sec: findSecForPage(page.id, nb) || null, pageNo: idx + 1 });
+  });
   return list;
 }
 
@@ -430,24 +441,24 @@ function parsePageRange(text, total) {
  *   die des vollständigen Hefts – eine herausgegriffene Seite 7 heißt im
  *   PDF also weiterhin „Seite 7" und nicht „Seite 1".
  */
+/* >>> Warum nicht mehr nach Abschnitten gruppiert wird <<<
+   Das PDF gibt das Heft wieder, wie es ist: eine durchgehende Folge, mit
+   den Seitenzahlen des Hefts. Vorher standen erst alle Seiten des einen
+   Abschnitts, dann die des nächsten, jeweils wieder ab 1 gezählt – und der
+   Export-Dialog zählte gleichzeitig durch. Er sagte „Seite 12 von 30",
+   während auf ebendieser Seite „Seite 3" stand.
+
+   Beide kommen jetzt aus exportPageList(), und die Website gibt ohnehin
+   schon flach aus – damit sind alle drei endlich einig. */
 function buildPdf(nb, options = {}) {
   getSections(nb);
 
   const selected = options.pageIds instanceof Set ? options.pageIds : null;
 
   let body = '';
-  for (const sec of nb.sections) {
-    const pages = pagesOfSec(sec, nb).filter(pg => !pageIsEmpty(pg));
-    const wanted = selected ? pages.filter(pg => selected.has(pg.id)) : pages;
-    if (!wanted.length) continue;
-
-    if (nb.sections.length > 1) {
-      body += `<div class="sh">${escapeAttr(sec.name)}</div>`;
-    }
-    pages.forEach((pg, i) => {
-      if (selected && !selected.has(pg.id)) return;
-      body += buildPdfPage(nb, sec, pg, i);
-    });
+  for (const entry of exportPageList(nb)) {
+    if (selected && !selected.has(entry.page.id)) continue;
+    body += buildPdfPage(nb, entry.sec, entry.page, entry.pageNo);
   }
 
   if (!body) {

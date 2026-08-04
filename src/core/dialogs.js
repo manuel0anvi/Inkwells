@@ -68,12 +68,8 @@ function showPageTransferDialog(fromNb, targets, preselected = []) {
 
   const picked = new Set(preselected.map(String));
 
-  /* Die Seiten in der Reihenfolge des Hefts, über alle Abschnitte hinweg –
-     so, wie man sie beim Blättern sieht. */
-  const rows = [];
-  for (const sec of (fromNb.sections || [])) {
-    for (const page of pagesOfSec(sec, fromNb)) rows.push({ sec, page });
-  }
+  // Die Seiten in der Reihenfolge des Hefts – dieselbe Quelle wie überall
+  const rows = notebookPages(fromNb).map(page => ({ page }));
 
   const refreshCount = () => {
     countEl.textContent = t('transferCount').replace('{n}', String(picked.size));

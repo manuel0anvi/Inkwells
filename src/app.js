@@ -331,7 +331,12 @@ function appendPageDOM(page, index) {
   const hdr = document.createElement('div'); hdr.className = 'j-page-hdr';
   /* Seitenzahl und Freigabe-Zeichen bleiben zusammen in einer Gruppe –
      sonst zöge das space-between des Kopfes das Zeichen in die Mitte. */
-  hdr.innerHTML = '<span class="j-page-left"><span class="j-page-num">Seite ' + (index + 1) + '</span>'
+  /* Die Nummer kommt aus dem Heft, nicht aus der Zeichenschleife: sie muss
+     dieselbe bleiben, gleich wie viele Seiten gerade gezeigt werden.
+     renumberVisiblePages() rechnet mit derselben Quelle. */
+  const pageNo = pageNumberOf(nb, page.id) || (index + 1);
+  hdr.innerHTML = '<span class="j-page-left"><span class="j-page-num">'
+    + t('pageNo').replace('{n}', String(pageNo)) + '</span>'
     + shareMarkHTML(shareMarkFor(nb)) + '</span>'
     + '<span class="j-page-date">' + fmt(page.date) + '</span>'
     + '<button class="pg-menu-btn" title="Seitenoptionen">⋯</button>';

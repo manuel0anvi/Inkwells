@@ -20,6 +20,7 @@ const TRANSLATIONS = {
     
     // Notebook card
     page: 'Seite',
+    pageNo: 'Seite {n}',
     pages: 'Seiten',
     
     // Context menu
@@ -504,6 +505,7 @@ const TRANSLATIONS = {
     
     // Notebook card
     page: 'Page',
+    pageNo: 'Page {n}',
     pages: 'Pages',
     
     // Context menu
@@ -987,6 +989,7 @@ const TRANSLATIONS = {
     
     // Notebook card
     page: 'Pagina',
+    pageNo: 'Pagina {n}',
     pages: 'Pagine',
     
     // Context menu

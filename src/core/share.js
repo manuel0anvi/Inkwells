@@ -743,6 +743,37 @@ function isInlineData(value) {
   return typeof value === 'string' && value.startsWith('data:');
 }
 
+/* ── Die Seiten eines Hefts in Heft-Reihenfolge ──────────────────────
+   Gegenstück zu notebookPages() in core/data.js. Bewusst hier noch einmal
+   und nicht von dort geholt: diese Datei läuft auch auf der Website, und
+   dort gibt es kein data.js. Sie muss für sich allein stehen.
+
+   >>> Was das behebt <<<
+   head.pageOrder wurde bisher aus notebook.pages gebildet – und das ist
+   reine Einfüge-Reihenfolge. Wer eine Seite in die Mitte einfügte, hatte
+   sie dort ganz hinten. In der Cloud stand damit die FALSCHE Reihenfolge;
+   website/js/viewer.js beschreibt das als Warnung und rechnet sie sich
+   selbst aus den Abschnitten zusammen. */
+function pagesInOrder(notebook) {
+  const pages = Array.isArray(notebook?.pages) ? notebook.pages : [];
+  const byId = new Map(pages.map(p => [String(p.id), p]));
+  const out = [];
+  const seen = new Set();
+
+  for (const sec of (notebook?.sections || [])) {
+    for (const pgId of (sec?.pgIds || [])) {
+      const key = String(pgId);
+      if (seen.has(key) || !byId.has(key)) continue;
+      seen.add(key);
+      out.push(byId.get(key));
+    }
+  }
+  for (const page of pages) {
+    if (!seen.has(String(page.id))) out.push(page);
+  }
+  return out;
+}
+
 /**
  * Zerlegt ein Heft in die Teile, die einzeln abgelegt werden.
  *
@@ -750,7 +781,7 @@ function isInlineData(value) {
  * @returns {{head:object, pages:object[], ink:object[], blobs:object[]}}
  */
 function splitNotebook(notebook) {
-  const pagesIn = Array.isArray(notebook.pages) ? notebook.pages : [];
+  const pagesIn = pagesInOrder(notebook);
   const pages = [];
   const ink = [];
   const blobs = [];
