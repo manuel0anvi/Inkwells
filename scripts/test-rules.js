@@ -181,6 +181,16 @@ function headData(overrides = {}) {
     collection(fsOf(STRANGER), 'docs'), where('memberEmails', 'array-contains', EDITOR.mail))));
   await denied('Alles auflisten geht nicht', getDocs(collection(fsOf(EDITOR), 'docs')));
 
+  /* Der Besitzer braucht seine eigene Liste, damit das Freigabe-Fenster
+     nachsehen kann, ob ein Heft schon geteilt ist – siehe
+     findOwnedDocForNotebook in core/share.js. Die Abfrage muss auf die
+     eigene Kennung eingeschränkt sein; ohne diese Einschränkung wäre sie
+     eine Liste aller Dokumente und wird abgewiesen. */
+  await ok('Der Besitzer listet seine eigenen', getDocs(query(
+    collection(fsOf(OWNER), 'docs'), where('owner', '==', OWNER.uid))));
+  await denied('Aber nicht die eines anderen', getDocs(query(
+    collection(fsOf(STRANGER), 'docs'), where('owner', '==', OWNER.uid))));
+
   /* ── Inhalt ──────────────────────────────────────────────────────── */
 
   section('Firestore: der Inhalt');

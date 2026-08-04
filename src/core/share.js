@@ -1530,6 +1530,53 @@ async function unshareDocument(docId) {
   return true;
 }
 
+/**
+ * Alle Dokumente, die MIR gehören.
+ *
+ * Abgefragt wird nur nach dem Besitzer, nicht zusätzlich nach dem Heft:
+ * eine Abfrage über zwei Felder verlangt in Firestore einen von Hand
+ * angelegten Index, eine über ein Feld nicht. Aussortiert wird deshalb
+ * hier – ein Konto hat eine Handvoll Freigaben, keine Tausende.
+ */
+async function listOwnedDocs() {
+  const me = currentIdentity();
+  if (!me || me.anonymous || !me.uid) return [];
+
+  const snapshot = await getDocs(
+    query(collection(db, DOCS), where('owner', '==', me.uid))
+  );
+  return snapshot.docs.map(d => describeDoc(d.id, d.data() || {}));
+}
+
+/**
+ * Ist dieses Heft schon freigegeben? Fragt Firestore, nicht den Merkzettel
+ * im Browser.
+ *
+ * >>> Warum der Merkzettel nicht reicht <<<
+ * Freigegeben wird mal aus der App, mal aus dem Browser, mal aus einem
+ * zweiten Browser. Der Merkzettel (localStorage bzw. Einstellungsdatei)
+ * kennt aber immer nur die Freigaben, die an genau DIESER Stelle erzeugt
+ * wurden. Überall sonst stand das Fenster deshalb auf „noch nicht
+ * freigegeben", obwohl das Heft längst geteilt war – und ein zweites
+ * „Freigeben" hätte eine zweite Freigabe daneben gelegt.
+ *
+ * @param {string} notebookId
+ * @returns {Promise<object|null>} der Kopf des Dokuments oder null
+ */
+async function findOwnedDocForNotebook(notebookId) {
+  const wanted = String(notebookId || '');
+  if (!wanted) return null;
+
+  const mine = await listOwnedDocs();
+  const hits = mine.filter(head => head.notebookId === wanted);
+  if (!hits.length) return null;
+
+  // Sollten aus einer früheren Fassung zwei Freigaben zum selben Heft
+  // herumliegen, gewinnt die zuletzt geänderte.
+  hits.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
+  return hits[0];
+}
+
 /* ── Empfängerseite ─────────────────────────────────────────────────── */
 
 /**
@@ -2221,6 +2268,8 @@ const InkwellShare = {
   leaveDocument,
   unblockMember,
   listMembers,
+  listOwnedDocs,
+  findOwnedDocForNotebook,
 
   // Geteilte Dokumente – Empfängerseite
   listSharedDocs,

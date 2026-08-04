@@ -284,7 +284,43 @@
     peopleSection.style.display = signedIn ? '' : 'none';
     if (!signedIn) return;
 
-    if (entry?.docId) await loadHead(entry.docId);
+    if (entry?.docId) { await loadHead(entry.docId); return; }
+
+    /* Kein Merkzettel heißt nicht „nicht freigegeben": wurde das Heft im
+       Browser oder auf einem anderen Rechner freigegeben, steht hier
+       nichts – und das Fenster behauptete, es sei noch nichts geteilt. */
+    await adoptExistingShare();
+  }
+
+  /** Sucht eine bestehende Freigabe zu diesem Heft und übernimmt sie. */
+  async function adoptExistingShare() {
+    const nbId = shareNb?.id;
+    if (!nbId) return;
+
+    statusEl.textContent = t('shareChecking');
+    try {
+      const api = await whenShareReady();
+      const found = await api.findOwnedDocForNotebook(nbId);
+
+      // Inzwischen ein anderes Heft im Fenster? Dann gilt die Antwort nicht.
+      if (!shareNb || shareNb.id !== nbId) return;
+
+      if (!found) { statusEl.textContent = ''; return; }
+
+      await remember(nbId, {
+        docId: found.docId,
+        linkId: found.linkId || '',
+        url: found.linkId ? api.docUrlFor(found.linkId) : '',
+        linkMode: found.linkMode
+      });
+
+      head = found;
+      renderFromHead();
+      await noteAccess();
+    } catch (err) {
+      console.warn('[Share] Bestehende Freigabe nicht abfragbar:', err?.message || err);
+      statusEl.textContent = '';
+    }
   }
 
   async function loadHead(docId) {
@@ -458,6 +494,11 @@
       await loadHead(entry.docId);
       return !!head;
     }
+
+    /* Erst nachsehen, dann anlegen: sonst entstünde eine ZWEITE Freigabe
+       zum selben Heft, sobald die erste von einem anderen Gerät stammt. */
+    await adoptExistingShare();
+    if (head) return true;
 
     statusEl.textContent = t('shareWorking');
 

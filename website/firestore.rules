@@ -317,9 +317,17 @@ service cloud.firestore {
          nichts: dass etwas NICHT existiert, ist kein Geheimnis. */
       allow get: if resource == null || isDocOwner() || isMember() || linkIsOpen();
 
-      // Auflisten nur über die Mitgliedschaft – eine Liste aller Dokumente
-      // gibt es dadurch nicht, auch nicht für Angemeldete.
-      allow list: if isMember();
+      /* Auflisten nur über die Mitgliedschaft oder den eigenen Besitz –
+         eine Liste ALLER Dokumente gibt es dadurch nicht, auch nicht für
+         Angemeldete. Firestore prüft diese Regel gegen jedes Dokument im
+         Ergebnis; eine Abfrage ohne passende Einschränkung scheitert also
+         von selbst.
+
+         Der Besitzerfall kam dazu, damit das Freigabe-Fenster nachsehen
+         kann, ob ein Heft schon geteilt ist (findOwnedDocForNotebook in
+         share.js). Ohne ihn stand dort „noch nicht freigegeben", sobald
+         die Freigabe von einem anderen Gerät oder Browser stammte. */
+      allow list: if isMember() || isDocOwner();
 
       /* Kein chunkCount mehr: der Inhalt liegt seit dem zerlegten Modell
          in pages/ink/blobs, nicht in Stücken. Stattdessen wird die
