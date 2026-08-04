@@ -152,7 +152,15 @@ const SCHEMA_VERSION = 2;
  */
 function normalizeNotebook(nb) {
   if (!nb || !Array.isArray(nb.pages)) return nb;
-  if (nb.schemaVersion === SCHEMA_VERSION) return nb;
+
+  /* Auch ein schon umgestelltes Heft kommt hier noch einmal durch: der
+     Zwangsabschnitt wurde erst später abgeschafft, und Hefte, die die
+     Umstellung davor mitgemacht haben, schleppen ihn sonst ewig mit. */
+  if (nb.schemaVersion === SCHEMA_VERSION) {
+    dropCatchAllSection(nb);
+    syncSectionIds(nb);
+    return nb;
+  }
 
   // 1. Die angezeigte Reihenfolge wird die wirkliche
   nb.pages = notebookPages(nb);
@@ -165,9 +173,39 @@ function normalizeNotebook(nb) {
     }
   }
 
+  dropCatchAllSection(nb);
+
   nb.schemaVersion = SCHEMA_VERSION;
   syncSectionIds(nb);
   return nb;
+}
+
+/* Der Zwangsabschnitt „Allgemein" verschwindet.
+
+   Solange die Anzeige an pgIds hing, brauchte jedes Heft mindestens einen
+   Abschnitt – sonst hätte man gar nichts gesehen. getSections() legte
+   deshalb ungefragt einen namens „Allgemein" an, der ALLE Seiten enthielt.
+   Als Etikett ist er sinnlos: er sagt nichts aus, klebt aber auf jeder
+   Seite und steht in der Navigation als Auswahl, die genau dasselbe zeigt
+   wie „Alle Seiten".
+
+   Weg damit – aber nur, wenn er wirklich der angelegte sein kann: der
+   EINZIGE Abschnitt und einer der drei erzeugten Namen. Wer daneben noch
+   andere Abschnitte hat, hat offenbar selbst geordnet; dann bleibt auch
+   ein „Allgemein" stehen. Ein Heft mit genau einem selbst so genannten
+   Abschnitt verliert das Etikett – die Seiten bleiben unberührt, nur die
+   Zuordnung geht verloren, und das ist der Preis dafür, den Zwangs-
+   abschnitt bei allen anderen loszuwerden. */
+const AUTO_SEC_NAMES = ['Allgemein', 'General', 'Generale'];
+
+function dropCatchAllSection(nb) {
+  if (!Array.isArray(nb.sections) || nb.sections.length !== 1) return;
+  const sec = nb.sections[0];
+  if (!AUTO_SEC_NAMES.includes(sec.name)) return;
+
+  for (const page of nb.pages) delete page.secId;
+  nb.sections = [];
+  if (String(nb.activeSecId || '') === String(sec.id)) nb.activeSecId = '';
 }
 
 /**

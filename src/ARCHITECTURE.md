@@ -67,8 +67,15 @@ src/
 > Gelesen wird die Zugehörigkeit nirgends mehr daraus — außer beim
 > Empfangen im Live-Betrieb, wo sie genau auf diesem Weg mitreist.
 >
+> **Ein Heft startet ohne Abschnitte.** Früher legte `getSections()`
+> ungefragt einen namens „Allgemein" an, der alle Seiten enthielt — nötig,
+> solange die Anzeige an `pgIds` hing. Als Etikett sagt er nichts aus und
+> steht in der Navigation als Auswahl, die dasselbe zeigt wie „Alle
+> Seiten"; `dropCatchAllSection()` räumt ihn beim Laden weg.
+>
 > Ältere Hefte stellt `normalizeNotebook()` beim Laden um; erkennbar an
-> `nb.schemaVersion`.
+> `nb.schemaVersion`. Es läuft auch über schon umgestellte Hefte, weil die
+> Abschaffung des Zwangsabschnitts später kam als die Umstellung selbst.
 
 ### `core/zoom.js`
 - **Zoom Management:** getZoom, setZoom, zoomIn, zoomOut, zoomReset
@@ -82,9 +89,12 @@ src/
 - **Notebook Modal:** openNbModal, event listeners
 
 ### `ui/sidebar.js`
-- **Navigation Tree:** renderSideTree (sections + headings)
+- **Navigation Tree:** renderSideTree (Ausschnitte + Überschriften)
 - **Page Management:** scrollToHdg, setActivePg, renumberVisiblePages
-- **Sections:** Add section button, rename section via double-click
+- **Abschnittsverwaltung:** openSecMgr, renderSecMgrBody/-Side/-Pages —
+  links die Abschnitte als Filter, rechts die Seiten des Hefts mit
+  anklickbarem Etikett. `_secMgrFilter`: `'*'` alle, `''` ohne Abschnitt,
+  sonst eine `secId`.
 
 ### `ui/toolbar.js`
 - **Mode Switching:** switchMode (pen1, pen2, hl, eraser, cursor)

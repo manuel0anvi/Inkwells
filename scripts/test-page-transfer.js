@@ -277,6 +277,64 @@ function makeNotebook(ctx, name, n) {
       ctx.pagesOfSec(alt.sections[1], alt).map(p => ctx.pageNumberOf(alt, p.id)), [3, 4]);
   }
 
+  /* ── Der Zwangsabschnitt „Allgemein" verschwindet ────────────────────
+     Solange die Anzeige an pgIds hing, legte getSections() ungefragt einen
+     Abschnitt dieses Namens an, der ALLE Seiten enthielt. Als Etikett sagt
+     er nichts aus, klebt aber auf jeder Seite und steht in der Navigation
+     als Auswahl, die dasselbe zeigt wie „Alle Seiten". */
+
+  console.log('\nDer Zwangsabschnitt wird abgeräumt');
+
+  {
+    const ctx = loadData();
+    const alt = {
+      id: 'nb', defaultBg: 'ruled', activeSecId: 'sA',
+      pages: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }],
+      sections: [{ id: 'sA', name: 'Allgemein', pgIds: ['p1', 'p2', 'p3'], defaultBg: 'ruled' }]
+    };
+    ctx.normalizeNotebook(alt);
+
+    check('Der Abschnitt ist weg', alt.sections, []);
+    check('Keine Seite trägt noch ein Etikett',
+      alt.pages.map(p => p.secId || '-'), ['-', '-', '-']);
+    check('Die Seiten sind vollzählig und in Reihenfolge',
+      alt.pages.map(p => p.id), ['p1', 'p2', 'p3']);
+    check('Die Ansicht steht auf allen Seiten', alt.activeSecId, '');
+  }
+
+  {
+    // Auch ein bereits umgestelltes Heft wird noch abgeräumt – die
+    // Abschaffung kam später als die Umstellung selbst.
+    const ctx = loadData();
+    const schon = {
+      id: 'nb', defaultBg: 'ruled', schemaVersion: 2,
+      pages: [{ id: 'p1', secId: 'sA' }, { id: 'p2', secId: 'sA' }],
+      sections: [{ id: 'sA', name: 'General', pgIds: ['p1', 'p2'], defaultBg: 'ruled' }]
+    };
+    ctx.normalizeNotebook(schon);
+    check('Auch nachträglich', schon.sections, []);
+    check('Und die Etiketten sind ab', schon.pages.map(p => p.secId || '-'), ['-', '-']);
+  }
+
+  {
+    // Wer selbst geordnet hat, behält seinen Abschnitt – auch wenn er
+    // zufällig so heißt.
+    const ctx = loadData();
+    const eigen = {
+      id: 'nb', defaultBg: 'ruled',
+      pages: [{ id: 'p1' }, { id: 'p2' }],
+      sections: [
+        { id: 'sA', name: 'Allgemein', pgIds: ['p1'], defaultBg: 'ruled' },
+        { id: 'sB', name: 'Anhang', pgIds: ['p2'], defaultBg: 'ruled' }
+      ]
+    };
+    ctx.normalizeNotebook(eigen);
+    check('Neben anderen bleibt er stehen',
+      eigen.sections.map(s => s.id), ['sA', 'sB']);
+    check('Und die Etiketten sitzen',
+      eigen.pages.map(p => p.secId), ['sA', 'sB']);
+  }
+
   console.log('\nEtikett wechseln');
 
   {
