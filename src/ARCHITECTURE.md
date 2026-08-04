@@ -49,9 +49,26 @@ src/
 - **Background UI:** buildBgRow, setTitleBar, showHome, showJournal
 
 ### `core/data.js`
-- **Data Queries:** getNb, getPage, getSection, pagesOfSec
-- **Data Builders:** makePage, pageIsEmpty, pagePreview
-- **Data Helpers:** getSections, findSecForPage
+- **Data Queries:** getNb, getPage, notebookPages, visiblePages, pagesOfSec
+- **Data Builders:** makePage, clonePage, insertPageInto, pageIsEmpty, pagePreview
+- **Data Helpers:** getSections, activeSection, findSecForPage, setSectionOfPage,
+  pageNumberOf, colorForSection, normalizeNotebook, syncSectionIds
+
+> **Abschnitte sind Etiketten, keine Kapitel.** Die Reihenfolge eines Hefts
+> steht in `nb.pages`, die Zugehörigkeit einer Seite in `page.secId`. Ein
+> Abschnitt ist damit ein *Ausschnitt* aus einer durchgehenden Folge, und
+> `nb.activeSecId` sagt, worauf die Ansicht gerade eingeschränkt ist (leer
+> = alle Seiten). Die Seitenzahl ist immer die Stelle im Heft — sie ändert
+> sich beim Filtern nicht.
+>
+> `sec.pgIds` gibt es weiterhin, aber nur noch **abgeleitet**
+> (`syncSectionIds`). Es hält ältere Stände lesefähig: die hielten einen
+> Abschnitt ohne `pgIds` für leer und legten ungefragt Füllseiten an.
+> Gelesen wird die Zugehörigkeit nirgends mehr daraus — außer beim
+> Empfangen im Live-Betrieb, wo sie genau auf diesem Weg mitreist.
+>
+> Ältere Hefte stellt `normalizeNotebook()` beim Laden um; erkennbar an
+> `nb.schemaVersion`.
 
 ### `core/zoom.js`
 - **Zoom Management:** getZoom, setZoom, zoomIn, zoomOut, zoomReset
