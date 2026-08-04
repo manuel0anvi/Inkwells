@@ -188,10 +188,13 @@
   padding: 0
 }
 
+/* Ohne eigenes z-index reicht die Ebene ihre Bilder in den Stapel der
+   Seite durch – nur so kann ein Bild überhaupt HINTER den Text (z-index 5)
+   rutschen. Die Zahl steht deshalb an jedem .obj-wrap, siehe canvas/objects.js. */
 .j-objects {
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: auto;
   pointer-events: none
 }
 
@@ -203,8 +206,9 @@
 }
 
 .obj-wrap.selected {
-  outline: 1.5px dashed var(--gold);
-  outline-offset: 3px
+  outline: 1.5px solid var(--gold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(200, 169, 110, .14)
 }
 
 .obj-wrap img {
@@ -217,44 +221,53 @@
 
 .obj-handle {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  background: var(--gold);
-  border: 1.5px solid var(--sh);
-  border-radius: 2px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 1.5px solid var(--gold);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
   z-index: 10;
   touch-action: none;
+  transition: transform .1s ease
+}
+
+.obj-handle:hover {
+  transform: scale(1.25)
 }
 
 .obj-handle.tl {
-  top: -7px;
-  left: -7px;
+  top: -6px;
+  left: -6px;
   cursor: nwse-resize
 }
 
 .obj-handle.tr {
-  top: -7px;
-  right: -7px;
+  top: -6px;
+  right: -6px;
   cursor: nesw-resize
 }
 
 .obj-handle.bl {
-  bottom: -7px;
-  left: -7px;
+  bottom: -6px;
+  left: -6px;
   cursor: nesw-resize
 }
 
 .obj-handle.br {
-  bottom: -7px;
-  right: -7px;
+  bottom: -6px;
+  right: -6px;
   cursor: nwse-resize
 }
 
 .obj-handle.rot {
-  top: -36px;
+  top: auto;
+  bottom: -34px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--gb);
+  background: var(--gold);
+  border-color: var(--gb);
+  color: #241b10;
   border-radius: 50%;
   cursor: grab;
   width: 22px;
@@ -262,25 +275,93 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px
+  font-size: 13px;
+  line-height: 1
 }
 
-.obj-delete {
+.obj-handle.rot:hover {
+  transform: translateX(-50%) scale(1.12)
+}
+
+/* Steht die Leiste ausnahmsweise unten, muss der Drehgriff nach oben –
+   sonst liegen beide übereinander. */
+.obj-wrap:has(.obj-bar.below) .obj-handle.rot {
+  top: -34px;
+  bottom: auto
+}
+
+/* ── Schwebende Leiste über dem ausgewählten Bild ───────────────────
+   Sie hängt am Bild, dreht sich aber nicht mit: canvas/objects.js setzt
+   die Gegendrehung auf transform. Deshalb steht hier KEIN transform,
+   das dort nicht auch wieder gesetzt wird. */
+.obj-bar {
   position: absolute;
-  top: -26px;
-  right: -6px;
-  width: 22px;
-  height: 22px;
-  background: var(--red);
-  border: none;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding: 4px;
+  background: rgba(28, 26, 34, .96);
+  border: 0.5px solid rgba(200, 169, 110, .32);
+  border-radius: 9px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .5);
+  z-index: 12;
+  white-space: nowrap;
+  cursor: default
+}
+
+/* Am Seitenanfang ist über dem Bild kein Platz – dann darunter */
+.obj-bar.below {
+  bottom: auto;
+  top: calc(100% + 12px);
+  transform-origin: 50% 0
+}
+
+.obj-bar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 11
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #ddd3c2;
+  cursor: pointer;
+  transition: background .12s, color .12s
+}
+
+.obj-bar-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block
+}
+
+.obj-bar-btn:hover {
+  background: rgba(200, 169, 110, .16);
+  color: var(--gold)
+}
+
+/* Welche Ebene gerade gilt, muss man sehen können, ohne zu klicken */
+.obj-bar-btn.active {
+  background: rgba(200, 169, 110, .22);
+  color: var(--gold)
+}
+
+.obj-bar-btn.danger:hover {
+  background: rgba(217, 83, 79, .2);
+  color: #e8837e
+}
+
+.obj-bar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: rgba(255, 255, 255, .12)
 }
 
 .pg-menu-btn {

@@ -327,15 +327,18 @@ function buildPdfPage(nb, sec, page, index) {
       + page.textContent + '</div>';
   }
 
-  // Eingefügte Bilder
+  /* Eingefügte Bilder. Die Ebene entscheidet, ob sie über oder unter Text
+     und Handschrift liegen – genau wie in der App (canvas/objects.js). Die
+     Reihenfolge im Dokument bleibt die aus page.objects, damit sich zwei
+     Bilder derselben Ebene hier genauso überdecken wie dort. */
   for (const obj of (page.objects || [])) {
     if (!obj || !obj.src) continue;
     const rot = obj.rot ? `transform:rotate(${obj.rot}deg);` : '';
-    html += `<img class="obj" src="${escapeAttr(obj.src)}" style="left:${obj.x || 0}px;top:${obj.y || 0}px;`
+    const cls = obj.layer === 'back' ? 'obj behind' : 'obj';
+    html += `<img class="${cls}" src="${escapeAttr(obj.src)}" style="left:${obj.x || 0}px;top:${obj.y || 0}px;`
       + `width:${obj.w || 200}px;height:${obj.h || 200}px;${rot}">`;
   }
 
-  // Handschrift zuletzt, damit sie über allem liegt – wie in der App
   const ink = renderInkToDataUrl(page);
   if (ink) html += `<img class="ink" src="${ink}">`;
 
@@ -498,7 +501,10 @@ function buildPdf(nb, options = {}) {
   .tx h2, .tx p.j-title-2 { font-weight: 600; color: #2a1f14; display: block }
   .tx h3, .tx p.j-title-3 { font-weight: 600; font-style: italic; color: #3a2e22; display: block }
 
-  .obj { position: absolute; object-fit: contain; z-index: 15 }
+  /* Dieselbe Staffelung wie in der App: Muster 1 · Bild hinten 2 ·
+     Text 5 · Handschrift 18 · Bild vorne 19 · Seitenkopf 20 */
+  .obj { position: absolute; object-fit: contain; z-index: 19 }
+  .obj.behind { z-index: 2 }
   .ink { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 18 }
 </style></head><body>${body}</body></html>`;
 }

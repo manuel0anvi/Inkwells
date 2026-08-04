@@ -655,7 +655,7 @@ E('btn-add-page-end').addEventListener('click', async () => {
   let _panOriginX = 0, _panOriginY = 0; // current translate offset
 
   function isTouchUiTarget(target) {
-    return !!target.closest('.pg-menu-btn, .j-page-hdr, .obj-wrap, .obj-handle, .obj-delete, #ctx-menu, .txt-color-dropdown, .custom-color-pop');
+    return !!target.closest('.pg-menu-btn, .j-page-hdr, .obj-wrap, .obj-handle, .obj-bar, #ctx-menu, .txt-color-dropdown, .custom-color-pop');
   }
 
   // Parse current translate from pages-wrap transform

@@ -128,7 +128,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
   div.addEventListener('pointerdown', e => {
     const target = e.target;
-    if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-delete')) return;
+    if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-bar')) return;
     if (target.closest('.j-text')) return;
     if (e.pointerType === 'touch') return;
     

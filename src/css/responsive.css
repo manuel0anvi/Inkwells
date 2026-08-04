@@ -12,44 +12,50 @@
   }
 
   .obj-handle {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px
+    width: 22px;
+    height: 22px
   }
 
   .obj-handle.tl {
-    top: -12px;
-    left: -12px
+    top: -11px;
+    left: -11px
   }
 
   .obj-handle.tr {
-    top: -12px;
-    right: -12px
+    top: -11px;
+    right: -11px
   }
 
   .obj-handle.bl {
-    bottom: -12px;
-    left: -12px
+    bottom: -11px;
+    left: -11px
   }
 
   .obj-handle.br {
-    bottom: -12px;
-    right: -12px
+    bottom: -11px;
+    right: -11px
   }
 
   .obj-handle.rot {
     width: 32px;
     height: 32px;
-    top: -46px;
+    bottom: -46px;
     font-size: 16px
   }
 
-  .obj-delete {
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-    top: -34px;
-    right: -12px
+  .obj-wrap:has(.obj-bar.below) .obj-handle.rot {
+    top: -46px
+  }
+
+  /* Mit dem Finger gehören die Knöpfe der Bild-Leiste größer */
+  .obj-bar-btn {
+    width: 36px;
+    height: 36px
+  }
+
+  .obj-bar-btn svg {
+    width: 19px;
+    height: 19px
   }
 
   .sec-hdr {
