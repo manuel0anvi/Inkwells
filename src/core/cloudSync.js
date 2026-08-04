@@ -923,6 +923,8 @@ class CloudSyncManager {
 
     if (this.syncQueue.length) {
       await this._processQueue();
+      // refreshRemote() bleibt aus, also den Papierkorb hier eigens nachziehen
+      await this._catchUpTrash();
       return;
     }
 
@@ -967,6 +969,10 @@ class CloudSyncManager {
 
   async flushPending() {
     if (!this._canSync() || !this.isOnline) return;
+
+    // Auch ohne wartende Hefte kann im Papierkorb etwas offen sein
+    await this._catchUpTrash();
+
     if (this.syncQueue.length === 0) return;
 
     for (const id of this.syncQueue) this.immediateUploads.add(id);
@@ -1649,6 +1655,29 @@ class CloudSyncManager {
     }
 
     await this._processQueue();
+
+    /* >>> Auch der Papierkorb war offline liegen geblieben <<<
+       Ein Heft, das ohne Netz gelöscht wurde, liegt in der Cloud noch im
+       Hauptordner: das Verschieben in den Cloud-Papierkorb ist schlicht
+       nicht durchgekommen. Der Eintrag merkt sich das (cloudTrashed:
+       false) und Trash._catchUpCloudTrash() holt es nach – nur wurde das
+       bis hierher ausschließlich beim Programmstart und von Hand
+       ausgelöst. Wer die App durchlaufen ließ, bekam das Löschen deshalb
+       nie in die Cloud, während normale Speicherungen längst oben waren.
+       Genau der Unterschied, der aufgefallen ist. */
+    await this._catchUpTrash();
+  }
+
+  /** Holt nach, was der Papierkorb ohne Netz nicht erledigen konnte. */
+  async _catchUpTrash() {
+    if (!this._canSync() || !this.isOnline) return;
+    if (typeof Trash === 'undefined' || !Trash) return;
+
+    try {
+      await Trash.syncWithCloud();
+    } catch (err) {
+      console.warn('[CloudSync] Papierkorb-Abgleich fehlgeschlagen:', err?.message || err);
+    }
   }
 
   async _restoreSession() {

@@ -54,6 +54,7 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
   const saved = {};
   const trashed = [];
   const deletedRemote = [];
+  const untrashed = [];
 
   const ctx = {
     console: { log() {}, warn() {}, error(...a) { console.error('[trash]', ...a); } },
@@ -62,7 +63,12 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
 
     CloudSync_: {
       loadTrashIndex: async () => index,
-      saveTrashIndex: async (list) => { saved.list = list; return true; },
+      // canSaveIndex: ob sich die gemeinsame Liste schreiben lässt
+      saveTrashIndex: async (list) => {
+        if (cloud.canSaveIndex === false) return false;
+        saved.list = list;
+        return true;
+      },
       // canMove: ob sich in den Cloud-Papierkorb verschieben lässt
       trashRemoteNotebook: async (id) => {
         trashed.push(id);
@@ -74,10 +80,21 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
         deletedRemote.push(id);
         return cloud.canDelete !== false;
       },
-      untrashRemoteNotebook: async () => null
+      // canUntrash: ob sich die Cloud-Datei zurückschieben lässt
+      untrashRemoteNotebook: async (fileId) => {
+        untrashed.push(fileId);
+        if (cloud.canUntrash !== true) return null;
+        return { notebooks: [{ id: cloud.restoreId || 'nb1', name: 'Tagebuch', pages: [] }] };
+      }
     },
 
     Registry: { remove: async () => {}, add: async () => {}, save: async () => { saved.calls = (saved.calls || 0) + 1; } },
+    FileManager_: {
+      saveNotebook: async () => {},
+      getNotebookFilePath: () => null,
+      getNotebookPath: () => null
+    },
+    Settings: { get: () => '' },
     S: { notebooks: [] },
     getNb: () => null
   };
@@ -88,13 +105,17 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
     loadRegistry: async () => ({ trash: entries }),
     deleteFile: async (p) => { deletedFiles.push(p); return { success: true }; },
     fileExists: async () => true,
-    moveFile: async () => ({ success: true })
+    moveFile: async () => ({ success: true }),
+    loadFromPath: async () => ({
+      success: true,
+      data: { notebooks: [{ id: cloud.restoreId || 'nb1', name: 'Tagebuch', pages: [] }] }
+    })
   };
 
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'src/core/trash.js'), 'utf8'), ctx);
 
-  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed, deletedRemote };
+  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed, deletedRemote, untrashed };
 }
 
 /** Ein Eintrag, der schon einmal in der gemeinsamen Liste stand. */
@@ -229,6 +250,78 @@ function syncedEntry(id, name) {
 
   check('Der Abgleich meldet Fehlschlag', ok, false);
   check('Der Papierkorb bleibt unberührt', offline.Trash.getAll().map(e => e.id), ['nb1']);
+
+  /* ════════════════════════════════════════════════════════════════
+     ZURÜCKHOLEN OHNE NETZ
+
+     Örtlich liegt das Heft danach wieder da, in der Cloud aber noch im
+     Papierkorb-Ordner und in der gemeinsamen Liste. Vorher war der
+     Eintrag hier einfach weg – und weil „kennt nur die Wolke" als „auf
+     einem anderen Gerät gelöscht" gilt, warf der nächste Abgleich das
+     Heft erneut in den Papierkorb.
+     ════════════════════════════════════════════════════════════════ */
+
+  console.log('\nOhne Netz zurückgeholt');
+
+  const restoredOffline = makeTrash(
+    [syncedEntry('nb1', 'Tagebuch')], { entries: nowInIndex, exists: true }, [],
+    { canUntrash: false, canSaveIndex: false }
+  );
+  const back = await restoredOffline.Trash.restore('nb1');
+
+  check('Das Heft kommt zurück', !!back, true);
+  check('Es steht nicht mehr im Papierkorb', restoredOffline.Trash.getAll().map(e => e.id), []);
+  check('Aber der Rest wird vermerkt',
+    restoredOffline.Trash._entries.map(e => [e.id, !!e.restored]), [['nb1', true]]);
+
+  console.log('\nDer Vermerk übersteht den nächsten Abgleich');
+
+  /* Die gemeinsame Liste kennt das Heft noch. Der Grabstein darf davon
+     nicht wieder zu einem sichtbaren Eintrag werden. */
+  restoredOffline.ctx.CloudSync_.saveTrashIndex = async (list) => {
+    restoredOffline.saved.list = list;
+    return true;
+  };
+  await restoredOffline.Trash.syncWithCloud();
+
+  check('Es bleibt aus dem Papierkorb heraus',
+    restoredOffline.Trash.getAll().map(e => e.id), []);
+  check('Und steht auch nicht in der gemeinsamen Liste',
+    (restoredOffline.saved.list || []).map(e => e.id), []);
+
+  console.log('\nWieder online: die Cloud-Datei wird zurückgeschoben');
+
+  const catchUp = makeTrash(
+    [syncedEntry('nb1', 'Tagebuch')], { entries: nowInIndex, exists: true }, [],
+    { canUntrash: false, canSaveIndex: false }
+  );
+  await catchUp.Trash.restore('nb1');
+
+  // Netz ist wieder da
+  catchUp.ctx.CloudSync_.untrashRemoteNotebook = async (fileId) => {
+    catchUp.untrashed.push(fileId);
+    return { notebooks: [{ id: 'nb1', name: 'Tagebuch', pages: [] }] };
+  };
+  catchUp.ctx.CloudSync_.saveTrashIndex = async (list) => { catchUp.saved.list = list; return true; };
+  await catchUp.Trash.syncWithCloud();
+
+  check('Die Cloud-Datei wurde zurückgeschoben',
+    catchUp.untrashed.includes('drive-nb1'), true);
+  check('Und der Vermerk ist verschwunden', catchUp.Trash._entries.map(e => e.id), []);
+
+  console.log('\nErneut gelöscht, bevor der Vermerk abgearbeitet war');
+
+  /* Sonst schöbe _catchUpCloudTrash die Datei gleich wieder aus dem
+     Papierkorb heraus, die das erneute Löschen gerade hineingelegt hat. */
+  const twice = makeTrash(
+    [syncedEntry('nb1', 'Tagebuch')], { entries: nowInIndex, exists: true }, [],
+    { canUntrash: false, canSaveIndex: false }
+  );
+  await twice.Trash.restore('nb1');
+  await twice.Trash.moveToTrash({ id: 'nb1', name: 'Tagebuch', pages: [] });
+
+  check('Es gibt genau einen Eintrag', twice.Trash._entries.length, 1);
+  check('Und der ist kein Grabstein', !!twice.Trash._entries[0].restored, false);
 
   if (failed > 0) {
     console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);

@@ -108,21 +108,38 @@ const Trash = {
     await Registry.save();
   },
 
-  /* `purged` = endgültig gelöscht, nur die Cloud-Datei steht noch aus.
-     Für Anzeige und Zählung ist so ein Eintrag nicht mehr da; er lebt
-     bloß weiter, damit _catchUpCloudTrash die Datei nachholen kann. */
+  /* ── Grabsteine ───────────────────────────────────────────────────
+     Zwei Sorten Eintrag sind örtlich erledigt, in der Cloud aber noch
+     nicht. Sie stehen nicht mehr in der Anzeige, bleiben aber in der
+     Liste, damit _catchUpCloudTrash die Cloud-Seite nachholen kann:
+
+       purged   = endgültig gelöscht, die Cloud-Datei steht noch aus
+       restored = zurückgeholt, die Cloud-Datei liegt noch im
+                  Papierkorb-Ordner oder steht noch in der gemeinsamen
+                  Liste
+
+     Ohne den zweiten kam ein ohne Netz zurückgeholtes Heft beim nächsten
+     Abgleich wieder in den Papierkorb: örtlich war der Eintrag weg, in
+     der gemeinsamen Liste stand er noch, und „kennt nur die Wolke" heißt
+     „auf einem anderen Gerät gelöscht". */
+  _isTombstone(entry) {
+    return !!(entry && (entry.purged || entry.restored));
+  },
+
   getAll() {
     return this._entries
-      .filter(e => !e.purged)
+      .filter(e => !this._isTombstone(e))
       .sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
   },
 
   count() {
-    return this._entries.filter(e => !e.purged).length;
+    return this._entries.filter(e => !this._isTombstone(e)).length;
   },
 
+  /* Grabsteine bleiben außen vor: Zurückholen und endgültiges Löschen
+     meinen immer den lebenden Eintrag, nie den nachzuholenden Rest. */
   find(id) {
-    return this._entries.find(e => e.id === id);
+    return this._entries.find(e => e.id === id && !this._isTombstone(e));
   },
 
   _trashPathFor(notebook, originalPath) {
@@ -164,6 +181,12 @@ const Trash = {
     }
 
     await this.load();
+
+    /* Ein offener Grabstein „zurückgeholt" zu genau diesem Heft ist mit dem
+       erneuten Löschen hinfällig. Bliebe er stehen, schöbe
+       _catchUpCloudTrash die Cloud-Datei gleich wieder aus dem Papierkorb
+       heraus, die der neue Eintrag gerade hineingelegt hat. */
+    this._entries = this._entries.filter(e => !(e.id === notebook.id && e.restored));
 
     const originalPath = FileManager_.getNotebookFilePath(notebook.id) || FileManager_.getNotebookPath(notebook);
     let trashPath = null;
@@ -247,11 +270,22 @@ const Trash = {
     let changed = false;
 
     for (const local of this._entries) {
-      /* Endgültig gelöscht, Cloud-Datei steht noch aus: steht bewusst
-         NICHT in der gemeinsamen Liste (siehe _pushIndex). Er darf hier
-         deshalb nicht als „anderswo erledigt" weggeräumt werden – dann
-         bliebe die Datei wieder für immer liegen. */
-      if (local.purged) { merged.push(local); continue; }
+      /* Grabsteine stehen bewusst NICHT in der gemeinsamen Liste (siehe
+         _pushIndex). Sie dürfen hier deshalb nicht als „anderswo
+         erledigt" weggeräumt werden – dann bliebe die Cloud-Seite wieder
+         für immer offen.
+
+         Aus der Wolken-Liste müssen sie trotzdem heraus: kam das
+         Hochladen der Liste nicht durch (kein Netz), steht das Heft dort
+         noch. Ohne diese Zeile käme es weiter unten als „kennt nur die
+         Wolke" wieder herein – als sichtbarer Eintrag, neben dem
+         Grabstein. Genau das machte ein ohne Netz zurückgeholtes Heft
+         wieder rückgängig. */
+      if (this._isTombstone(local)) {
+        remoteById.delete(local.id);
+        merged.push(local);
+        continue;
+      }
 
       const inRemote = remoteById.get(local.id);
 
@@ -293,7 +327,10 @@ const Trash = {
 
     if (changed) {
       await this.save();
-      await CloudSync_.saveTrashIndex(this._entries.map(stripLocalFields));
+      // Über _pushIndex, damit die Grabsteine draußen bleiben – hier stand
+      // vorher this._entries ungefiltert, womit ein endgültig gelöschtes
+      // Heft auf den anderen Geräten wieder im Papierkorb auftauchte.
+      await this._pushIndex();
     }
 
     return true;
@@ -316,6 +353,28 @@ const Trash = {
 
     let changed = false;
     for (const entry of [...this._entries]) {
+      /* Ohne Netz zurückgeholt: die Cloud-Datei liegt noch im
+         Papierkorb-Ordner. Jetzt zurückschieben – gelingt es, ist der
+         Eintrag erledigt und fällt beim Hochladen aus der gemeinsamen
+         Liste. Ohne Datei-Kennung gibt es dort nichts zu tun. */
+      if (entry.restored) {
+        if (!entry.driveFileId) {
+          this._entries = this._entries.filter(e => e !== entry);
+          changed = true;
+          continue;
+        }
+        try {
+          if (await CloudSync_.untrashRemoteNotebook(entry.driveFileId)) {
+            this._entries = this._entries.filter(e => e !== entry);
+            console.log('[Trash] Cloud-Datei nachträglich zurückgeholt:', entry.name);
+            changed = true;
+          }
+        } catch (err) {
+          console.warn('[Trash] Nachholen des Zurückholens:', err.message);
+        }
+        continue;
+      }
+
       /* Endgültig gelöscht, aber die Cloud-Datei stand noch aus. Jetzt
          noch einmal – gelingt es, verschwindet der Eintrag ganz. */
       if (entry.purged) {
@@ -403,12 +462,14 @@ const Trash = {
     // 2. Drive-Datei aus dem Papierkorb-Ordner zurückschieben. Das muss auch
     //    dann geschehen, wenn es lokal schon geklappt hat – sonst legt der
     //    nächste Upload eine zweite Datei an und die alte bleibt verwaist.
+    let cloudFertig = true;
     if (entry.driveFileId && typeof CloudSync_ !== 'undefined' && CloudSync_) {
       const fromDrive = await CloudSync_.untrashRemoteNotebook(entry.driveFileId);
       if (fromDrive && !notebook) {
         // Auf einem anderen Gerät gelöscht: der Inhalt kommt aus Drive
         notebook = Array.isArray(fromDrive?.notebooks) ? fromDrive.notebooks[0] : fromDrive;
       }
+      cloudFertig = !!fromDrive;
     }
 
     if (!notebook) {
@@ -443,7 +504,26 @@ const Trash = {
 
     // Gemeinsame Liste aktualisieren, damit der Eintrag auch auf den
     // anderen Geräten verschwindet
-    await this._pushIndex();
+    const indexOk = await this._pushIndex();
+
+    /* >>> Ohne Netz ist das Zurückholen erst halb geschehen <<<
+       Örtlich liegt das Heft wieder da, in der Cloud aber noch im
+       Papierkorb-Ordner und in der gemeinsamen Liste. Der nächste
+       Abgleich hielte das für „auf einem anderen Gerät gelöscht" und
+       würfe das Heft erneut in den Papierkorb – schon einmal so erlebt
+       beim Löschen. Deshalb bleibt ein Grabstein stehen, bis
+       _catchUpCloudTrash die Cloud-Seite nachgeholt hat. Aus Anzeige und
+       Zählung ist er heraus (siehe _isTombstone).
+
+       Nur nötig, wenn die Cloud von dem Heft überhaupt weiß. */
+    if ((!cloudFertig || !indexOk) && (entry.driveFileId || entry.syncedToCloud)) {
+      console.warn('[Trash] Zurückgeholt, Cloud-Seite wird nachgeholt:', entry.name);
+      entry.restored = true;
+      entry.trashPath = null;   // die Datei liegt jetzt wieder am Zielort
+      entry.snapshot = null;
+      this._entries.push(entry);
+      await this.save();
+    }
 
     return notebook;
   },
@@ -551,17 +631,21 @@ const Trash = {
     return await CloudSync_.remoteNotebookExists(entry.id) === false;
   },
 
-  /** Schreibt die aktuelle Liste in die gemeinsame Datei in Drive. */
+  /**
+   * Schreibt die aktuelle Liste in die gemeinsame Datei in Drive.
+   * @returns {Promise<boolean>} ob die Liste dort wirklich ankam. false
+   *   heißt ohne Netz oder nicht angemeldet – dann später noch einmal.
+   */
   async _pushIndex() {
-    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return;
+    if (typeof CloudSync_ === 'undefined' || !CloudSync_) return true;
     try {
-      /* Endgültig gelöschte Einträge, bei denen nur die Cloud-Datei noch
-         aussteht, gehören NICHT in die gemeinsame Liste – sonst sähe das
+      /* Grabsteine gehören NICHT in die gemeinsame Liste – sonst sähe das
          andere Gerät ein Heft im Papierkorb, das es hier nicht mehr gibt. */
-      const sichtbar = this._entries.filter(e => !e.purged);
-      await CloudSync_.saveTrashIndex(sichtbar.map(stripLocalFields));
+      const sichtbar = this._entries.filter(e => !this._isTombstone(e));
+      return await CloudSync_.saveTrashIndex(sichtbar.map(stripLocalFields)) !== false;
     } catch (err) {
       console.warn('[Trash] Gemeinsame Liste nicht aktualisiert:', err.message);
+      return false;
     }
   }
 };
