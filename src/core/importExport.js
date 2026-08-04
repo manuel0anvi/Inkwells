@@ -32,6 +32,10 @@ async function parsePdfToImages(pdfDataUrl) {
 /* ── INSERT ── */
 E('btn-insert').addEventListener('click', async () => {
   if (!window.api) { toast(t('electronOnly'), true); return; }
+  /* Ohne Schreibrecht gar nicht erst anfangen. Sonst entstünden Seiten nur
+     örtlich – und gingen gesammelt hinaus, sobald das Recht zurückkommt
+     (setCanWrite ruft syncStructure). Gleicher Riegel wie in ui/sidebar.js. */
+  if (S.readOnly) { toast(t('sharedNoRight'), true); return; }
   const files = await window.api.pickFiles();
   if (!files || !files.length) return;
 
@@ -63,8 +67,7 @@ E('btn-insert').addEventListener('click', async () => {
             newPg.bgImg = imgObj.url;
             newPg.w = CFG.PAGE_W; // normalize width to standard A4 (approx 840)
             newPg.h = Math.round(CFG.PAGE_W * (imgObj.h / (imgObj.w || 1))) + 56;
-            nb.pages.push(newPg);
-            sec.pgIds.splice(insertIdx + i, 0, newPg.id);
+            insertPageInto(nb, sec, newPg, insertIdx + i);
             if (!firstNewPageId) firstNewPageId = newPg.id;
           });
           addedPages = true;
@@ -84,8 +87,7 @@ E('btn-insert').addEventListener('click', async () => {
                 targetPgInfo = getPage(pages[curIdx].id);
               } else {
                 const newPg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-                nb.pages.push(newPg);
-                sec.pgIds.splice(curIdx, 0, newPg.id);
+                insertPageInto(nb, sec, newPg, curIdx);
                 targetPgInfo = { page: newPg };
                 addedPages = true;
                 if (!firstNewPageId) firstNewPageId = newPg.id;
@@ -128,8 +130,7 @@ E('btn-insert').addEventListener('click', async () => {
         await new Promise(r => tmpImg.onload = r);
         newPg.w = CFG.PAGE_W; // normalize to roughly standard page
         newPg.h = Math.round(CFG.PAGE_W * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1))) + 56;
-        nb.pages.push(newPg);
-        sec.pgIds.splice(curIdx + 1, 0, newPg.id);
+        insertPageInto(nb, sec, newPg, curIdx + 1);
         if (!firstNewPageId) firstNewPageId = newPg.id;
         addedPages = true;
         if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();

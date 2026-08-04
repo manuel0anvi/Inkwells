@@ -65,3 +65,123 @@ function pagesOfSec(sec, nb) {
 function findSecForPage(pgId, nb) {
   return (nb.sections || []).find(s => s.pgIds.includes(pgId));
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SEITEN ZWISCHEN HEFTEN BEWEGEN
+
+   Reine Arbeit am Datenmodell: keine Oberfläche, keine Cloud, keine
+   Freigabe. Was danach damit geschieht – Datei sichern, in den Raum
+   melden –, erledigt ein einziges AutoSave.markDirty() je betroffenem
+   Heft (core/autoSave.js).
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Tiefe Kopie einer Seite mit NEUEN Kennungen.
+ *
+ * >>> Warum die Kennungen zwingend neu sein müssen <<<
+ * Sie sind nicht bloß Namen, sondern Schlüssel:
+ *
+ *   · getPage() sucht über ALLE offenen Hefte und nimmt den ersten
+ *     Treffer. Zwei Hefte mit derselben Seitenkennung greifen sich
+ *     gegenseitig ins Steuer.
+ *   · In Firestore heißen die Bild-Ablagen `obj_<seite>_<objekt>` und
+ *     `bg_<seite>`, die Handschrift-Bögen `<seite>__<nr>`
+ *     (core/share.js). Gleiche Kennung heißt: sie überschreiben einander.
+ *   · Der Empfänger im Raum verwirft eine Seite, deren Kennung er schon
+ *     kennt, STILLSCHWEIGEND (ui/collab.js, applyPageAdd).
+ *
+ * Deshalb bekommt auch jedes Objekt auf der Seite eine neue Kennung.
+ * Die Bilddaten selbst stehen als data:-URL mitten in der Seite, ein
+ * JSON-Umweg kopiert sie also vollständig mit.
+ */
+function clonePage(page) {
+  const copy = JSON.parse(JSON.stringify(page));
+  copy.id = uid();
+  copy.date = new Date().toISOString();
+  copy.objects = (copy.objects || []).map(obj => ({ ...obj, id: uid() }));
+  return copy;
+}
+
+/**
+ * Eine Seite in ein Heft einsetzen – in die Seitenliste UND in einen
+ * Abschnitt. Beides gehört zusammen: eine Seite, die nur in pgIds steht,
+ * gibt es nicht wirklich, und eine, die nur in pages steht, taucht
+ * nirgends auf.
+ *
+ * @param {number} [index] Stelle im Abschnitt; ohne Angabe ans Ende.
+ */
+function insertPageInto(nb, sec, page, index) {
+  if (!nb || !sec || !page) return null;
+  nb.pages.push(page);
+  const at = Number.isInteger(index) ? index : (sec.pgIds || []).length;
+  sec.pgIds = [...(sec.pgIds || [])];
+  sec.pgIds.splice(at, 0, page.id);
+  return page;
+}
+
+/**
+ * Seiten von einem Heft in ein anderes bewegen.
+ *
+ * @param {object} fromNb   Ausgangsheft
+ * @param {string[]} pageIds Welche Seiten (Reihenfolge des Hefts gewinnt)
+ * @param {object} toNb     Zielheft
+ * @param {object} [options]
+ * @param {boolean} [options.copy] true = kopieren, sonst verschieben
+ * @returns {{moved: number, pages: object[]}}
+ *
+ * >>> Was hier NICHT passieren darf <<<
+ * nb.pages wird ausschließlich ERGÄNZT, nie ersetzt. Beim Sichern eines
+ * freigegebenen Hefts löscht saveDocumentContent in Firestore jede Seite,
+ * die im Vergleichsstand steht und im neuen Stand fehlt – samt
+ * Handschrift und Bildern. Ein Ablauf, der die Liste neu zusammensetzt,
+ * löschte damit die Arbeit der anderen.
+ */
+function transferPages(fromNb, pageIds, toNb, options = {}) {
+  const result = { moved: 0, pages: [] };
+  if (!fromNb || !toNb || !pageIds?.length) return result;
+  if (fromNb === toNb) return result;
+
+  const copy = !!options.copy;
+  getSections(fromNb);
+  const toSec = getSections(toNb).find(s => s.id === toNb.activeSecId)
+    || getSections(toNb)[0];
+  if (!toSec) return result;
+
+  /* In der Reihenfolge des Ausgangshefts, nicht in der des Anklickens –
+     sonst stünden die Seiten im Ziel durcheinander. */
+  const wanted = new Set(pageIds.map(String));
+  const ordered = (fromNb.pages || []).filter(p => wanted.has(String(p.id)));
+
+  for (const page of ordered) {
+    const fromSec = findSecForPage(page.id, fromNb);
+
+    if (copy) {
+      insertPageInto(toNb, toSec, clonePage(page));
+    } else {
+      // Beim Verschieben behält die Seite ihre Kennung: sie gibt es
+      // hinterher nur noch einmal, also kann nichts kollidieren.
+      if (fromSec) fromSec.pgIds = (fromSec.pgIds || []).filter(id => id !== page.id);
+      fromNb.pages = (fromNb.pages || []).filter(p => p.id !== page.id);
+      if (S.strokeHistory) delete S.strokeHistory[page.id];
+      insertPageInto(toNb, toSec, page);
+    }
+
+    result.moved++;
+    result.pages.push(page);
+  }
+
+  /* Ein Heft ohne Seiten gibt es nicht – dieselbe Regel wie beim Löschen
+     einer Seite (ui/sidebar.js). Betrifft nur das Verschieben. */
+  if (!copy) {
+    for (const sec of getSections(fromNb)) {
+      if ((sec.pgIds || []).length) continue;
+      insertPageInto(fromNb, sec, makePage(sec.defaultBg || fromNb.defaultBg || 'ruled'));
+    }
+    if (!(fromNb.pages || []).length) {
+      const sec = getSections(fromNb)[0];
+      insertPageInto(fromNb, sec, makePage(fromNb.defaultBg || 'ruled'));
+    }
+  }
+
+  return result;
+}

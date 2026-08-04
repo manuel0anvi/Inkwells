@@ -39,6 +39,133 @@ function showMsHint() {
   });
 }
 
+/**
+ * Fragt, welche Seiten in welches Heft sollen.
+ *
+ * @param {object} fromNb          Ausgangsheft
+ * @param {object[]} targets       Hefte, die als Ziel in Frage kommen
+ * @param {string[]} [preselected] Seiten, die schon angehakt sein sollen
+ * @returns {Promise<{pageIds: string[], toNb: object, copy: boolean}|null>}
+ *          null = abgebrochen
+ *
+ * Baut nur die Liste auf und liefert die Entscheidung zurück – bewegt
+ * selbst nichts. Das tut transferPages() in core/data.js.
+ */
+function showPageTransferDialog(fromNb, targets, preselected = []) {
+  const list = E('pt-list');
+  const sel = E('pt-target-sel');
+  const countEl = E('pt-count');
+  list.innerHTML = '';
+  sel.innerHTML = '';
+
+  for (const nb of targets) {
+    const opt = document.createElement('option');
+    opt.value = nb.id;
+    // Geteilte Dokumente kenntlich machen – sie sehen sonst aus wie eigene
+    opt.textContent = nb.name + (nb.origin === 'shared' ? ' (' + t('sharedWithMe') + ')' : '');
+    sel.appendChild(opt);
+  }
+
+  const picked = new Set(preselected.map(String));
+
+  /* Die Seiten in der Reihenfolge des Hefts, über alle Abschnitte hinweg –
+     so, wie man sie beim Blättern sieht. */
+  const rows = [];
+  for (const sec of (fromNb.sections || [])) {
+    for (const page of pagesOfSec(sec, fromNb)) rows.push({ sec, page });
+  }
+
+  const refreshCount = () => {
+    countEl.textContent = t('transferCount').replace('{n}', String(picked.size));
+    E('pt-move').disabled = picked.size === 0 || !sel.value;
+    E('pt-copy').disabled = picked.size === 0 || !sel.value;
+  };
+
+  rows.forEach((row, idx) => {
+    const item = document.createElement('div');
+    item.className = 'mgr-pg-item';
+
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'pt-check';
+    box.checked = picked.has(String(row.page.id));
+
+    const num = document.createElement('span');
+    num.className = 'mgr-pg-num';
+    num.textContent = 'S.' + (idx + 1);
+
+    const info = document.createElement('div');
+    info.className = 'mgr-pg-info';
+    const date = document.createElement('span');
+    date.className = 'mgr-pg-date';
+    date.textContent = new Date(row.page.date).toLocaleDateString();
+    const prev = document.createElement('span');
+    prev.className = 'mgr-pg-preview';
+    prev.textContent = pagePreview(row.page) || t('emptyPage');
+    info.append(date, prev);
+
+    const paint = () => {
+      item.classList.toggle('picked', box.checked);
+      if (box.checked) picked.add(String(row.page.id));
+      else picked.delete(String(row.page.id));
+      refreshCount();
+    };
+
+    box.addEventListener('click', e => e.stopPropagation());
+    box.addEventListener('change', paint);
+    // Die ganze Zeile schaltet mit – ein 15px-Kästchen zu treffen nervt
+    item.addEventListener('click', () => { box.checked = !box.checked; paint(); });
+
+    item.append(box, num, info);
+    item.classList.toggle('picked', box.checked);
+    list.appendChild(item);
+  });
+
+  refreshCount();
+  E('ov-page-transfer').style.display = 'flex';
+
+  return new Promise(res => {
+    const finish = (copy) => {
+      if (!picked.size || !sel.value) return;
+      const toNb = targets.find(nb => nb.id === sel.value);
+      if (!toNb) return;
+      close();
+      res({ pageIds: [...picked], toNb, copy });
+    };
+    const cancel = () => { close(); res(null); };
+    const setAll = (on) => {
+      picked.clear();
+      if (on) for (const row of rows) picked.add(String(row.page.id));
+      for (const [i, item] of [...list.children].entries()) {
+        item.querySelector('.pt-check').checked = on;
+        item.classList.toggle('picked', on);
+        void i;
+      }
+      refreshCount();
+    };
+    const kd = e => { if (e.key === 'Escape') cancel(); };
+
+    function close() {
+      E('ov-page-transfer').style.display = 'none';
+      E('pt-close').onclick = null;
+      E('pt-move').onclick = null;
+      E('pt-copy').onclick = null;
+      E('pt-all').onclick = null;
+      E('pt-none').onclick = null;
+      sel.onchange = null;
+      document.removeEventListener('keydown', kd);
+    }
+
+    E('pt-close').onclick = cancel;
+    E('pt-move').onclick = () => finish(false);
+    E('pt-copy').onclick = () => finish(true);
+    E('pt-all').onclick = () => setAll(true);
+    E('pt-none').onclick = () => setAll(false);
+    sel.onchange = refreshCount;
+    document.addEventListener('keydown', kd);
+  });
+}
+
 // Returns 'save', 'leave', or null (cancelled)
 function showSaveConfirm(msg) {
   E('save-confirm-msg').textContent = msg;

@@ -288,6 +288,7 @@
     <div class="sec-mgr-footer">
       <button id="sec-mgr-add-sec" class="mgr-btn" data-i18n="addSection">+ Abschnitt</button>
       <button id="sec-mgr-add-page" class="mgr-btn" data-i18n="addPage">+ Seite</button>
+      <button id="sec-mgr-transfer" class="mgr-btn" data-i18n="transferOpen">In anderes Heft …</button>
       <button class="ok-btn" id="sec-mgr-done" data-i18n="done">Fertig</button>
     </div>
   </div>
@@ -491,6 +492,35 @@
     <div class="modal-btns">
       <button id="ms-hint-cancel" data-i18n="cancel">Abbrechen</button>
       <button id="ms-hint-ok" class="ok-btn" data-i18n="msHintConfirm">Verstanden, weiter</button>
+    </div>
+  </div>
+</div>
+
+<!-- SEITEN IN EIN ANDERES HEFT
+     Die Liste wird in core/dialogs.js aufgebaut (showPageTransferDialog).
+     Stil aus der Abschnittsverwaltung übernommen – dort stehen Seiten
+     schon genau so, mit Nummer, Datum und Vorschautext. -->
+<div class="overlay" id="ov-page-transfer" style="display:none">
+  <div class="modal sec-mgr-modal">
+    <div class="sec-mgr-head">
+      <h3 id="pt-title" data-i18n="transferTitle">Seiten in ein anderes Heft</h3>
+      <button class="modal-close-x" id="pt-close">✕</button>
+    </div>
+    <p class="sec-mgr-hint" id="pt-hint" data-i18n="transferHint">Wähle die Seiten und das Ziel. Kopieren lässt sie hier stehen, Verschieben nimmt sie mit.</p>
+
+    <div class="pt-target">
+      <label for="pt-target-sel" data-i18n="transferTarget">Zielheft</label>
+      <select id="pt-target-sel"></select>
+    </div>
+
+    <div class="sec-mgr-body" id="pt-list"></div>
+
+    <div class="sec-mgr-footer">
+      <button id="pt-all" class="mgr-btn" data-i18n="transferAll">Alle</button>
+      <button id="pt-none" class="mgr-btn" data-i18n="transferNone">Keine</button>
+      <span class="pt-count" id="pt-count"></span>
+      <button id="pt-copy" class="mgr-btn" data-i18n="transferCopy">Kopieren</button>
+      <button id="pt-move" class="ok-btn" data-i18n="transferMove">Verschieben</button>
     </div>
   </div>
 </div>

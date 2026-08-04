@@ -136,6 +136,23 @@ function renumberVisiblePages() {
 let _secMgrFocusSecId = null;
 let _secMgrCtxMenu = null;
 
+/* ── Darf hier überhaupt etwas geändert werden? ──────────────────────
+   >>> Warum das nicht bloß Kosmetik ist <<<
+   Die Abschnittsverwaltung veränderte das Heft bisher ohne jede Frage nach
+   S.readOnly. In den Raum ging davon zwar nichts – syncStructure steigt bei
+   fehlendem Schreibrecht aus –, aber es stand im örtlichen Modell. Sobald
+   das Recht zurückkam, rief setCanWrite(true) sofort syncStructure() auf,
+   und alles heimlich Entstandene ging auf einen Schlag hinaus.
+
+   Damit war die Sperre für Eingeladene, deren Besitzer nicht da ist, durch
+   eine Seitentür zu umgehen. Gemeldet wird es, statt still nichts zu tun –
+   ein Knopf, der ohne Erklärung nicht reagiert, sieht wie ein Fehler aus. */
+function mgrCanEdit() {
+  if (!S.readOnly) return true;
+  toast(t('sharedNoRight'), true);
+  return false;
+}
+
 function ensureSecMgrCtxMenu() {
   if (_secMgrCtxMenu) return _secMgrCtxMenu;
   const menu = document.createElement('div');
@@ -180,6 +197,7 @@ function showSecMgrPageMenu(x, y, sec, page) {
 
   if (nb.sections.length > 1) {
     menu.appendChild(mkBtn(t('moveToSection'), async () => {
+      if (!mgrCanEdit()) return;
       const candidates = nb.sections.filter(s => s.id !== sec.id);
       const names = candidates.map(s => getSectionDisplayName(s));
       const targetName = await txtModal(t('moveToSection'), names[0] || '');
@@ -197,8 +215,16 @@ function showSecMgrPageMenu(x, y, sec, page) {
       }
       renderSideTree();
       renderSecMgrBody(target.id);
+      // Fehlte: ohne das erreichte die Verschiebung weder Datei noch Raum
+      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
     }));
   }
+
+  // Mit dieser Seite vorausgewählt – meist will man genau die übertragen
+  menu.appendChild(mkBtn(t('transferOpen'), async () => {
+    closeSecMgr();
+    await openPageTransfer([String(page.id)]);
+  }));
 
   menu.appendChild(mkBtn(t('deletePage'), async () => {
     await deletePageFromSection(sec, page);
@@ -212,12 +238,15 @@ function showSecMgrPageMenu(x, y, sec, page) {
 async function deletePageFromSection(sec, page) {
   const nb = getNb();
   if (!nb || !sec || !page) return;
+  if (!mgrCanEdit()) return;
   if ((nb.pages || []).length <= 1) {
-    await showAlert('Mindestens eine Seite muss erhalten bleiben.');
+    await showAlert(t('lastPageStays'));
     return;
   }
 
-  const ok = await confModal(t('deletePage') + '?');
+  // confModal gibt es nicht – der Aufruf lief in einen ReferenceError,
+  // und damit tat „Seite löschen" hier gar nichts.
+  const ok = await showConfirm(t('deletePage') + '?');
   if (!ok) return;
 
   sec.pgIds = (sec.pgIds || []).filter(id => id !== page.id);
@@ -243,6 +272,7 @@ async function deletePageFromSection(sec, page) {
 function addPageToSection(sec) {
   const nb = getNb();
   if (!nb || !sec) return;
+  if (!mgrCanEdit()) return;
   const pg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
   nb.pages.push(pg);
   sec.pgIds = [...(sec.pgIds || []), pg.id];
@@ -254,9 +284,66 @@ function addPageToSection(sec) {
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
 
+/* ── Seiten in ein anderes Heft ──────────────────────────────────────
+   Bewegt selbst nichts: fragt, lässt transferPages() (core/data.js) die
+   Arbeit tun und meldet danach beide Hefte als geändert.
+
+   >>> Welche Hefte als Ziel in Frage kommen <<<
+   Alle eigenen außer dem Ausgangsheft – das ist der Normalfall und
+   braucht weder Konto noch Netz. Ein geteiltes Dokument kommt nur dazu,
+   wenn dort gerade wirklich geschrieben werden darf: ist der Besitzer
+   nicht da, steht S.readOnly, und dann darf es gar nicht erst in der
+   Auswahl auftauchen. Sonst wäre die Sperre über diesen Weg zu umgehen.
+   ─────────────────────────────────────────────────────────────────── */
+function transferTargetsFor(fromNb) {
+  const targets = ownNotebooks().filter(nb => nb.id !== fromNb.id);
+  for (const shared of sharedNotebooks()) {
+    if (shared.id === fromNb.id) continue;
+    if (S.readOnly) continue;                 // Besitzer weg oder nur Leserecht
+    targets.push(shared);
+  }
+  return targets;
+}
+
+async function openPageTransfer(preselectedPageIds = []) {
+  const nb = getNb();
+  if (!nb) return;
+  if (!mgrCanEdit()) return;                  // aus einem gesperrten Heft nichts herausnehmen
+
+  const targets = transferTargetsFor(nb);
+  if (!targets.length) { toast(t('transferNoTarget'), true); return; }
+
+  const choice = await showPageTransferDialog(nb, targets, preselectedPageIds);
+  if (!choice) return;
+
+  const res = transferPages(nb, choice.pageIds, choice.toNb, { copy: choice.copy });
+  if (!res.moved) return;
+
+  /* Genau ein Anstoß je Heft, erst NACH allen Seiten. Der eine Aufruf
+     deckt Datei, Live-Raum und geteiltes Dokument ab (core/autoSave.js);
+     je Seite anzustoßen erzeugte ebenso viele Speichervorgänge. */
+  if (typeof AutoSave !== 'undefined' && AutoSave) {
+    if (!choice.copy) AutoSave.markDirty(nb.id);
+    AutoSave.markDirty(choice.toNb.id);
+  }
+
+  // Das Ausgangsheft ist das offene – nur dort muss neu gezeichnet werden.
+  if (!choice.copy) {
+    const sec = nb.sections.find(s => s.id === nb.activeSecId) || nb.sections[0];
+    if (sec) openSection(sec);
+  }
+  renderSideTree();
+  renderSecMgrBody(nb.activeSecId);
+
+  toast((choice.copy ? t('transferDoneCopy') : t('transferDoneMove'))
+    .replace('{n}', String(res.moved))
+    .replace('{name}', choice.toNb.name));
+}
+
 async function addSectionFromManager() {
   const nb = getNb();
   if (!nb) return;
+  if (!mgrCanEdit()) return;
   const name = await txtModal(t('newSection'), t('newSection'));
   if (!name) return;
 
@@ -305,6 +392,7 @@ function renderSecMgrBody(focusSecId) {
 
     const renameBtn = mk('button', 'mgr-btn', t('rename'));
     renameBtn.addEventListener('click', async () => {
+      if (!mgrCanEdit()) return;
       const nextName = await txtModal(t('rename'), sec.name || '');
       if (!nextName) return;
       sec.name = nextName;
@@ -317,7 +405,9 @@ function renderSecMgrBody(focusSecId) {
     delBtn.disabled = nb.sections.length <= 1;
     delBtn.addEventListener('click', async () => {
       if (nb.sections.length <= 1) return;
-      const ok = await confModal(t('delete') + ' "' + getSectionDisplayName(sec) + '"?');
+      if (!mgrCanEdit()) return;
+      // Auch hier stand confModal – siehe deletePageFromSection
+      const ok = await showConfirm(t('delete') + ' "' + getSectionDisplayName(sec) + '"?');
       if (!ok) return;
 
       const target = nb.sections.find(s => s.id !== sec.id);
@@ -417,6 +507,13 @@ function openSecMgr(sec) {
     if (!target) return;
     addPageToSection(target);
   };
+  const transferBtn = E('sec-mgr-transfer');
+  if (transferBtn) {
+    transferBtn.onclick = async () => {
+      closeSecMgr();
+      await openPageTransfer();
+    };
+  }
   ov.onclick = (e) => {
     if (e.target === ov) closeSecMgr();
   };

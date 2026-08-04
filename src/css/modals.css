@@ -120,6 +120,68 @@
   color: #fff !important;
 }
 
+/* ── Seiten in ein anderes Heft ──────────────────────────────────────
+   Nutzt Fenster, Liste und Zeilen der Abschnittsverwaltung mit
+   (.sec-mgr-modal, .mgr-pg-list, .mgr-pg-item). Neu ist nur die Zeile
+   für das Zielheft und das Häkchen je Seite. */
+.pt-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 22px 12px
+}
+
+.pt-target label {
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--md);
+  flex-shrink: 0
+}
+
+.pt-target select {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--sb2);
+  background: var(--sp);
+  color: var(--hi);
+  font-family: 'Crimson Pro', serif;
+  font-size: 14px
+}
+
+/* Zählt links neben den Knöpfen mit, damit „Verschieben" nie ins Leere
+   greift, ohne dass man die Häkchen abzählen müsste. */
+.pt-count {
+  margin-right: auto;
+  align-self: center;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--lo)
+}
+
+/* Die Zeilen sind hier zum Anklicken da, nicht zum Ziehen. */
+#pt-list .mgr-pg-item {
+  cursor: pointer
+}
+
+#pt-list .mgr-pg-item.picked {
+  border-color: var(--gold);
+  background: var(--sh2)
+}
+
+.pt-check {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--gold);
+  cursor: pointer
+}
+
 .color-palette {
   display: flex;
   gap: 7px;
