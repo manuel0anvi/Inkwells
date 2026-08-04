@@ -487,12 +487,12 @@ function buildPdf(nb, options = {}) {
   .pg-bgimg { position: absolute; top: 56px; left: 0; width: 100%; height: calc(100% - 56px);
               object-fit: contain; z-index: 1 }
 
-  .ph { position: absolute; top: 0; left: 0; right: 0; height: 56px; padding: 0 72px; z-index: 20;
+  .ph { position: absolute; top: 0; left: 0; right: 0; height: 56px; padding: 0 72px; z-index: 1300;
         display: flex; align-items: center; justify-content: space-between;
         border-bottom: 2px solid #e2dbd0;
         font-family: 'DM Mono', Consolas, monospace; font-size: 9px; color: #b0a898; letter-spacing: .5px }
 
-  .tx { position: absolute; top: 64px; left: 72px; bottom: 24px; z-index: 5;
+  .tx { position: absolute; top: 64px; left: 72px; bottom: 24px; z-index: 1000;
         font-family: 'Crimson Pro', Georgia, serif; font-size: 17px; color: #1a1510;
         white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word }
   .tx * { line-height: inherit }
@@ -501,11 +501,14 @@ function buildPdf(nb, options = {}) {
   .tx h2, .tx p.j-title-2 { font-weight: 600; color: #2a1f14; display: block }
   .tx h3, .tx p.j-title-3 { font-weight: 600; font-style: italic; color: #3a2e22; display: block }
 
-  /* Dieselbe Staffelung wie in der App: Muster 1 · Bild hinten 2 ·
-     Text 5 · Handschrift 18 · Bild vorne 19 · Seitenkopf 20 */
-  .obj { position: absolute; object-fit: contain; z-index: 19 }
-  .obj.behind { z-index: 2 }
-  .ink { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 18 }
+  /* Dieselbe Staffelung wie in der App (css/pages.css): Muster 1 ·
+     Bild hinten 100 · Text 1000 · Handschrift 1100 · Seitenkopf 1300 ·
+     Bild vorne 2000. Die Reihenfolge innerhalb eines Bandes steckt hier
+     in der Dokumentreihenfolge – buildPdfPage gibt die Bilder in der
+     Reihenfolge aus page.objects aus. */
+  .obj { position: absolute; object-fit: contain; z-index: 2000 }
+  .obj.behind { z-index: 100 }
+  .ink { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1100 }
 </style></head><body>${body}</body></html>`;
 }
 

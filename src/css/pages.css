@@ -84,7 +84,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 72px;
-  z-index: 20;
+  z-index: 1300;
   pointer-events: none;
 }
 
@@ -123,7 +123,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 10;
+  z-index: 1100;
   display: block;
   touch-action: pan-y
 }
@@ -134,7 +134,7 @@
   left: 72px;
   right: 32px;
   bottom: 24px;
-  z-index: 5;
+  z-index: 1000;
   outline: none;
   font-family: 'Crimson Pro', Georgia, 'Times New Roman', serif;
   font-size: 17px;
@@ -188,9 +188,33 @@
   padding: 0
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   DIE STAFFELUNG EINER SEITE
+
+   Die Zahlen sind bewusst weit auseinander. Bilder brauchen zwischen
+   Papier und Text sowie oberhalb des Kopfes je ein ganzes Band, in dem
+   sie untereinander eine Reihenfolge haben (canvas/objects.js):
+
+        1  Papier, Linien, Seitenbild
+      100  BILDER HINTER DEM TEXT   (100 + Stelle)
+      900  Sperrbänder der Mitschreiber
+     1000  Text
+     1100  Handschrift
+     1150  Zeilenumbruch-Hilfe
+     1200  Marken der Mitschreiber
+     1250  Schreibmarken
+     1300  Seitenkopf
+     2000  BILDER VOR DEM TEXT      (2000 + Stelle)
+     5000  Griffe und Leiste des ausgewählten Bildes
+     6000  Fanglinien
+
+   Alles davon steckt im eigenen Stapel von .pages-wrap (layout.css) und
+   kann deshalb nicht mit der übrigen Oberfläche kollidieren.
+   ══════════════════════════════════════════════════════════════════ */
+
 /* Ohne eigenes z-index reicht die Ebene ihre Bilder in den Stapel der
-   Seite durch – nur so kann ein Bild überhaupt HINTER den Text (z-index 5)
-   rutschen. Die Zahl steht deshalb an jedem .obj-wrap, siehe canvas/objects.js. */
+   Seite durch – nur so kann ein Bild überhaupt HINTER den Text rutschen.
+   Die Zahl steht an jedem .obj-body, siehe canvas/objects.js. */
 .j-objects {
   position: absolute;
   inset: 0;
@@ -447,7 +471,7 @@
 .snap-line {
   position: absolute;
   pointer-events: none;
-  z-index: 100;
+  z-index: 6000;
 }
 
 .snap-line.v {
@@ -473,5 +497,5 @@
   color: rgba(120, 120, 120, .55);
   pointer-events: none;
   user-select: none;
-  z-index: 12;
+  z-index: 1150;
 }

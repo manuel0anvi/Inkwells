@@ -22,10 +22,45 @@ let _selObj = null;
    deshalb muss die DOM-Reihenfolge mit ihr übereinstimmen.
    ══════════════════════════════════════════════════════════════════════ */
 
-const OBJ_Z = { back: 2, front: 20 };
+/* Zwei Baender mit Platz darin. Die Zahl eines Bildes ist
+   Bandanfang + seine Stelle in page.objects – damit sagen die beiden
+   Knopfpaare zwei verschiedene Dinge, die sich nicht in die Quere kommen:
+
+     vor / hinter Text   waehlt das BAND, also nur das Verhaeltnis zum Text
+     vorn / hinten       waehlt die Stelle IM Band, also nur das
+                         Verhaeltnis zu den anderen Bildern
+
+   Vorher trugen alle Bilder eines Bandes dieselbe Zahl und die Reihenfolge
+   hing allein am DOM. Sichtbar wurde davon nichts, sobald die beiden
+   Bilder in verschiedenen Baendern lagen – die Knoepfe „ganz nach vorn"
+   und „ganz nach hinten" schienen wirkungslos.
+
+   Die Staffelung der ganzen Seite steht in css/pages.css; zwischen den
+   Baendern liegen Text (1000), Handschrift (1100) und Seitenkopf (1300). */
+const OBJ_Z = { back: 100, front: 2000 };
+const OBJ_Z_SPAN = 700;   // so viele Bilder je Band bekommen eine eigene Zahl
 
 function objLayerOf(obj) {
   return obj && obj.layer === 'back' ? 'back' : 'front';
+}
+
+/**
+ * Schreibt allen Bildern einer Seite ihre Zahl neu.
+ *
+ * Muss nach jeder Änderung an Band oder Reihenfolge laufen – und zwar für
+ * die ganze Seite, nicht nur für das angefasste Bild: eine verschobene
+ * Stelle verschiebt auch alle dahinter.
+ */
+function restackObjects(objLayer, page) {
+  const bodies = new Map();
+  for (const wrap of objLayer.querySelectorAll('.obj-wrap')) {
+    const body = wrap.querySelector('.obj-body');
+    if (body) bodies.set(wrap.dataset.objid, body);
+  }
+  (page.objects || []).forEach((o, i) => {
+    const body = bodies.get(String(o.id));
+    if (body) body.style.zIndex = OBJ_Z[objLayerOf(o)] + Math.min(i, OBJ_Z_SPAN - 1);
+  });
 }
 
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.obj-wrap')) deselect(); });
@@ -169,7 +204,7 @@ function objText(key, fallback) {
    Beide liegen deckungsgleich auf dem Rahmen und drehen sich getrennt,
    aber gleich weit. Die Ebene des Bildes ändert sich durch das Auswählen
    damit überhaupt nicht mehr. */
-const OBJ_Z_CHROME = 30;
+const OBJ_Z_CHROME = 5000;
 
 function deselect() {
   if (!_selObj) return;
@@ -199,7 +234,6 @@ function placeObject(objLayer, obj, page) {
   wrap.style.cssText = 'left:' + obj.x + 'px;top:' + obj.y + 'px;width:' + obj.w + 'px;height:' + obj.h + 'px;position:absolute;pointer-events:none';
 
   const body = document.createElement('div'); body.className = 'obj-body';
-  body.style.zIndex = OBJ_Z[objLayerOf(obj)];
   body.style.pointerEvents = S.mode === 'cursor' ? 'auto' : 'none';
   if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; body.appendChild(img); }
   else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
@@ -342,9 +376,9 @@ function placeObject(objLayer, obj, page) {
     if (objLayerOf(obj) === which) return;
     pushPageHistory(page);
     obj.layer = which;
-    // Nur das Bild wandert; die Bedienteile bleiben, wo sie sind
-    body.style.zIndex = OBJ_Z[which];
     wrap.dataset.layer = which;
+    // Nur das Band wechselt; die Stelle unter den Bildern bleibt dieselbe
+    restackObjects(objLayer, page);
     markLayerButtons();
     updateUndoRedoUI();
     noteObjectChanged();
@@ -365,6 +399,8 @@ function placeObject(objLayer, obj, page) {
     list.splice(idx, 1);
     if (toEnd) { list.push(obj); objLayer.appendChild(wrap); }
     else { list.unshift(obj); objLayer.insertBefore(wrap, objLayer.firstChild); }
+    // Nur die Stelle im Band wechselt; das Band selbst bleibt
+    restackObjects(objLayer, page);
     updateUndoRedoUI();
     noteObjectChanged();
   }
@@ -384,6 +420,7 @@ function placeObject(objLayer, obj, page) {
     page.objects = (page.objects || []).filter(o => o.id !== obj.id);
     deselect();
     wrap.remove();
+    restackObjects(objLayer, page);
     updateUndoRedoUI();
     noteObjectChanged();
   }
@@ -484,4 +521,6 @@ function placeObject(objLayer, obj, page) {
   }, { passive: true });
 
   objLayer.appendChild(wrap);
+  // Erst jetzt hängt es im Baum – vorher findet restackObjects es nicht
+  restackObjects(objLayer, page);
 }

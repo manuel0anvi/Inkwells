@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+<style>
+  body { margin: 0; background: #222; }
+  #pg-scroll { position: relative; }
+  .j-page { position: relative; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="pg-scroll">
+  <div class="j-page bg-ruled" data-pgid="p1" style="width:794px;height:1123px">
+    <div class="j-page-hdr"><span class="j-page-num">Seite 1</span></div>
+    <canvas class="j-canvas" width="794" height="1123"
+            style="width:794px;height:1123px;pointer-events:none"></canvas>
+    <div class="j-objects"></div>
+    <div class="j-text" contenteditable="true"
+         style="font-size:17px;line-height:32px;padding-top:19px;top:64px;left:72px;right:32px;bottom:24px;pointer-events:auto;white-space:pre-wrap">Zeile mit Text</div>
+  </div>
+</div>
+
+<script>
+/* Umgebung nachbauen, so weit objects.js sie braucht */
+const S = { mode: 'cursor', readOnly: false };
+let _zoom = 1;
+let uidN = 0;
+function uid() { return 'o' + (++uidN); }
+function pushPageHistory() {}
+function updateUndoRedoUI() {}
+function toast() {}
+function t() { return ''; }
+function E(id) { return document.getElementById(id); }
+window.markCurrentNotebookDirty = () => {};
+</script>
+<script src="../../src/canvas/objects.js"></script>
+<script>
+const out = [];
+window.onerror = (msg, src, line) => {
+  out.push('ABBRUCH ' + msg + ' @' + line);
+  window.__ergebnis = out.join('\n');
+};
+function check(label, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  out.push((ok ? 'OK   ' : 'FEHL ') + label
+    + (ok ? '' : '  erwartet ' + JSON.stringify(expected) + ', bekommen ' + JSON.stringify(actual)));
+}
+
+const pageEl = document.querySelector('.j-page');
+const layer = pageEl.querySelector('.j-objects');
+
+const a = { id: 'a', kind: 'image', src: '', name: 'A', x: 120, y: 300, w: 300, h: 200, rot: 0 };
+const b = { id: 'b', kind: 'image', src: '', name: 'B', x: 220, y: 380, w: 300, h: 200, rot: 0 };
+const page = { id: 'p1', objects: [a, b] };
+placeObject(layer, a, page);
+placeObject(layer, b, page);
+
+const wrapOf = (o) => layer.querySelector('.obj-wrap[data-objid="' + o.id + '"]');
+const bodyOf = (o) => wrapOf(o).querySelector('.obj-body');
+const chromeOf = (o) => wrapOf(o).querySelector('.obj-chrome');
+const barBtns = (o) => [...chromeOf(o).querySelectorAll('.obj-bar-btn')];
+const zOf = (o) => bodyOf(o).style.zIndex;
+
+// Reihenfolge in der Leiste: 0 links · 1 rechts · 2 vor Text · 3 hinter Text
+//                            4 ganz vorn · 5 ganz hinten · 6 kopieren · 7 loeschen
+const BTN = { vorText: 2, hinterText: 3, ganzVorn: 4, ganzHinten: 5 };
+
+function press(el, x, y) {
+  el.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true, cancelable: true, composed: true,
+    clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true
+  }));
+}
+/** Wer liegt an dieser Stelle obenauf? */
+function oben(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el) return 'nichts';
+  const wrap = el.closest ? el.closest('.obj-wrap') : null;
+  return wrap ? wrap.dataset.objid : (el.className || el.tagName);
+}
+
+/* 1. Ausgangslage: beide vorne, B ueber A */
+check('A und B liegen im vorderen Band', [zOf(a), zOf(b)], ['2000', '2001']);
+
+const UX = 300, UY = 420;   // Stelle, an der beide liegen
+check('B liegt an der Ueberlappung oben', oben(UX, UY), 'b');
+
+/* 2. Auswaehlen aendert nichts an der Ebene */
+press(bodyOf(a), 140, 320);
+check('A ist ausgewaehlt', wrapOf(a).classList.contains('selected'), true);
+check('Die Bedienteile sind sichtbar', chromeOf(a).style.display, 'block');
+check('Die Ebene ist unveraendert', zOf(a), '2000');
+check('B ist unveraendert', zOf(b), '2001');
+check('B liegt weiterhin oben', oben(UX, UY), 'b');
+
+/* 3. Die Knoepfe sind erreichbar */
+const btns = barBtns(a);
+check('Acht Knoepfe in der Leiste', btns.length, 8);
+const daneben = btns.map((btn, i) => {
+  const r = btn.getBoundingClientRect();
+  const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return (el && btn.contains(el)) ? null : (i + ':' + (el ? el.className : 'nichts'));
+}).filter(Boolean);
+check('Jeder Knopf faengt den Zeiger', daneben, []);
+
+/* 4. "Ganz nach vorn" wirkt UNTER den Bildern */
+btns[BTN.ganzVorn].click();
+check('A steht jetzt hinten in der Liste', page.objects.map(o => o.id), ['b', 'a']);
+check('Und traegt die hoehere Zahl', [zOf(b), zOf(a)], ['2000', '2001']);
+check('A liegt an der Ueberlappung oben', oben(UX, UY), 'a');
+
+btns[BTN.ganzHinten].click();
+check('Und wieder zurueck', [zOf(a), zOf(b)], ['2000', '2001']);
+check('B liegt wieder oben', oben(UX, UY), 'b');
+
+/* 5. "Hinter den Text" wirkt NUR gegenueber dem Text */
+btns[BTN.hinterText].click();
+check('A wechselt ins hintere Band', zOf(a), '100');
+check('Und ist so vermerkt', a.layer, 'back');
+check('B bleibt voellig unberuehrt', [zOf(b), b.layer], ['2001', undefined]);
+check('Die Bedienteile bleiben oben', chromeOf(a).style.zIndex, '5000');
+
+const rb = barBtns(a)[BTN.hinterText].getBoundingClientRect();
+const nochDa = document.elementFromPoint(rb.left + rb.width / 2, rb.top + rb.height / 2);
+check('Die Leiste bleibt anklickbar', !!(nochDa && chromeOf(a).contains(nochDa)), true);
+
+/* 6. Stapeln funktioniert auch INNERHALB des hinteren Bandes
+      Hier trifft elementFromPoint den Text – beide Bilder liegen ja
+      darunter. Gefragt ist deshalb der Faenger, der den Klick durch den
+      Text hindurchreicht: er muss dasselbe oberste Bild waehlen. */
+const gegriffen = (x, y) => {
+  const w = backObjectAt(pageEl, x, y);
+  return w ? w.dataset.objid : 'nichts';
+};
+
+press(bodyOf(b), 500, 560);
+barBtns(b)[BTN.hinterText].click();
+check('Jetzt liegen beide hinten', [zOf(a), zOf(b)], ['100', '101']);
+check('B wird an der Ueberlappung gegriffen', gegriffen(UX, UY), 'b');
+
+barBtns(b)[BTN.ganzHinten].click();
+check('B ganz nach hinten', [page.objects.map(o => o.id), zOf(b), zOf(a)], [['b', 'a'], '100', '101']);
+check('Jetzt wird A gegriffen', gegriffen(UX, UY), 'a');
+
+/* 7. Ein Bild hinter dem Text laesst sich anklicken */
+deselect();
+press(document.elementFromPoint(140, 320), 140, 320);
+check('Auswahl ueber den Text hinweg', wrapOf(a).classList.contains('selected'), true);
+
+/* 8. Zurueck nach vorn */
+barBtns(a)[BTN.vorText].click();
+check('A ist wieder vorne', [zOf(a), a.layer], ['2001', 'front']);
+check('B blieb hinten', [zOf(b), b.layer], ['100', 'back']);
+
+window.__ergebnis = out.join('\n');
+</script>
+</body>
+</html>
