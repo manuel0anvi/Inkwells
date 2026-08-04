@@ -882,6 +882,18 @@
         </div>
       </div>
 
+      <!-- ABSCHNITTE
+           Wirkt zusätzlich zur Seitenauswahl darüber: erst wird bestimmt,
+           WELCHE Seiten, dann welche Abschnitte davon. Der Block bleibt
+           ganz weg, wenn das Heft keine Abschnitte hat. Aufgebaut in
+           ui/export.js. -->
+      <div id="export-sec-block" style="margin-bottom:18px; display:none;">
+        <div style="font-family:'DM Mono',Consolas,monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--lo); margin-bottom:10px;">
+          <span data-i18n="exportSecLabel">Welche Abschnitte?</span>
+        </div>
+        <div id="export-sec-list" class="export-sec-list"></div>
+      </div>
+
       <div id="export-status" style="font-size:12px; color:var(--gold); min-height:18px;"></div>
 
       <div style="display:flex; justify-content:flex-end; gap:10px;">

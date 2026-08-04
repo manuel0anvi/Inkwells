@@ -263,31 +263,14 @@ function showSecMgrPageMenu(x, y, sec, page) {
   }));
 
   if (nb.sections.length > 1) {
-    menu.appendChild(mkBtn(t('moveToSection'), async () => {
+    /* Frueher musste man den Zielnamen ABTIPPEN (txtModal) und die
+       Eingabe wurde ueber den Namen verglichen – bei zwei aehnlich
+       benannten Abschnitten ein Gluecksspiel. Jetzt derselbe Weg wie am
+       Seitenkopf: ein Menue mit Farbpunkten. */
+    menu.appendChild(mkBtn(t('setSection'), async () => {
       if (!mgrCanEdit()) return;
-      const candidates = nb.sections.filter(s => s.id !== sec.id);
-      const names = candidates.map(s => getSectionDisplayName(s));
-      const targetName = await txtModal(t('moveToSection'), names[0] || '');
-      if (!targetName) return;
-      const target = candidates.find(s => getSectionDisplayName(s) === targetName || s.name === targetName);
-      if (!target) {
-        toast(t('cancelled'), true);
-        return;
-      }
-      /* Umetikettieren, nicht verschieben: die Seite bleibt, wo sie im
-         Heft steht, und behaelt ihre Seitenzahl. Frueher wurde sie ans
-         Ende des Zielabschnitts gehaengt und riss dabei ihre Position
-         mit. */
-      setSectionOfPage(nb, page.id, target.id);
-      if (nb.activeSecId === sec.id && S.activePgId === page.id) {
-        // Sonst verschwaende die Seite aus der gerade gezeigten Auswahl
-        nb.activeSecId = target.id;
-        openSection(target, page.id);
-      }
-      renderSideTree();
-      renderSecMgrBody(target.id);
-      // Fehlte: ohne das erreichte die Verschiebung weder Datei noch Raum
-      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      menu.style.display = 'none';
+      showPgSectionMenu(x, y, page);
     }));
   }
 
@@ -456,7 +439,8 @@ function renderSecMgrBody(focusSecId) {
     const hdr = mk('div', 'mgr-sec-hdr');
     
     const dot = mk('span', 'mgr-sec-dot');
-    dot.style.background = (nb.color || '#7a6f5c');
+    // Bisher stand hier die Heftfarbe – alle Punkte sahen also gleich aus
+    dot.style.background = colorForSection(sec.id);
     
     const name = mk('span', 'mgr-sec-name', getSectionDisplayName(sec));
     const count = mk('span', 'mgr-sec-count', pagesOfSec(sec, nb).length + ' ' + t('pages'));
@@ -509,7 +493,7 @@ function renderSecMgrBody(focusSecId) {
     const pgList = mk('div', 'mgr-pg-list');
     const secPages = pagesOfSec(sec, nb);
     if (!secPages.length) {
-      pgList.appendChild(mk('div', 'mgr-sec-empty', 'Keine Seiten'));
+      pgList.appendChild(mk('div', 'mgr-sec-empty', t('noPagesYet')));
     } else {
       secPages.forEach((pg, idx) => {
         const item = mk('div', 'mgr-pg-item');

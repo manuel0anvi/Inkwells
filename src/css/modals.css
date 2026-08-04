@@ -182,6 +182,43 @@
   cursor: pointer
 }
 
+/* ── Abschnittsauswahl im Export ─────────────────────────────────────
+   Eine Zeile je Abschnitt mit Haekchen, Farbpunkt und Anzahl. */
+.export-sec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px
+}
+
+.export-sec-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all .12s
+}
+
+.export-sec-row:hover {
+  background: var(--sh2);
+  border-color: var(--sb2)
+}
+
+.export-sec-name {
+  flex: 1;
+  font-family: 'Crimson Pro', serif;
+  font-size: 14px;
+  color: var(--hi)
+}
+
+.export-sec-count {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 10px;
+  color: var(--lo)
+}
+
 /* Farbpunkt im Abschnitts-Menue am Seitenkopf */
 .ctx-sec-dot {
   width: 8px;
@@ -406,7 +443,9 @@
   border: 1px solid var(--sb);
   border-radius: 5px;
   gap: 8px;
-  cursor: grab;
+  /* Kein grab-Zeiger: Ziehen gibt es hier nicht. Er versprach seit jeher
+     etwas, das nirgends umgesetzt ist – das CSS dafuer liegt zwar bereit
+     (.dragging, .drag-over, .mgr-drop-slot), die Logik fehlt. */
   user-select: none;
   transition: all .15s
 }

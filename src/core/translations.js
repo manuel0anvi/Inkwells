@@ -22,6 +22,7 @@ const TRANSLATIONS = {
     page: 'Seite',
     pageNo: 'Seite {n}',
     allPages: 'Alle Seiten',
+    exportSecLabel: 'Welche Abschnitte?',
     navNoHeadings: 'Keine Überschriften auf diesen Seiten.',
     navNoPages: 'Diesem Abschnitt ist noch keine Seite zugeordnet.',
     setSection: 'Abschnitt festlegen',
@@ -88,7 +89,7 @@ const TRANSLATIONS = {
     
     // Section manager
     manageSectionsTitle: 'Abschnitte verwalten',
-    sectionManagerHint: 'Ziehen zum Sortieren · Rechtsklick für Optionen',
+    sectionManagerHint: 'Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft. Rechtsklick auf eine Seite für weitere Optionen.',
     addSection: '+ Abschnitt',
     done: 'Fertig',
     
@@ -514,6 +515,7 @@ const TRANSLATIONS = {
     page: 'Page',
     pageNo: 'Page {n}',
     allPages: 'All pages',
+    exportSecLabel: 'Which sections?',
     navNoHeadings: 'No headings on these pages.',
     navNoPages: 'No page is assigned to this section yet.',
     setSection: 'Set section',
@@ -580,7 +582,7 @@ const TRANSLATIONS = {
     
     // Section manager
     manageSectionsTitle: 'Manage Sections',
-    sectionManagerHint: 'Drag to reorder · Right-click for options',
+    sectionManagerHint: 'Sections are labels: a page keeps its place in the notebook. Right-click a page for more options.',
     addSection: '+ Section',
     done: 'Done',
     
@@ -1005,6 +1007,7 @@ const TRANSLATIONS = {
     page: 'Pagina',
     pageNo: 'Pagina {n}',
     allPages: 'Tutte le pagine',
+    exportSecLabel: 'Quali sezioni?',
     navNoHeadings: 'Nessun titolo in queste pagine.',
     navNoPages: 'Nessuna pagina è ancora assegnata a questa sezione.',
     setSection: 'Scegli la sezione',
@@ -1071,7 +1074,7 @@ const TRANSLATIONS = {
     
     // Section manager
     manageSectionsTitle: 'Gestisci Sezioni',
-    sectionManagerHint: 'Trascina per riordinare · Clic destro per opzioni',
+    sectionManagerHint: 'Le sezioni sono etichette: una pagina mantiene il suo posto nel quaderno. Clic destro su una pagina per altre opzioni.',
     addSection: '+ Sezione',
     done: 'Fatto',
     

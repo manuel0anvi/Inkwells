@@ -22,10 +22,14 @@
   const currentRow = E('export-scope-current-row');
   const currentHint = E('export-current-hint');
   const startBtn = E('export-start');
+  const secBlock = E('export-sec-block');
+  const secList = E('export-sec-list');
 
   let exportNb = null;
   let entries = [];        // aus exportPageList()
   let currentIndex = -1;   // 0-basiert, Position der offenen Seite
+  // Abschnitte, die mit sollen. Leer = keine Einschraenkung.
+  let pickedSecs = new Set();
 
   /* ── Öffnen und Schließen ─────────────────────────────────────────── */
 
@@ -46,6 +50,8 @@
     }
 
     totalEl.textContent = ` · ${entries.length} ${entries.length === 1 ? t('page') : t('pages')}`;
+
+    buildSectionPicker(nb);
 
     // „Nur die aktuelle Seite" ergibt nur Sinn, wenn dieses Heft offen ist
     currentIndex = (S.activeNbId === nb.id)
@@ -96,26 +102,88 @@
     if (radio && !radio.checked) { radio.checked = true; rangeInput.disabled = false; }
   });
 
+  /* ── Abschnittsauswahl ────────────────────────────────────────────
+     Wirkt ZUSAETZLICH zur Seitenauswahl darueber: erst wird bestimmt,
+     welche Seiten in Frage kommen, dann welche Abschnitte davon. Wer
+     nichts ankreuzt, bekommt alles – so wie vorher auch.
+
+     Seiten ohne Etikett stehen als eigener Eintrag darin. Ohne ihn waeren
+     sie bei jeder Einschraenkung stillschweigend weg. */
+  function buildSectionPicker(nb) {
+    pickedSecs = new Set();
+    secList.innerHTML = '';
+
+    const secs = (nb.sections || []).filter(sec => entries.some(e => e.sec?.id === sec.id));
+    const ohne = entries.some(e => !e.sec);
+
+    // Ohne Abschnitte gibt es nichts zu waehlen
+    if (!secs.length) { secBlock.style.display = 'none'; return; }
+    secBlock.style.display = '';
+
+    const zeile = (id, label, farbe, anzahl) => {
+      const row = document.createElement('label');
+      row.className = 'export-sec-row';
+
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'pt-check';
+      box.checked = true;
+      pickedSecs.add(id);
+      box.addEventListener('change', () => {
+        if (box.checked) pickedSecs.add(id); else pickedSecs.delete(id);
+        statusEl.textContent = '';
+      });
+
+      const dot = document.createElement('span');
+      dot.className = 'sec-dot';
+      if (farbe) dot.style.background = farbe;
+      else dot.style.boxShadow = 'inset 0 0 0 1.5px var(--gd)', dot.style.background = 'transparent';
+
+      const name = document.createElement('span');
+      name.className = 'export-sec-name';
+      name.textContent = label;
+
+      const zahl = document.createElement('span');
+      zahl.className = 'export-sec-count';
+      zahl.textContent = String(anzahl);
+
+      row.append(box, dot, name, zahl);
+      secList.appendChild(row);
+    };
+
+    for (const sec of secs) {
+      zeile(sec.id, sec.name, colorForSection(sec.id),
+        entries.filter(e => e.sec?.id === sec.id).length);
+    }
+    if (ohne) zeile('', t('noSection'), null, entries.filter(e => !e.sec).length);
+  }
+
   /* ── Auswahl auswerten ────────────────────────────────────────────── */
 
   /** @returns {Array|null} die gewählten Einträge, null bei Fehleingabe */
   function selectedEntries() {
     const scope = overlay.querySelector('input[name="export-scope"]:checked')?.value || 'all';
 
-    if (scope === 'all') return entries;
-
-    if (scope === 'current') {
+    let chosen;
+    if (scope === 'all') {
+      chosen = entries;
+    } else if (scope === 'current') {
       if (currentIndex < 0) return null;
-      return [entries[currentIndex]];
+      chosen = [entries[currentIndex]];
+    } else {
+      const numbers = parsePageRange(rangeInput.value, entries.length);
+      if (!numbers) {
+        statusEl.textContent = t('exportRangeInvalid');
+        return null;
+      }
+      chosen = entries.filter((_, index) => numbers.has(index + 1));
     }
 
-    const numbers = parsePageRange(rangeInput.value, entries.length);
-    if (!numbers) {
-      statusEl.textContent = t('exportRangeInvalid');
-      return null;
+    // Dann die Abschnitte – nur wenn es ueberhaupt welche zur Wahl gab
+    if (secBlock.style.display !== 'none') {
+      chosen = chosen.filter(e => pickedSecs.has(e.sec?.id || ''));
     }
 
-    const chosen = entries.filter((_, index) => numbers.has(index + 1));
     if (!chosen.length) {
       statusEl.textContent = t('exportNoPages');
       return null;
