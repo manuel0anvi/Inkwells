@@ -30,32 +30,100 @@ function objLayerOf(obj) {
 
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.obj-wrap')) deselect(); });
 
-/* >>> Bilder hinter dem Text mit Alt+Klick greifen <<<
-   Ein Bild in der hinteren Ebene liegt unter .j-text, und das Textfeld
-   nimmt in der Zeigerstellung jeden Klick entgegen – auch dort, wo gar
-   kein Buchstabe steht. Ohne diesen Griff wäre ein einmal nach hinten
-   gestelltes Bild nicht mehr auswählbar. Der Hinweis darauf erscheint
-   beim Umschalten als kurze Meldung. */
+/* ══════════════════════════════════════════════════════════════════════
+   EIN BILD HINTER DEM TEXT ANKLICKEN
+
+   Es liegt unter .j-text, und das Textfeld nimmt in der Zeigerstellung
+   JEDEN Klick entgegen – auch dort, wo gar kein Buchstabe steht. Ein
+   einmal nach hinten gestelltes Bild war damit für immer verloren: man
+   kam nur noch ins Schreiben.
+
+   Deshalb wird hier vorher abgefangen. Die Regel ist die, die man von
+   Textverarbeitungen kennt:
+
+     · auf einem Buchstaben  →  der Text gewinnt, der Blinker springt hin
+     · irgendwo sonst        →  das Bild darunter wird ausgewählt
+     · mit Alt               →  immer das Bild, auch mitten im Wort
+
+   Ob ein Buchstabe unter dem Zeiger liegt, beantwortet nicht die Fläche
+   des Absatzes, sondern das Rechteck des einzelnen Zeichens neben der
+   Einfügemarke. Eine leere Zeile oder der Platz unter dem letzten Absatz
+   zählen dadurch als „kein Text".
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Das oberste Bild unter dem Zeiger, das hinter dem Text liegt. */
+function backObjectAt(pageEl, x, y) {
+  const layer = pageEl.querySelector('.j-objects');
+  if (!layer) return null;
+
+  // Von vorn nach hinten: das zuletzt gezeichnete liegt oben
+  const wraps = [...layer.querySelectorAll('.obj-wrap')].reverse();
+  for (const wrap of wraps) {
+    if (Number(wrap.dataset.restz) !== OBJ_Z.back) continue;
+    if (typeof wrap._beginObjInteraction !== 'function') continue;
+    const r = wrap.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return wrap;
+  }
+  return null;
+}
+
+/** Die Einfügemarke an einer Bildschirmstelle – über beide Schreibweisen. */
+function caretAt(x, y) {
+  if (document.caretRangeFromPoint) {
+    const range = document.caretRangeFromPoint(x, y);
+    return range ? { node: range.startContainer, offset: range.startOffset } : null;
+  }
+  if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    return pos ? { node: pos.offsetNode, offset: pos.offset } : null;
+  }
+  return null;
+}
+
+/** Steht an dieser Stelle wirklich ein Zeichen? */
+function pointIsOnText(pageEl, x, y) {
+  const textDiv = pageEl.querySelector('.j-text');
+  if (!textDiv) return false;
+
+  const caret = caretAt(x, y);
+  if (!caret || !textDiv.contains(caret.node)) return false;
+
+  const node = caret.node;
+  if (node.nodeType !== 3) return false;   // kein Textknoten – also kein Zeichen
+
+  /* Beide Nachbarn der Einfügemarke ansehen: der Klick kann links oder
+     rechts vom gefundenen Punkt auf dem Zeichen gelandet sein. */
+  const len = node.textContent.length;
+  const spans = [[caret.offset - 1, caret.offset], [caret.offset, caret.offset + 1]];
+
+  for (const [from, to] of spans) {
+    if (from < 0 || to > len) continue;
+    const probe = document.createRange();
+    probe.setStart(node, from);
+    probe.setEnd(node, to);
+    for (const r of probe.getClientRects()) {
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
+    }
+  }
+  return false;
+}
+
 document.addEventListener('pointerdown', e => {
-  if (!e.altKey || typeof S === 'undefined' || S.mode !== 'cursor') return;
+  if (typeof S === 'undefined' || S.mode !== 'cursor') return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  // Ein Bild in der vorderen Ebene bekommt seinen Klick ohnehin selbst
   if (e.target.closest('.obj-wrap')) return;
 
   const pageEl = e.target.closest ? e.target.closest('.j-page') : null;
-  const layer = pageEl && pageEl.querySelector('.j-objects');
-  if (!layer) return;
+  if (!pageEl) return;
 
-  // Von vorn nach hinten suchen: das oberste Bild unter dem Zeiger gewinnt
-  const wraps = [...layer.querySelectorAll('.obj-wrap')].reverse();
-  for (const wrap of wraps) {
-    const r = wrap.getBoundingClientRect();
-    if (e.clientX < r.left || e.clientX > r.right) continue;
-    if (e.clientY < r.top || e.clientY > r.bottom) continue;
-    if (typeof wrap._beginObjInteraction !== 'function') continue;
-    e.preventDefault();
-    e.stopPropagation();
-    wrap._beginObjInteraction(e);
-    return;
-  }
+  const wrap = backObjectAt(pageEl, e.clientX, e.clientY);
+  if (!wrap) return;
+  if (!e.altKey && pointIsOnText(pageEl, e.clientX, e.clientY)) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  wrap._beginObjInteraction(e);
 }, true);
 
 /**
@@ -81,10 +149,17 @@ function objText(key, fallback) {
   return (typeof t === 'function' && t(key)) || fallback;
 }
 
+/* Ausgewählt liegt ein Bild immer obenauf – auch eines aus der hinteren
+   Ebene. Sonst lägen Griffe und Leiste mit ihm unter dem Text: sichtbar
+   wäre nichts davon und anklickbar erst recht nicht. Beim Abwählen fällt
+   es auf seine Ebene zurück (dataset.restz). */
+const OBJ_Z_SELECTED = OBJ_Z.front + 1;
+
 function deselect() {
   if (!_selObj) return;
   _selObj.classList.remove('selected');
   [..._selObj.querySelectorAll('.obj-handle,.obj-bar')].forEach(h => h.style.display = 'none');
+  if (_selObj.dataset.restz) _selObj.style.zIndex = _selObj.dataset.restz;
   _selObj = null;
 }
 
@@ -229,12 +304,14 @@ function placeObject(objLayer, obj, page) {
     if (objLayerOf(obj) === which) return;
     pushPageHistory(page);
     obj.layer = which;
-    wrap.style.zIndex = OBJ_Z[which];
+    wrap.dataset.restz = String(OBJ_Z[which]);
+    // Solange ausgewählt, bleibt es oben – erst das Abwählen lässt es sinken
+    if (_selObj !== wrap) wrap.style.zIndex = OBJ_Z[which];
     markLayerButtons();
     updateUndoRedoUI();
     noteObjectChanged();
     if (which === 'back' && typeof toast === 'function') {
-      toast(objText('objBehindHint', 'Hinter dem Text – mit Alt+Klick wieder auswählbar.'));
+      toast(objText('objBehindHint', 'Liegt jetzt hinter dem Text.'));
     }
   }
 
@@ -295,6 +372,8 @@ function placeObject(objLayer, obj, page) {
 
   wrap.appendChild(bar);
   wrap.dataset.objid = String(obj.id);
+  // Die Ebene, auf die es nach dem Abwählen zurückfällt
+  wrap.dataset.restz = String(OBJ_Z[objLayerOf(obj)]);
 
   /** Auswählen und, solange der Zeiger unten bleibt, verschieben. */
   function beginInteraction(e) {
@@ -302,6 +381,7 @@ function placeObject(objLayer, obj, page) {
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
     e.stopPropagation(); e.preventDefault();
     deselect(); _selObj = wrap; wrap.classList.add('selected');
+    wrap.style.zIndex = OBJ_Z_SELECTED;
     placeBar();
     [...wrap.querySelectorAll('.obj-handle')].forEach(h => h.style.display = 'flex');
     bar.style.display = 'flex';
@@ -339,6 +419,7 @@ function placeObject(objLayer, obj, page) {
       e.stopPropagation(); e.preventDefault();
       pinchStartDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
       pinchStartW = obj.w; pinchStartH = obj.h; deselect(); _selObj = wrap; wrap.classList.add('selected');
+      wrap.style.zIndex = OBJ_Z_SELECTED;
       placeBar();
       [...wrap.querySelectorAll('.obj-handle')].forEach(h => h.style.display = 'flex');
       bar.style.display = 'flex';
