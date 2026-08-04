@@ -55,13 +55,15 @@ function fakeElement() {
 }
 
 function makeNotebook(docId) {
+  /* Abschnitte sind Etiketten: die Zugehoerigkeit steht an der Seite
+     (secId), pgIds ist davon nur abgeleitet. */
   return {
     id: 'shared:' + docId, origin: 'shared', name: 'Geteilt', color: '#000',
-    defaultBg: 'ruled',
+    defaultBg: 'ruled', schemaVersion: 2,
     sections: [{ id: 's1', name: 'A', pgIds: ['p1', 'p2'], defaultBg: 'ruled' }],
     pages: [
-      { id: 'p1', date: '', bg: null, textContent: '<p>Eins</p>', inkStrokes: [], objects: [] },
-      { id: 'p2', date: '', bg: null, textContent: '<p>Zwei</p>', inkStrokes: [], objects: [] }
+      { id: 'p1', secId: 's1', date: '', bg: null, textContent: '<p>Eins</p>', inkStrokes: [], objects: [] },
+      { id: 'p2', secId: 's1', date: '', bg: null, textContent: '<p>Zwei</p>', inkStrokes: [], objects: [] }
     ]
   };
 }
@@ -337,7 +339,7 @@ function liveNb(app) {
   const own2 = makeNotebook('doc1');
   own2.id = 'nb-eigenes';
   own2.origin = undefined;
-  own2.pages.push({ id: 'offline', date: '', bg: null, textContent: '<p>Ohne Netz</p>', inkStrokes: [], objects: [] });
+  own2.pages.push({ id: 'offline', secId: 's1', date: '', bg: null, textContent: '<p>Ohne Netz</p>', inkStrokes: [], objects: [] });
   own2.sections[0].pgIds.push('offline');
 
   const room2 = makeNotebook('doc1');
@@ -349,7 +351,7 @@ function liveNb(app) {
   await wait(60);
 
   check('Die eigene Seite ist noch da', own2.pages.map(p => p.id), ['p1', 'p2', 'offline']);
-  check('Und hängt in einem Abschnitt', own2.sections[0].pgIds.includes('offline'), true);
+  check('Und behält ihr Etikett', own2.pages.find(p => p.id === 'offline').secId, 's1');
   check('Sie gilt als ungesichert', owner2.calls.save.length, 0);
 
   owner2.ctx.window.closeOpenSharedDoc();

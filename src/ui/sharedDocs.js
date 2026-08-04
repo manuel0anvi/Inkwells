@@ -533,33 +533,30 @@
   function adoptRoom(nb, roomNb) {
     const roomIds = new Set((roomNb.pages || []).map(p => String(p.id)));
 
-    // Wo lagen die eigenen Seiten? Für die, die der Raum nicht kennt.
-    const sectionOf = new Map();
-    for (const sec of (nb.sections || [])) {
-      for (const pgId of (sec.pgIds || [])) sectionOf.set(String(pgId), String(sec.id));
-    }
-
+    /* Seiten, die es nur hier gibt – ohne Netz angelegt. Ihr Etikett steht
+       an der Seite selbst und ueberlebt den Umbau von allein; frueher
+       musste es aus den pgIds gerettet werden. */
     const extras = (nb.pages || []).filter(p => !roomIds.has(String(p.id)));
 
+    // Der Raum ist die massgebliche Fassung, die eigenen Seiten haengen an
     nb.pages = (roomNb.pages || []).concat(extras);
     nb.sections = (roomNb.sections || []).map(sec => ({
       id: String(sec.id),
       name: String(sec.name || ''),
-      pgIds: (sec.pgIds || []).map(String),
+      pgIds: [],                       // gleich unten abgeleitet
       defaultBg: sec.defaultBg || nb.defaultBg || 'ruled'
     }));
 
-    if (!nb.sections.length && typeof getSections === 'function') getSections(nb);
-
-    for (const page of extras) {
-      const wanted = sectionOf.get(String(page.id));
-      const sec = nb.sections.find(s => s.id === wanted) || nb.sections[0];
-      if (sec && !sec.pgIds.includes(String(page.id))) sec.pgIds.push(String(page.id));
+    /* Ein Etikett, das es im Raum nicht mehr gibt, wird abgenommen – die
+       Seite bleibt, wo sie ist. Sie einem fremden Abschnitt zuzuschlagen
+       waere geraten. */
+    const bekannt = new Set(nb.sections.map(s => s.id));
+    for (const page of nb.pages) {
+      if (page.secId && !bekannt.has(String(page.secId))) delete page.secId;
     }
+    if (typeof syncSectionIds === 'function') syncSectionIds(nb);
 
-    if (!nb.sections.some(s => s.id === nb.activeSecId)) {
-      nb.activeSecId = nb.sections[0]?.id || '';
-    }
+    if (nb.activeSecId && !bekannt.has(String(nb.activeSecId))) nb.activeSecId = '';
     return extras.length;
   }
 

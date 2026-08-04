@@ -1562,6 +1562,9 @@
         id: pageId,
         date: page.date || '',
         bg: page.bg ?? null,
+        // Das Etikett gleich mitschicken: sonst haengt die neue Seite beim
+        // anderen bis zum folgenden st-Op im falschen Ausschnitt
+        secId: page.secId || '',
         w: page.w ?? null,
         h: page.h ?? null,
         textContent: page.textContent || '',
@@ -1678,9 +1681,12 @@
     };
     if (incoming.w) page.w = incoming.w;
     if (incoming.h) page.h = incoming.h;
+    // Das Etikett kommt mit dem Op mit – siehe base in doSyncStructure
+    if (incoming.secId) page.secId = String(incoming.secId);
 
     const at = Number.isInteger(data.index) ? data.index : (liveNb.pages || []).length;
     liveNb.pages.splice(Math.max(0, Math.min(at, liveNb.pages.length)), 0, page);
+    if (typeof syncSectionIds === 'function') syncSectionIds(liveNb);
 
     // Der gemeinsame Text der neuen Seite, sonst käme dort nichts an
     if (yAvailable()) docFor(pageId, page.textContent, null);
@@ -1697,9 +1703,7 @@
   function applyPageRemove(pageId) {
     const before = (liveNb.pages || []).length;
     liveNb.pages = (liveNb.pages || []).filter(p => String(p.id) !== pageId);
-    for (const sec of (liveNb.sections || [])) {
-      sec.pgIds = (sec.pgIds || []).filter(id => String(id) !== pageId);
-    }
+    if (typeof syncSectionIds === 'function') syncSectionIds(liveNb);
     if (liveNb.pages.length === before) return;
 
     delete S.strokeHistory[pageId];
@@ -1783,6 +1787,22 @@
         pgIds: (sec.pgIds || []).map(String),
         defaultBg: sec.defaultBg || liveNb.defaultBg || 'ruled'
       }));
+
+      /* >>> Die Etiketten reisen in den pgIds mit <<<
+         Seit Abschnitte Etiketten sind, steht die Zugehoerigkeit an der
+         Seite (page.secId). pgIds wird daraus nur noch abgeleitet – aber
+         genau deshalb traegt der Struktur-Op sie weiterhin, und hier
+         lassen sie sich zurueckrechnen. Das Uebertragungsprotokoll
+         brauchte dafuer keine Aenderung, und ein Stand ohne den Umbau
+         versteht denselben Op unveraendert. */
+      const etikett = new Map();
+      for (const sec of data.sections) {
+        for (const pgId of (sec.pgIds || [])) etikett.set(String(pgId), String(sec.id));
+      }
+      for (const page of (liveNb.pages || [])) {
+        const next = etikett.get(String(page.id)) || '';
+        if (next) page.secId = next; else delete page.secId;
+      }
     }
     if (typeof data.name === 'string' && data.name) liveNb.name = data.name;
     if (typeof data.color === 'string' && data.color) liveNb.color = data.color;
@@ -1800,11 +1820,15 @@
       liveNb.pages = sorted;
     }
 
-    /* Der eigene Abschnitt bleibt der eigene – es sei denn, es gibt ihn
-       nicht mehr. Sonst würde man beim Blättern des anderen mitgerissen. */
-    if (!(liveNb.sections || []).some(s => s.id === liveNb.activeSecId)) {
-      liveNb.activeSecId = (liveNb.sections || [])[0]?.id || '';
+    /* Der eigene Ausschnitt bleibt der eigene – es sei denn, es gibt ihn
+       nicht mehr. Dann zurueck auf "alle Seiten" statt auf irgendeinen
+       fremden Abschnitt. */
+    if (liveNb.activeSecId && !(liveNb.sections || []).some(s => s.id === liveNb.activeSecId)) {
+      liveNb.activeSecId = '';
     }
+
+    // Die abgeleiteten pgIds wieder in Deckung bringen
+    if (typeof syncSectionIds === 'function') syncSectionIds(liveNb);
 
     scheduleRerender();
   }

@@ -93,16 +93,15 @@ document.addEventListener('drop', async e => {
       try {
         const pdfImageUrls = await parsePdfToImages(dataUrl);
         if (insertType === 'page') {
-          const pages = pagesOfSec(sec, nb);
-          const curIdx = pages.indexOf(info.page);
-          const insertIdx = curIdx + 1;
+          // Direkt hinter die Seite, auf die abgelegt wurde – die Stelle
+          // zaehlt jetzt im HEFT, nicht im Abschnitt
+          const insertIdx = pageNumberOf(nb, info.page.id);
           pdfImageUrls.forEach((imgObj, i) => {
             const newPg = makePage('blank');
             newPg.bgImg = imgObj.url;
             newPg.w = CFG.PAGE_W;
             newPg.h = Math.round(CFG.PAGE_W * (imgObj.h / (imgObj.w || 1))) + 56;
-            nb.pages.push(newPg);
-            sec.pgIds.splice(insertIdx + i, 0, newPg.id);
+            insertPageInto(nb, sec, newPg, insertIdx + i);
             if (!firstNewPageId) firstNewPageId = newPg.id;
           });
           addedPages = true;
@@ -121,9 +120,8 @@ document.addEventListener('drop', async e => {
               if (curIdx < pages.length) {
                 targetPgInfo = getPage(pages[curIdx].id);
               } else {
-                const newPg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-                nb.pages.push(newPg);
-                sec.pgIds.splice(curIdx, 0, newPg.id);
+                const newPg = makePage(sec?.defaultBg || nb.defaultBg || 'ruled');
+                insertPageInto(nb, sec, newPg, pageNumberOf(nb, pages[curIdx - 1]?.id));
                 targetPgInfo = { page: newPg };
                 addedPages = true;
                 if (!firstNewPageId) firstNewPageId = newPg.id;
@@ -166,8 +164,7 @@ document.addEventListener('drop', async e => {
         await new Promise(r => tmpImg.onload = r);
         newPg.w = CFG.PAGE_W; // normalize to standard page
         newPg.h = Math.round(CFG.PAGE_W * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1))) + 56;
-        nb.pages.push(newPg);
-        sec.pgIds.splice(curIdx + 1, 0, newPg.id);
+        insertPageInto(nb, sec, newPg, pageNumberOf(nb, info.page.id));
         if (!firstNewPageId) firstNewPageId = newPg.id;
         addedPages = true;
         if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();

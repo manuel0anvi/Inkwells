@@ -238,6 +238,8 @@ async function loadNotebooksFromRegistry() {
         // Check if already in S.notebooks (by id)
         const existing = S.notebooks.find(n => n.id === nb.id);
         if (!existing) {
+          // Abschnitte sind Etiketten – ein aelteres Heft wird hier umgestellt
+          normalizeNotebook(nb);
           S.notebooks.push(nb);
           console.log('[Init] ✓ Loaded notebook:', nb.name);
         }
@@ -290,6 +292,7 @@ async function openNotebookFromFile(filePath) {
       await Registry.add(loadedNb, filePath);
     } else {
       // Add new notebook
+      normalizeNotebook(loadedNb);
       S.notebooks.push(loadedNb);
       console.log('[Init] Added new notebook to S.notebooks');
       

@@ -84,6 +84,8 @@ function makeNotebook(ctx, name, n) {
     sections: [{ id: `${name}-s1`, name: 'A', pgIds: pages.map(p => p.id), defaultBg: 'ruled' }]
   };
   nb.activeSecId = nb.sections[0].id;
+  // So, wie ein Heft nach dem Laden vorliegt: umgestellt, mit Etiketten
+  ctx.normalizeNotebook(nb);
   ctx.S.notebooks.push(nb);
   return nb;
 }
@@ -152,7 +154,10 @@ function makeNotebook(ctx, name, n) {
     ctx.transferPages(from, ['A-p1', 'A-p2'], to);
 
     check('Eine leere Seite wächst nach', from.pages.length, 1);
-    ok('Sie hängt auch im Abschnitt', from.sections[0].pgIds.length === 1);
+    /* Sie bekommt bewusst KEIN Etikett: welches sollte es sein? Unter
+       Etiketten ist eine Seite ohne Zuordnung völlig in Ordnung, und eine
+       geratene wäre schlechter als keine. */
+    ok('Und zwar ohne Etikett', !from.pages[0].secId);
     check('Und sie ist wirklich leer', from.pages[0].textContent, '');
     check('Das Ziel hat alle drei', to.pages.length, 3);
   }
@@ -228,17 +233,102 @@ function makeNotebook(ctx, name, n) {
     check('Und ohne Seiten kommt nichts', ctx.notebookPages({ pages: [] }), []);
   }
 
+  /* ── Aus Kapiteln werden Etiketten ───────────────────────────────────
+     Ein altes Heft trägt seine Reihenfolge in den pgIds der Abschnitte.
+     normalizeNotebook macht daraus eine durchgehende Folge und hängt jeder
+     Seite ihr Etikett an. Verlustfrei: die neue Reihenfolge ist genau die,
+     die man vorher beim Durchblättern gesehen hätte. */
+
+  console.log('\nMigration eines alten Hefts');
+
+  {
+    const ctx = loadData();
+    const alt = {
+      id: 'nb', name: 'Mathe', defaultBg: 'ruled',
+      // Einfüge-Reihenfolge, absichtlich durcheinander
+      pages: [{ id: 'u1' }, { id: 'r1' }, { id: 'ohne' }, { id: 'r2' }, { id: 'u2' }],
+      sections: [
+        { id: 'sR', name: 'Regeln', pgIds: ['r1', 'r2'], defaultBg: 'ruled' },
+        { id: 'sU', name: 'Übungen', pgIds: ['u1', 'u2'], defaultBg: 'grid' }
+      ]
+    };
+
+    ctx.normalizeNotebook(alt);
+
+    check('Die Reihenfolge ist die, die man gesehen hätte',
+      alt.pages.map(p => p.id), ['r1', 'r2', 'u1', 'u2', 'ohne']);
+    check('Jede Seite trägt ihr Etikett',
+      alt.pages.map(p => p.secId || '-'), ['sR', 'sR', 'sU', 'sU', '-']);
+    check('Das Heft ist als umgestellt vermerkt', alt.schemaVersion, 2);
+
+    // Nochmal anwenden darf nichts verändern
+    const vorher = JSON.stringify(alt);
+    ctx.normalizeNotebook(alt);
+    check('Ein zweiter Durchlauf ändert nichts', JSON.stringify(alt), vorher);
+
+    /* pgIds werden weiter mitgeschrieben, damit ein Stand ohne diesen
+       Umbau die Abschnitte nicht für leer hält und Füllseiten anlegt. */
+    check('pgIds bleiben abgeleitet gefüllt',
+      alt.sections.map(s => s.pgIds.join(',')), ['r1,r2', 'u1,u2']);
+
+    check('Ein Abschnitt ist ein Ausschnitt',
+      ctx.pagesOfSec(alt.sections[0], alt).map(p => p.id), ['r1', 'r2']);
+    check('Und die Seitenzahlen bleiben die des Hefts',
+      ctx.pagesOfSec(alt.sections[1], alt).map(p => ctx.pageNumberOf(alt, p.id)), [3, 4]);
+  }
+
+  console.log('\nEtikett wechseln');
+
+  {
+    const ctx = loadData();
+    const nb = {
+      id: 'nb', defaultBg: 'ruled',
+      pages: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      sections: [{ id: 's1', name: 'Eins', pgIds: ['a', 'b', 'c'], defaultBg: 'ruled' },
+                 { id: 's2', name: 'Zwei', pgIds: [], defaultBg: 'ruled' }]
+    };
+    ctx.normalizeNotebook(nb);
+
+    ctx.setSectionOfPage(nb, 'b', 's2');
+
+    check('Die Reihenfolge bleibt unangetastet', nb.pages.map(p => p.id), ['a', 'b', 'c']);
+    check('Die Seitenzahl auch', ctx.pageNumberOf(nb, 'c'), 3);
+    check('Das Etikett sitzt', ctx.findSecForPage('b', nb).id, 's2');
+    check('Und die abgeleiteten pgIds stimmen',
+      nb.sections.map(s => s.pgIds.join(',')), ['a,c', 'b']);
+
+    ctx.setSectionOfPage(nb, 'b', '');
+    check('Etikett abnehmen geht auch', ctx.findSecForPage('b', nb), null);
+    check('Die Seite bleibt trotzdem im Heft', nb.pages.map(p => p.id), ['a', 'b', 'c']);
+  }
+
+  /* Der Index zählt jetzt im HEFT, nicht im Abschnitt. Solange Abschnitte
+     Kapitel waren, hieß „an Stelle 1" die zweite Seite dieses Abschnitts;
+     unter Etiketten hat eine Seite genau einen Platz, und der gilt im
+     ganzen Heft. */
+
   console.log('\nEinsetzen an einer bestimmten Stelle');
 
   {
     const ctx = loadData();
     const nb = makeNotebook(ctx, 'A', 3);
     const sec = nb.sections[0];
+    const neu = ctx.makePage('ruled');
 
-    ctx.insertPageInto(nb, sec, ctx.makePage('ruled'), 1);
+    ctx.insertPageInto(nb, sec, neu, 1);
 
-    check('Die neue Seite sitzt an zweiter Stelle', sec.pgIds[1], nb.pages[3].id);
-    check('Und die Liste kennt sie', nb.pages.length, 4);
+    check('Die neue Seite sitzt an zweiter Stelle im Heft',
+      nb.pages.map(p => p.id), ['A-p1', neu.id, 'A-p2', 'A-p3']);
+    check('Sie hat die Seitenzahl 2', ctx.pageNumberOf(nb, neu.id), 2);
+    check('Und trägt das Etikett des Abschnitts', neu.secId, sec.id);
+    check('Die abgeleiteten pgIds folgen der Heft-Reihenfolge',
+      sec.pgIds, ['A-p1', neu.id, 'A-p2', 'A-p3']);
+
+    // Ohne Abschnitt eingesetzt: die Seite ist da, bleibt aber unetikettiert
+    const frei = ctx.makePage('ruled');
+    ctx.insertPageInto(nb, null, frei);
+    check('Auch ohne Etikett landet sie im Heft', ctx.pageNumberOf(nb, frei.id), 5);
+    ok('Und bekommt keins aufgedrängt', !frei.secId);
   }
 
   if (failed > 0) {

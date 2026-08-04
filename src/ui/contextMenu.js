@@ -64,14 +64,18 @@ E('pgctx-delete').addEventListener('click', async () => {
   hidePgCtxMenu();
   if (!_pgCtxPage) return;
   const nb = getNb(); if (!nb) return;
-  const sec = nb.sections?.find(s => s.pgIds.includes(_pgCtxPage.id));
-  if (sec && sec.pgIds.length <= 1) { await showAlert('Mindestens eine Seite muss bleiben.'); return; }
-  if (!await showConfirm('Seite löschen?')) return;
-  if (sec) sec.pgIds = sec.pgIds.filter(id => id !== _pgCtxPage.id);
+  /* Nur das HEFT braucht mindestens eine Seite. Frueher war die Sperre an
+     den Abschnitt geknuepft – unter Etiketten waere das die falsche Frage,
+     ein Etikett darf durchaus auf keiner Seite kleben. */
+  if (notebookPages(nb).length <= 1) { await showAlert(t('lastPageStays')); return; }
+  if (!await showConfirm(t('deletePage') + '?')) return;
   nb.pages = nb.pages.filter(p => p.id !== _pgCtxPage.id);
+  syncSectionIds(nb);
   delete S.strokeHistory[_pgCtxPage.id];
   _pgCtxEl.remove();
   renumberVisiblePages();
   renderSideTree();
+  // Fehlte: ohne das erreichte das Loeschen weder die Datei noch den Raum
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 });
 

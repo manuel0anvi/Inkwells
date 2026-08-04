@@ -50,10 +50,15 @@ function pagePreview(p) {
   return (p.textContent || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
 }
 
+/* Abschnitte sind Etiketten – ein Heft braucht keine.
+
+   Früher wurde hier bei fehlenden Abschnitten einer namens „Allgemein"
+   angelegt, der ALLE Seiten enthielt. Das war nötig, solange die Anzeige
+   an pgIds hing: ohne Abschnitt hätte man gar nichts gesehen. Heute zeigt
+   „alle Seiten" ohnehin alles, und ein Zwangsetikett auf jeder Seite wäre
+   nur im Weg. Angelegt wird deshalb nichts mehr. */
 function getSections(nb) {
-  if (!nb.sections || !nb.sections.length) {
-    nb.sections = [{ id: uid(), name: 'Allgemein', pgIds: nb.pages.map(p => p.id), defaultBg: nb.defaultBg || 'ruled' }];
-  }
+  if (!Array.isArray(nb.sections)) nb.sections = [];
   nb.sections.forEach(s => { if (!s.defaultBg) s.defaultBg = nb.defaultBg || 'ruled'; });
   return nb.sections;
 }
@@ -79,6 +84,11 @@ function getSections(nb) {
    hängen hinten an, in ihrer bisherigen Reihenfolge. */
 function notebookPages(nb) {
   if (!nb || !Array.isArray(nb.pages)) return [];
+
+  /* Umgestelltes Heft: nb.pages IST die Reihenfolge. Hier noch einmal über
+     die Abschnitte zu gehen wäre sogar falsch – die pgIds sind dort nur
+     abgeleitet und würden die Seiten wieder nach Abschnitten gruppieren. */
+  if (nb.schemaVersion === SCHEMA_VERSION) return nb.pages;
 
   const byId = new Map(nb.pages.map(p => [String(p.id), p]));
   const out = [];
@@ -108,12 +118,133 @@ function pageNumberOf(nb, pgId) {
   return notebookPages(nb).findIndex(p => String(p.id) === String(pgId)) + 1;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ABSCHNITTE SIND ETIKETTEN, KEINE KAPITEL
+
+   Früher bestimmte sec.pgIds beides: WELCHE Seiten zu einem Abschnitt
+   gehören und in welcher REIHENFOLGE sie stehen. Man sah immer nur einen
+   Abschnitt, und ein Wechsel zeigte einen ganz anderen Satz Seiten.
+
+   Jetzt ist ein Heft eine durchgehende Folge (nb.pages), und ein
+   Abschnitt nur noch ein Ausschnitt daraus (page.secId). Im Mathe-Heft
+   trägt man Regelseiten als „Regeln" ein und Übungsseiten als „Übungen",
+   ohne dass sich die Reihenfolge ändert – und die Seitenzahlen bleiben,
+   wie sie sind, auch wenn nur ein Ausschnitt gezeigt wird.
+
+   >>> pgIds wird trotzdem weiter mitgeschrieben <<<
+   Abgeleitet, nicht als Wahrheit. Ein Stand ohne diesen Umbau hielte
+   einen Abschnitt ohne pgIds für leer und legte ungefragt Füllseiten an –
+   das wäre echte Datenverschmutzung, nicht bloß ein Anzeigefehler. Solange
+   zwei Leute mit verschiedenen Ständen arbeiten, bleibt das Feld also
+   gefüllt. Siehe syncSectionIds().
+   ══════════════════════════════════════════════════════════════════════ */
+
+const SCHEMA_VERSION = 2;
+
+/**
+ * Bringt ein Heft auf den heutigen Aufbau. Läuft an jedem Eingang, durch
+ * den ein Heft in den Zustand gelangt (core/init.js, core/cloudSync.js),
+ * und ist mehrfach anwendbar.
+ *
+ * Verlustfrei: die neue Reihenfolge ist genau die, die man vorher beim
+ * Durchblättern gesehen hätte – erst Abschnitt für Abschnitt, dann was in
+ * keinem stand.
+ */
+function normalizeNotebook(nb) {
+  if (!nb || !Array.isArray(nb.pages)) return nb;
+  if (nb.schemaVersion === SCHEMA_VERSION) return nb;
+
+  // 1. Die angezeigte Reihenfolge wird die wirkliche
+  nb.pages = notebookPages(nb);
+
+  // 2. Jede Seite bekommt ihr Etikett
+  for (const sec of (nb.sections || [])) {
+    for (const pgId of (sec.pgIds || [])) {
+      const page = nb.pages.find(p => String(p.id) === String(pgId));
+      if (page && !page.secId) page.secId = sec.id;
+    }
+  }
+
+  nb.schemaVersion = SCHEMA_VERSION;
+  syncSectionIds(nb);
+  return nb;
+}
+
+/**
+ * Schreibt die abgeleiteten pgIds neu – nach jeder Änderung an der
+ * Reihenfolge oder an den Etiketten aufzurufen.
+ *
+ * Sie sind ab jetzt nur noch ein Abfallprodukt für ältere Stände; gelesen
+ * wird die Zugehörigkeit aus page.secId.
+ */
+function syncSectionIds(nb) {
+  if (!nb || !Array.isArray(nb.sections)) return;
+  const order = nb.pages || [];
+  for (const sec of nb.sections) {
+    sec.pgIds = order.filter(p => String(p.secId || '') === String(sec.id)).map(p => p.id);
+  }
+}
+
+/**
+ * Der gerade gezeigte Ausschnitt – null heißt „alle Seiten".
+ *
+ * nb.activeSecId hat damit eine neue Bedeutung: früher „welcher Abschnitt
+ * ist offen", heute „worauf ist die Ansicht eingeschränkt". Leer ist der
+ * Normalfall, nicht die Ausnahme.
+ */
+function activeSection(nb) {
+  if (!nb || !nb.activeSecId) return null;
+  return (nb.sections || []).find(s => String(s.id) === String(nb.activeSecId)) || null;
+}
+
+/** Die Seiten, die gerade zu sehen sind – gefiltert oder alle. */
+function visiblePages(nb) {
+  const sec = activeSection(nb);
+  return sec ? pagesOfSec(sec, nb) : notebookPages(nb);
+}
+
+/** Die Seiten eines Abschnitts – ein Ausschnitt aus der Heft-Reihenfolge. */
 function pagesOfSec(sec, nb) {
-  return (sec.pgIds || []).map(id => nb.pages.find(p => p.id === id)).filter(Boolean);
+  if (!sec) return [];
+  return notebookPages(nb).filter(p => String(p.secId || '') === String(sec.id));
 }
 
 function findSecForPage(pgId, nb) {
-  return (nb.sections || []).find(s => (s.pgIds || []).includes(pgId));
+  const page = (nb?.pages || []).find(p => String(p.id) === String(pgId));
+  if (!page || !page.secId) return null;
+  return (nb.sections || []).find(s => String(s.id) === String(page.secId)) || null;
+}
+
+/**
+ * Setzt das Etikett einer Seite – oder nimmt es weg (secId leer).
+ * Die Position im Heft bleibt dabei unangetastet; genau darum geht es.
+ */
+function setSectionOfPage(nb, pgId, secId) {
+  const page = (nb?.pages || []).find(p => String(p.id) === String(pgId));
+  if (!page) return false;
+  const next = secId ? String(secId) : '';
+  if (String(page.secId || '') === next) return false;
+  if (next) page.secId = next; else delete page.secId;
+  syncSectionIds(nb);
+  return true;
+}
+
+/* Die Farbe eines Abschnitts wird GERECHNET, nicht gespeichert.
+
+   applyStruct() in ui/collab.js baut eingehende Abschnitte feldweise neu
+   auf und kennt nur id, name, pgIds und defaultBg – ein gespeichertes
+   sec.color verschwände bei jedem Struktur-Abgleich eines geteilten Hefts
+   stillschweigend. Aus der Kennung gerechnet gibt es nichts zu verlieren.
+
+   Gleiches Verfahren wie colorForUid in core/share.js. */
+function colorForSection(secId) {
+  const palette = (typeof NB_COLORS !== 'undefined' && NB_COLORS.length)
+    ? NB_COLORS
+    : ['#c04040', '#c87a2a', '#2e8a46', '#2a5fa8', '#7a3aaa', '#8a5030', '#2a8a88', '#606060'];
+  let hash = 0;
+  const key = String(secId || '');
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -153,19 +284,29 @@ function clonePage(page) {
 }
 
 /**
- * Eine Seite in ein Heft einsetzen – in die Seitenliste UND in einen
- * Abschnitt. Beides gehört zusammen: eine Seite, die nur in pgIds steht,
- * gibt es nicht wirklich, und eine, die nur in pages steht, taucht
- * nirgends auf.
+ * Eine Seite in ein Heft einsetzen.
  *
- * @param {number} [index] Stelle im Abschnitt; ohne Angabe ans Ende.
+ * @param {object} nb
+ * @param {object|null} sec  Abschnitt, dessen Etikett die Seite bekommt
+ *                           (null = ohne Zuordnung)
+ * @param {object} page
+ * @param {number} [index]   Stelle im HEFT; ohne Angabe ans Ende.
+ *
+ * >>> Der Index zählt jetzt im Heft, nicht im Abschnitt <<<
+ * Solange Abschnitte Kapitel waren, hieß „an Stelle 3" die dritte Seite
+ * DIESES Abschnitts. Unter Etiketten gibt es das nicht mehr – eine Seite
+ * hat genau einen Platz, und der gilt im ganzen Heft.
  */
 function insertPageInto(nb, sec, page, index) {
-  if (!nb || !sec || !page) return null;
-  nb.pages.push(page);
-  const at = Number.isInteger(index) ? index : (sec.pgIds || []).length;
-  sec.pgIds = [...(sec.pgIds || [])];
-  sec.pgIds.splice(at, 0, page.id);
+  if (!nb || !page) return null;
+  if (sec) page.secId = sec.id;
+
+  const at = Number.isInteger(index)
+    ? Math.max(0, Math.min(index, nb.pages.length))
+    : nb.pages.length;
+  nb.pages.splice(at, 0, page);
+
+  syncSectionIds(nb);
   return page;
 }
 
@@ -193,26 +334,27 @@ function transferPages(fromNb, pageIds, toNb, options = {}) {
 
   const copy = !!options.copy;
   getSections(fromNb);
-  const toSec = getSections(toNb).find(s => s.id === toNb.activeSecId)
-    || getSections(toNb)[0];
-  if (!toSec) return result;
+  getSections(toNb);
+
+  /* Das Etikett im Ziel: der gerade gezeigte Ausschnitt, sonst keins.
+     Steht die Ansicht auf „alle Seiten", bekommt die Seite bewusst gar
+     kein Etikett – ihr eines aufzudrängen wäre geraten. */
+  const toSec = (toNb.sections || []).find(s => s.id === toNb.activeSecId) || null;
 
   /* In der Reihenfolge des Ausgangshefts, nicht in der des Anklickens –
      sonst stünden die Seiten im Ziel durcheinander. */
   const wanted = new Set(pageIds.map(String));
-  const ordered = (fromNb.pages || []).filter(p => wanted.has(String(p.id)));
+  const ordered = notebookPages(fromNb).filter(p => wanted.has(String(p.id)));
 
   for (const page of ordered) {
-    const fromSec = findSecForPage(page.id, fromNb);
-
     if (copy) {
       insertPageInto(toNb, toSec, clonePage(page));
     } else {
       // Beim Verschieben behält die Seite ihre Kennung: sie gibt es
       // hinterher nur noch einmal, also kann nichts kollidieren.
-      if (fromSec) fromSec.pgIds = (fromSec.pgIds || []).filter(id => id !== page.id);
       fromNb.pages = (fromNb.pages || []).filter(p => p.id !== page.id);
       if (S.strokeHistory) delete S.strokeHistory[page.id];
+      delete page.secId;                    // das Etikett des alten Hefts gilt hier nicht
       insertPageInto(toNb, toSec, page);
     }
 
@@ -220,16 +362,13 @@ function transferPages(fromNb, pageIds, toNb, options = {}) {
     result.pages.push(page);
   }
 
-  /* Ein Heft ohne Seiten gibt es nicht – dieselbe Regel wie beim Löschen
-     einer Seite (ui/sidebar.js). Betrifft nur das Verschieben. */
+  /* Ein Heft ohne Seiten gibt es nicht. Die frühere Regel „auch kein
+     Abschnitt ohne Seiten" ist mit den Etiketten entfallen – ein Etikett,
+     das gerade auf keiner Seite klebt, ist völlig in Ordnung. */
   if (!copy) {
-    for (const sec of getSections(fromNb)) {
-      if ((sec.pgIds || []).length) continue;
-      insertPageInto(fromNb, sec, makePage(sec.defaultBg || fromNb.defaultBg || 'ruled'));
-    }
+    syncSectionIds(fromNb);
     if (!(fromNb.pages || []).length) {
-      const sec = getSections(fromNb)[0];
-      insertPageInto(fromNb, sec, makePage(fromNb.defaultBg || 'ruled'));
+      insertPageInto(fromNb, null, makePage(fromNb.defaultBg || 'ruled'));
     }
   }
 

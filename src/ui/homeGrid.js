@@ -355,7 +355,8 @@ E('nb-modal-ok').addEventListener('click', async () => {
     const nb = { id: uid(), name, color: _nbColor, defaultBg: _nbBg, pages: [], sections: [] }; 
     const pg = makePage(nb.defaultBg); 
     nb.pages.push(pg); 
-    nb.sections = [{ id: uid(), name: 'Allgemein', pgIds: [pg.id], defaultBg: nb.defaultBg }]; 
+    // Ein neues Heft startet ohne Abschnitte: "alle Seiten" zeigt ohnehin alles
+    nb.sections = []; 
     S.notebooks.push(nb);
     // Refresh home grid so new notebook appears immediately in overview
     try { renderHomeGrid(); } catch (err) { console.error('[HomeGrid] renderHomeGrid after create failed:', err); }

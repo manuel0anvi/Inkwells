@@ -945,16 +945,20 @@ function assembleNotebook(head, pages = [], ink = [], blobs = []) {
   };
   if (head.activeSecId) notebook.activeSecId = head.activeSecId;
 
-  // Kein Abschnitt hinterlegt (sehr alte Fassung): einen aufmachen, sonst
-  // steht der Editor ohne Navigation da.
-  if (!notebook.sections.length && notebookPages.length) {
-    notebook.sections = [{
-      id: 'sec_' + (notebook.id || 'doc'),
-      name: 'Allgemein',
-      pgIds: notebookPages.map(p => p.id),
-      defaultBg: notebook.defaultBg
-    }];
+  /* Abschnitte sind Etiketten: die Zugehoerigkeit gehoert an die Seite.
+     Uebertragen wird sie weiterhin in den abgeleiteten pgIds des Kopfes –
+     hier wird sie zurueckgerechnet. Ein Dokument ganz ohne Abschnitte
+     braucht keinen Ersatz mehr: "alle Seiten" zeigt ohnehin alles. */
+  for (const sec of notebook.sections) {
+    for (const pgId of (sec.pgIds || [])) {
+      const page = notebookPages.find(p => String(p.id) === String(pgId));
+      if (page && !page.secId) page.secId = String(sec.id);
+    }
   }
+  for (const sec of notebook.sections) {
+    sec.pgIds = notebookPages.filter(p => String(p.secId || '') === String(sec.id)).map(p => p.id);
+  }
+  notebook.schemaVersion = 2;
 
   return notebook;
 }

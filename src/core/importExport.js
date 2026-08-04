@@ -44,9 +44,12 @@ E('btn-insert').addEventListener('click', async () => {
 
   toast(t('processingFiles'));
   const nb = getNb();
-  const sec = nb?.sections?.find(s => s.id === nb.activeSecId);
+  /* Der gezeigte Ausschnitt – darf leer sein. Steht die Ansicht auf
+     "alle Seiten", bekommen neue Seiten kein Etikett; frueher brach der
+     Einfuegevorgang hier ab, weil immer ein Abschnitt offen sein musste. */
+  const sec = activeSection(nb);
   const info = getPage(S.activePgId);
-  if (!info || !sec) return;
+  if (!info) return;
 
   let addedPages = false;
   let firstNewPageId = null;
@@ -58,9 +61,8 @@ E('btn-insert').addEventListener('click', async () => {
         const pdfImageUrls = await parsePdfToImages(f.dataUrl);
 
         if (insertType === 'page') {
-          const pages = pagesOfSec(sec, nb);
-          const curIdx = pages.indexOf(info.page);
-          const insertIdx = curIdx + 1;
+          // Die Stelle zaehlt im HEFT, nicht im Abschnitt
+          const insertIdx = pageNumberOf(nb, info.page.id);
 
           pdfImageUrls.forEach((imgObj, i) => {
             const newPg = makePage('blank'); // better default for full page images
@@ -87,7 +89,7 @@ E('btn-insert').addEventListener('click', async () => {
                 targetPgInfo = getPage(pages[curIdx].id);
               } else {
                 const newPg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-                insertPageInto(nb, sec, newPg, curIdx);
+                insertPageInto(nb, sec, newPg, pageNumberOf(nb, pages[curIdx - 1]?.id));
                 targetPgInfo = { page: newPg };
                 addedPages = true;
                 if (!firstNewPageId) firstNewPageId = newPg.id;
@@ -121,8 +123,6 @@ E('btn-insert').addEventListener('click', async () => {
       }
     } else if (f.kind === 'image') {
       if (insertType === 'page') {
-        const pages = pagesOfSec(sec, nb);
-        const curIdx = pages.indexOf(info.page);
         const newPg = makePage('blank');
         newPg.bgImg = f.dataUrl;
         const tmpImg = new Image();
@@ -130,7 +130,7 @@ E('btn-insert').addEventListener('click', async () => {
         await new Promise(r => tmpImg.onload = r);
         newPg.w = CFG.PAGE_W; // normalize to roughly standard page
         newPg.h = Math.round(CFG.PAGE_W * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1))) + 56;
-        insertPageInto(nb, sec, newPg, curIdx + 1);
+        insertPageInto(nb, sec, newPg, pageNumberOf(nb, info.page.id));
         if (!firstNewPageId) firstNewPageId = newPg.id;
         addedPages = true;
         if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();

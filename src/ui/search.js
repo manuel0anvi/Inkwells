@@ -85,8 +85,9 @@
         const text = plainTextOf(page);
         if (!text || !text.toLowerCase().includes(query)) continue;
 
-        const sec = sections.find(s => (s.pgIds || []).includes(page.id));
-        const pageNo = sec ? (sec.pgIds || []).indexOf(page.id) + 1 : (nb.pages.indexOf(page) + 1);
+        const sec = findSecForPage(page.id, nb);
+        // Die Seitenzahl des HEFTS – dieselbe, die ueber der Seite steht
+        const pageNo = pageNumberOf(nb, page.id);
 
         hits.push({
           kind: 'page',

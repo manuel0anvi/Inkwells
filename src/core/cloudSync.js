@@ -1732,6 +1732,11 @@ class CloudSyncManager {
     notebook.name = notebook.name
       || (file?.name || 'Untitled').replace(/\.(json|jrnl)$/i, '').split('__')[0];
     notebook.updatedAt = notebook.updatedAt || file?.modifiedTime || new Date().toISOString();
+
+    /* Aus der Cloud kommt, was ein anderes Gerät hochgeladen hat – auch von
+       einem Stand ohne den Etiketten-Umbau. Hier ist der Eingang, an dem so
+       ein Heft umgestellt wird (core/data.js). */
+    if (typeof normalizeNotebook === 'function') normalizeNotebook(notebook);
     return notebook;
   }
 

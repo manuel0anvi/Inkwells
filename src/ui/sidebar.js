@@ -217,9 +217,13 @@ function showSecMgrPageMenu(x, y, sec, page) {
         toast(t('cancelled'), true);
         return;
       }
-      sec.pgIds = (sec.pgIds || []).filter(id => id !== page.id);
-      target.pgIds = [...(target.pgIds || []), page.id];
+      /* Umetikettieren, nicht verschieben: die Seite bleibt, wo sie im
+         Heft steht, und behaelt ihre Seitenzahl. Frueher wurde sie ans
+         Ende des Zielabschnitts gehaengt und riss dabei ihre Position
+         mit. */
+      setSectionOfPage(nb, page.id, target.id);
       if (nb.activeSecId === sec.id && S.activePgId === page.id) {
+        // Sonst verschwaende die Seite aus der gerade gezeigten Auswahl
         nb.activeSecId = target.id;
         openSection(target, page.id);
       }
@@ -259,19 +263,19 @@ async function deletePageFromSection(sec, page) {
   const ok = await showConfirm(t('deletePage') + '?');
   if (!ok) return;
 
-  sec.pgIds = (sec.pgIds || []).filter(id => id !== page.id);
   nb.pages = (nb.pages || []).filter(p => p.id !== page.id);
+  syncSectionIds(nb);
 
-  if (!sec.pgIds.length) {
-    const fallback = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-    nb.pages.push(fallback);
-    sec.pgIds.push(fallback.id);
+  /* Nur das HEFT darf nicht leer werden. Ein Etikett, das gerade auf keiner
+     Seite klebt, ist dagegen voellig in Ordnung – frueher wuchs hier eine
+     Seite nach, sobald ein Abschnitt leer lief. */
+  if (!nb.pages.length) {
+    insertPageInto(nb, null, makePage(nb.defaultBg || 'ruled'));
   }
 
   if (S.activePgId === page.id) {
-    const activeSec = nb.sections.find(s => s.id === nb.activeSecId) || sec;
-    const nextId = activeSec.pgIds?.[0] || sec.pgIds?.[0];
-    openSection(activeSec, nextId);
+    const shown = visiblePages(nb);
+    openSection(activeSection(nb), shown[0]?.id || notebookPages(nb)[0]?.id);
   }
 
   renderSideTree();
@@ -284,8 +288,7 @@ function addPageToSection(sec) {
   if (!nb || !sec) return;
   if (!mgrCanEdit()) return;
   const pg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-  nb.pages.push(pg);
-  sec.pgIds = [...(sec.pgIds || []), pg.id];
+  insertPageInto(nb, sec, pg);
 
   if (nb.activeSecId === sec.id) openSection(sec, pg.id);
   else renderSideTree();
@@ -358,9 +361,11 @@ async function addSectionFromManager() {
   if (!name) return;
 
   getSections(nb);
-  const pg = makePage(nb.defaultBg || 'ruled');
-  nb.pages.push(pg);
-  const sec = { id: uid(), name, pgIds: [pg.id], defaultBg: nb.defaultBg };
+  /* Ohne eigene Seite: ein Abschnitt ist ein Etikett, und ein Etikett, das
+     noch auf keiner Seite klebt, ist voellig in Ordnung. Frueher musste
+     zwingend eine Seite mit angelegt werden, weil ein Abschnitt ohne
+     Seiten gar nicht anzuzeigen war. */
+  const sec = { id: uid(), name, pgIds: [], defaultBg: nb.defaultBg };
   nb.sections.push(sec);
   renderSideTree();
   renderSecMgrBody(sec.id);
@@ -397,7 +402,7 @@ function renderSecMgrBody(focusSecId) {
     dot.style.background = (nb.color || '#7a6f5c');
     
     const name = mk('span', 'mgr-sec-name', getSectionDisplayName(sec));
-    const count = mk('span', 'mgr-sec-count', (sec.pgIds?.length || 0) + ' ' + t('pages'));
+    const count = mk('span', 'mgr-sec-count', pagesOfSec(sec, nb).length + ' ' + t('pages'));
     const actions = mk('div', 'mgr-sec-actions');
 
     const renameBtn = mk('button', 'mgr-btn', t('rename'));
@@ -423,7 +428,8 @@ function renderSecMgrBody(focusSecId) {
       const target = nb.sections.find(s => s.id !== sec.id);
       if (!target) return;
 
-      target.pgIds = [...(target.pgIds || []), ...(sec.pgIds || [])];
+      // Die Seiten bleiben, wo sie sind – sie wechseln nur das Etikett
+      for (const pg of pagesOfSec(sec, nb)) setSectionOfPage(nb, pg.id, target.id);
       nb.sections = nb.sections.filter(s => s.id !== sec.id);
 
       if (nb.activeSecId === sec.id) {
@@ -537,9 +543,8 @@ E('btn-add-sec').addEventListener('click', () => {
   txtModal(t('newSection'), t('newSection')).then(name => {
     if (!name) return; const nb = getNb(); if (!nb) return;
     getSections(nb);
-    const pg = makePage(nb.defaultBg || 'ruled');
-    nb.pages.push(pg);
-    const sec = { id: uid(), name, pgIds: [pg.id], defaultBg: nb.defaultBg };
+    // Auch hier ohne eigene Seite – siehe addSectionFromManager
+    const sec = { id: uid(), name, pgIds: [], defaultBg: nb.defaultBg };
     nb.sections.push(sec);
     renderSideTree();
     openSection(sec);

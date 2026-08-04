@@ -187,10 +187,18 @@ function openNotebook(id) {
   }
 
   showJournal(nb);
+  /* Sicherheitsnetz: normalerweise ist das Heft schon beim Laden umgestellt
+     (core/init.js, core/cloudSync.js). Ein Heft, das auf anderem Weg
+     hereinkommt, wird hier nachgezogen – die Funktion tut nichts, wenn
+     bereits umgestellt. */
+  normalizeNotebook(nb);
   getSections(nb);
-  if (!nb.activeSecId || !nb.sections.find(s => s.id === nb.activeSecId)) nb.activeSecId = nb.sections[0].id;
-  // page bg now in per-page 3-dot menu
-  openSection(nb.sections.find(s => s.id === nb.activeSecId) || nb.sections[0]);
+
+  /* Ohne gültigen Ausschnitt werden ALLE Seiten gezeigt. Das ist der
+     Normalfall: früher musste immer ein Abschnitt offen sein, heute ist
+     das Heft eine durchgehende Folge und der Filter die Ausnahme. */
+  if (nb.activeSecId && !nb.sections.find(s => s.id === nb.activeSecId)) nb.activeSecId = '';
+  openSection(activeSection(nb));
   renderSideTree();
 
   /* Ist dieses Heft freigegeben, wird daraus jetzt eine Live-Sitzung –
@@ -200,15 +208,28 @@ function openNotebook(id) {
 }
 
 /* ── OPEN SECTION (renders its pages) ── */
-function openSection(sec, scrollToPgId = null) {
-  const nb = getNb(); if (!nb || !sec) return;
-  nb.activeSecId = sec.id;
-  let pages = pagesOfSec(sec, nb);
-  // Auto-create a page if section is empty (nicht in fremden Dokumenten,
-  // die man nur lesen darf – das wäre schon eine Änderung)
-  if (!pages.length && !S.readOnly) {
-    const pg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-    nb.pages.push(pg); sec.pgIds.push(pg.id); pages = [pg];
+/**
+ * Zeichnet das Heft – wahlweise nur einen Ausschnitt.
+ *
+ * @param {object|null} sec  Abschnitt, auf den eingeschränkt wird.
+ *                           **null zeigt alle Seiten** – das ist der
+ *                           Normalfall, seit Abschnitte Etiketten sind.
+ * @param {string|null} scrollToPgId
+ *
+ * Früher hieß das „Abschnitt öffnen", und ein leerer Abschnitt bekam
+ * ungefragt eine Seite angelegt. Beides ist entfallen: ein Etikett, das
+ * gerade auf keiner Seite klebt, ist in Ordnung und darf nicht dazu
+ * führen, dass Seiten entstehen.
+ */
+function openSection(sec = null, scrollToPgId = null) {
+  const nb = getNb(); if (!nb) return;
+  nb.activeSecId = sec ? sec.id : '';
+  let pages = visiblePages(nb);
+
+  // Ein Heft ganz ohne Seiten gibt es nicht – ein leerer AUSSCHNITT schon.
+  if (!pages.length && !S.readOnly && !notebookPages(nb).length) {
+    insertPageInto(nb, sec, makePage(sec?.defaultBg || nb.defaultBg || 'ruled'));
+    pages = visiblePages(nb);
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   }
   E('pages-wrap').innerHTML = ''; S.strokeHistory = {};
@@ -582,11 +603,13 @@ function setupScrollAutoPage(sec) {
     sc._hasScrollListener = true;
   }
 }
-function maybeAutoPage() { if (S.readOnly) return; const nb = getNb(); if (!nb) return; const sec = nb.sections?.find(s => s.id === nb.activeSecId); const pages = sec ? pagesOfSec(sec, nb) : nb.pages; const last = pages[pages.length - 1]; if (!last || pageIsEmpty(last)) return; const wrap = E('pages-wrap'); const lastEl = wrap.lastElementChild; if (!lastEl) return; const sc = E('pg-scroll'); if (sc.scrollTop + sc.clientHeight >= lastEl.offsetTop + lastEl.offsetHeight - CFG.SCROLL_THRESH) addAutoPage(); }
+function maybeAutoPage() { if (S.readOnly) return; const nb = getNb(); if (!nb) return; const pages = visiblePages(nb); const last = pages[pages.length - 1]; if (!last || pageIsEmpty(last)) return; const wrap = E('pages-wrap'); const lastEl = wrap.lastElementChild; if (!lastEl) return; const sc = E('pg-scroll'); if (sc.scrollTop + sc.clientHeight >= lastEl.offsetTop + lastEl.offsetHeight - CFG.SCROLL_THRESH) addAutoPage(); }
 function addAutoPage() {
   if (S.readOnly) return;
-  const nb = getNb(); if (!nb) return; const sec = nb.sections?.find(s => s.id === nb.activeSecId); const pages = sec ? pagesOfSec(sec, nb) : nb.pages; const last = pages[pages.length - 1]; if (!last || pageIsEmpty(last)) return;
-  const pg = makePage((sec?.defaultBg) || nb.defaultBg || 'ruled'); nb.pages.push(pg); if (sec) sec.pgIds.push(pg.id); const pgEl = appendPageDOM(pg, pages.length); pgEl.style.opacity = '0'; pgEl.style.transform = 'translateY(16px)'; pgEl.style.transition = 'opacity .3s,transform .3s'; requestAnimationFrame(() => requestAnimationFrame(() => { pgEl.style.opacity = '1'; pgEl.style.transform = 'none'; })); renumberVisiblePages(); renderSideTree();
+  const nb = getNb(); if (!nb) return; const sec = activeSection(nb); const pages = visiblePages(nb); const last = pages[pages.length - 1]; if (!last || pageIsEmpty(last)) return;
+  /* Ans Ende des HEFTS, mit dem Etikett des gezeigten Ausschnitts – sonst
+     verschwaende die neue Seite sofort aus der Ansicht, in der sie entstand. */
+  const pg = makePage((sec?.defaultBg) || nb.defaultBg || 'ruled'); insertPageInto(nb, sec, pg); const pgEl = appendPageDOM(pg, pages.length); pgEl.style.opacity = '0'; pgEl.style.transform = 'translateY(16px)'; pgEl.style.transition = 'opacity .3s,transform .3s'; requestAnimationFrame(() => requestAnimationFrame(() => { pgEl.style.opacity = '1'; pgEl.style.transform = 'none'; })); renumberVisiblePages(); renderSideTree();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
 
@@ -596,11 +619,16 @@ function checkPageOverflow(textDiv, page) {
   const lh = parseInt(textDiv.style.lineHeight) || 32; const availH = CFG.PAGE_H - 64 - 24;
   if (textDiv.scrollHeight <= availH + lh) return;
   const nb = getNb(); if (!nb) return;
-  const sec = nb.sections?.find(s => s.id === nb.activeSecId);
-  const pages = sec ? pagesOfSec(sec, nb) : nb.pages;
+  const sec = activeSection(nb);
+  const pages = visiblePages(nb);
   const pageIdx = pages.indexOf(page);
   let nextPage = pages[pageIdx + 1]; const isNew = !nextPage;
-  if (isNew) { nextPage = makePage((sec?.defaultBg) || nb.defaultBg || 'ruled'); nb.pages.push(nextPage); if (sec) sec.pgIds.push(nextPage.id); }
+  /* Die Folgeseite kommt direkt HINTER die uebergelaufene, nicht ans Ende:
+     der Text laeuft weiter, also muss sie dort stehen, wo er weitergeht. */
+  if (isNew) {
+    nextPage = makePage((sec?.defaultBg) || nb.defaultBg || 'ruled');
+    insertPageInto(nb, sec, nextPage, pageNumberOf(nb, page.id));
+  }
   const overflow = [];
   while (textDiv.scrollHeight > availH + lh && textDiv.children.length > 0) { const last = textDiv.lastElementChild; overflow.unshift(last.outerHTML); last.remove(); }
   if (!overflow.length) return;
@@ -631,15 +659,15 @@ E('btn-zoom-reset').addEventListener('click', zoomReset);
 E('btn-add-page-end').addEventListener('click', async () => {
   if (S.readOnly) return;
   const nb = getNb(); if (!nb) return;
-  const sec = nb.sections?.find(s => s.id === nb.activeSecId) || nb.sections?.[0]; if (!sec) return;
-  const pages = pagesOfSec(sec, nb);
+  const sec = activeSection(nb);
+  const pages = visiblePages(nb);
   const last = pages[pages.length - 1];
   if (last && pageIsVisuallyEmpty(last)) {
     await showAlert('Die letzte Seite ist noch leer.');
     return;
   }
-  const pg = makePage(sec.defaultBg || nb.defaultBg || 'ruled');
-  nb.pages.push(pg); sec.pgIds.push(pg.id);
+  const pg = makePage(sec?.defaultBg || nb.defaultBg || 'ruled');
+  insertPageInto(nb, sec, pg);
   const pgEl = appendPageDOM(pg, pages.length);
   renumberVisiblePages();
   pgEl.style.opacity = '0'; pgEl.style.transition = 'opacity .3s';
