@@ -28,6 +28,96 @@ function showPgCtxMenu(x, y, page, pgEl) {
   m.style.visibility = 'visible';
   setTimeout(() => document.addEventListener('pointerdown', hidePgCtxOut), 0);
 }
+/* ══════════════════════════════════════════════════════════════════════
+   ABSCHNITT EINER SEITE FESTLEGEN
+
+   Das Menü hinter dem Symbol im Seitenkopf. Es listet alle Abschnitte mit
+   ihrem Farbpunkt, dazu „Ohne Abschnitt". Ein Klick etikettiert um – die
+   Seite bleibt dabei genau da, wo sie im Heft steht.
+
+   Aufgebaut zur Laufzeit, weil sich die Abschnitte jederzeit ändern.
+   Gleiches Muster wie ensureSecMgrCtxMenu in ui/sidebar.js.
+   ══════════════════════════════════════════════════════════════════════ */
+let _pgSecMenu = null;
+
+function showPgSectionMenu(x, y, page) {
+  if (S.readOnly) return;
+  const nb = getNb();
+  if (!nb || !page) return;
+
+  if (!_pgSecMenu) {
+    _pgSecMenu = document.createElement('div');
+    _pgSecMenu.className = 'ctx-menu';
+    _pgSecMenu.style.display = 'none';
+    document.body.appendChild(_pgSecMenu);
+    document.addEventListener('pointerdown', e => {
+      if (_pgSecMenu && !_pgSecMenu.contains(e.target)) _pgSecMenu.style.display = 'none';
+    });
+  }
+
+  const menu = _pgSecMenu;
+  menu.innerHTML = '';
+  const jetzt = findSecForPage(page.id, nb);
+
+  const eintrag = (label, farbe, aktiv, handler) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ctx-item' + (aktiv ? ' on' : '');
+    const dot = document.createElement('span');
+    dot.className = 'ctx-sec-dot';
+    if (farbe) dot.style.background = farbe;
+    else dot.style.boxShadow = 'inset 0 0 0 1.5px currentColor';
+    const text = document.createElement('span');
+    text.textContent = label;
+    btn.append(dot, text);
+    btn.addEventListener('click', () => { menu.style.display = 'none'; handler(); });
+    return btn;
+  };
+
+  const umhaengen = (secId) => {
+    if (!setSectionOfPage(nb, page.id, secId)) return;
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+
+    /* Steht die Ansicht auf einem Ausschnitt und die Seite gehört jetzt
+       nicht mehr dazu, muss neu gezeichnet werden – sonst bliebe sie
+       sichtbar, obwohl sie nicht mehr zur Auswahl zählt. */
+    const gezeigt = activeSection(nb);
+    if (gezeigt && String(gezeigt.id) !== String(secId || '')) openSection(gezeigt);
+    else { refreshPageSectionMarks(); renderSideTree(); }
+  };
+
+  for (const sec of getSections(nb)) {
+    menu.appendChild(eintrag(
+      getSectionDisplayName(sec), colorForSection(sec.id),
+      jetzt && jetzt.id === sec.id, () => umhaengen(sec.id)
+    ));
+  }
+  menu.appendChild(eintrag(t('noSection'), null, !jetzt, () => umhaengen('')));
+
+  const margin = 8;
+  menu.style.cssText = 'display:block;position:fixed;left:0;top:0;z-index:1000;visibility:hidden';
+  const mx = Math.max(margin, Math.min(x, window.innerWidth - (menu.offsetWidth || 200) - margin));
+  const my = Math.max(margin, Math.min(y, window.innerHeight - (menu.offsetHeight || 160) - margin));
+  menu.style.left = mx + 'px';
+  menu.style.top = my + 'px';
+  menu.style.visibility = 'visible';
+}
+
+/** Farbstreifen und Knopf-Titel nachziehen, ohne alles neu zu zeichnen. */
+function refreshPageSectionMarks() {
+  const nb = getNb();
+  if (!nb) return;
+  for (const pgEl of QA('#pages-wrap .j-page')) {
+    const sec = findSecForPage(pgEl.dataset.pgid, nb);
+    const hdr = pgEl.querySelector('.j-page-hdr');
+    if (sec) pgEl.style.setProperty('--sec-color', colorForSection(sec.id));
+    else pgEl.style.removeProperty('--sec-color');
+    if (hdr) hdr.classList.toggle('has-sec', !!sec);
+    const btn = pgEl.querySelector('.pg-sec-btn');
+    if (btn) btn.title = sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection');
+  }
+}
+
 function hidePgCtxMenu() { E('pg-ctx-menu').style.display = 'none'; document.removeEventListener('pointerdown', hidePgCtxOut); }
 function hidePgCtxOut(e) { if (!e.target.closest('#pg-ctx-menu')) hidePgCtxMenu(); }
 

@@ -14,40 +14,69 @@ function getSectionDisplayName(sec) {
   return sec.name;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DIE NAVIGATION
+
+   Oben die Ausschnitte: „Alle Seiten" und darunter die Abschnitte mit
+   Farbpunkt und Anzahl. Ein Klick schaltet um, ein zweiter auf denselben
+   zurück auf alles. Darunter die Überschriften der gerade gezeigten
+   Seiten.
+
+   Früher war das eine Liste von Kapiteln, zwischen denen man wechselte –
+   und man sah immer nur eines. Jetzt ist es ein Filter über ein
+   durchgehendes Heft.
+   ══════════════════════════════════════════════════════════════════════ */
+
 function renderSideTree() {
   const nb = getNb(); const tree = E('side-tree'); tree.innerHTML = ''; if (!nb) return;
   getSections(nb);
+
+  const gesamt = notebookPages(nb).length;
+
+  /* ─ „Alle Seiten" ─ */
+  const alle = document.createElement('div');
+  alle.className = 'sec-hdr filter-row' + (!nb.activeSecId ? ' active' : '');
+  alle.innerHTML = '<span class="sec-dot all"></span>'
+    + '<span class="sec-name">' + t('allPages') + '</span>'
+    + '<span class="sec-pg-count">' + gesamt + '</span>'
+    + '<button class="sec-edit-btn" title="' + t('manageSections') + '">✎</button>';
+  alle.querySelector('.sec-edit-btn').addEventListener('click', e => {
+    e.stopPropagation(); openSecMgr(activeSection(nb));
+  });
+  alle.addEventListener('click', () => { if (nb.activeSecId) openSection(null); });
+  tree.appendChild(alle);
+
+  /* ─ Je Abschnitt eine Zeile ─ */
   for (const sec of nb.sections) {
     const isActiveSec = nb.activeSecId === sec.id;
-    const isCollapsed = _secCollapsed.has(sec.id);
-    const pages = pagesOfSec(sec, nb);
-    const displayName = getSectionDisplayName(sec);
-
-    /* ─ Section header ─ */
-    const hdr = document.createElement('div');
-    hdr.className = 'sec-hdr' + (isActiveSec ? ' active' : '') + (isCollapsed ? ' collapsed' : '');
-    hdr.innerHTML = '<span class="sec-arrow">▼</span><span class="sec-name">' + displayName + '</span>'
-      + '<span class="sec-pg-count">' + pages.length + '</span>'
-      + '<button class="sec-edit-btn" title="' + t('manageSections') + '">✎</button>';
-    hdr.querySelector('.sec-edit-btn').addEventListener('click', e => { e.stopPropagation(); openSecMgr(sec); });
-    // Double-click on name → rename
-    hdr.querySelector('.sec-name').addEventListener('dblclick', e => { e.stopPropagation(); txtModal(t('rename'), sec.name).then(n => { if (n) { sec.name = n; renderSideTree(); if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty(); } }); });
-    hdr.addEventListener('click', () => {
-      const wasActive = nb.activeSecId === sec.id;
-      if (wasActive) {
-        // toggle collapse
-        if (_secCollapsed.has(sec.id)) _secCollapsed.delete(sec.id); else _secCollapsed.add(sec.id);
-        renderSideTree();
-      } else {
-        openSection(sec); // always renders pages + tree
-      }
+    const anzahl = pagesOfSec(sec, nb).length;
+    const row = document.createElement('div');
+    row.className = 'sec-hdr filter-row' + (isActiveSec ? ' active' : '');
+    row.innerHTML = '<span class="sec-dot"></span>'
+      + '<span class="sec-name">' + getSectionDisplayName(sec) + '</span>'
+      + '<span class="sec-pg-count">' + anzahl + '</span>';
+    row.querySelector('.sec-dot').style.background = colorForSection(sec.id);
+    row.querySelector('.sec-name').addEventListener('dblclick', e => {
+      e.stopPropagation();
+      txtModal(t('rename'), sec.name).then(n => {
+        if (!n) return;
+        sec.name = n; renderSideTree();
+        if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      });
     });
-    tree.appendChild(hdr);
+    // Noch einmal auf den gezeigten Ausschnitt: zurück auf alle Seiten
+    row.addEventListener('click', () => openSection(isActiveSec ? null : sec));
+    tree.appendChild(row);
+  }
 
-    /* ─ Section body ─ */
+  /* ─ Überschriften der gezeigten Seiten ─ */
+  {
+    const pages = visiblePages(nb);
+    const sec = activeSection(nb);
+    const isActiveSec = true;
+
     const body = document.createElement('div');
-    body.className = 'sec-body' + (isCollapsed ? ' collapsed' : '');
-    body.style.maxHeight = isCollapsed ? '0' : '2000px';
+    body.className = 'sec-body';
 
     if (isActiveSec) {
       /* Active heading: find which heading the cursor is currently in,
@@ -72,10 +101,21 @@ function renderSideTree() {
         }
       }
 
-      /* Headings from all pages in section */
-      let h1Key = null, subWrap = null;
-      for (let pi = 0; pi < pages.length; pi++) {
-        const pg = pages[pi];
+      /* Überschriften aller gezeigten Seiten.
+
+         >>> Zwei Fehler, die hier steckten <<<
+         1. h1Key und subWrap standen AUSSERHALB der Schleife. Alle
+            Zuhörer teilten sich damit dieselbe Veränderliche – ab der
+            zweiten h1 klappte jeder Pfeil die zuletzt erzeugte Gruppe zu
+            und schrieb in den zuletzt gesetzten Schlüssel. Jetzt je
+            Durchgang eine eigene Bindung.
+         2. Der Schlüssel war der Seitenindex INNERHALB des Abschnitts
+            plus Überschriftentext – über Abschnitte hinweg kollidierte
+            das. Im Modus "alle Seiten" wäre es sofort aufgefallen.
+            Jetzt die Seitenkennung, die ist eindeutig. */
+      let subWrap = null;
+      for (const pg of pages) {
+        const pgNo = pageNumberOf(nb, pg.id);
         const livePgEl = E('pg-scroll').querySelector('[data-pgid="' + pg.id + '"]');
         let hdgs = livePgEl ? [...livePgEl.querySelectorAll('.j-text h1,.j-text h2,.j-text h3,.j-text p.j-title-1,.j-text p.j-title-2,.j-text p.j-title-3')]
           : ([...((d => { d.innerHTML = pg.textContent || ''; return d; })(document.createElement('div'))).querySelectorAll('h1,h2,h3,p.j-title-1,p.j-title-2,p.j-title-3')]);
@@ -83,26 +123,43 @@ function renderSideTree() {
         hdgs.forEach(h => {
           const lvl = h.classList?.contains('j-title-1') ? 'h1' : h.classList?.contains('j-title-2') ? 'h2' : h.classList?.contains('j-title-3') ? 'h3' : h.tagName.toLowerCase();
           if (lvl === 'h1') {
-            h1Key = pi + '_' + h.textContent;
+            const h1Key = pg.id + '_' + h.textContent;
             const isColH1 = _navCollapsed.has(h1Key);
             const isActiveH1 = _activeHdgText && h.textContent === _activeHdgText;
             const row = document.createElement('li'); row.className = 'nav-item' + (isActiveH1 ? ' nav-active' : ''); row.dataset.level = 'h1';
-            row.innerHTML = '<span class="nav-collapse-arrow">' + (isColH1 ? '▶' : '▼') + '</span><span class="nav-item-text">' + h.textContent + '</span><span class="nav-pg-badge">S.' + (pi + 1) + '</span>';
+            row.innerHTML = '<span class="nav-collapse-arrow">' + (isColH1 ? '▶' : '▼') + '</span><span class="nav-item-text"></span><span class="nav-pg-badge">S.' + pgNo + '</span>';
+            row.querySelector('.nav-item-text').textContent = h.textContent;
             const arr = row.querySelector('.nav-collapse-arrow');
-            arr.addEventListener('click', ev => { ev.stopPropagation(); if (_navCollapsed.has(h1Key)) _navCollapsed.delete(h1Key); else _navCollapsed.add(h1Key); arr.textContent = _navCollapsed.has(h1Key) ? '▶' : '▼'; if (subWrap) subWrap.style.display = _navCollapsed.has(h1Key) ? 'none' : 'block'; });
+            const meinSubWrap = document.createElement('ul');
+            meinSubWrap.style.cssText = 'list-style:none;padding:0;margin:0;display:' + (isColH1 ? 'none' : 'block');
+            arr.addEventListener('click', ev => {
+              ev.stopPropagation();
+              if (_navCollapsed.has(h1Key)) _navCollapsed.delete(h1Key); else _navCollapsed.add(h1Key);
+              const zu = _navCollapsed.has(h1Key);
+              arr.textContent = zu ? '▶' : '▼';
+              meinSubWrap.style.display = zu ? 'none' : 'block';
+            });
             row.querySelector('.nav-item-text').addEventListener('click', () => scrollToHdg(h, lvl, pg));
             body.appendChild(row);
-            subWrap = document.createElement('ul'); subWrap.style.cssText = 'list-style:none;padding:0;margin:0;display:' + (isColH1 ? 'none' : 'block');
-            body.appendChild(subWrap);
+            subWrap = meinSubWrap;
+            body.appendChild(meinSubWrap);
           } else {
             const wrap = subWrap || body;
             const isActiveH = _activeHdgText && h.textContent === _activeHdgText;
             const item = document.createElement('li'); item.className = 'nav-item' + (isActiveH ? ' nav-active' : ''); item.dataset.level = lvl;
-            item.innerHTML = '<span class="nav-dot"></span><span class="nav-item-text">' + h.textContent + '</span><span class="nav-pg-badge">S.' + (pi + 1) + '</span>';
+            item.innerHTML = '<span class="nav-dot"></span><span class="nav-item-text"></span><span class="nav-pg-badge">S.' + pgNo + '</span>';
+            item.querySelector('.nav-item-text').textContent = h.textContent;
             item.querySelector('.nav-item-text').addEventListener('click', () => scrollToHdg(h, lvl, pg));
             wrap.appendChild(item);
           }
         });
+      }
+
+      if (!body.children.length) {
+        const leer = document.createElement('div');
+        leer.className = 'nav-empty';
+        leer.textContent = pages.length ? t('navNoHeadings') : t('navNoPages');
+        body.appendChild(leer);
       }
     }
 

@@ -73,6 +73,12 @@
   z-index: 1
 }
 
+/* Der Farbstreifen des Abschnitts. Der Kopf hatte schon einen unteren
+   Rand – er wird eingefaerbt, statt ein neues Element einzufuehren. */
+.j-page-hdr.has-sec {
+  border-bottom-color: var(--sec-color, var(--pl))
+}
+
 .j-page-hdr {
   position: absolute;
   top: 0;
@@ -408,7 +414,24 @@
   background: rgba(255, 255, 255, .12)
 }
 
-.pg-menu-btn {
+/* ── Die Knoepfe am Seitenkopf ───────────────────────────────────────
+   Frueher sass der Drei-Punkte-Knopf allein und absolut am rechten Rand.
+   Seit ein zweiter dazugekommen ist (Abschnitt festlegen), stehen beide
+   in einer Gruppe – so braucht es keine Pixelrechnerei, wenn spaeter noch
+   einer dazukommt. */
+.j-page-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto
+}
+
+.pg-menu-btn,
+.pg-sec-btn {
   pointer-events: auto;
   background: transparent;
   border: none;
@@ -418,15 +441,20 @@
   padding: 2px 8px;
   border-radius: 4px;
   transition: all .12s;
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%)
+  display: flex;
+  align-items: center
 }
 
-.pg-menu-btn:hover {
+.pg-menu-btn:hover,
+.pg-sec-btn:hover {
   background: rgba(0, 0, 0, .08);
   color: #4a3d2e
+}
+
+/* Traegt die Seite ein Etikett, faerbt sich das Symbol danach – so sieht
+   man beim Blaettern, wozu die Seite gehoert, ohne irgendwo nachzusehen. */
+.j-page-hdr.has-sec .pg-sec-btn {
+  color: var(--sec-color, #b0a898)
 }
 
 .add-page-btn-wrap {

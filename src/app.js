@@ -356,14 +356,31 @@ function appendPageDOM(page, index) {
      dieselbe bleiben, gleich wie viele Seiten gerade gezeigt werden.
      renumberVisiblePages() rechnet mit derselben Quelle. */
   const pageNo = pageNumberOf(nb, page.id) || (index + 1);
+  const sec = findSecForPage(page.id, nb);
+  /* Der Farbstreifen sitzt als Rand am Seitenkopf und wird ueber eine
+     Veraenderliche eingefaerbt – dasselbe Verfahren wie --nb-color bei den
+     Karten der Startseite. Ohne Abschnitt bleibt der Kopf, wie er war. */
+  if (sec) div.style.setProperty('--sec-color', colorForSection(sec.id));
+  hdr.classList.toggle('has-sec', !!sec);
+
   hdr.innerHTML = '<span class="j-page-left"><span class="j-page-num">'
     + t('pageNo').replace('{n}', String(pageNo)) + '</span>'
     + shareMarkHTML(shareMarkFor(nb)) + '</span>'
     + '<span class="j-page-date">' + fmt(page.date) + '</span>'
-    + '<button class="pg-menu-btn" title="Seitenoptionen">⋯</button>';
+    + '<span class="j-page-actions">'
+    + '<button class="pg-sec-btn" title="' + (sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection')) + '">'
+    + '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
+    + '<path d="M2.5 3.5h11M2.5 8h11M2.5 12.5h7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
+    + '</svg></button>'
+    + '<button class="pg-menu-btn" title="Seitenoptionen">⋯</button>'
+    + '</span>';
   hdr.querySelector('.pg-menu-btn').addEventListener('click', e => {
-    e.stopPropagation(); const r = e.target.getBoundingClientRect();
+    e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect();
     showPgCtxMenu(r.left, r.bottom + 4, page, div);
+  });
+  hdr.querySelector('.pg-sec-btn').addEventListener('click', e => {
+    e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect();
+    showPgSectionMenu(r.left, r.bottom + 4, page);
   });
   hdr.style.pointerEvents = 'auto';
   div.appendChild(hdr);
@@ -688,7 +705,7 @@ E('btn-add-page-end').addEventListener('click', async () => {
   let _panOriginX = 0, _panOriginY = 0; // current translate offset
 
   function isTouchUiTarget(target) {
-    return !!target.closest('.pg-menu-btn, .j-page-hdr, .obj-wrap, .obj-handle, .obj-bar, #ctx-menu, .txt-color-dropdown, .custom-color-pop');
+    return !!target.closest('.pg-menu-btn, .pg-sec-btn, .j-page-actions, .j-page-hdr, .obj-wrap, .obj-handle, .obj-bar, #ctx-menu, .txt-color-dropdown, .custom-color-pop');
   }
 
   // Parse current translate from pages-wrap transform

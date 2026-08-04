@@ -21,6 +21,13 @@ const TRANSLATIONS = {
     // Notebook card
     page: 'Seite',
     pageNo: 'Seite {n}',
+    allPages: 'Alle Seiten',
+    navNoHeadings: 'Keine Überschriften auf diesen Seiten.',
+    navNoPages: 'Diesem Abschnitt ist noch keine Seite zugeordnet.',
+    setSection: 'Abschnitt festlegen',
+    noSection: 'Ohne Abschnitt',
+    sectionOf: 'Abschnitt: {name}',
+    noPagesYet: 'Keine Seiten',
     pages: 'Seiten',
     
     // Context menu
@@ -506,6 +513,13 @@ const TRANSLATIONS = {
     // Notebook card
     page: 'Page',
     pageNo: 'Page {n}',
+    allPages: 'All pages',
+    navNoHeadings: 'No headings on these pages.',
+    navNoPages: 'No page is assigned to this section yet.',
+    setSection: 'Set section',
+    noSection: 'No section',
+    sectionOf: 'Section: {name}',
+    noPagesYet: 'No pages',
     pages: 'Pages',
     
     // Context menu
@@ -990,6 +1004,13 @@ const TRANSLATIONS = {
     // Notebook card
     page: 'Pagina',
     pageNo: 'Pagina {n}',
+    allPages: 'Tutte le pagine',
+    navNoHeadings: 'Nessun titolo in queste pagine.',
+    navNoPages: 'Nessuna pagina è ancora assegnata a questa sezione.',
+    setSection: 'Scegli la sezione',
+    noSection: 'Senza sezione',
+    sectionOf: 'Sezione: {name}',
+    noPagesYet: 'Nessuna pagina',
     pages: 'Pagine',
     
     // Context menu
