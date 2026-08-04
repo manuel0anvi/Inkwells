@@ -362,6 +362,12 @@ function searchHighlight(snippet, query) {
 /** Abschnitt, in dem eine Seite liegt – kennt beide Ablageformen. */
 function searchSectionOf(notebook, page) {
   const sections = Array.isArray(notebook.sections) ? notebook.sections : [];
+
+  // Seit Abschnitte Etiketten sind, steht die Zugehoerigkeit an der Seite
+  if (page.secId) {
+    return sections.find(sec => String(sec.id) === String(page.secId)) || null;
+  }
+
   return sections.find(sec =>
     (Array.isArray(sec.pgIds) && sec.pgIds.includes(page.id))
     || (Array.isArray(sec.pages) && sec.pages.some(p => p && p.id === page.id))

@@ -1,4 +1,16 @@
 /* ══════════════════════════════════════════════════════════════════════
+   ⚠  ERZEUGTE DATEI – NICHT HIER BEARBEITEN
+
+   Wortgleiche Kopie von src/core/share.js. Die App wird ohne den
+   Ordner website/ ausgeliefert (siehe electron-builder.config.js),
+   deshalb braucht die Website ein eigenes Exemplar.
+
+   Änderungen gehören nach src/core/share.js. Danach:
+       npm run sync-share
+   Vor dem Veröffentlichen der Website läuft das von selbst.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════════════
    HEFT-FREIGABE ÜBER EINEN LINK  ―  Cloud Firestore
 
    Ein Heft kann als schreibgeschützte Kopie veröffentlicht werden. Wer den
@@ -743,6 +755,37 @@ function isInlineData(value) {
   return typeof value === 'string' && value.startsWith('data:');
 }
 
+/* ── Die Seiten eines Hefts in Heft-Reihenfolge ──────────────────────
+   Gegenstück zu notebookPages() in core/data.js. Bewusst hier noch einmal
+   und nicht von dort geholt: diese Datei läuft auch auf der Website, und
+   dort gibt es kein data.js. Sie muss für sich allein stehen.
+
+   >>> Was das behebt <<<
+   head.pageOrder wurde bisher aus notebook.pages gebildet – und das ist
+   reine Einfüge-Reihenfolge. Wer eine Seite in die Mitte einfügte, hatte
+   sie dort ganz hinten. In der Cloud stand damit die FALSCHE Reihenfolge;
+   website/js/viewer.js beschreibt das als Warnung und rechnet sie sich
+   selbst aus den Abschnitten zusammen. */
+function pagesInOrder(notebook) {
+  const pages = Array.isArray(notebook?.pages) ? notebook.pages : [];
+  const byId = new Map(pages.map(p => [String(p.id), p]));
+  const out = [];
+  const seen = new Set();
+
+  for (const sec of (notebook?.sections || [])) {
+    for (const pgId of (sec?.pgIds || [])) {
+      const key = String(pgId);
+      if (seen.has(key) || !byId.has(key)) continue;
+      seen.add(key);
+      out.push(byId.get(key));
+    }
+  }
+  for (const page of pages) {
+    if (!seen.has(String(page.id))) out.push(page);
+  }
+  return out;
+}
+
 /**
  * Zerlegt ein Heft in die Teile, die einzeln abgelegt werden.
  *
@@ -750,7 +793,7 @@ function isInlineData(value) {
  * @returns {{head:object, pages:object[], ink:object[], blobs:object[]}}
  */
 function splitNotebook(notebook) {
-  const pagesIn = Array.isArray(notebook.pages) ? notebook.pages : [];
+  const pagesIn = pagesInOrder(notebook);
   const pages = [];
   const ink = [];
   const blobs = [];
@@ -914,16 +957,20 @@ function assembleNotebook(head, pages = [], ink = [], blobs = []) {
   };
   if (head.activeSecId) notebook.activeSecId = head.activeSecId;
 
-  // Kein Abschnitt hinterlegt (sehr alte Fassung): einen aufmachen, sonst
-  // steht der Editor ohne Navigation da.
-  if (!notebook.sections.length && notebookPages.length) {
-    notebook.sections = [{
-      id: 'sec_' + (notebook.id || 'doc'),
-      name: 'Allgemein',
-      pgIds: notebookPages.map(p => p.id),
-      defaultBg: notebook.defaultBg
-    }];
+  /* Abschnitte sind Etiketten: die Zugehoerigkeit gehoert an die Seite.
+     Uebertragen wird sie weiterhin in den abgeleiteten pgIds des Kopfes –
+     hier wird sie zurueckgerechnet. Ein Dokument ganz ohne Abschnitte
+     braucht keinen Ersatz mehr: "alle Seiten" zeigt ohnehin alles. */
+  for (const sec of notebook.sections) {
+    for (const pgId of (sec.pgIds || [])) {
+      const page = notebookPages.find(p => String(p.id) === String(pgId));
+      if (page && !page.secId) page.secId = String(sec.id);
+    }
   }
+  for (const sec of notebook.sections) {
+    sec.pgIds = notebookPages.filter(p => String(p.secId || '') === String(sec.id)).map(p => p.id);
+  }
+  notebook.schemaVersion = 2;
 
   return notebook;
 }
@@ -1346,21 +1393,61 @@ async function updateDocHead(docId, patch) {
   await updateDoc(doc(db, DOCS, docId), { ...patch, updatedAt: serverTimestamp() });
 }
 
-/** Was darf, wer den Link hat? 'off' nimmt den Link ganz aus dem Verkehr. */
+/**
+ * Was darf, wer den Link hat? 'off' nimmt den Link ganz aus dem Verkehr.
+ *
+ * >>> Warum dabei auch die MITGLIEDER angefasst werden <<<
+ * Wer über den Link hereinkommt, wird von joinViaLink zum Mitglied
+ * gemacht – mit `memberVia: 'link'` und der Rolle, die der Link in dem
+ * Augenblick hergab. Danach hängt sein Zugriff nur noch an diesem
+ * Eintrag, nicht mehr am Link.
+ *
+ * Der Schalter änderte bisher aber nur `linkMode`. Wer schon drin war,
+ * behielt deshalb alles:
+ *
+ *   · Link auf „aus": es flog niemand hinaus, nur neue Besucher kamen
+ *     nicht mehr herein.
+ *   · Link von „lesen" auf „bearbeiten" (oder zurück): die Rolle der
+ *     bereits Eingetretenen blieb stehen.
+ *
+ * Es sah deshalb so aus, als wirke der Link-Schalter nur bei den per
+ * E-Mail Eingeladenen – bei denen wird `members` ja unmittelbar
+ * geschrieben. Jetzt zieht der Schalter alle über den Link Eingetretenen
+ * mit. Wer ausdrücklich per E-Mail eingeladen wurde (`memberVia` ist
+ * nicht 'link'), bleibt unberührt – seine Einladung hat mit dem Link
+ * nichts zu tun.
+ */
 async function setLinkMode(docId, mode) {
   const me = requireIdentity();
   const wanted = normalizeLinkMode(mode);
   const head = await loadDocumentHead(docId);
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
 
+  // Alle, die über den Link hereingekommen sind
+  const ueberLink = head.memberEmails.filter(e => head.memberVia[e] === 'link');
+
+  const members = { ...head.members };
+  const memberVia = { ...head.memberVia };
+  let memberEmails = head.memberEmails.slice();
+
   if (wanted === 'off') {
+    for (const e of ueberLink) {
+      delete members[e];
+      delete memberVia[e];
+    }
+    memberEmails = memberEmails.filter(e => !ueberLink.includes(e));
+
     if (head.linkId) await deleteDoc(doc(db, DOC_LINKS, head.linkId)).catch(() => {});
-    await updateDocHead(docId, { linkMode: 'off', linkId: '' });
+    await updateDocHead(docId, {
+      linkMode: 'off', linkId: '', memberEmails, members, memberVia
+    });
     return { linkMode: 'off', linkId: '', url: '' };
   }
 
+  for (const e of ueberLink) members[e] = wanted;
+
   const linkId = head.linkId || makeShareId();
-  await updateDocHead(docId, { linkMode: wanted, linkId });
+  await updateDocHead(docId, { linkMode: wanted, linkId, members });
   await writeLinkEntry(linkId, docId, me.uid);
   return { linkMode: wanted, linkId, url: docUrlFor(linkId) };
 }
@@ -1488,6 +1575,53 @@ async function unshareDocument(docId) {
   await clearDocContent(docId);
   await deleteDoc(doc(db, DOCS, docId));
   return true;
+}
+
+/**
+ * Alle Dokumente, die MIR gehören.
+ *
+ * Abgefragt wird nur nach dem Besitzer, nicht zusätzlich nach dem Heft:
+ * eine Abfrage über zwei Felder verlangt in Firestore einen von Hand
+ * angelegten Index, eine über ein Feld nicht. Aussortiert wird deshalb
+ * hier – ein Konto hat eine Handvoll Freigaben, keine Tausende.
+ */
+async function listOwnedDocs() {
+  const me = currentIdentity();
+  if (!me || me.anonymous || !me.uid) return [];
+
+  const snapshot = await getDocs(
+    query(collection(db, DOCS), where('owner', '==', me.uid))
+  );
+  return snapshot.docs.map(d => describeDoc(d.id, d.data() || {}));
+}
+
+/**
+ * Ist dieses Heft schon freigegeben? Fragt Firestore, nicht den Merkzettel
+ * im Browser.
+ *
+ * >>> Warum der Merkzettel nicht reicht <<<
+ * Freigegeben wird mal aus der App, mal aus dem Browser, mal aus einem
+ * zweiten Browser. Der Merkzettel (localStorage bzw. Einstellungsdatei)
+ * kennt aber immer nur die Freigaben, die an genau DIESER Stelle erzeugt
+ * wurden. Überall sonst stand das Fenster deshalb auf „noch nicht
+ * freigegeben", obwohl das Heft längst geteilt war – und ein zweites
+ * „Freigeben" hätte eine zweite Freigabe daneben gelegt.
+ *
+ * @param {string} notebookId
+ * @returns {Promise<object|null>} der Kopf des Dokuments oder null
+ */
+async function findOwnedDocForNotebook(notebookId) {
+  const wanted = String(notebookId || '');
+  if (!wanted) return null;
+
+  const mine = await listOwnedDocs();
+  const hits = mine.filter(head => head.notebookId === wanted);
+  if (!hits.length) return null;
+
+  // Sollten aus einer früheren Fassung zwei Freigaben zum selben Heft
+  // herumliegen, gewinnt die zuletzt geänderte.
+  hits.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
+  return hits[0];
 }
 
 /* ── Empfängerseite ─────────────────────────────────────────────────── */
@@ -1805,8 +1939,8 @@ function colorForUid(uid) {
  * @param {string} docId
  * @param {object} [options]
  * @param {boolean} [options.isOwner]  ist DIESE Person der Besitzer?
- * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerLost
- * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerLost/sendOp/onOp/leave
+ * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerAway
+ * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/onOp/leave
  */
 async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
@@ -1860,24 +1994,27 @@ async function joinDocRoom(docId, options = {}) {
 
   /* ── Was geschieht, wenn die Leitung abreißt? ──────────────────────
      Der Auftrag wird JETZT hinterlegt und vom Server ausgeführt, sobald
-     die Verbindung wegfällt. Genau deshalb funktioniert das auch für
-     einen Rechner, der schon offline ist und nichts mehr senden kann.
+     die Verbindung wegfällt. Genau deshalb greift er auch bei einem
+     Rechner, der schon offline ist und nichts mehr senden kann.
 
      Bei allen anderen verschwindet der Eintrag einfach.
 
-     >>> Beim Besitzer nicht <<<
-     Dort bleibt er stehen, mit lost = 1. Das ist das Zeichen für die
-     Eingeladenen, dass der Besitzer die App zwar offen hat, aber ohne
-     Netz ist – und dann womöglich örtlich weiterschreibt. Solange das
-     so steht, dürfen die anderen nur lesen (ui/sharedDocs.js). Beim
-     ordentlichen Verlassen räumt leave() den Eintrag weg und hebt den
-     Auftrag auf; wer die App zumacht, hält damit niemanden auf.
+     >>> Beim Besitzer bleibt eine Marke stehen (lost = 1) <<<
+     Sie unterscheidet einen Abbruch vom ordentlichen Verlassen und ist
+     damit in der Konsole zu erkennen.
+
+     Für die Frage, ob die Eingeladenen schreiben dürfen, macht das aber
+     KEINEN Unterschied – dort zählt schon die blosse Abwesenheit
+     (onOwnerAway). Der Grund steht dort ausführlich: ob abgestürzt oder
+     zugemacht, der Besitzer kann das Heft gleich darauf ohne Netz wieder
+     öffnen und örtlich weiterschreiben. Diesen einen Weg kann nichts
+     anderes absichern, denn eine App, die offline startet, hatte nie
+     eine Leitung, über die sie sich hätte melden können.
 
      Registriert wird ERST nach dem set() oben: dort steht fest, welche
-     Felder die veröffentlichten Regeln annehmen. Vorher gäbe es hier
-     bloß dieselbe Abweisung ein zweites Mal. Bis zu diesem Punkt gibt
-     es auch nichts wegzuräumen – ohne das set() existiert der Eintrag
-     ja gar nicht. */
+     Felder die veröffentlichten Regeln annehmen. Bis zu diesem Punkt
+     gibt es auch nichts wegzuräumen – ohne das set() existiert der
+     Eintrag ja gar nicht. */
   let ownerMarkOk = false;
   if (options.isOwner) {
     try {
@@ -1885,10 +2022,9 @@ async function joinDocRoom(docId, options = {}) {
       ownerMarkOk = true;
     } catch (err) {
       console.warn('[Share] Die veröffentlichten Regeln kennen das Feld lost '
-        + 'noch nicht – die Eingeladenen merken einen Abbruch beim Besitzer '
-        + 'nicht und dürfen weiterschreiben. Abhilfe: '
-        + 'website/database.rules.json in der Firebase Console unter '
-        + 'Realtime Database → Regeln veröffentlichen.');
+        + 'noch nicht – ein Abbruch beim Besitzer fällt den Eingeladenen '
+        + 'dann nicht auf. Abhilfe: website/database.rules.json in der '
+        + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.');
     }
   }
   if (!ownerMarkOk) await onDisconnect(meRef).remove();
@@ -1967,7 +2103,7 @@ async function joinDocRoom(docId, options = {}) {
     const stop = onValue(ref(rtdb, `presence/${docId}`), (snap) => {
       const all = snap.val() || {};
       // lost = die stehen gebliebene Marke eines Besitzers, dem die
-      // Verbindung abgerissen ist. Anwesend ist er damit gerade nicht.
+      // Leitung abgerissen ist. Anwesend ist er damit gerade nicht.
       callback(Object.values(all).filter(p => p && p.uid !== me.uid && !p.lost));
     }, () => callback([]));
     stops.push(stop);
@@ -1975,25 +2111,71 @@ async function joinDocRoom(docId, options = {}) {
   }
 
   /**
-   * Meldet, ob dem Besitzer die Verbindung abgerissen ist, während er das
-   * Dokument offen hatte – siehe die Erklärung beim onDisconnect oben.
+   * Meldet, ob der Kontakt zum Besitzer fehlt. Solange das der Fall ist,
+   * dürfen Eingeladene nur lesen (ui/sharedDocs.js).
    *
-   * Ohne bekannte Besitzerkennung (oder beim Besitzer selbst) wird einmal
-   * `false` gemeldet und nichts weiter beobachtet: die Frage stellt sich
-   * dann nicht.
+   * >>> Zwei Gründe, dasselbe Ergebnis <<<
+   * Gesperrt wird nur, wenn der Kontakt UNGEWOLLT fehlt:
    *
-   * @param {(lost: boolean) => void} callback
+   *   · Dem Besitzer ist die Leitung abgerissen oder er ist abgestürzt.
+   *     Dann steht sein Eintrag mit lost = 1 da (siehe onDisconnect
+   *     oben): er hat die App offen und schreibt womöglich örtlich
+   *     weiter, ohne dass es ankommt. Wer jetzt hier tippt, baut einen
+   *     Konflikt auf, den nachher niemand auflösen kann.
+   *   · Die EIGENE Leitung ist weg. Dann sagt der Anwesenheitseintrag
+   *     nichts mehr aus – er steht nur noch im Zwischenspeicher und
+   *     könnte längst überholt sein. Gefragt wird deshalb zusätzlich
+   *     `.info/connected`; das ist der einzige Wert, der auch ohne
+   *     Verbindung stimmt, weil ihn die Bibliothek örtlich führt.
+   *
+   * >>> Und wann NICHT gesperrt wird <<<
+   * Wenn der Besitzer den Raum ordentlich verlässt oder die App zumacht.
+   * Dann räumt leave() seinen Eintrag weg und hebt den Auftrag auf – es
+   * bleibt gar nichts stehen. Weitergearbeitet wird wie bei Google Docs;
+   * dass der Besitzer gerade nicht da ist, geht niemanden etwas an.
+   *
+   * Bewusst NICHT über das Alter des Eintrags: setPage schreibt nur bei
+   * einer Änderung, ein untätiger Besitzer frischt `at` also gar nicht
+   * auf. Er gälte nach kurzer Zeit als weg, obwohl er dasitzt.
+   *
+   * Beim Besitzer selbst wird einmal `false` gemeldet und nichts weiter
+   * beobachtet: er darf immer schreiben, auch offline.
+   *
+   * @param {(away: boolean) => void} callback
    */
-  function onOwnerLost(callback) {
+  function onOwnerAway(callback) {
     const ownerUid = options.ownerUid || '';
     if (!ownerUid || ownerUid === me.uid) { callback(false); return () => {}; }
 
-    const stop = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
-      const entry = snap.val();
-      callback(!!(entry && entry.lost));
-    }, () => callback(false));
-    stops.push(stop);
-    return stop;
+    let connected = true;
+    let ownerHere = true;
+    const report = () => callback(!connected || !ownerHere);
+
+    const stopConn = onValue(ref(rtdb, '.info/connected'), (snap) => {
+      connected = snap.val() === true;
+      report();
+    }, () => { connected = false; report(); });
+
+    const stopOwner = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+      /* >>> Kein Eintrag zählt schon als weg <<<
+         Ob der Besitzer abgestürzt ist oder ordentlich zugemacht hat,
+         macht für die Gefahr keinen Unterschied: in beiden Fällen kann
+         er das Heft gleich darauf ohne Netz wieder öffnen und örtlich
+         weiterschreiben, ohne dass es irgendjemand mitbekommt. Genau
+         dieser Weg lässt sich durch nichts anderes absichern – eine App,
+         die offline startet, hatte nie eine Leitung, über die sie sich
+         hätte melden können.
+
+         Die Marke (lost) bleibt trotzdem stehen und zählt hier mit: sie
+         schadet nicht, und ohne veröffentlichte Regel fällt der Auftrag
+         auf „Eintrag entfernen" zurück – was hier dasselbe bedeutet. */
+      const eintrag = snap.val();
+      ownerHere = snap.exists() && !eintrag?.lost;
+      report();
+    }, () => { ownerHere = false; report(); });
+
+    stops.push(stopConn, stopOwner);
+    return () => { stopConn(); stopOwner(); };
   }
 
   /* ── Änderungsstrom ── */
@@ -2013,31 +2195,42 @@ async function joinDocRoom(docId, options = {}) {
    *
    * Eine Zugabe darf die Hauptsache nicht umbringen. Also: scheitert es,
    * geht dieselbe Änderung ohne die Zusatzangaben noch einmal hinaus.
+   *
+   * >>> Warum das Ergebnis zurückgemeldet wird <<<
+   * Vorher endete jeder Fehlschlag in einer Warnung in der Konsole, und
+   * der Aufrufer hielt die Änderung für zugestellt. Sie war damit für
+   * immer verloren – der andere sah den Text nie, während Anwesenheit
+   * und Sperrband weiter ankamen. Wer das Ergebnis kennt, kann den
+   * Notweg über Firestore nehmen (ui/collab.js).
+   *
+   * @returns {Promise<boolean>} ob die Änderung im Raum steht
    */
   function sendOp(op) {
-    if (left) return Promise.resolve();
+    if (left) return Promise.resolve(false);
     const full = { ...op, by: me.uid, at: rtNow() };
 
-    return push(opsRef, full).catch((err) => {
+    return push(opsRef, full).then(() => true).catch((err) => {
       const extras = OP_EXTRAS.filter(key => key in op);
       if (!extras.length) {
         console.warn('[Share] Änderung konnte nicht gesendet werden:', err?.message || err);
-        return;
+        return false;
       }
 
       const plain = { ...full };
       for (const key of extras) delete plain[key];
 
       return push(opsRef, plain).then(() => {
-        if (extrasWarned) return;
+        if (extrasWarned) return true;
         extrasWarned = true;
         console.warn('[Share] Die veröffentlichten Regeln kennen die Felder '
           + OP_EXTRAS.join(', ') + ' noch nicht. Der Text wird übertragen, die fremde '
           + 'Schreibmarke bleibt aber ungenau. Abhilfe: website/database.rules.json '
           + 'in der Firebase Console unter Realtime Database → Regeln veröffentlichen.');
+        return true;
       }).catch((zweiter) => {
         console.warn('[Share] Änderung konnte nicht gesendet werden:',
           zweiter?.message || zweiter);
+        return false;
       });
     });
   }
@@ -2081,7 +2274,7 @@ async function joinDocRoom(docId, options = {}) {
 
   pruneOps();
 
-  return { me: card, setPage, onPresence, onOwnerLost, sendOp, onOp, leave };
+  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, leave };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────
@@ -2122,6 +2315,8 @@ const InkwellShare = {
   leaveDocument,
   unblockMember,
   listMembers,
+  listOwnedDocs,
+  findOwnedDocForNotebook,
 
   // Geteilte Dokumente – Empfängerseite
   listSharedDocs,

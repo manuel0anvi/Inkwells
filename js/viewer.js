@@ -92,6 +92,13 @@ function getNotebookPages(notebook) {
     if (page && page.id) pagesById.set(page.id, page);
   }
 
+  /* Umgestelltes Heft: notebook.pages IST die Reihenfolge, und die
+     Zugehoerigkeit steht als page.secId an der Seite. Ueber die Abschnitte
+     zu gehen waere hier sogar falsch – deren pgIds sind nur noch
+     abgeleitet und wuerden die Seiten nach Abschnitten gruppieren.
+     Gegenstueck: notebookPages() in src/core/data.js. */
+  if (notebook.schemaVersion === 2) return allPages;
+
   const ordered = [];
   const seen = new Set();
 
@@ -161,6 +168,13 @@ function resolvePageBg(notebook, page) {
   if (page.bg) return page.bg;
 
   const sections = Array.isArray(notebook.sections) ? notebook.sections : [];
+
+  // Seit Abschnitte Etiketten sind, steht die Zugehoerigkeit an der Seite
+  if (page.secId) {
+    const eigen = sections.find(sec => String(sec.id) === String(page.secId));
+    if (eigen?.defaultBg) return eigen.defaultBg;
+  }
+
   for (const section of sections) {
     const belongs = (Array.isArray(section.pgIds) && section.pgIds.includes(page.id))
       || (Array.isArray(section.pages) && section.pages.some(p => p && p.id === page.id));
