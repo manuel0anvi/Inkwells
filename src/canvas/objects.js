@@ -59,7 +59,7 @@ function backObjectAt(pageEl, x, y) {
   // Von vorn nach hinten: das zuletzt gezeichnete liegt oben
   const wraps = [...layer.querySelectorAll('.obj-wrap')].reverse();
   for (const wrap of wraps) {
-    if (Number(wrap.dataset.restz) !== OBJ_Z.back) continue;
+    if (wrap.dataset.layer !== 'back') continue;
     if (typeof wrap._beginObjInteraction !== 'function') continue;
     const r = wrap.getBoundingClientRect();
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return wrap;
@@ -119,7 +119,10 @@ document.addEventListener('pointerdown', e => {
 
   const wrap = backObjectAt(pageEl, e.clientX, e.clientY);
   if (!wrap) return;
-  if (!e.altKey && pointIsOnText(pageEl, e.clientX, e.clientY)) return;
+
+  /* Ist es schon ausgewählt, gewinnt es immer: sonst verlöre man es beim
+     Verschieben, sobald der Zeiger über einem Buchstaben aufsetzt. */
+  if (_selObj !== wrap && !e.altKey && pointIsOnText(pageEl, e.clientX, e.clientY)) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -149,17 +152,30 @@ function objText(key, fallback) {
   return (typeof t === 'function' && t(key)) || fallback;
 }
 
-/* Ausgewählt liegt ein Bild immer obenauf – auch eines aus der hinteren
-   Ebene. Sonst lägen Griffe und Leiste mit ihm unter dem Text: sichtbar
-   wäre nichts davon und anklickbar erst recht nicht. Beim Abwählen fällt
-   es auf seine Ebene zurück (dataset.restz). */
-const OBJ_Z_SELECTED = OBJ_Z.front + 1;
+/* ── Bedienteile über allem, das Bild bleibt liegen ─────────────────
+   Griffe und Leiste sassen zunächst im selben Element wie das Bild. Bei
+   einem Bild hinter dem Text lagen sie damit selbst unter dem Text:
+   unsichtbar und nicht anzuklicken. Der erste Versuch war, das Bild beim
+   Auswählen nach vorn zu holen – dann sprang es aber sichtbar vor den
+   Text und stellte die eingestellte Ebene in Frage.
+
+   Deshalb sind es jetzt zwei Geschwister in einem Rahmen ohne eigenen
+   Stapel (.obj-wrap hat z-index:auto und KEIN transform – beides würde
+   die Kinder einsperren):
+
+     .obj-body    das Bild        z-index 2 oder 20, je nach Ebene
+     .obj-chrome  Griffe, Leiste  z-index 30, also immer obenauf
+
+   Beide liegen deckungsgleich auf dem Rahmen und drehen sich getrennt,
+   aber gleich weit. Die Ebene des Bildes ändert sich durch das Auswählen
+   damit überhaupt nicht mehr. */
+const OBJ_Z_CHROME = 30;
 
 function deselect() {
   if (!_selObj) return;
   _selObj.classList.remove('selected');
-  [..._selObj.querySelectorAll('.obj-handle,.obj-bar')].forEach(h => h.style.display = 'none');
-  if (_selObj.dataset.restz) _selObj.style.zIndex = _selObj.dataset.restz;
+  const chrome = _selObj.querySelector('.obj-chrome');
+  if (chrome) chrome.style.display = 'none';
   _selObj = null;
 }
 
@@ -179,9 +195,23 @@ const OBJ_ICONS = {
 
 function placeObject(objLayer, obj, page) {
   const wrap = document.createElement('div'); wrap.className = 'obj-wrap';
-  wrap.style.cssText = 'left:' + obj.x + 'px;top:' + obj.y + 'px;width:' + obj.w + 'px;height:' + obj.h + 'px;transform:rotate(' + (obj.rot || 0) + 'deg);position:absolute;z-index:' + OBJ_Z[objLayerOf(obj)] + ';pointer-events:' + (S.mode === 'cursor' ? 'auto' : 'none');
-  if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; wrap.appendChild(img); }
-  else { wrap.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
+  // Nur Lage und Größe – kein z-index, kein transform (siehe OBJ_Z_CHROME)
+  wrap.style.cssText = 'left:' + obj.x + 'px;top:' + obj.y + 'px;width:' + obj.w + 'px;height:' + obj.h + 'px;position:absolute;pointer-events:none';
+
+  const body = document.createElement('div'); body.className = 'obj-body';
+  body.style.zIndex = OBJ_Z[objLayerOf(obj)];
+  body.style.pointerEvents = S.mode === 'cursor' ? 'auto' : 'none';
+  if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; body.appendChild(img); }
+  else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
+  wrap.appendChild(body);
+
+  /* Die Bedienteile. Der Rahmen selbst lässt Klicks durch, sonst läge er
+     als unsichtbare Scheibe über dem Text – nur Griffe und Leiste fangen
+     sie ab. */
+  const chrome = document.createElement('div'); chrome.className = 'obj-chrome';
+  chrome.style.zIndex = OBJ_Z_CHROME;
+  chrome.style.display = 'none';
+  wrap.appendChild(chrome);
 
   let snapV = null, snapH = null;
   const showSnap = (type, pos) => {
@@ -197,7 +227,7 @@ function placeObject(objLayer, obj, page) {
   };
 
   ['tl', 'tr', 'bl', 'br'].forEach(pos => {
-    const h = document.createElement('div'); h.className = 'obj-handle ' + pos; h.style.display = 'none'; wrap.appendChild(h);
+    const h = document.createElement('div'); h.className = 'obj-handle ' + pos; chrome.appendChild(h);
     h.addEventListener('pointerdown', e => {
       e.stopPropagation(); e.preventDefault();
       h.setPointerCapture(e.pointerId);
@@ -226,7 +256,7 @@ function placeObject(objLayer, obj, page) {
         if (pos === 'tl') { nx = ox + (ow - nw); ny = oy + (oh - nh); }
         if (nw > 20 && nh > 20) {
           obj.w = nw; obj.h = nh; obj.x = nx; obj.y = ny;
-          wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px'; wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px'; wrap.style.transform = 'rotate(' + (obj.rot || 0) + 'deg)';
+          wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px'; wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px';
           placeBar();
         }
       };
@@ -235,7 +265,7 @@ function placeObject(objLayer, obj, page) {
     });
   });
 
-  const rotH = document.createElement('div'); rotH.className = 'obj-handle rot'; rotH.textContent = '↻'; rotH.style.display = 'none'; wrap.appendChild(rotH);
+  const rotH = document.createElement('div'); rotH.className = 'obj-handle rot'; rotH.textContent = '↻'; chrome.appendChild(rotH);
   rotH.addEventListener('pointerdown', e => {
     e.stopPropagation(); e.preventDefault(); rotH.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
@@ -257,7 +287,6 @@ function placeObject(objLayer, obj, page) {
      einen einzigen roten Knopf zum Löschen und sonst nichts. */
   const bar = document.createElement('div');
   bar.className = 'obj-bar';
-  bar.style.display = 'none';
   // Ein Klick in die Leiste darf das Bild weder verschieben noch abwählen
   bar.addEventListener('pointerdown', e => e.stopPropagation());
 
@@ -278,9 +307,18 @@ function placeObject(objLayer, obj, page) {
     bar.appendChild(s);
   };
 
-  /** Dreht das Bild und hält die Leiste dabei aufrecht. */
+  /**
+   * Dreht Bild und Bedienteile getrennt, aber gleich weit.
+   *
+   * Getrennt, weil eine Drehung am gemeinsamen Rahmen einen eigenen
+   * Stapel aufmachen und die Bedienteile wieder unter den Text sperren
+   * würde. Beide liegen deckungsgleich auf demselben Rechteck und drehen
+   * um dessen Mitte – das Ergebnis ist dasselbe.
+   */
   function applyRotation() {
-    wrap.style.transform = 'rotate(' + (obj.rot || 0) + 'deg)';
+    const deg = 'rotate(' + (obj.rot || 0) + 'deg)';
+    body.style.transform = deg;
+    chrome.style.transform = deg;
     // Sonst stünde die Leiste bei einem gedrehten Bild auf dem Kopf
     bar.style.transform = 'translateX(-50%) rotate(' + (-(obj.rot || 0)) + 'deg)';
   }
@@ -304,9 +342,9 @@ function placeObject(objLayer, obj, page) {
     if (objLayerOf(obj) === which) return;
     pushPageHistory(page);
     obj.layer = which;
-    wrap.dataset.restz = String(OBJ_Z[which]);
-    // Solange ausgewählt, bleibt es oben – erst das Abwählen lässt es sinken
-    if (_selObj !== wrap) wrap.style.zIndex = OBJ_Z[which];
+    // Nur das Bild wandert; die Bedienteile bleiben, wo sie sind
+    body.style.zIndex = OBJ_Z[which];
+    wrap.dataset.layer = which;
     markLayerButtons();
     updateUndoRedoUI();
     noteObjectChanged();
@@ -370,22 +408,27 @@ function placeObject(objLayer, obj, page) {
   markLayerButtons();
   applyRotation();
 
-  wrap.appendChild(bar);
+  chrome.appendChild(bar);
   wrap.dataset.objid = String(obj.id);
-  // Die Ebene, auf die es nach dem Abwählen zurückfällt
-  wrap.dataset.restz = String(OBJ_Z[objLayerOf(obj)]);
+  // backObjectAt() liest hier ab, ob dieses Bild hinter dem Text liegt
+  wrap.dataset.layer = objLayerOf(obj);
+
+  /** Zeigt Griffe und Leiste. Die Ebene des Bildes bleibt unberührt. */
+  function select() {
+    deselect();
+    _selObj = wrap;
+    wrap.classList.add('selected');
+    chrome.style.display = 'block';
+    placeBar();
+  }
 
   /** Auswählen und, solange der Zeiger unten bleibt, verschieben. */
   function beginInteraction(e) {
     if (S.mode !== 'cursor') return;
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
     e.stopPropagation(); e.preventDefault();
-    deselect(); _selObj = wrap; wrap.classList.add('selected');
-    wrap.style.zIndex = OBJ_Z_SELECTED;
-    placeBar();
-    [...wrap.querySelectorAll('.obj-handle')].forEach(h => h.style.display = 'flex');
-    bar.style.display = 'flex';
-    wrap.setPointerCapture(e.pointerId);
+    select();
+    body.setPointerCapture(e.pointerId);
     const sx = e.clientX, sy = e.clientY, ox = obj.x, oy = obj.y;
     const others = (page.objects || []).filter(o => o.id !== obj.id);
     let xs = [], ys = [], cxs = [], cys = [];
@@ -405,27 +448,25 @@ function placeObject(objLayer, obj, page) {
       obj.x = nx; obj.y = ny; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
       placeBar();
     };
-    const up = (ev) => { hideSnaps(); wrap.releasePointerCapture(ev.pointerId); wrap.removeEventListener('pointermove', mv); wrap.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
-    wrap.addEventListener('pointermove', mv); wrap.addEventListener('pointerup', up);
+    const up = (ev) => { hideSnaps(); body.releasePointerCapture(ev.pointerId); body.removeEventListener('pointermove', mv); body.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
+    body.addEventListener('pointermove', mv); body.addEventListener('pointerup', up);
   }
 
-  wrap.addEventListener('pointerdown', beginInteraction);
-  // Für den Alt+Klick weiter oben: er sitzt außerhalb dieses Elements
+  body.addEventListener('pointerdown', beginInteraction);
+  /* Für den Griff von außen: ein Bild hinter dem Text bekommt seinen
+     Klick nicht selbst, den reicht der Fänger ganz oben herein. */
   wrap._beginObjInteraction = beginInteraction;
 
   let pinchStartDist = 0, pinchStartW = 0, pinchStartH = 0;
-  wrap.addEventListener('touchstart', e => {
+  body.addEventListener('touchstart', e => {
     if (e.touches.length === 2 && S.mode === 'cursor') {
       e.stopPropagation(); e.preventDefault();
       pinchStartDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
-      pinchStartW = obj.w; pinchStartH = obj.h; deselect(); _selObj = wrap; wrap.classList.add('selected');
-      wrap.style.zIndex = OBJ_Z_SELECTED;
-      placeBar();
-      [...wrap.querySelectorAll('.obj-handle')].forEach(h => h.style.display = 'flex');
-      bar.style.display = 'flex';
+      pinchStartW = obj.w; pinchStartH = obj.h;
+      select();
     }
   }, { passive: false });
-  wrap.addEventListener('touchmove', e => {
+  body.addEventListener('touchmove', e => {
     if (e.touches.length === 2 && pinchStartDist > 0 && S.mode === 'cursor') {
       e.stopPropagation(); e.preventDefault();
       const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
@@ -438,7 +479,7 @@ function placeObject(objLayer, obj, page) {
       }
     }
   }, { passive: false });
-  wrap.addEventListener('touchend', e => {
+  body.addEventListener('touchend', e => {
     if (e.touches.length < 2 && pinchStartDist > 0) { pinchStartDist = 0; noteObjectChanged(); }
   }, { passive: true });
 

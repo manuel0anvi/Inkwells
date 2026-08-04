@@ -388,7 +388,8 @@ function applyMode() {
     t.contentEditable = ic ? 'true' : 'false';
   });
   QA('.j-objects').forEach(o => o.style.pointerEvents = 'none');
-  QA('.obj-wrap').forEach(o => o.style.pointerEvents = ic ? 'auto' : 'none');
+  // Nur das Bild schaltet um; die Bedienteile regeln sich über .obj-chrome
+  QA('.obj-body').forEach(o => o.style.pointerEvents = ic ? 'auto' : 'none');
   updateCursor();
 }
 
