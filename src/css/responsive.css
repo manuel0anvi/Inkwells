@@ -73,10 +73,22 @@
     opacity: 1
   }
 
-  .side-mgr-btn,
+  /* Alle drei Kopfknoepfe zusammen groesser – einzeln waeren sie
+     verschieden gross, und nebeneinander faellt das sofort auf. */
+  .side-add-sec,
+  .side-mgr-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 15px
+  }
+
+  .side-mgr-btn {
+    font-size: 13px
+  }
+
   .sec-edit-btn {
-    min-width: 36px;
-    min-height: 32px;
+    min-width: 34px;
+    min-height: 34px;
     font-size: 14px
   }
 
@@ -178,6 +190,18 @@
   .side-panel.open .side-content {
     width: 200px
   }
+
+  /* >>> Warum das hier schon stehen muss <<<
+     Kopf, Suchzeile und Baum tragen min-width: 230px – gedacht als
+     Schutz gegen das Zusammenquetschen waehrend die Leiste aufklappt.
+     Sobald die Leiste aber selbst schmaler wird, ragt der Kopf darueber
+     hinaus, und der letzte Knopf steht ausserhalb. Genau ab hier faengt
+     das an: 230px Inhalt in einer 200px breiten Leiste. */
+  .side-head,
+  .side-search,
+  .side-tree {
+    min-width: 0
+  }
 }
 
 @media (max-width:900px) {
@@ -187,14 +211,10 @@
     width: min(180px, 42vw)
   }
 
-  .side-head,
-  .side-tree {
-    min-width: 0
-  }
-
-  .side-add-sec {
-    padding: 4px 8px;
-    font-size: 9px
+  /* Ab hier bleibt fuer die Beschriftung ohnehin nur ein Stummel –
+     dann lieber ganz weg, damit die drei Knoepfe Luft haben. */
+  .side-label {
+    display: none
   }
 
   .toolbar {
