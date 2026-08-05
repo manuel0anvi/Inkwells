@@ -169,7 +169,12 @@ body.touch-draw .j-canvas {
   word-break: break-word;
   overflow: visible;
   pointer-events: none;
-  margin: 0
+  margin: 0;
+  /* Ueber beschreibbarem Text markiert Chromium mit dem Stift, statt zu
+     scrollen – der Text bedeckt fast die ganze Seite, damit stand sie
+     fest. pan-y gibt das Schieben zurueck; markiert wird mit langem
+     Halten, genau wie mit dem Finger. Dieselbe Regel hat .j-canvas. */
+  touch-action: pan-y
 }
 
 .j-text * {

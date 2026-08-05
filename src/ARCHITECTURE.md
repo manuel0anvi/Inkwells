@@ -151,16 +151,26 @@ src/
 ### `canvas/input.js`
 - **Pointer Events:** attachInput (handlers for pointerdown/move/up)
 
-> **Welches Gerät was tut.** Stift und Maus sind dasselbe Zeigegerät: es
-> zählt allein das gewählte Werkzeug (`isDrawMode`). Auf dem Zeiger setzen
-> beide die Schreibmarke, auf Stift/Marker/Radierer zeichnen beide. Der
-> Stift schaltete früher von selbst um — damit konnte man mit ihm keinen
-> Text mehr antippen, deshalb ist das weg. Seine *zweite Taste* radiert
-> dagegen in jedem Werkzeug (`S._restoreMode` bringt das alte zurück); die
-> rechte Maustaste nicht, die gehört dem Kontextmenü. Der Finger scrollt,
-> es sei denn `S.touchDraw` ist an **und** ein Zeichenwerkzeug gewählt.
-> `S._drawPointerId` hält fest, wer den Strich begonnen hat — sonst malte
-> beim Zoomen der zweite Finger mit.
+> **Welches Gerät was tut.** Es zählt allein das gewählte Werkzeug
+> (`isDrawMode`): auf Stift/Marker/Radierer zeichnet jedes Gerät, auf dem
+> Zeiger keines. Der Stift schaltete früher von selbst um — damit konnte
+> man mit ihm nichts mehr antippen, deshalb ist das weg. Seine *zweite
+> Taste* radiert dagegen in jedem Werkzeug (`S._restoreMode` bringt das
+> alte zurück); die rechte Maustaste nicht, die gehört dem Kontextmenü.
+>
+> Auf dem Zeiger ist der Stift ein **Finger, keine Maus**: schieben
+> scrollt, antippen setzt die Marke, beides überlassen wir dem Browser.
+> Setzt man die Marke selbst (wie bei der Maus), wird aus jeder Bewegung
+> ein Markieren und die Seite steht fest. Dazu gehören zwei Stellen
+> außerhalb von `input.js`: `touch-action: pan-y` auf `.j-text`, sonst
+> markiert Chromium über beschreibbarem Text mit dem Stift statt zu
+> scrollen — und `penIsActive()` (`core/state.js`), das Berührungen nur
+> noch **beim Zeichnen** abweist. Chromium meldet den Stift zusätzlich
+> als Berührung, die Handballensperre traf also den Stift selbst.
+>
+> Der Finger scrollt ebenso, es sei denn `S.touchDraw` ist an **und** ein
+> Zeichenwerkzeug gewählt. `S._drawPointerId` hält fest, wer den Strich
+> begonnen hat — sonst malte beim Zoomen der zweite Finger mit.
 - **Drawing:** buildStroke, liveDrawIncr (live feedback)
 - **Erasing:** pointToLineDistance, strokeErase
 - **Caret Placement:** placeCaret, placeCaretAnywhere

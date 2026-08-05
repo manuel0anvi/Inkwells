@@ -11,7 +11,15 @@ const _penPointers = new Set();
 let _penLiftTime = 0;
 const PEN_GRACE_MS = 500;
 
+/* Handballen abweisen: liegt der Stift auf der Seite, gehoert sie ihm, und
+   die Beruehrungen daneben werden verworfen (app.js).
+
+   Aber NUR beim Zeichnen. Auf dem Zeiger soll der Stift schieben wie ein
+   Finger – und Chromium meldet den Stift zusaetzlich als Beruehrung.
+   Diese Sperre traf damit den Stift selbst: sie verwarf genau das
+   Scrollen, das er gerade ausloesen wollte. */
 function penIsActive() {
+  if (typeof isDrawMode === 'function' && !isDrawMode(S.mode)) return false;
   return _penPointers.size > 0 || (Date.now() - _penLiftTime < PEN_GRACE_MS);
 }
 

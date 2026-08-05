@@ -137,16 +137,20 @@ function attachInput(canvas, textDiv, objLayer, page) {
   /* ══════════════════════════════════════════════════════════════════
      WELCHES GERAET WAS TUT
 
-     Stift und Maus sind dasselbe Zeigegeraet – was zaehlt, ist das
-     gewaehlte Werkzeug. Auf Stift, Marker oder Radierer zeichnen beide,
-     auf dem Zeiger setzen beide nur die Schreibmarke.
+     Es zaehlt allein das gewaehlte Werkzeug: auf Stift, Marker oder
+     Radierer zeichnet jedes Geraet, auf dem Zeiger keines.
 
-     Hier schaltete der Stift frueher von selbst auf das zuletzt
-     benutzte Werkzeug. Das nahm einem die Wahl wieder weg: wer den
-     Zeiger gewaehlt hatte, konnte mit dem Stift keinen Text mehr
-     antippen, weil schon die Beruehrung einen Strich machte.
+     Der Stift schaltete frueher von selbst auf das zuletzt benutzte
+     Werkzeug um. Das nahm einem die Wahl wieder weg – wer den Zeiger
+     gewaehlt hatte, konnte mit dem Stift nichts mehr antippen, weil
+     schon die Beruehrung einen Strich machte.
 
-     Der Finger scrollt – ausser das Zeichnen mit dem Finger ist
+     Auf dem Zeiger ist der Stift ein FINGER, keine Maus: schieben
+     scrollt, antippen setzt die Marke. Das ueberlaesst er ganz dem
+     Browser. Setzten wir die Marke hier selbst (wie bei der Maus),
+     wurde daraus ein Markieren – und die Seite stand fest.
+
+     Der Finger scrollt ebenso – ausser das Zeichnen mit dem Finger ist
      eingeschaltet und ein Zeichenwerkzeug gewaehlt.
      ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointerdown', e => {
@@ -154,18 +158,22 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-bar')) return;
     if (target.closest('.j-text')) return;
 
-    if (e.pointerType === 'pen' || e.pointerType === 'mouse') {
+    if (e.pointerType === 'pen') {
+      /* Die zweite Taste am Stift radiert in jedem Werkzeug – umdrehen,
+         wegwischen, weiterschreiben, ohne zur Leiste zu muessen. */
       const zweiteTaste = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
       if (e.button !== 0 && !zweiteTaste) return;
+      if (isDrawMode(S.mode) || zweiteTaste) { handleDrawStart(e); return; }
+      return; // Zeiger: der Browser scrollt und setzt die Marke
+    }
 
-      /* Die zweite Taste am Stift radiert in jedem Werkzeug – umdrehen,
-         wegwischen, weiterschreiben, ohne zur Leiste zu muessen. Bei der
-         Maus bleibt die rechte Taste dem Kontextmenue, sonst waere das
-         Markieren von Text kaputt. */
-      if (isDrawMode(S.mode) || (e.pointerType === 'pen' && zweiteTaste)) {
-        handleDrawStart(e);
-        return;
-      }
+    if (e.pointerType === 'mouse') {
+      // Die rechte Maustaste bleibt dem Kontextmenue, sonst waere das
+      // Markieren von Text kaputt – sie radiert nur beim Zeichnen.
+      const radiert = e.button === 2 || (e.buttons & 2);
+      if (e.button !== 0 && !radiert) return;
+
+      if (isDrawMode(S.mode)) { handleDrawStart(e); return; }
 
       // We don't preventDefault here to allow native selection to work.
       // But we call activeTextEditingAt immediately so the cursor appears
@@ -255,10 +263,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
     textDiv.style.pointerEvents = 'auto';
 
     if (S.readOnly) return;
-    /* Stift und Maus setzen die Marke selbst – sonst landet sie beim Stift
-       am Zeilenende statt dort, wo man hingetippt hat. Der Finger nicht:
-       dort ist der eigene Treffer des Browsers samt Griffen besser. */
-    if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+    /* Nur die Maus setzt die Marke selbst. Stift und Finger ueberlaesst
+       das den Browser: er entscheidet zwischen Antippen und Schieben, und
+       nur so bleibt das Scrollen ueber dem Text erhalten. Setzten wir sie
+       hier, war jede Bewegung ein Markieren. */
+    if (e.pointerType !== 'mouse') return;
     if (e.button !== 0) return;
 
     // Direct clicks on the editor container:
