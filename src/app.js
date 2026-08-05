@@ -194,11 +194,25 @@ function openNotebook(id) {
   normalizeNotebook(nb);
   getSections(nb);
 
+  /* ── Da weitermachen, wo man aufgehört hat ──────────────────────────
+     Seite und Ausschnitt stehen örtlich (core/settings.js), nicht im
+     Heft: bei einem geteilten Dokument ist beides Sache jedes Einzelnen.
+     Beides wird geprüft, bevor es gilt – ein Abschnitt kann inzwischen
+     gelöscht, eine Seite verschoben oder weg sein. */
+  const merk = (typeof getNotebookView === 'function') ? getNotebookView(nb.id) : {};
+  if (typeof merk.secId === 'string') nb.activeSecId = merk.secId;
+
   /* Ohne gültigen Ausschnitt werden ALLE Seiten gezeigt. Das ist der
      Normalfall: früher musste immer ein Abschnitt offen sein, heute ist
      das Heft eine durchgehende Folge und der Filter die Ausnahme. */
   if (nb.activeSecId && !nb.sections.find(s => s.id === nb.activeSecId)) nb.activeSecId = '';
-  openSection(activeSection(nb));
+
+  const sec = activeSection(nb);
+  // Nur anspringen, wenn die Seite im gezeigten Ausschnitt auch vorkommt
+  const sichtbar = sec ? pagesOfSec(sec, nb) : notebookPages(nb);
+  const start = sichtbar.some(p => String(p.id) === String(merk.pageId || '')) ? merk.pageId : null;
+
+  openSection(sec, start);
   renderSideTree();
 
   /* Ist dieses Heft freigegeben, wird daraus jetzt eine Live-Sitzung –
@@ -224,6 +238,10 @@ function openNotebook(id) {
 function openSection(sec = null, scrollToPgId = null) {
   const nb = getNb(); if (!nb) return;
   nb.activeSecId = sec ? sec.id : '';
+  // Der gewählte Ausschnitt gilt auch beim nächsten Öffnen des Hefts
+  if (typeof rememberNotebookView === 'function') {
+    rememberNotebookView(nb.id, { secId: nb.activeSecId });
+  }
   let pages = visiblePages(nb);
 
   // Ein Heft ganz ohne Seiten gibt es nicht – ein leerer AUSSCHNITT schon.

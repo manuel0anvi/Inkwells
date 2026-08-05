@@ -187,9 +187,73 @@ class SettingsManager {
     };
   }
 
+  /* Nur in den Speicher, ohne zu schreiben. Fuer Werte, die sich haeufig
+     aendern und deren Verlust nichts kostet – siehe die Merkstelle unten. */
+  stash(key, value) {
+    this.settings[key] = value;
+  }
+
   _notify() {
     this._listeners.forEach(cb => cb(this.settings));
   }
 }
 
 const Settings = new SettingsManager();
+
+/* ══════════════════════════════════════════════════════════════════════
+   WO MAN EIN HEFT ZULETZT VERLASSEN HAT
+
+   Die Seite und der gewaehlte Abschnitt, je Heft.
+
+   >>> Warum das nicht ins Heft gehoert <<<
+   Bei einem geteilten Dokument ist es Sache jedes Einzelnen, wo er
+   gerade liest. ui/collab.js haelt activeSecId aus genau diesem Grund
+   aus dem Struktur-Abgleich heraus – stuende es darin, riss einen das
+   Blaettern des anderen mit. Also oertlich, neben den uebrigen
+   Einstellungen.
+
+   Geschrieben wird verzoegert: setActivePg laeuft beim Scrollen an jeder
+   Seite, und dafuer jedes Mal eine Datei anzufassen waere unsinnig.
+   Beim Verlassen des Hefts und vor dem Beenden wird nachgeholt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const VIEW_STATE_KEY = 'notebookViewState';
+const VIEW_STATE_MAX = 200;      // sonst waechst die Datei ohne Ende
+let _viewStateTimer = null;
+
+function getNotebookView(nbId) {
+  if (!nbId) return {};
+  const all = Settings.get(VIEW_STATE_KEY);
+  return (all && all[String(nbId)]) || {};
+}
+
+/** @param {{pageId?: string, secId?: string}} patch */
+function rememberNotebookView(nbId, patch) {
+  if (!nbId || !patch) return;
+  const all = { ...(Settings.get(VIEW_STATE_KEY) || {}) };
+  const key = String(nbId);
+  const vorher = all[key] || {};
+  const nachher = { ...vorher, ...patch };
+
+  if (vorher.pageId === nachher.pageId && vorher.secId === nachher.secId) return;
+
+  // Neu einsortieren, damit das zuletzt Benutzte hinten steht
+  delete all[key];
+  all[key] = nachher;
+
+  const schluessel = Object.keys(all);
+  for (let i = 0; i < schluessel.length - VIEW_STATE_MAX; i++) delete all[schluessel[i]];
+
+  Settings.stash(VIEW_STATE_KEY, all);
+
+  clearTimeout(_viewStateTimer);
+  _viewStateTimer = setTimeout(() => { _viewStateTimer = null; Settings.save(); }, 2000);
+}
+
+/** Ausstehendes sofort wegschreiben – beim Verlassen und vor dem Beenden. */
+function flushNotebookView() {
+  if (!_viewStateTimer) return Promise.resolve();
+  clearTimeout(_viewStateTimer);
+  _viewStateTimer = null;
+  return Settings.save();
+}

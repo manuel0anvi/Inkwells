@@ -260,6 +260,8 @@ function setTitleBar(name, color) {
 }
 
 function showHome() {
+  // Seite und Ausschnitt festhalten, bevor das Heft aus dem Blick gerät
+  if (typeof flushNotebookView === 'function') flushNotebookView();
   E('view-home').style.display = 'flex';
   E('view-journal').style.display = 'none';
   E('btn-home').style.display = 'none';

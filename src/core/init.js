@@ -158,6 +158,14 @@
       }
 
       try {
+        /* Wo man zuletzt gelesen hat. Wird sonst verzoegert geschrieben –
+           beim Beenden bliebe das letzte Stueck sonst liegen. */
+        if (typeof flushNotebookView === 'function') await flushNotebookView();
+      } catch (err) {
+        console.warn('[Init] Merkstelle nicht geschrieben:', err);
+      }
+
+      try {
         // Ein offenes geteiltes Dokument hat keine Datei – es wird in den
         // Raum zurückgeschrieben und taucht deshalb in AutoSave gar nicht auf.
         if (S.sharedDoc && !S.readOnly && typeof window.flushSharedDocSave === 'function') {

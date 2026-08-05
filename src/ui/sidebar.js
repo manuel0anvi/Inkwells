@@ -221,6 +221,11 @@ function setActivePg(pgId) {
   // In einem geteilten Dokument zieht der eigene Marker mit auf die Seite,
   // auf der man gerade ist (ui/collab.js).
   if (window.Collab) Collab.notePage(pgId);
+  /* Damit das Heft beim naechsten Mal hier wieder aufgeht. Gemerkt wird
+     oertlich und verzoegert geschrieben – core/settings.js. */
+  if (typeof rememberNotebookView === 'function') {
+    rememberNotebookView(S.activeNbId, { pageId: pgId });
+  }
 }
 
 /* Die Nummer kommt aus dem HEFT, nicht aus der Bildschirmposition.

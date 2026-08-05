@@ -89,6 +89,18 @@ src/
 > `nb.schemaVersion`. Es läuft auch über schon umgestellte Hefte, weil die
 > Abschaffung des Zwangsabschnitts später kam als die Umstellung selbst.
 
+### `core/settings.js`
+- **Einstellungen:** Settings (get/set/update/save), Laden aus der Datei
+- **Merkstelle je Heft:** getNotebookView, rememberNotebookView,
+  flushNotebookView — Seite und gewählter Abschnitt, an denen ein Heft
+  zuletzt verlassen wurde.
+
+> **Warum das nicht ins Heft gehört.** Bei einem geteilten Dokument ist es
+> Sache jedes Einzelnen, wo er gerade liest; `ui/collab.js` hält
+> `activeSecId` aus genau diesem Grund aus dem Struktur-Abgleich heraus.
+> Geschrieben wird verzögert (2 s) — `setActivePg` läuft beim Scrollen an
+> jeder Seite. `showHome()` und der Quit-Handler holen nach.
+
 ### `core/zoom.js`
 - **Zoom Management:** getZoom, setZoom, zoomIn, zoomOut, zoomReset
 - **Zoom Helpers:** getCanvasDpr, isVerticalMode, getVerticalFitZoom
