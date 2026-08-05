@@ -50,6 +50,7 @@
   const inviteRole = E('share-invite-role');
   const inviteAdd = E('share-invite-add');
   const needsAccountEl = E('share-needs-account');
+  const msLinkBox = E('share-ms-link');
   const linkSection = E('share-link-section');
   const peopleSection = E('share-people-section');
   const legacyBox = E('share-legacy');
@@ -178,6 +179,63 @@
     return t('shareNeedsAccount');
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DER FEHLENDE ZWEITE SCHRITT BEI MICROSOFT
+
+     Firebase nimmt für microsoft.com nur eine Anmeldung an, die es selbst
+     begonnen hat (ausführlich in core/share.js). Ein stiller Nachholer
+     scheitert deshalb immer – es braucht einen Klick, denn ein Fenster
+     ohne Zutun wird geblockt.
+
+     Der Knopf dafür stand nur im Reiter der geteilten Hefte. Wer aber
+     ein eigenes Heft freigeben wollte, las im Dialog einen Fehler, der
+     auf „den Knopf darunter" verwies – und darunter war nichts. Deshalb
+     wird er hier einmal gebaut und an beiden Stellen benutzt.
+
+     @param {(ok: boolean) => any} danach  gerufen, wenn der Schritt durch ist
+     @returns {HTMLButtonElement|null} null, wenn er hier nichts brächte
+     ══════════════════════════════════════════════════════════════════ */
+  function microsoftLinkButton(danach) {
+    // Nur bei Microsoft, und nur wenn man in Inkwell überhaupt angemeldet
+    // ist – sonst ist der Ausgangszustand ein anderer und der Klick liefe leer.
+    if (window.CloudSync_?.getProviderId?.() !== 'microsoft') return null;
+    if (!window.CloudSync_?.isAuthenticated?.()) return null;
+
+    const btn = document.createElement('button');
+    btn.className = 'settings-btn';
+    btn.style.cssText = 'margin-top:14px;padding:8px 16px;font-size:13px;';
+    btn.textContent = t('sharedLinkMicrosoft');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const vorher = btn.textContent;
+      btn.textContent = t('shareCheckingAccount');
+      const ok = await CloudSync_.linkMicrosoftInteractively();
+      btn.disabled = false;
+      btn.textContent = vorher;
+      await danach(ok);
+    });
+    return btn;
+  }
+
+  /** Setzt den Knopf unter die Erklärung – oder räumt ihn weg. */
+  function showMicrosoftLink(zeigen) {
+    if (!msLinkBox) return;
+    msLinkBox.innerHTML = '';
+    msLinkBox.style.display = 'none';
+    if (!zeigen) return;
+
+    const nb = shareNb;
+    const btn = microsoftLinkButton(async ok => {
+      // Geklappt: den Dialog mit demselben Heft neu aufbauen, dann stehen
+      // Link und Personenliste da. Sonst wenigstens sagen, woran es lag.
+      if (ok) await openShareDialog(nb);
+      else needsAccountEl.textContent = describeIdentityProblem();
+    });
+    if (!btn) return;
+    msLinkBox.appendChild(btn);
+    msLinkBox.style.display = 'block';
+  }
+
   /* ── Link-Zeile: Schalter + Rolle ⇄ linkMode ──────────────────────
      In Firestore ist es EIN Wert ('off' | 'view' | 'edit'), in der
      Oberfläche sind es zwei Bedienelemente. Hier die Übersetzung.
@@ -245,6 +303,7 @@
     linkRow.style.display = 'none';
     linkInput.value = '';
     revokeBtn.style.display = 'none';
+    showMicrosoftLink(false);
     setBusy(false);
 
     const entry = shareFor(nb.id);
@@ -282,7 +341,7 @@
     needsAccountEl.style.display = signedIn ? 'none' : 'block';
     linkSection.style.display = signedIn ? '' : 'none';
     peopleSection.style.display = signedIn ? '' : 'none';
-    if (!signedIn) return;
+    if (!signedIn) { showMicrosoftLink(true); return; }
 
     if (entry?.docId) { await loadHead(entry.docId); return; }
 
@@ -813,4 +872,8 @@
      längst angemeldet war und nur Firebase den Nutzer nicht kannte. Damit
      war der leere Reiter nicht zu erklären. */
   window.describeShareIdentityProblem = describeIdentityProblem;
+
+  /* Denselben Knopf braucht der Reiter der geteilten Hefte. Zwei Fassungen
+     davon liefen schon einmal auseinander – deshalb nur diese eine. */
+  window.microsoftLinkButton = microsoftLinkButton;
 })();
