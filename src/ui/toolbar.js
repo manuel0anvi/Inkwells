@@ -52,8 +52,7 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 
 /** Zeichnet der Finger gerade, statt zu scrollen? */
 function touchDrawActive() {
-  return !!S.touchDraw && !S._modeAuto
-    && typeof isDrawMode === 'function' && isDrawMode(S.mode);
+  return !!S.touchDraw && typeof isDrawMode === 'function' && isDrawMode(S.mode);
 }
 
 /* Pen color presets */
@@ -477,29 +476,13 @@ window.addEventListener('pointermove', e => {
   }
 });
 
-// Track last pen mode so pen auto-switch restores it
-S._lastPenMode = 'pen1';
-
-/* Wurde das Werkzeug vom Geraet gesetzt oder vom Nutzer gewaehlt?
-   Daran haengt, ob die Maus zum Text zurueckspringt: hat der Stift
-   umgeschaltet, war es nicht gemeint und die Maus schreibt wieder. Hat der
-   Nutzer den Stift angeklickt, darf er auch mit der Maus zeichnen. */
-S._modeAuto = false;
-
 /** Malt dieses Werkzeug, statt Text zu setzen? */
 function isDrawMode(mode) {
   return mode === 'pen1' || mode === 'pen2' || mode === 'hl' || mode === 'eraser';
 }
 
-/**
- * @param {string} mode
- * @param {{auto?: boolean}} [opts] auto = vom Eingabegeraet gesetzt,
- *   nicht vom Nutzer gewaehlt
- */
-function switchMode(mode, opts = {}) {
+function switchMode(mode) {
   S.mode = mode;
-  S._modeAuto = !!opts.auto;
-  if (mode !== 'cursor' && mode !== 'eraser') S._lastPenMode = mode;
   /* Nur die Werkzeug-Knoepfe. Ohne den Zusatz [data-mode] loeschte jeder
      Werkzeugwechsel auch die Markierung am Finger-Schalter – der hat
      keinen Modus, sein dataset.mode ist undefined und passt nie. */

@@ -151,12 +151,14 @@ src/
 ### `canvas/input.js`
 - **Pointer Events:** attachInput (handlers for pointerdown/move/up)
 
-> **Welches Gerät was tut.** Der Stift zeichnet immer und schaltet dafür von
-> selbst auf das zuletzt benutzte Werkzeug (`switchMode(m, {auto:true})`).
-> Die Maus schreibt Text — hat aber der Stift das Werkzeug gesetzt
-> (`S._modeAuto`), springt sie zurück zum Text; ein *selbst* angeklicktes
-> Werkzeug bleibt stehen und zeichnet auch mit der Maus. Der Finger scrollt,
-> es sei denn `S.touchDraw` ist an **und** das Werkzeug wurde selbst gewählt.
+> **Welches Gerät was tut.** Stift und Maus sind dasselbe Zeigegerät: es
+> zählt allein das gewählte Werkzeug (`isDrawMode`). Auf dem Zeiger setzen
+> beide die Schreibmarke, auf Stift/Marker/Radierer zeichnen beide. Der
+> Stift schaltete früher von selbst um — damit konnte man mit ihm keinen
+> Text mehr antippen, deshalb ist das weg. Seine *zweite Taste* radiert
+> dagegen in jedem Werkzeug (`S._restoreMode` bringt das alte zurück); die
+> rechte Maustaste nicht, die gehört dem Kontextmenü. Der Finger scrollt,
+> es sei denn `S.touchDraw` ist an **und** ein Zeichenwerkzeug gewählt.
 > `S._drawPointerId` hält fest, wer den Strich begonnen hat — sonst malte
 > beim Zoomen der zweite Finger mit.
 - **Drawing:** buildStroke, liveDrawIncr (live feedback)

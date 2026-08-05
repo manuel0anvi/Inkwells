@@ -99,15 +99,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // Die hintere Taste am Stift radiert – bei der Maus die rechte
     const isE = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
     if (isE) {
-      if (S.mode !== 'eraser') { S._restoreMode = S.mode; switchMode('eraser', { auto: true }); }
-    } else {
-      /* Nur der Stift schaltet von selbst auf das zuletzt benutzte
-         Werkzeug. Maus und Finger kommen ohnehin nur hierher, wenn schon
-         ein Zeichenwerkzeug gewaehlt ist. */
-      if (e.pointerType === 'pen' && S.mode === 'cursor') {
-        switchMode(S._lastPenMode || 'pen1', { auto: true });
-      }
-      if (S._restoreMode) S._restoreMode = null;
+      if (S.mode !== 'eraser') { S._restoreMode = S.mode; switchMode('eraser'); }
+    } else if (S._restoreMode) {
+      S._restoreMode = null;
     }
     S._drawPointerId = e.pointerId;
     e.preventDefault();
@@ -143,34 +137,35 @@ function attachInput(canvas, textDiv, objLayer, page) {
   /* ══════════════════════════════════════════════════════════════════
      WELCHES GERAET WAS TUT
 
-     Der Stift zeichnet immer und schaltet dafuer von selbst auf das
-     zuletzt benutzte Werkzeug – so muss man nichts anklicken, um
-     loszuschreiben.
+     Stift und Maus sind dasselbe Zeigegeraet – was zaehlt, ist das
+     gewaehlte Werkzeug. Auf Stift, Marker oder Radierer zeichnen beide,
+     auf dem Zeiger setzen beide nur die Schreibmarke.
 
-     Die Maus schreibt Text. Hat aber der STIFT eben das Werkzeug
-     gesetzt (S._modeAuto), war das nicht gemeint: die Maus springt
-     zurueck zum Text. Wer dagegen selbst auf den Stift geklickt hat,
-     darf auch mit der Maus zeichnen.
+     Hier schaltete der Stift frueher von selbst auf das zuletzt
+     benutzte Werkzeug. Das nahm einem die Wahl wieder weg: wer den
+     Zeiger gewaehlt hatte, konnte mit dem Stift keinen Text mehr
+     antippen, weil schon die Beruehrung einen Strich machte.
 
-     Der Finger scrollt – ausser man hat das Zeichnen mit dem Finger
-     eingeschaltet UND ein Werkzeug selbst gewaehlt. Sonst koennte man
-     eine Seite nicht mehr bewegen, sobald der Stift einmal dran war.
+     Der Finger scrollt – ausser das Zeichnen mit dem Finger ist
+     eingeschaltet und ein Zeichenwerkzeug gewaehlt.
      ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointerdown', e => {
     const target = e.target;
     if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-bar')) return;
     if (target.closest('.j-text')) return;
 
-    if (e.pointerType === 'pen') { handleDrawStart(e); return; }
+    if (e.pointerType === 'pen' || e.pointerType === 'mouse') {
+      const zweiteTaste = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
+      if (e.button !== 0 && !zweiteTaste) return;
 
-    if (e.pointerType === 'mouse') {
-      const radiert = e.button === 2 || (e.buttons & 2);
-      if (e.button !== 0 && !radiert) return;
-
-      // Der Stift hatte umgeschaltet, nicht der Nutzer – zurueck zum Text
-      if (S._modeAuto && S.mode !== 'cursor') switchMode('cursor');
-
-      if (isDrawMode(S.mode)) { handleDrawStart(e); return; }
+      /* Die zweite Taste am Stift radiert in jedem Werkzeug – umdrehen,
+         wegwischen, weiterschreiben, ohne zur Leiste zu muessen. Bei der
+         Maus bleibt die rechte Taste dem Kontextmenue, sonst waere das
+         Markieren von Text kaputt. */
+      if (isDrawMode(S.mode) || (e.pointerType === 'pen' && zweiteTaste)) {
+        handleDrawStart(e);
+        return;
+      }
 
       // We don't preventDefault here to allow native selection to work.
       // But we call activeTextEditingAt immediately so the cursor appears
@@ -179,10 +174,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
       return;
     }
 
-    if (e.pointerType === 'touch') {
-      if (S.touchDraw && !S._modeAuto && isDrawMode(S.mode)) { handleDrawStart(e); return; }
-      // sonst bleibt der Finger fuers Scrollen und Zoomen (app.js)
-    }
+    if (e.pointerType === 'touch' && touchDrawActive()) { handleDrawStart(e); return; }
+    // sonst bleibt der Finger fuers Scrollen und Zoomen (app.js)
   });
 
   div.addEventListener('pointermove', e => {
@@ -254,16 +247,18 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
   textDiv.addEventListener('pointerdown', e => {
     setActivePg(page.id);
-    /* Ein SELBST gewaehltes Zeichenwerkzeug bleibt stehen. Hier stand
-       fruehe ein bedingungsloses switchMode('cursor') – damit war das
-       Zeichnen mit der Maus unmoeglich: der erste Klick auf die Seite
-       schaltete sofort wieder auf Text. */
-    if (S.mode !== 'cursor' && S._modeAuto) switchMode('cursor');
+    /* Das gewaehlte Zeichenwerkzeug bleibt stehen. Hier stand frueher ein
+       bedingungsloses switchMode('cursor') – damit war das Zeichnen mit
+       der Maus unmoeglich: der erste Klick auf die Seite schaltete sofort
+       wieder auf Text. */
     if (S.mode !== 'cursor') return;
     textDiv.style.pointerEvents = 'auto';
 
     if (S.readOnly) return;
-    if (e.pointerType !== 'mouse') return;
+    /* Stift und Maus setzen die Marke selbst – sonst landet sie beim Stift
+       am Zeilenende statt dort, wo man hingetippt hat. Der Finger nicht:
+       dort ist der eigene Treffer des Browsers samt Griffen besser. */
+    if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
     if (e.button !== 0) return;
 
     // Direct clicks on the editor container:
