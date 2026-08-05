@@ -1,25 +1,50 @@
 'use strict';
 
+/* ══════════════════════════════════════════════════════════════════════
+   AUTOMATISCH SPEICHERN
+
+   Gespeichert wird kurz nachdem man aufhoert – zwei Sekunden nach der
+   letzten Aenderung. Das ist alles.
+
+   >>> Was hier frueher stand, und warum es weg ist <<<
+   Es gab zusaetzlich einen Taktgeber (setInterval) mit einer
+   einstellbaren Weile: 15 Sekunden, 30, eine Minute, zwei. Beides
+   nebeneinander, und die Einstellung war wirkungslos:
+
+       delay = max(500, min(weile * 1000, 2000))
+
+   Fuer jede waehlbare Weile ab zwei Sekunden kam da 2000 heraus. Ob man
+   15 Sekunden oder zwei Minuten einstellte, aenderte also nichts – die
+   Arbeit war immer nach zwei Sekunden auf der Platte. Der Taktgeber fand
+   danach nichts mehr zu tun und meldete Runde um Runde „keine
+   Aenderungen".
+
+   Eine Aufgabe hatte er doch: einen FEHLGESCHLAGENEN Speichervorgang
+   noch einmal versuchen. Dafuer gibt es jetzt einen ausdruecklichen
+   zweiten Anlauf, statt eines Taktgebers, der die ganze Zeit
+   mitlaeuft und dabei eine Einstellung vorgaukelt, die nichts bewirkt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Vorsilbe AUTOSAVE_, weil ui/sharedDocs.js in seinem eigenen Bereich
+   ebenfalls ein SAVE_DELAY_MS fuehrt – fuer den Takt ins geteilte
+   Dokument, mit anderem Wert. Zwei gleiche Namen waeren eine Falle. */
+const AUTOSAVE_DELAY_MS = 2000;   // nach der letzten Aenderung
+const AUTOSAVE_RETRY_MS = 5000;   // nach einem Fehlschlag
+const AUTOSAVE_RETRIES = 3;
+
 class AutoSaveEngine {
   constructor() {
     this.dirtyNotebooks = new Set();
-    this.saveTimer = null;
     this.lastSaveTime = new Map(); // nbId -> timestamp
     this._listeners = [];
     this._changeVersions = new Map();
     this._debounceTimers = new Map();
+    this._retries = new Map();     // nbId -> Zahl der Fehlversuche
   }
 
   init() {
-    console.log('[AutoSave] Initializing...');
-    
-    Settings.onChange((settings) => {
-      console.log('[AutoSave] Settings changed, restarting timer');
-      this._restartTimer();
-    });
-    
-    this._restartTimer();
-    console.log('[AutoSave] Started with interval:', Settings.get('autoSaveInterval'), 'seconds');
+    console.log('[AutoSave] Bereit – gespeichert wird', AUTOSAVE_DELAY_MS / 1000,
+      'Sekunden nach der letzten Aenderung.');
   }
 
   // Wird bei jeder Änderung aufgerufen (Tippen, Zeichnen, Seiten, Abschnitte),
@@ -54,6 +79,7 @@ class AutoSaveEngine {
   markClean(nbId) {
     this.dirtyNotebooks.delete(nbId);
     this.lastSaveTime.set(nbId, Date.now());
+    this._retries.delete(nbId);
     this._notifyStateChange();
   }
 
@@ -124,47 +150,13 @@ class AutoSaveEngine {
     return results;
   }
 
-  _restartTimer() {
-    if (this.saveTimer) {
-      clearInterval(this.saveTimer);
-      this.saveTimer = null;
-    }
-
+  /**
+   * @param {number} [delay] abweichende Wartezeit – fuer den zweiten
+   *   Anlauf nach einem Fehlschlag
+   */
+  _scheduleDebouncedSave(nbId, delay = AUTOSAVE_DELAY_MS) {
     if (!Settings.get('autoSaveEnabled')) return;
 
-    const interval = Settings.get('autoSaveInterval') * 1000;
-    this.saveTimer = setInterval(() => {
-      this._autoSaveTick();
-    }, interval);
-  }
-
-  async _autoSaveTick() {
-    if (this.dirtyNotebooks.size === 0) {
-      console.log('[AutoSave] Tick - no dirty notebooks');
-      return;
-    }
-    
-    console.log(`[AutoSave] Tick - saving ${this.dirtyNotebooks.size} notebook(s)...`);
-    const results = await this._saveAllDirty();
-    
-    const successful = results.filter(r => r.success).length;
-    const failed = results.filter(r => !r.success).length;
-    
-    if (successful > 0) {
-      console.log(`[AutoSave] ✓ Saved ${successful} notebook(s)`);
-    }
-    if (failed > 0) {
-      console.warn(`[AutoSave] ✗ Failed to save ${failed} notebook(s)`);
-      results.filter(r => !r.success).forEach(r => {
-        console.error(`[AutoSave] Failed notebook ${r.nbId}:`, r.error);
-      });
-    }
-  }
-
-  _scheduleDebouncedSave(nbId) {
-    if (!Settings.get('autoSaveEnabled')) return;
-
-    const delay = Math.max(500, Math.min((Settings.get('autoSaveInterval') || 30) * 1000, 2000));
     const expectedVersion = this._changeVersions.get(nbId) || 0;
 
     const timer = this._debounceTimers.get(nbId);
@@ -174,12 +166,33 @@ class AutoSaveEngine {
       this._debounceTimers.delete(nbId);
       if (!this.isDirty(nbId)) return;
       if ((this._changeVersions.get(nbId) || 0) !== expectedVersion) return;
-      this._saveNotebook(nbId, expectedVersion).catch(err => {
-        console.error('[AutoSave] Debounced save failed:', err);
+      this._saveNotebook(nbId, expectedVersion).then(res => {
+        if (res && res.success === false) this._retryLater(nbId, res.error);
+      }).catch(err => {
+        console.error('[AutoSave] Speichern fehlgeschlagen:', err);
+        this._retryLater(nbId, err && err.message);
       });
     }, delay);
 
     this._debounceTimers.set(nbId, nextTimer);
+  }
+
+  /* Noch einmal versuchen. Ohne das bliebe eine Aenderung nach einem
+     Fehlschlag liegen, bis man das naechste Mal etwas tippt – frueher
+     fing der Taktgeber das auf. Nach drei Anlaeufen wird aufgehoert; das
+     Heft bleibt als „nicht gespeichert" stehen, und der Knopf in der
+     Leiste zeigt es an. */
+  _retryLater(nbId, grund) {
+    const versuche = (this._retries.get(nbId) || 0) + 1;
+    if (versuche > AUTOSAVE_RETRIES) {
+      console.error('[AutoSave] Gibt auf nach', AUTOSAVE_RETRIES, 'Versuchen:', nbId, grund || '');
+      this._retries.delete(nbId);
+      return;
+    }
+    this._retries.set(nbId, versuche);
+    console.warn('[AutoSave] Fehlgeschlagen, Anlauf', versuche, 'in',
+      AUTOSAVE_RETRY_MS / 1000, 's:', grund || '');
+    this._scheduleDebouncedSave(nbId, AUTOSAVE_RETRY_MS);
   }
 
   onChange(callback) {
@@ -199,11 +212,11 @@ class AutoSaveEngine {
     });
   }
 
+  /** Alles Ausstehende abbrechen – es laeuft kein Taktgeber mehr mit. */
   stop() {
-    if (this.saveTimer) {
-      clearInterval(this.saveTimer);
-      this.saveTimer = null;
-    }
+    for (const timer of this._debounceTimers.values()) clearTimeout(timer);
+    this._debounceTimers.clear();
+    this._retries.clear();
   }
 }
 

@@ -86,7 +86,6 @@
     AutoSave.init();
     console.log('[Init] ✓ Auto-save initialized');
     console.log('[Init] Auto-save enabled:', Settings.get('autoSaveEnabled'));
-    console.log('[Init] Auto-save interval:', Settings.get('autoSaveInterval'), 'seconds');
   } catch (err) {
     console.error('[Init] ✗ Auto-save init failed:', err);
   }

@@ -678,15 +678,10 @@
           </label>
           <span class="toggle-label" data-i18n="autoSave">Automatisch speichern</span>
         </div>
-        <div class="settings-row" id="autosave-interval-row">
-          <label style="flex: 0 0 auto; margin-right: 12px" data-i18n="autoSaveInterval">Intervall:</label>
-          <select id="autosave-interval" class="settings-select">
-            <option value="15" data-i18n="seconds15">15 Sekunden</option>
-            <option value="30" selected data-i18n="seconds30">30 Sekunden</option>
-            <option value="60" data-i18n="seconds60">1 Minute</option>
-            <option value="120" data-i18n="seconds120">2 Minuten</option>
-          </select>
-        </div>
+        <!-- Das Speicherintervall stand hier und war ohne Wirkung:
+             gespeichert wurde ohnehin immer kurz nach der letzten
+             Änderung, gleich was eingestellt war. Siehe core/autoSave.js. -->
+        <p class="settings-hint" data-i18n="autoSaveHint">Gespeichert wird kurz nachdem du aufhörst zu schreiben.</p>
       </div>
       <!-- Cloud Sync (Moved to Profile Menu) -->
     </div>

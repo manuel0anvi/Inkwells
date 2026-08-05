@@ -12,8 +12,6 @@
   const btnPickSaveLocation = E('btn-pick-save-location');
   
   const autosaveEnabled = E('autosave-enabled');
-  const autosaveInterval = E('autosave-interval');
-  const autosaveIntervalRow = E('autosave-interval-row');
   const settingsVersion = E('settings-version');
   // Cloud UI elements
   const cloudEnabledChk = E('cloud-enabled');
@@ -152,11 +150,6 @@
     }
   });
 
-  // Auto-save toggle
-  autosaveEnabled.addEventListener('change', () => {
-    autosaveIntervalRow.style.display = autosaveEnabled.checked ? 'flex' : 'none';
-  });
-
   // Cloud toggle
   if (cloudEnabledChk) {
     cloudEnabledChk.addEventListener('change', () => {
@@ -195,8 +188,6 @@
     languageSelect.value = settings.language || 'de';
     saveLocationDisplay.value = settings.saveLocation || '';
     autosaveEnabled.checked = settings.autoSaveEnabled;
-    autosaveInterval.value = settings.autoSaveInterval;
-    autosaveIntervalRow.style.display = settings.autoSaveEnabled ? 'flex' : 'none';
 
     if (cloudEnabledChk) cloudEnabledChk.checked = !!settings.cloudEnabled;
     if (cloudConfigRow) cloudConfigRow.style.display = settings.cloudEnabled ? 'flex' : 'none';
@@ -238,8 +229,7 @@
     const updates = {
       language: languageSelect.value,
       saveLocation: saveLocationDisplay.value || null,
-      autoSaveEnabled: autosaveEnabled.checked,
-      autoSaveInterval: parseInt(autosaveInterval.value)
+      autoSaveEnabled: autosaveEnabled.checked
     };
     
     // Cloud settings

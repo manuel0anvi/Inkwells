@@ -5,7 +5,6 @@ const SETTINGS_FILE = 'journal-settings.json';
 const DEFAULT_SETTINGS = {
   saveLocation: null, // null means user needs to set it
   autoSaveEnabled: true,
-  autoSaveInterval: 30, // seconds
   language: 'en', // de, en, it
   /* Zeichnet der Finger, statt die Seite zu bewegen? Aus, solange nichts
      anderes gesagt wird – wer einen Stift hat, will mit dem Finger
@@ -74,6 +73,19 @@ const OBSOLETE_SETTINGS = [
   'cloudProviderToken', 'cloudProviderRefreshToken', 'useDrive', '_pendingDriveConnect'
 ];
 
+/* Reste, die nur wegzuräumen sind – ohne Folgen für die Anmeldung.
+   >>> Warum getrennt von OBSOLETE_SETTINGS <<<
+   Dort zieht ein Fund das Verwerfen der Cloud-Sitzung nach sich, und das
+   ist bei diesen Werten richtig: ihr Token taugt nichts mehr. Ein
+   ausgemustertes Speicherintervall meldet dagegen niemanden ab. Stünde
+   es in derselben Liste, müsste sich beim nächsten Start JEDER neu
+   anmelden – jede vorhandene Einstellungsdatei enthält den Wert. */
+const STALE_SETTINGS = [
+  // Ohne Wirkung: gespeichert wurde ohnehin immer zwei Sekunden nach der
+  // letzten Änderung, gleich was dort stand (core/autoSave.js).
+  'autoSaveInterval'
+];
+
 class SettingsManager {
   constructor() {
     this.settings = { ...DEFAULT_SETTINGS };
@@ -137,6 +149,9 @@ class SettingsManager {
           this.settings.cloudTokenExpiry = 0;
           console.log('[Settings] Einstellungen aus einer früheren Fassung bereinigt');
         }
+
+        // Still wegräumen, ohne jemanden abzumelden
+        for (const key of STALE_SETTINGS) delete this.settings[key];
 
         this._loadedFromFile = true;
         console.log('[Settings] Loaded from file:', this.settings);

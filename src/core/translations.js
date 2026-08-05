@@ -121,11 +121,7 @@ const TRANSLATIONS = {
     saveLocation: 'Speicherort',
     chooseFolder: 'Ordner wählen',
     autoSave: 'Automatisch speichern',
-    autoSaveInterval: 'Speicherintervall',
-    seconds15: '15 Sekunden',
-    seconds30: '30 Sekunden',
-    seconds60: '1 Minute',
-    seconds120: '2 Minuten',
+    autoSaveHint: 'Gespeichert wird kurz nachdem du aufhörst zu schreiben.',
     
     // Save status
     saved: 'Gespeichert',
@@ -657,11 +653,7 @@ const TRANSLATIONS = {
     saveLocation: 'Save Location',
     chooseFolder: 'Choose Folder',
     autoSave: 'Auto-save',
-    autoSaveInterval: 'Save Interval',
-    seconds15: '15 seconds',
-    seconds30: '30 seconds',
-    seconds60: '1 minute',
-    seconds120: '2 minutes',
+    autoSaveHint: 'Your work is saved shortly after you stop writing.',
     
     // Save status
     saved: 'Saved',
@@ -1192,11 +1184,7 @@ const TRANSLATIONS = {
     saveLocation: 'Posizione di salvataggio',
     chooseFolder: 'Scegli Cartella',
     autoSave: 'Salvataggio automatico',
-    autoSaveInterval: 'Intervallo di salvataggio',
-    seconds15: '15 secondi',
-    seconds30: '30 secondi',
-    seconds60: '1 minuto',
-    seconds120: '2 minuti',
+    autoSaveHint: 'Il salvataggio avviene poco dopo che smetti di scrivere.',
     
     // Save status
     saved: 'Salvato',

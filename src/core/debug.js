@@ -8,11 +8,10 @@ window.journalDebug = {
     console.log('Settings:', Settings ? '✓' : '✗');
     console.log('  - Save Location:', Settings?.get('saveLocation'));
     console.log('  - Auto-save Enabled:', Settings?.get('autoSaveEnabled'));
-    console.log('  - Auto-save Interval:', Settings?.get('autoSaveInterval'), 'seconds');
     
     console.log('\nAutoSave:', AutoSave ? '✓' : '✗');
     console.log('  - Dirty notebooks:', AutoSave?.dirtyNotebooks?.size || 0);
-    console.log('  - Timer running:', AutoSave?.saveTimer ? '✓' : '✗');
+    console.log('  - Ausstehende Speichervorgänge:', AutoSave?._debounceTimers?.size ?? 0);
     
     console.log('\nState:');
     console.log('  - Active Notebook ID:', S?.activeNbId || 'none');
