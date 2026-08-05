@@ -29,7 +29,12 @@
     // es lebt im Raum und wird von ui/sharedDocs.js gesichert.
     if (typeof isSharedNotebook === 'function' && isSharedNotebook(nbId)) return false;
 
-    if ((CloudSync_.syncQueue || []).includes(nbId)) return true;
+    // syncQueue enthält jetzt Objekte {nbId, nbName, action, ...} –
+    // oder im alten Format noch reine Strings. Beides abfangen.
+    const inQueue = (CloudSync_.syncQueue || []).some(e => {
+      return (typeof e === 'string' ? e : e.nbId) === nbId;
+    });
+    if (inQueue) return true;
 
     const nb = getNb(nbId);
     if (!nb) return false;

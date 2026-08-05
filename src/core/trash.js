@@ -231,6 +231,13 @@ const Trash = {
       console.warn('[Trash] Drive-Verschieben übersprungen:', err.message);
     }
 
+    // Ohne Netz ist die Cloud-Seite noch offen – in der Sync-Queue vermerken,
+    // damit der Nutzer im Konto-Modal sieht, was noch aussteht.
+    if (!entry.cloudTrashed && typeof CloudSync_ !== 'undefined' && CloudSync_
+        && typeof CloudSync_.queueNotebook === 'function') {
+      CloudSync_.queueNotebook(notebook.id, { action: 'trash', nbName: notebook.name, silent: true });
+    }
+
     this._entries.push(entry);
 
     await Registry.remove(notebook.id);   // schreibt die Registry-Datei
@@ -496,6 +503,13 @@ const Trash = {
     // Pfad vorher wieder eintragen, sonst legt saveNotebook eine zweite
     // Datei am Standardort an und die zurückgeschobene bleibt verwaist.
     if (restoredPath) await Registry.add(notebook, restoredPath);
+
+    // Einen eventuellen Lösch-Eintrag aus der Sync-Queue entfernen – das Heft
+    // lebt wieder und soll hochgeladen werden, nicht gelöscht.
+    if (typeof CloudSync_ !== 'undefined' && CloudSync_
+        && typeof CloudSync_.queueNotebook === 'function') {
+      CloudSync_.queueNotebook(notebook.id, { action: 'restore', nbName: notebook.name, immediate: true, silent: true });
+    }
 
     // Legt die Datei neu an, falls sie nicht zurückverschoben werden konnte,
     // und trägt das Heft wieder in die Übersicht ein

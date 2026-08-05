@@ -65,6 +65,10 @@ class CloudSyncManager {
     this._persistedQueue = [];
     this._hadOfflineBacklog = false;
     this._offlineToastShown = false;
+
+    // Sync-Verlauf: die letzten abgeschlossenen/fehlgeschlagenen Vorgänge.
+    // Wird beim Start aus Settings geladen und bei jedem Vorgang ergänzt.
+    this._syncHistory = [];
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -160,6 +164,7 @@ class CloudSyncManager {
     }
 
     this._restorePendingQueue();
+    this._loadSyncHistory();
     this.isOnline = await this._checkConnectivity();
 
     window.addEventListener('online', () => this._onConnectivityChange(true));
@@ -577,7 +582,9 @@ class CloudSyncManager {
 
     this._resetCloudState({ keepQueue: true });
     this._expiryWarned = false;
-    for (const id of this.syncQueue) this.immediateUploads.add(id);
+    for (const e of this.syncQueue) {
+      this.immediateUploads.add(typeof e === 'string' ? e : e.nbId);
+    }
     await this.refreshRemote();
     this._notify();
     return this._session;
@@ -883,38 +890,61 @@ class CloudSyncManager {
 
   _restorePendingQueue() {
     const stored = Settings.get('cloudPendingUploads');
-    const ids = Array.isArray(stored) ? stored.filter(id => typeof id === 'string' && id) : [];
-    if (!ids.length) return;
+    if (!Array.isArray(stored) || !stored.length) return;
 
-    this._persistedQueue = [...ids];
+    this._persistedQueue = [];
     this._hadOfflineBacklog = true;
 
-    for (const id of ids) {
-      if (!this.syncQueue.includes(id)) this.syncQueue.push(id);
+    for (const item of stored) {
+      // Abwärtskompatibel: alte Einträge sind reine Strings (nbId),
+      // neue sind { nbId, action, queuedAt }
+      const entry = typeof item === 'string'
+        ? { nbId: item, action: 'upload', nbName: '', queuedAt: new Date().toISOString() }
+        : { nbId: item.nbId, action: item.action || 'upload', nbName: '', queuedAt: item.queuedAt || new Date().toISOString() };
+
+      if (!entry.nbId) continue;
+
+      // Heft-Name ergänzen, falls das Heft noch lebt
+      const nb = getNb(entry.nbId);
+      if (nb) entry.nbName = nb.name;
+
+      // Gibt es diesen Eintrag schon? Nur dann nicht doppelt.
+      const exists = this.syncQueue.some(e => {
+        const id = typeof e === 'string' ? e : e.nbId;
+        return id === entry.nbId;
+      });
+      if (!exists) this.syncQueue.push(entry);
+
       // Nachzügler aus einer früheren Sitzung sollen nicht noch eine
       // Minute Mindestabstand abwarten.
-      this.immediateUploads.add(id);
+      this.immediateUploads.add(entry.nbId);
     }
-    console.log('[CloudSync]', ids.length, 'Heft(e) aus der letzten Sitzung warten noch auf den Upload');
+    console.log('[CloudSync]', this.syncQueue.length, 'Einträge aus der letzten Sitzung warten noch');
   }
 
   _persistQueue() {
-    const ids = [...this.syncQueue];
-    const same = ids.length === this._persistedQueue.length
-      && ids.every((id, i) => id === this._persistedQueue[i]);
+    // Nur die IDs und Aktionen merken – Namen können sich ändern und werden
+    // beim Laden aus den Heften ergänzt.
+    const slim = this.syncQueue.map(e => ({ nbId: e.nbId, action: e.action || 'upload', queuedAt: e.queuedAt }));
+    const same = slim.length === this._persistedQueue.length
+      && slim.every((e, i) => e.nbId === this._persistedQueue[i]?.nbId
+        && (e.action || 'upload') === (this._persistedQueue[i]?.action || 'upload'));
     if (same) return;
 
-    this._persistedQueue = ids;
+    this._persistedQueue = slim;
     // Bewusst ohne await: das Schreiben der Einstellungsdatei darf den
     // Abgleich nicht ausbremsen.
-    Settings.update({ cloudPendingUploads: ids }).catch(err => {
+    Settings.update({ cloudPendingUploads: slim }).catch(err => {
       console.warn('[CloudSync] Warteschlange nicht speicherbar:', err.message);
     });
   }
 
   /** Wie viele Hefte warten noch auf den Upload? */
   getPendingCount() {
-    return this.syncQueue.length;
+    return this.syncQueue.filter(e => {
+      const entry = typeof e === 'string' ? { nbId: e, action: 'upload' } : e;
+      return entry.action !== 'delete'; // Löschungen zählen nicht als Upload
+    }).length;
   }
 
   /** Beim Start alles nachholen, was offline liegen geblieben ist. */
@@ -933,6 +963,17 @@ class CloudSyncManager {
     await this.refreshRemote();
   }
 
+  /**
+   * Reiht ein Heft in die Upload-Warteschlange ein.
+   *
+   * @param {string} nbId Heft-Kennung
+   * @param {object} [options]
+   * @param {'upload'|'delete'|'trash'|'restore'} [options.action='upload']
+   *   Was soll mit dem Heft in der Cloud geschehen?
+   * @param {string} [options.nbName] Name zum Anzeigen (wird sonst aus dem Heft gelesen)
+   * @param {boolean} [options.immediate] Sofort hochladen, ohne Mindestabstand
+   * @param {boolean} [options.silent] Keinen Toast zeigen
+   */
   queueNotebook(nbId, options = {}) {
     if (!nbId) return;
 
@@ -940,7 +981,66 @@ class CloudSyncManager {
     // diese Bremse lüde die App des Empfängers fremde Hefte in SEIN Konto.
     if (typeof isSharedNotebook === 'function' && isSharedNotebook(nbId)) return;
 
-    if (!this.syncQueue.includes(nbId)) this.syncQueue.push(nbId);
+    let action = options.action || 'upload';
+    const nb = getNb(nbId);
+    const nbName = options.nbName || (nb ? nb.name : '');
+
+    /* ── Randfall: offline erstellen + offline löschen ────────────────
+       Steht dasselbe Heft bereits mit action 'upload' in der Schlange und
+       wird jetzt als 'delete' oder 'trash' gemeldet, dann war es nie in der
+       Cloud. Der Upload-Eintrag wird entfernt – es gibt nichts zu löschen. */
+    if (action === 'delete' || action === 'trash') {
+      const uploadIdx = this.syncQueue.findIndex(e => {
+        const id = typeof e === 'string' ? e : e.nbId;
+        return id === nbId && (typeof e === 'string' || (e.action || 'upload') === 'upload');
+      });
+      if (uploadIdx > -1) {
+        // Nur wenn das Heft VORHER schon in der Cloud war (syncedAt), muss
+        // es dort auch gelöscht werden. Sonst: Upload streichen, nichts tun.
+        const hadSynced = nb && nb.syncedAt;
+        if (!hadSynced) {
+          this.syncQueue.splice(uploadIdx, 1);
+          this._persistQueue();
+          this.immediateUploads.delete(nbId);
+          this._notify();
+          return;
+        }
+        // Es war schon oben → Upload durch Delete ersetzen
+        this.syncQueue.splice(uploadIdx, 1);
+      }
+    }
+
+    /* ── Randfall: offline löschen + offline wiederherstellen ─────────
+       Ein 'restore' macht einen vorherigen 'delete'-Eintrag rückgängig. */
+    if (action === 'restore' || action === 'upload') {
+      const deleteIdx = this.syncQueue.findIndex(e => {
+        const id = typeof e === 'string' ? e : e.nbId;
+        const a = typeof e === 'string' ? 'upload' : (e.action || 'upload');
+        return id === nbId && (a === 'delete' || a === 'trash');
+      });
+      if (deleteIdx > -1) {
+        this.syncQueue.splice(deleteIdx, 1);
+        // Wiederherstellen heißt: das Heft soll jetzt hochgeladen werden
+        action = 'upload';
+      }
+    }
+
+    // Gibt es diesen Eintrag schon? Dann nur ggf. Namen aktualisieren.
+    const existing = this.syncQueue.find(e => {
+      const id = typeof e === 'string' ? e : e.nbId;
+      return id === nbId;
+    });
+    if (existing && typeof existing === 'object') {
+      if (nbName) existing.nbName = nbName;
+      if (options.immediate) this.immediateUploads.add(nbId);
+    } else if (!existing) {
+      this.syncQueue.push({ nbId, nbName, action, queuedAt: new Date().toISOString() });
+    } else {
+      // Alter String-Eintrag → umwandeln
+      const idx = this.syncQueue.indexOf(nbId);
+      if (idx > -1) this.syncQueue[idx] = { nbId, nbName, action, queuedAt: new Date().toISOString() };
+    }
+
     if (options.immediate) this.immediateUploads.add(nbId);
     this._persistQueue();
 
@@ -951,17 +1051,33 @@ class CloudSyncManager {
       return;
     }
 
-    if (!this.isOnline) {
+    if (!this.isOnline && !options.silent) {
       this._hadOfflineBacklog = true;
-      // Einmal je Offline-Phase Bescheid geben, nicht bei jedem Speichern
       if (!this._offlineToastShown) {
         this._offlineToastShown = true;
         if (typeof toast === 'function') {
-          toast(typeof t === 'function' ? t('syncQueuedOffline')
-            : 'Ohne Internet gespeichert. Wird hochgeladen, sobald du wieder online bist.');
+          const count = this.syncQueue.length;
+          if (count === 1 && nbName) {
+            const key = action === 'delete' || action === 'trash' ? 'syncQueuedDelete' : 'syncOfflineToastNamed';
+            toast(typeof t === 'function' ? t(key).replace('{name}', nbName)
+              : `Ohne Internet: „${nbName}" wird hochgeladen, sobald du wieder online bist.`);
+          } else if (count > 1) {
+            toast(typeof t === 'function' ? t('syncOfflineToastCount').replace('{n}', count)
+              : `Ohne Internet: ${count} Änderungen warten auf Internet.`);
+          } else {
+            toast(typeof t === 'function' ? t('syncQueuedOffline')
+              : 'Ohne Internet gespeichert. Wird hochgeladen, sobald du wieder online bist.');
+          }
         }
       }
     }
+
+    // Sync-Verlauf: vermerken, dass dieser Vorgang vorgemerkt wurde
+    this._addSyncHistoryEntry({
+      nbId, nbName, action,
+      status: this.isOnline ? 'pending' : 'queued',
+      reason: this.isOnline ? '' : 'offline'
+    });
 
     this._notify();
     this._processQueue();
@@ -975,7 +1091,10 @@ class CloudSyncManager {
 
     if (this.syncQueue.length === 0) return;
 
-    for (const id of this.syncQueue) this.immediateUploads.add(id);
+    for (const e of this.syncQueue) {
+      const id = typeof e === 'string' ? e : e.nbId;
+      this.immediateUploads.add(id);
+    }
     await this._processQueue().catch(() => {});
   }
 
@@ -1013,7 +1132,10 @@ class CloudSyncManager {
   }
 
   _removeFromQueue(nbId) {
-    const idx = this.syncQueue.indexOf(nbId);
+    const idx = this.syncQueue.findIndex(e => {
+      const id = typeof e === 'string' ? e : e.nbId;
+      return id === nbId;
+    });
     if (idx > -1) this.syncQueue.splice(idx, 1);
     this._persistQueue();
   }
@@ -1022,23 +1144,63 @@ class CloudSyncManager {
     if (this.syncQueue.length === 0) return;
     if (!this._canSync() || !this.isOnline) return;
 
-    const due = this.syncQueue.filter(id => this._isUploadDue(id));
+    // Normalisieren: alte String-Einträge in Objekte umwandeln
+    for (let i = 0; i < this.syncQueue.length; i++) {
+      if (typeof this.syncQueue[i] === 'string') {
+        const nb = getNb(this.syncQueue[i]);
+        this.syncQueue[i] = {
+          nbId: this.syncQueue[i],
+          nbName: nb ? nb.name : '',
+          action: 'upload',
+          queuedAt: new Date().toISOString()
+        };
+      }
+    }
+
+    const due = this.syncQueue.filter(e => this._isUploadDue(e.nbId));
     if (due.length === 0) return;
 
     this.syncing = true;
     this._notify();
 
-    for (const nbId of due) {
-      if (!this.syncQueue.includes(nbId)) continue;
+    let completedCount = 0;
+
+    for (const entry of due) {
+      if (!this.syncQueue.some(e => e.nbId === entry.nbId)) continue;
+
+      const { nbId, nbName, action } = entry;
 
       try {
-        await this._syncNotebook(nbId);
+        if (action === 'delete' || action === 'trash') {
+          // Cloud-Löschung: Datei in der Cloud löschen
+          await this.deleteRemoteNotebookById(nbId);
+          this._addSyncHistoryEntry({
+            nbId, nbName, action,
+            status: 'completed',
+            reason: action === 'trash' ? 'In Papierkorb verschoben' : 'Gelöscht'
+          });
+          if (action === 'trash' && typeof toast === 'function') {
+            toast(typeof t === 'function'
+              ? t('syncSuccessItem').replace('{name}', nbName || nbId).replace('{reason}', 'In Papierkorb verschoben')
+              : `„${nbName || nbId}" in den Cloud-Papierkorb verschoben.`);
+          }
+        } else {
+          // Upload: Heft in die Cloud laden
+          await this._syncNotebook(nbId);
+          this._addSyncHistoryEntry({
+            nbId, nbName, action: 'upload',
+            status: 'completed',
+            reason: 'Fertig'
+          });
+        }
+
         this._removeFromQueue(nbId);
         this.lastUploadAt.set(nbId, Date.now());
         this.immediateUploads.delete(nbId);
         delete this.retryCounts[nbId];
+        completedCount++;
       } catch (err) {
-        console.error('[CloudSync] Upload fehlgeschlagen für', nbId, err);
+        console.error('[CloudSync] Vorgang fehlgeschlagen für', nbId, action, err);
 
         this.retryCounts[nbId] = (this.retryCounts[nbId] || 0) + 1;
         const count = this.retryCounts[nbId];
@@ -1052,10 +1214,20 @@ class CloudSyncManager {
           this._removeFromQueue(nbId);
           this.immediateUploads.delete(nbId);
           delete this.retryCounts[nbId];
+          this._addSyncHistoryEntry({
+            nbId, nbName, action,
+            status: 'failed',
+            reason: count >= 3 ? `Nach ${count} Versuchen: ${msg}` : msg
+          });
           if (typeof toast === 'function') {
             toast(count >= 3 ? `Sync fehlgeschlagen nach 3 Versuchen: ${msg}` : msg, true);
           }
         } else {
+          this._addSyncHistoryEntry({
+            nbId, nbName, action,
+            status: 'failed',
+            reason: msg
+          });
           break;   // temporärer Fehler – später erneut
         }
       }
@@ -1067,8 +1239,11 @@ class CloudSyncManager {
     // geben, sonst bleibt unklar, ob die Änderungen angekommen sind.
     if (this._hadOfflineBacklog && this.syncQueue.length === 0) {
       this._hadOfflineBacklog = false;
-      if (typeof toast === 'function') {
-        toast(typeof t === 'function' ? t('syncCaughtUp') : 'Offline-Änderungen wurden hochgeladen.');
+      if (typeof toast === 'function' && completedCount > 0) {
+        const key = completedCount === 1 ? 'syncCaughtUp' : 'syncBacklogCleared';
+        toast(typeof t === 'function'
+          ? t(key).replace('{n}', completedCount)
+          : `${completedCount} Offline-Änderung(en) hochgeladen.`);
       }
     }
 
@@ -1202,7 +1377,10 @@ class CloudSyncManager {
         const remoteTime = remoteNb ? this._toTime(remoteNb.updatedAt) : 0;
 
         if (!remoteNb || localTime > remoteTime) {
-          if (!this.syncQueue.includes(localNb.id)) this.syncQueue.push(localNb.id);
+          const inQueue = this.syncQueue.some(e => {
+            return (typeof e === 'string' ? e : e.nbId) === localNb.id;
+          });
+          if (!inQueue) this.syncQueue.push({ nbId: localNb.id, nbName: localNb.name, action: 'upload', queuedAt: new Date().toISOString() });
         }
       }
       this._persistQueue();
@@ -1648,9 +1826,25 @@ class CloudSyncManager {
     // üblichen Mindestabstand abzuwarten.
     if (wasOffline && this.syncQueue.length && this._canSync()) {
       this._hadOfflineBacklog = true;
-      for (const id of this.syncQueue) this.immediateUploads.add(id);
+      for (const e of this.syncQueue) {
+        const id = typeof e === 'string' ? e : e.nbId;
+        this.immediateUploads.add(id);
+      }
       if (typeof toast === 'function') {
-        toast(typeof t === 'function' ? t('syncBackOnline') : 'Wieder online – ausstehende Änderungen werden hochgeladen…');
+        const count = this.syncQueue.length;
+        const first = this.syncQueue[0];
+        const name = typeof first === 'object' ? first.nbName : '';
+        if (count === 1 && name) {
+          toast(typeof t === 'function'
+            ? t('syncBackOnlineNamed').replace('{name}', name).replace('{n}', '0')
+            : `Wieder online – „${name}" wird hochgeladen…`);
+        } else if (count > 1 && name) {
+          toast(typeof t === 'function'
+            ? t('syncBackOnlineNamed').replace('{name}', name).replace('{n}', count - 1)
+            : `Wieder online – „${name}" und ${count - 1} weitere werden hochgeladen…`);
+        } else {
+          toast(typeof t === 'function' ? t('syncBackOnline') : 'Wieder online – ausstehende Änderungen werden hochgeladen…');
+        }
       }
     }
 
@@ -1786,6 +1980,69 @@ class CloudSyncManager {
     await Settings.update({ cloudLastSync: new Date().toISOString() });
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     SYNC-VERLAUF
+     ══════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Hängt einen Eintrag an das Sync-Protokoll an. Maximal 30 Einträge;
+   * ältere werden entfernt. Das Protokoll überlebt einen Neustart.
+   */
+  _addSyncHistoryEntry({ nbId, nbName, action, status, reason }) {
+    const entry = {
+      id: typeof uid === 'function' ? uid() : (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
+      nbId,
+      nbName: nbName || '',
+      action: action || 'upload',
+      status: status || 'pending',
+      reason: reason || '',
+      at: new Date().toISOString()
+    };
+
+    this._syncHistory.push(entry);
+    if (this._syncHistory.length > 30) {
+      this._syncHistory = this._syncHistory.slice(-30);
+    }
+
+    // Ohne await: das Protokollieren darf den Abgleich nicht bremsen
+    Settings.update({ cloudSyncLog: this._syncHistory }).catch(() => {});
+  }
+
+  /** Lädt das Sync-Protokoll aus den Einstellungen. */
+  _loadSyncHistory() {
+    const stored = Settings.get('cloudSyncLog');
+    if (Array.isArray(stored)) this._syncHistory = stored.slice(-30);
+  }
+
+  /**
+   * Gibt die ausstehenden Vorgänge als lesbare Liste zurück.
+   * @returns {Array<{nbId, nbName, action, queuedAt}>}
+   */
+  getPendingActions() {
+    return this.syncQueue.map(e => {
+      if (typeof e === 'string') {
+        const nb = getNb(e);
+        return { nbId: e, nbName: nb ? nb.name : '', action: 'upload', queuedAt: '' };
+      }
+      return { ...e };
+    });
+  }
+
+  /**
+   * Gibt das Sync-Protokoll zurück (max. 30 Einträge, neueste zuerst).
+   * @returns {Array<{id, nbId, nbName, action, status, reason, at}>}
+   */
+  getSyncHistory() {
+    return [...this._syncHistory].reverse();
+  }
+
+  /** Löscht das Sync-Protokoll. */
+  async clearSyncLog() {
+    this._syncHistory = [];
+    await Settings.update({ cloudSyncLog: [] });
+    this._notify();
+  }
+
   onChange(callback) {
     this._listeners.push(callback);
     return () => {
@@ -1807,7 +2064,9 @@ class CloudSyncManager {
       isOnline: this.isOnline,
       queueLength: this.syncQueue.length,
       syncing: this.syncing,
-      session: this._session
+      session: this._session,
+      pendingActions: this.getPendingActions(),
+      syncHistory: this.getSyncHistory()
     };
 
     for (const callback of this._listeners) {

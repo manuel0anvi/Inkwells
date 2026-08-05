@@ -806,6 +806,36 @@
       <!-- Zustand der Cloud-Sitzung (Restlaufzeit bzw. „bleibt aktiv") -->
       <div id="auth-session-info" style="display:none; font-size:11px; color:var(--text-muted); line-height:1.5;"></div>
 
+      <!-- Sync-Status: ausstehende und kürzlich abgeschlossene Vorgänge -->
+      <button id="auth-sync-panel-btn" class="settings-btn" style="display:none; justify-content:center; align-items:center; gap:6px; width:100%;">
+        <span id="auth-sync-pending-badge" style="display:none; background:var(--accent); color:var(--bg); border-radius:10px; padding:0 6px; font-size:10px; font-weight:bold; min-width:18px; text-align:center;">0</span>
+        <span data-i18n="syncPanelShow">Synchronisation anzeigen</span>
+      </button>
+
+      <div id="auth-sync-panel" style="display:none; padding: 0; flex-direction:column; gap:8px; max-height:40vh; overflow-y:auto; border-top:1px solid var(--sb); margin-top:4px; padding-top:10px;">
+
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <h4 style="font-family:'Cormorant Garamond',serif; font-weight:300; font-style:italic; font-size:15px; color:var(--hi); margin:0;" data-i18n="syncPanelTitle">Sync-Status</h4>
+          <button id="sync-panel-close-btn" class="notice-close" title="Schließen">✕</button>
+        </div>
+
+        <!-- Ausstehend -->
+        <div id="sync-pending-section" style="display:none;">
+          <div class="sync-section-label" data-i18n="syncPendingHeader">Ausstehend</div>
+          <div id="sync-pending-list" class="sync-list"></div>
+          <button id="sync-retry-all-btn" class="settings-btn" style="display:none; margin-top:6px; padding:4px 10px; font-size:11px;" data-i18n="syncRetryAll">Alle jetzt hochladen</button>
+        </div>
+
+        <!-- Zuletzt abgeschlossen -->
+        <div id="sync-recent-section">
+          <div class="sync-section-label" data-i18n="syncRecentHeader">Zuletzt synchronisiert</div>
+          <div id="sync-recent-list" class="sync-list"></div>
+          <div id="sync-recent-empty" style="font-size:11px; color:var(--text-muted); text-align:center; padding:8px 0; display:none;" data-i18n="syncRecentEmpty">Keine Einträge</div>
+        </div>
+
+        <button id="sync-clear-log-btn" class="settings-btn" style="padding:4px 10px; font-size:10px; align-self:flex-end; color:var(--text-muted);" data-i18n="syncClearLog">Protokoll löschen</button>
+      </div>
+
       <hr style="border:0; border-top:1px solid var(--sb); margin:8px 0;">
 
       <button id="auth-signout-btn" class="settings-btn" style="color:#d9534f; border-color: rgba(217, 83, 79, 0.3)" data-i18n="signOut">

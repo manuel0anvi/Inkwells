@@ -53,6 +53,9 @@ const DEFAULT_SETTINGS = {
   // wer ohne Internet arbeitet und die App schließt, hätte sonst nach dem
   // Wiederverbinden nichts, woran der Upload noch hängt.
   cloudPendingUploads: [],
+  // Protokoll der letzten Sync-Vorgänge – was wurde wann mit der Cloud
+  // abgeglichen? Auch für die Anzeige im Konto-Modal.
+  cloudSyncLog: [],
   // Wird gesetzt, sobald eine Sitzung ungewollt endet (Token abgelaufen,
   // Zugriff entzogen). Beim nächsten Start weist die App darauf hin.
   cloudSessionLost: false,
