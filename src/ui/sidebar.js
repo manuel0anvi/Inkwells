@@ -720,6 +720,7 @@ function renderSecMgrSide(nb) {
    ══════════════════════════════════════════════════════════════════════ */
 
 let _dragPgId = null;      // welche Seite gerade wandert
+let _dragPointerId = null; // welcher Zeiger sie haelt
 let _dragRows = null;      // [{el, mitte}] in Listenkoordinaten
 let _dragBodyTop = 0;      // Oberkante der Liste auf dem Schirm
 let _markEl = null;        // wo die Marke gerade sitzt
@@ -768,31 +769,41 @@ function randScroll(body, clientY) {
   else if (clientY > r.bottom - zone) body.scrollTop += 14;
 }
 
-/* Die Behandler haengen an der LISTE, nicht an den Zeilen: die Liste
-   ueberlebt jedes Neuzeichnen, die Zeilen nicht. Sonst haetten sich die
-   Behandler bei jedem renderSecMgrBody() gestapelt. */
+/* ── Der Zug selbst ──────────────────────────────────────────────────
+   >>> Warum Zeiger-Ereignisse und nicht HTML5-Drag <<<
+   draggable/dragstart gibt es mit dem FINGER nicht – auf einem Tablet
+   liess sich damit keine Seite umsortieren. pointerdown/-move/-up
+   sprechen alle drei Geraete gleich an, und die Rechnerei darunter
+   (messeZeilen, zielStelle) bleibt dieselbe.
+
+   Gezogen wird am Griff, nicht an der ganzen Zeile: mit dem Finger muss
+   die Liste sich weiterhin scrollen lassen.
+
+   Die Behandler haengen an der LISTE, nicht an den Zeilen – die Liste
+   ueberlebt jedes Neuzeichnen. Sonst haetten sie sich bei jedem
+   renderSecMgrBody() gestapelt. */
 function ensureSecMgrDnd(body) {
   if (body._dndReady) return;
   body._dndReady = true;
 
-  body.addEventListener('dragover', e => {
-    if (!_dragPgId) return;
+  body.addEventListener('pointermove', e => {
+    if (!_dragPgId || e.pointerId !== _dragPointerId) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
     setzeMarke(zielStelle(body, e.clientY));
     randScroll(body, e.clientY);
   });
 
-  body.addEventListener('dragleave', e => {
-    if (!body.contains(e.relatedTarget)) setzeMarke(null);
-  });
-
-  body.addEventListener('drop', e => {
-    if (!_dragPgId) return;
-    e.preventDefault();
+  const beenden = (e) => {
+    if (!_dragPgId || e.pointerId !== _dragPointerId) return;
     const gezogen = _dragPgId;
     const stelle = zielStelle(body, e.clientY);
+
     setzeMarke(null);
+    _dragRows?.forEach(r => r.el.classList.remove('dragging'));
+    _dragPgId = null;
+    _dragPointerId = null;
+    _dragRows = null;
+    body.classList.remove('dragging-now');
 
     const nb = getNb();
     if (!nb || !mgrCanEdit()) return;
@@ -819,7 +830,36 @@ function ensureSecMgrDnd(body) {
     reorderPageDom(nb);
     renderSideTree();
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  };
+
+  body.addEventListener('pointerup', beenden);
+  body.addEventListener('pointercancel', e => {
+    if (!_dragPgId || e.pointerId !== _dragPointerId) return;
+    setzeMarke(null);
+    _dragRows?.forEach(r => r.el.classList.remove('dragging'));
+    _dragPgId = null; _dragPointerId = null; _dragRows = null;
+    body.classList.remove('dragging-now');
   });
+}
+
+/** Einen Zug am Griff beginnen – Maus, Finger und Stift gleichermassen. */
+function startSecMgrDrag(e, pgId, item, body) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (!mgrCanEdit()) return;
+  if (_secMgrSel) return;              // im Auswahlmodus wird nicht sortiert
+
+  e.preventDefault();
+  e.stopPropagation();
+  _dragPgId = String(pgId);
+  _dragPointerId = e.pointerId;
+  messeZeilen(body);
+  item.classList.add('dragging');
+  body.classList.add('dragging-now');
+
+  /* Ohne Fangen verliert man den Zug, sobald der Finger die Zeile
+     verlaesst – und das tut er sofort, es geht ja gerade darum. */
+  try { body.setPointerCapture(e.pointerId); } catch (err) {}
+  setzeMarke(zielStelle(body, e.clientY));
 }
 
 /* Die Seiten im Editor in die neue Reihenfolge bringen.
@@ -879,31 +919,15 @@ function renderSecMgrPages(nb) {
     if (sec) item.style.setProperty('--sec-color', colorForSection(sec));
     else item.classList.add('no-sec');
 
-    /* Ziehen zum Umsortieren. Der Griff links ist nur ein Zeichen – der
-       ganze Streifen ist ziehbar, sonst muesste man ein 13px breites Ziel
-       treffen. Klicken bleibt Klicken: ein Zug beginnt erst mit der
-       Bewegung, die Knoepfe rechts reagieren also weiterhin normal. */
-    item.draggable = true;
+    /* Gezogen wird am Griff, nicht an der ganzen Zeile. Mit dem Finger
+       muss die Liste sich weiterhin scrollen lassen – waere der ganze
+       Streifen ziehbar, ginge das nicht mehr. Auf Beruehrungsschirmen ist
+       der Griff deshalb groesser (css/responsive.css). */
     const griff = document.createElement('span');
     griff.className = 'mgr-pg-grip';
     griff.textContent = '⠿';
     griff.title = t('dragToReorder');
-
-    item.addEventListener('dragstart', e => {
-      if (!mgrCanEdit()) { e.preventDefault(); return; }
-      _dragPgId = String(pg.id);
-      item.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      // Ohne Nutzlast startet in manchen Browsern gar kein Zug
-      try { e.dataTransfer.setData('text/plain', String(pg.id)); } catch (err) {}
-      messeZeilen(body);
-    });
-    item.addEventListener('dragend', () => {
-      item.classList.remove('dragging');
-      setzeMarke(null);
-      _dragPgId = null;
-      _dragRows = null;      // haelt sonst geloeschte Zeilen fest
-    });
+    griff.addEventListener('pointerdown', e => startSecMgrDrag(e, pg.id, item, body));
 
     // Die Zahl gilt im HEFT – vorher zählte sie je Abschnitt und
     // widersprach damit allem, was sonst „Seite 12" nennt
@@ -960,7 +984,6 @@ function renderSecMgrPages(nb) {
     });
     item.addEventListener('pointerup', druckEnde);
     item.addEventListener('pointercancel', druckEnde);
-    item.addEventListener('dragstart', druckEnde);
 
     item.addEventListener('click', e => {
       // Der lange Druck hat eben schon gewaehlt – nicht gleich wieder ab
@@ -1030,10 +1053,6 @@ function paintSecMgrPicks() {
   for (const el of body.children) {
     if (!el.classList.contains('mgr-pg-item')) continue;
     el.classList.toggle('picked', !!_secMgrSel && _secMgrSel.has(el.dataset.pgid));
-    /* Waehrend der Auswahl wird nicht umsortiert. Sonst finge ein
-       Weiterziehen nach dem langen Druck einen Zug an, den niemand
-       gemeint hat. */
-    el.draggable = !_secMgrSel;
   }
 
   const normal = E('sec-mgr-bar-normal');

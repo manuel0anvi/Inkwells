@@ -676,11 +676,26 @@
   cursor: grab;
   flex-shrink: 0;
   opacity: .4;
-  transition: opacity .12s
+  transition: opacity .12s;
+  /* Der Griff faengt den Zug selbst ab – der Browser darf hier weder
+     scrollen noch Text markieren, sonst reisst der Zug sofort ab. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none
 }
 
 .mgr-pg-item:hover .mgr-pg-grip {
   opacity: 1
+}
+
+.mgr-pg-grip:active {
+  cursor: grabbing
+}
+
+/* Waehrend ein Zug laeuft, darf die Liste nicht mitscrollen */
+#sec-mgr-body.dragging-now {
+  touch-action: none
 }
 
 .mgr-pg-item.dragging {
@@ -743,7 +758,11 @@
 
 /* Ausserhalb der Auswahl ist die ganze Zeile der Knopf */
 #sec-mgr-body .mgr-pg-item {
-  cursor: pointer
+  cursor: pointer;
+  /* Langes Druecken waehlt aus – der Browser darf daraus keine
+     Textmarkierung und kein eigenes Menue machen. */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent
 }
 
 .mgr-pg-num {

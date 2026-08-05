@@ -7,6 +7,10 @@ const DEFAULT_SETTINGS = {
   autoSaveEnabled: true,
   autoSaveInterval: 30, // seconds
   language: 'en', // de, en, it
+  /* Zeichnet der Finger, statt die Seite zu bewegen? Aus, solange nichts
+     anderes gesagt wird – wer einen Stift hat, will mit dem Finger
+     blättern. Umschaltbar in der Werkzeugleiste (ui/toolbar.js). */
+  touchDraw: false,
   cloudEnabled: false,
   // Cloud-Anbieter: 'google' (Drive) oder 'microsoft' (OneDrive).
   // Siehe core/cloudConfig.js und core/providers/.

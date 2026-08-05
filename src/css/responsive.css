@@ -63,16 +63,71 @@
     min-height: 44px
   }
 
+  /* ── Was nur beim Zeigen erscheint, gibt es mit dem Finger nicht ──
+     Ein Zeiger, der ueber etwas faehrt, ohne es zu beruehren, existiert
+     hier nicht. Alles, was sich per :hover einblendet, bliebe also
+     unsichtbar – und damit unerreichbar. */
+  .sec-edit-btn,
+  .mgr-side-tools,
+  .nb-card-edit-btn {
+    opacity: 1
+  }
+
+  .side-mgr-btn,
   .sec-edit-btn {
-    opacity: 1;
-    width: 32px;
-    height: 32px;
+    min-width: 36px;
+    min-height: 32px;
     font-size: 14px
+  }
+
+  .mgr-side-tool {
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 13px
+  }
+
+  .mgr-side-row {
+    padding: 9px 8px;
+    min-height: 44px
   }
 
   .mgr-pg-item {
     padding: 10px 12px;
-    min-height: 48px
+    min-height: 52px;
+    gap: 10px
+  }
+
+  /* Der Griff ist das einzige Ziel zum Umsortieren – mit dem Finger
+     braucht er echte Flaeche, sonst trifft man ihn nie. */
+  .mgr-pg-grip {
+    opacity: .8;
+    font-size: 17px;
+    padding: 6px 4px;
+    margin: -6px -2px
+  }
+
+  .mgr-pg-sec {
+    font-size: 12px;
+    padding: 4px 11px
+  }
+
+  .mgr-btn,
+  .sec-mgr-footer .ok-btn {
+    min-height: 36px;
+    padding: 7px 14px;
+    font-size: 13px
+  }
+
+  .modal-close-x {
+    min-width: 40px;
+    min-height: 40px
+  }
+
+  /* Die Auswahl-Fussleiste hat fuenf Knoepfe – auf schmalem Schirm
+     brechen sie um, statt sich zu quetschen. */
+  .sec-mgr-bar {
+    flex-wrap: wrap;
+    row-gap: 6px
   }
 
   /* Auf schmalem Schirm untereinander statt nebeneinander – 190px
@@ -99,6 +154,22 @@
   .ctx-item {
     padding: 12px 16px;
     font-size: 15px
+  }
+
+  /* ── Die Knoepfe am Seitenkopf ──────────────────────────────────────
+     Sie sitzen AUF der Seite und schrumpfen deshalb mit dem Zoom mit. Im
+     Hochformat passt Inkwell die Seite auf den Schirm ein, oft auf gut
+     die Haelfte – aus 16px werden dann acht, und die trifft kein Finger.
+     Die Flaeche wird darum grosszuegiger; die Kopfhoehe bleibt, sonst
+     verschoebe sich der Textanfang auf jeder Seite. */
+  .pg-menu-btn,
+  .pg-sec-btn {
+    padding: 12px 14px;
+    font-size: 21px
+  }
+
+  .j-page-actions {
+    gap: 6px
   }
 }
 

@@ -83,19 +83,33 @@ function attachInput(canvas, textDiv, objLayer, page) {
     return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY, p: e.pressure > 0 ? e.pressure : 0.5 };
   }
 
-  function handlePenStart(e) {
+  /**
+   * Einen Strich beginnen – mit Stift, Maus oder Finger.
+   *
+   * Hiess handlePenStart und lief nur fuer den Stift. Gezeichnet wird
+   * inzwischen mit allem, was der Nutzer dafuer nimmt; welches Geraet
+   * ueberhaupt hierher kommt, entscheidet der Verteiler unten.
+   */
+  function handleDrawStart(e) {
     // Fremdes Dokument ohne Bearbeitungsrecht: der Stift schreibt nicht.
     // Ohne diese Bremse landeten die Striche zwar nur lokal, wären aber
     // sichtbar – und wirkten dadurch wie eine gespeicherte Änderung.
     if (S.readOnly) return;
 
+    // Die hintere Taste am Stift radiert – bei der Maus die rechte
     const isE = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
     if (isE) {
-      if (S.mode !== 'eraser') { S._restoreMode = S.mode; switchMode('eraser'); }
+      if (S.mode !== 'eraser') { S._restoreMode = S.mode; switchMode('eraser', { auto: true }); }
     } else {
-      if (S.mode === 'cursor') switchMode(S._lastPenMode || 'pen1');
+      /* Nur der Stift schaltet von selbst auf das zuletzt benutzte
+         Werkzeug. Maus und Finger kommen ohnehin nur hierher, wenn schon
+         ein Zeichenwerkzeug gewaehlt ist. */
+      if (e.pointerType === 'pen' && S.mode === 'cursor') {
+        switchMode(S._lastPenMode || 'pen1', { auto: true });
+      }
       if (S._restoreMode) S._restoreMode = null;
     }
+    S._drawPointerId = e.pointerId;
     e.preventDefault();
     try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
     textDiv.style.pointerEvents = 'none';
@@ -126,25 +140,55 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WELCHES GERAET WAS TUT
+
+     Der Stift zeichnet immer und schaltet dafuer von selbst auf das
+     zuletzt benutzte Werkzeug – so muss man nichts anklicken, um
+     loszuschreiben.
+
+     Die Maus schreibt Text. Hat aber der STIFT eben das Werkzeug
+     gesetzt (S._modeAuto), war das nicht gemeint: die Maus springt
+     zurueck zum Text. Wer dagegen selbst auf den Stift geklickt hat,
+     darf auch mit der Maus zeichnen.
+
+     Der Finger scrollt – ausser man hat das Zeichnen mit dem Finger
+     eingeschaltet UND ein Werkzeug selbst gewaehlt. Sonst koennte man
+     eine Seite nicht mehr bewegen, sobald der Stift einmal dran war.
+     ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointerdown', e => {
     const target = e.target;
     if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-bar')) return;
     if (target.closest('.j-text')) return;
-    if (e.pointerType === 'touch') return;
-    
+
+    if (e.pointerType === 'pen') { handleDrawStart(e); return; }
+
     if (e.pointerType === 'mouse') {
-      if (e.button !== 0) return;
+      const radiert = e.button === 2 || (e.buttons & 2);
+      if (e.button !== 0 && !radiert) return;
+
+      // Der Stift hatte umgeschaltet, nicht der Nutzer – zurueck zum Text
+      if (S._modeAuto && S.mode !== 'cursor') switchMode('cursor');
+
+      if (isDrawMode(S.mode)) { handleDrawStart(e); return; }
+
       // We don't preventDefault here to allow native selection to work.
-      // But we call activeTextEditingAt immediately so the cursor appears 
+      // But we call activeTextEditingAt immediately so the cursor appears
       // where we want it before the browser has a chance to place its own.
       activateTextEditingAt(e.clientX, e.clientY, false);
       return;
     }
-    if (e.pointerType === 'pen') handlePenStart(e);
+
+    if (e.pointerType === 'touch') {
+      if (S.touchDraw && !S._modeAuto && isDrawMode(S.mode)) { handleDrawStart(e); return; }
+      // sonst bleibt der Finger fuers Scrollen und Zoomen (app.js)
+    }
   });
 
   div.addEventListener('pointermove', e => {
-    if (!S.isDrawing || e.pointerType !== 'pen') return;
+    // Nur der Zeiger, der den Strich begonnen hat – ein zweiter Finger
+    // beim Zoomen darf nicht mitmalen
+    if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
     e.preventDefault(); const c = coords(e); const ctx = canvas.getContext('2d');
     if (S.mode === 'eraser' && S.eraser.type === 'stroke') {
       strokeErase(c, page, canvas);
@@ -184,8 +228,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
   }, { passive: false });
 
   div.addEventListener('pointerup', e => {
-    if (!S.isDrawing) return;
+    if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
     S.isDrawing = false;
+    S._drawPointerId = null;
     stopLineTimer(S._cur);
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
@@ -202,14 +247,19 @@ function attachInput(canvas, textDiv, objLayer, page) {
   });
   div.addEventListener('pointercancel', () => {
     stopLineTimer(S._cur);
-    S.isDrawing = false; S._cur = null;
+    S.isDrawing = false; S._cur = null; S._drawPointerId = null;
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
   });
 
   textDiv.addEventListener('pointerdown', e => {
     setActivePg(page.id);
-    if (S.mode !== 'cursor') switchMode('cursor');
+    /* Ein SELBST gewaehltes Zeichenwerkzeug bleibt stehen. Hier stand
+       fruehe ein bedingungsloses switchMode('cursor') – damit war das
+       Zeichnen mit der Maus unmoeglich: der erste Klick auf die Seite
+       schaltete sofort wieder auf Text. */
+    if (S.mode !== 'cursor' && S._modeAuto) switchMode('cursor');
+    if (S.mode !== 'cursor') return;
     textDiv.style.pointerEvents = 'auto';
 
     if (S.readOnly) return;

@@ -3,6 +3,59 @@
 /* ── TOOLBAR ── */
 QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => switchMode(btn.dataset.mode)); });
 
+/* ══════════════════════════════════════════════════════════════════════
+   MIT DEM FINGER ZEICHNEN
+
+   Aus, solange nichts anderes gesagt wird. Waere es an, liesse sich die
+   Seite mit einem Finger nicht mehr bewegen, sobald ein Zeichenwerkzeug
+   gewaehlt ist – und wer einen Stift hat, will genau das nicht.
+
+   Der Knopf erscheint nur, wo es ueberhaupt einen Finger gibt. Auf einem
+   Rechner ohne Beruehrungsschirm waere er eine Frage ohne Gegenstand.
+   ══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const btn = E('btn-touch-draw');
+  if (!btn) return;
+
+  const hatFinger = (navigator.maxTouchPoints || 0) > 0
+    || window.matchMedia('(pointer: coarse)').matches;
+  if (!hatFinger) return;
+
+  btn.style.display = '';
+
+  const anwenden = () => {
+    btn.classList.toggle('active', !!S.touchDraw);
+    /* Beim Zeichnen mit dem Finger darf der Browser die Seite nicht
+       gleichzeitig scrollen – sonst bleibt vom Strich ein Ruckeln. */
+    document.body.classList.toggle('touch-draw', !!S.touchDraw);
+  };
+
+  S.touchDraw = !!(typeof Settings !== 'undefined' && Settings.get && Settings.get('touchDraw'));
+  anwenden();
+
+  btn.addEventListener('click', () => {
+    S.touchDraw = !S.touchDraw;
+    anwenden();
+    toast(S.touchDraw ? t('touchDrawOn') : t('touchDrawOff'));
+    if (typeof Settings !== 'undefined' && Settings.set) Settings.set('touchDraw', S.touchDraw);
+  });
+
+  // Die Einstellung wird erst nach dem Laden der Datei richtig bekannt
+  if (typeof Settings !== 'undefined' && Settings.onChange) {
+    Settings.onChange(s => {
+      if (!!s.touchDraw === !!S.touchDraw) return;
+      S.touchDraw = !!s.touchDraw;
+      anwenden();
+    });
+  }
+})();
+
+/** Zeichnet der Finger gerade, statt zu scrollen? */
+function touchDrawActive() {
+  return !!S.touchDraw && !S._modeAuto
+    && typeof isDrawMode === 'function' && isDrawMode(S.mode);
+}
+
 /* Pen color presets */
 QA('.pen-sw[data-pcolor]').forEach(sw => {
   sw.addEventListener('click', () => {
@@ -427,10 +480,30 @@ window.addEventListener('pointermove', e => {
 // Track last pen mode so pen auto-switch restores it
 S._lastPenMode = 'pen1';
 
-function switchMode(mode) {
+/* Wurde das Werkzeug vom Geraet gesetzt oder vom Nutzer gewaehlt?
+   Daran haengt, ob die Maus zum Text zurueckspringt: hat der Stift
+   umgeschaltet, war es nicht gemeint und die Maus schreibt wieder. Hat der
+   Nutzer den Stift angeklickt, darf er auch mit der Maus zeichnen. */
+S._modeAuto = false;
+
+/** Malt dieses Werkzeug, statt Text zu setzen? */
+function isDrawMode(mode) {
+  return mode === 'pen1' || mode === 'pen2' || mode === 'hl' || mode === 'eraser';
+}
+
+/**
+ * @param {string} mode
+ * @param {{auto?: boolean}} [opts] auto = vom Eingabegeraet gesetzt,
+ *   nicht vom Nutzer gewaehlt
+ */
+function switchMode(mode, opts = {}) {
   S.mode = mode;
+  S._modeAuto = !!opts.auto;
   if (mode !== 'cursor' && mode !== 'eraser') S._lastPenMode = mode;
-  QA('.tb-mode').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  /* Nur die Werkzeug-Knoepfe. Ohne den Zusatz [data-mode] loeschte jeder
+     Werkzeugwechsel auch die Markierung am Finger-Schalter – der hat
+     keinen Modus, sein dataset.mode ist undefined und passt nie. */
+  QA('.tb-mode[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   const isPen = mode === 'pen1' || mode === 'pen2' || mode === 'hl';
   E('pen-opts').style.display = isPen ? 'flex' : 'none';
   E('eraser-opts').style.display = mode === 'eraser' ? 'flex' : 'none';

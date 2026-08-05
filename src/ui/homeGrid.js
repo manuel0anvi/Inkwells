@@ -139,8 +139,14 @@ function handleDragStart(e) {
     }
   };
   
-  // For touch: start drag on long press
-  longPressTimer = setTimeout(startDrag, 200);
+  /* Mit dem Finger beginnt das Verschieben nach langem Druecken.
+     >>> Warum nicht mehr nach 200ms <<<
+     Ein gewoehnliches Antippen dauert oft laenger als das. Der Zug
+     begann dann bei jedem zweiten Tippen, _dragState stand, und der Klick
+     lief ins Leere – das Heft ging schlicht nicht auf. Mit der Maus
+     braucht es den Zeitgeber ohnehin nicht: dort startet die Bewegung
+     den Zug, und die kommt sofort. */
+  if (e.pointerType !== 'mouse') longPressTimer = setTimeout(startDrag, 450);
   
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onEnd);

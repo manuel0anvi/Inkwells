@@ -36,19 +36,19 @@ const TRANSLATIONS = {
     delete: 'Löschen',
     rename: 'Umbenennen',
     removeFromOverview: 'Aus Übersicht entfernen',
-    deleteNotebook: 'Notebook löschen',
+    deleteNotebook: 'Heft löschen',
     deleteNotebookWarning: 'Dies löscht die Datei dauerhaft:',
     removedFromOverview: 'Aus Übersicht entfernt',
-    notebookDeleted: 'Notebook gelöscht',
+    notebookDeleted: 'Heft gelöscht',
     
     // Directory migration
     changeDirectory: 'Speicherort ändern',
-    transferNotebooks: 'Notebooks übertragen',
-    transferQuestion: 'Was soll mit bestehenden Notebooks passieren?',
+    transferNotebooks: 'Hefte übertragen',
+    transferQuestion: 'Was soll mit bestehenden Heften passieren?',
     transferAll: 'Alle übertragen',
     keepExisting: 'Nur neue hier speichern',
-    transferring: 'Übertrage Notebooks...',
-    transferComplete: 'Notebooks übertragen',
+    transferring: 'Übertrage Hefte...',
+    transferComplete: 'Hefte übertragen',
     
     // Toolbar
     cursor: 'Cursor',
@@ -96,6 +96,9 @@ const TRANSLATIONS = {
     colorAuto: 'Automatisch',
     sectionBackground: 'Papier',
     bgLikeNotebook: 'Wie das Heft',
+    touchDraw: 'Mit dem Finger zeichnen',
+    touchDrawOn: 'Der Finger zeichnet jetzt. Zwei Finger bewegen die Seite.',
+    touchDrawOff: 'Der Finger bewegt die Seite wieder.',
     dragToReorder: 'Ziehen, um die Reihenfolge zu ändern',
     done: 'Fertig',
     
@@ -601,6 +604,9 @@ const TRANSLATIONS = {
     colorAuto: 'Automatic',
     sectionBackground: 'Paper',
     bgLikeNotebook: 'Same as notebook',
+    touchDraw: 'Draw with your finger',
+    touchDrawOn: 'Your finger draws now. Two fingers move the page.',
+    touchDrawOff: 'Your finger moves the page again.',
     dragToReorder: 'Drag to reorder',
     done: 'Done',
     
@@ -1105,6 +1111,9 @@ const TRANSLATIONS = {
     colorAuto: 'Automatico',
     sectionBackground: 'Carta',
     bgLikeNotebook: 'Come il quaderno',
+    touchDraw: 'Disegna con il dito',
+    touchDrawOn: 'Ora il dito disegna. Due dita spostano la pagina.',
+    touchDrawOff: 'Il dito sposta di nuovo la pagina.',
     dragToReorder: 'Trascina per riordinare',
     done: 'Fatto',
     

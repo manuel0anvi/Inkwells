@@ -119,10 +119,12 @@ src/
   links die Abschnitte als Filter, rechts die Seiten des Hefts mit
   anklickbarem Etikett. `_secMgrFilter`: `'*'` alle, `''` ohne Abschnitt,
   sonst eine `secId`. openSectionEditor setzt Name und Farbe.
-- **Umsortieren:** ensureSecMgrDnd, messeZeilen, zielStelle, reorderPageDom.
-  Die Zeilenmitten werden **einmal beim Aufnehmen** gemessen; `dragover`
-  sucht nur noch binär darin. Die Ablegemarke ist ein innerer Schatten, weil
-  eine eingeschobene Zeile die Messung ungültig machen würde.
+- **Umsortieren:** startSecMgrDrag, ensureSecMgrDnd, messeZeilen, zielStelle,
+  reorderPageDom. Gezogen wird am Griff über **Zeiger-Ereignisse**, nicht über
+  HTML5-Drag — das gibt es mit dem Finger nicht. Die Zeilenmitten werden
+  **einmal beim Aufnehmen** gemessen, `pointermove` sucht nur noch binär
+  darin; die Ablegemarke ist ein innerer Schatten, weil eine eingeschobene
+  Zeile die Messung ungültig machen würde.
 
 > **Der Baum wird nicht bei jeder Kleinigkeit neu gebaut.** renderSideTree()
 > läuft über alle gezeigten Seiten und fragt für jede das DOM ab. Beim
@@ -143,6 +145,15 @@ src/
 
 ### `canvas/input.js`
 - **Pointer Events:** attachInput (handlers for pointerdown/move/up)
+
+> **Welches Gerät was tut.** Der Stift zeichnet immer und schaltet dafür von
+> selbst auf das zuletzt benutzte Werkzeug (`switchMode(m, {auto:true})`).
+> Die Maus schreibt Text — hat aber der Stift das Werkzeug gesetzt
+> (`S._modeAuto`), springt sie zurück zum Text; ein *selbst* angeklicktes
+> Werkzeug bleibt stehen und zeichnet auch mit der Maus. Der Finger scrollt,
+> es sei denn `S.touchDraw` ist an **und** das Werkzeug wurde selbst gewählt.
+> `S._drawPointerId` hält fest, wer den Strich begonnen hat — sonst malte
+> beim Zoomen der zweite Finger mit.
 - **Drawing:** buildStroke, liveDrawIncr (live feedback)
 - **Erasing:** pointToLineDistance, strokeErase
 - **Caret Placement:** placeCaret, placeCaretAnywhere

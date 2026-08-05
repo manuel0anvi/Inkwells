@@ -765,6 +765,15 @@ E('btn-add-page-end').addEventListener('click', async () => {
   sc.addEventListener('touchstart', e => {
     if (penIsActive()) { e.preventDefault(); return; }
 
+    /* Zeichnet der Finger, gehoert ihm der Strich – nicht das Scrollen.
+       Zwei Finger bleiben aber das Zoomen, sonst kaeme man aus einer
+       vergroesserten Seite nicht mehr heraus. */
+    if (typeof touchDrawActive === 'function' && touchDrawActive()
+        && e.touches.length === 1 && e.target.closest('.j-page')) {
+      _panActive = false;
+      return;
+    }
+
     if (isTouchUiTarget(e.target)) {
       _panActive = false;
       return;
@@ -788,6 +797,10 @@ E('btn-add-page-end').addEventListener('click', async () => {
 
   sc.addEventListener('touchmove', e => {
     if (penIsActive()) { e.preventDefault(); return; }
+
+    // Ein zeichnender Finger scrollt nicht mit
+    if (typeof touchDrawActive === 'function' && touchDrawActive()
+        && e.touches.length === 1 && S.isDrawing) { e.preventDefault(); return; }
 
     if (e.touches.length === 2 && _pinchDist > 0) {
       const d = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);

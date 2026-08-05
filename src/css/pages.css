@@ -134,6 +134,13 @@
   touch-action: pan-y
 }
 
+/* Zeichnet der Finger, darf der Browser nicht gleichzeitig scrollen –
+   sonst bleibt vom Strich ein Ruckeln. Zwei Finger zoomen weiterhin,
+   das faengt app.js selbst ab. */
+body.touch-draw .j-canvas {
+  touch-action: none
+}
+
 .j-text {
   position: absolute;
   top: 64px;
