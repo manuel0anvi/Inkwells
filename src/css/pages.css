@@ -89,9 +89,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 0 72px;
   z-index: 1300;
   pointer-events: none;
+}
+
+/* Das Datum bleibt rechts, wo es war – nur eben VOR den Knoepfen statt
+   unter ihnen. Bei sehr schmalen Seiten gibt es nach, nicht die Knoepfe. */
+.j-page-date {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
 }
 
 .j-page-num,
@@ -106,7 +116,8 @@
 .j-page-left {
   display: flex;
   align-items: center;
-  gap: 6px
+  gap: 6px;
+  flex-shrink: 0
 }
 
 /* Das Heft ist freigegeben: Mensch = andere schreiben mit, Auge = nur lesen.
@@ -426,14 +437,24 @@ body.touch-draw .j-canvas {
    Seit ein zweiter dazugekommen ist (Abschnitt festlegen), stehen beide
    in einer Gruppe – so braucht es keine Pixelrechnerei, wenn spaeter noch
    einer dazukommt. */
+/* >>> Warum das NICHT absolut positioniert ist <<<
+   Es stand auf `position:absolute; right:8px` – damit war die Gruppe aus
+   dem Fluss genommen und der Kopf verteilte nur noch Seitenzahl und
+   Datum. Das Datum sass also am rechten Rand, die Knoepfe darueber.
+   Solange sie schmaler als der 72px-Rand waren, fiel das nicht auf; auf
+   Beruehrungsschirmen sind sie groesser, und dann lagen sie auf dem
+   Datum.
+
+   Jetzt stehen sie im Fluss: das Datum wird von ihnen nach links
+   geschoben, ueberlappen kann nichts mehr. Der negative Aussenrand holt
+   die Gruppe in den Seitenrand hinein, damit sie sitzt wie bisher
+   (72px Innenrand − 64px = 8px vom Blattrand). */
 .j-page-actions {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
+  margin-right: -64px;
   pointer-events: auto
 }
 

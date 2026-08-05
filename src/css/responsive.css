@@ -11,6 +11,17 @@
     min-height: 36px
   }
 
+  /* Auf schmalem Schirm etwas kleiner: 36px mal zwanzig Knoepfe passen
+     dort in keine Zeile. 32px trifft der Finger noch zuverlaessig. */
+  @media (max-width: 900px) {
+    .tb-mode,
+    .tb-opt,
+    .sz-btn {
+      min-width: 32px;
+      min-height: 32px
+    }
+  }
+
   .obj-handle {
     width: 22px;
     height: 22px
@@ -217,12 +228,19 @@
     display: none
   }
 
+  /* ── Die Werkzeugleiste bleibt EINE Zeile ───────────────────────────
+     Hier stand flex-wrap: wrap mit overflow-x: visible – und genau das
+     machte im Hochformat mit offener Navigation zwei Zeilen daraus. Die
+     Grundeinstellung (css/toolbar.css) ist laengst einzeilig mit
+     seitlichem Schieben und ausgeblendetem Rollbalken; sie war hier nur
+     ueberschrieben.
+
+     Damit trotzdem moeglichst wenig zu schieben bleibt, faellt alles
+     Entbehrliche weg: Beschriftungen, Trenner, und die beiden
+     Zoom-Knoepfe – im Hochformat zoomt man ohnehin mit zwei Fingern. */
   .toolbar {
     padding: 4px 6px;
-    gap: 1px;
-    flex-wrap: wrap;
-    overflow-x: visible;
-    row-gap: 4px
+    gap: 1px
   }
 
   .tb-zone,
@@ -240,11 +258,22 @@
     display: none
   }
 
-  /* hide labels on narrow */
-  .tb-sep {
+  .tb-sep,
+  .tb-sep-sm {
     display: none
   }
-  
+
+  /* Zwei Finger tun dasselbe; der Prozentwert bleibt und setzt zurueck */
+  #btn-zoom-in,
+  #btn-zoom-out {
+    display: none
+  }
+
+  .tb-mode,
+  .tb-opt {
+    padding: 4px 6px
+  }
+
   /* Hide save text in vertical/portrait mode */
   .save-text {
     display: none !important;
