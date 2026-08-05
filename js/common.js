@@ -282,6 +282,78 @@ async function inkwellIdentityReady() {
   }
 }
 
+/* ── Die Adminsitzung endet mit der Adminseite ────────────────────────
+   Wer sich in der Verwaltung anmeldet und danach zurück auf die Website
+   geht, war dort weiterhin Admin: Beiträge und Antworten ließen sich
+   löschen und alles Geschriebene ging unter „Inkwell Team" hinaus. Das
+   war nie beabsichtigt – die Werkzeuge gehören in die Verwaltung.
+
+   Abgemeldet wird beim BETRETEN jeder anderen Seite, nicht beim Verlassen
+   der Adminseite: ein Fenster, das zugemacht wird, kommt nicht mehr dazu,
+   und ein „beforeunload" darf ohnehin nichts mehr abwarten.
+
+   Nicht zu verwechseln mit inkwellAdminSignOut() weiter unten: das räumt
+   beim ausdrücklichen Abmelden auf und fragt deshalb nicht erst nach.
+   Hier MUSS gefragt werden – sonst würde ein ganz normal angemeldeter
+   Nutzer mit hinausgeworfen.
+
+   >>> Warum das die Firebase-Sitzung als Ganzes trifft <<<
+   Forum und Freigaben teilen sich EINE Anmeldung (js/firebase.js und
+   js/share.js starten dieselbe Anwendung). Das Adminkonto hat die
+   Google- bzw. Microsoft-Kennung also schon beim Anmelden verdrängt;
+   hier bleibt danach schlicht keine übrig. Für die geteilten Dokumente
+   heißt das: einmal neu bei Google bzw. Microsoft anmelden.
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Läuft, sobald die Frage geklärt ist. Wer wie die Community-Seite davon
+   abhängt, ob moderiert werden darf, muss das abwarten – sonst zeichnet
+   er seine Löschen-Knöpfe in der Lücke zwischen „noch angemeldet" und
+   „abgemeldet". */
+window.inkwellAdminSessionEnded = Promise.resolve();
+
+function endAdminSessionOutsideAdmin() {
+  if (window.location.pathname.includes('/admin/')) return;
+
+  const done = (weg) => console.log('[Admin] Außerhalb der Verwaltung abgemeldet über', weg);
+
+  // Seiten mit dem Forum-Modul (Community, Datenschutz, Startseite)
+  const viaForum = new Promise((resolve) => {
+    if (window.InkwellForum) return resolve(window.InkwellForum);
+    if (!document.querySelector('script[src*="firebase.js"]')) return resolve(null);
+    document.addEventListener('inkwell-forum-ready',
+      () => resolve(window.InkwellForum || null), { once: true });
+    setTimeout(() => resolve(null), 15000);
+  }).then(async (api) => {
+    if (!api?.adminReady) return false;
+    if (!await api.adminReady()) return false;
+    await inkwellAdminSignOut();
+    done('das Forum-Modul');
+    return true;
+  });
+
+  /* Das Dashboard bindet js/firebase.js nicht ein, wohl aber js/share.js –
+     und beide hängen an derselben Anmeldung. Deshalb dort dieser Weg. */
+  const viaShare = viaForum.then(async (schonErledigt) => {
+    if (schonErledigt) return;
+    if (!document.querySelector('script[src*="share.js"]')) return;
+
+    const api = await whenInkwellShareReady(8000);
+    await api.whenIdentityReady();
+    const me = api.currentIdentity();
+    if (!me || me.email !== api.normalizeEmail(ADMIN_EMAIL)) return;
+
+    await api.signOutIdentity();
+    document.body.dataset.inkwellAdmin = 'no';
+    done('das Freigabe-Modul');
+  });
+
+  window.inkwellAdminSessionEnded = viaShare.catch(err => {
+    console.warn('[Admin] Abmelden übersprungen:', err?.message || err);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', endAdminSessionOutsideAdmin);
+
 /**
  * Sorgt für ein gültiges Token. Gibt die Sitzung zurück oder null, wenn
  * eine echte Neuanmeldung nötig ist. Mehrfachaufrufe teilen sich den Vorgang.

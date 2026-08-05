@@ -187,13 +187,45 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
   accent-color:var(--gold-light);cursor:pointer;
 }
 .share-link-toggle span{min-width:0}
-.share-role-select{
+/* ── Rollen-Auswahl ────────────────────────────────────────────────
+   Das eingebaute Aussehen eines <select> kommt vom Betriebssystem und
+   passte nirgends zum dunklen Fenster: heller Kasten, blaue Markierung,
+   ein Pfeil in Windows-Grau. Mit appearance:none fällt das weg, der
+   Pfeil kommt als Hintergrundbild dazu.
+
+   Die aufgeklappte Liste zeichnet weiterhin der Browser. Sie folgt aber
+   den Farben, die an <option> stehen – deshalb sind sie hier gesetzt und
+   nicht nur am Kasten. Gegenstück in der App: src/css/modals.css. */
+.share-role-select,
+.share-person select{
   flex:none;
-  padding:6px 8px;background:rgba(0,0,0,0.28);
-  border:0.5px solid var(--navy-border);border-radius:5px;color:var(--cream);
-  font-family:'Jost',sans-serif;font-size:12px;
+  appearance:none;-webkit-appearance:none;
+  padding:7px 28px 7px 11px;
+  background-color:rgba(0,0,0,0.32);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23c9bfa8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 9px center;
+  background-size:9px 6px;
+  border:0.5px solid var(--navy-border);border-radius:6px;color:var(--cream);
+  font-family:'Jost',sans-serif;font-size:12px;line-height:1.35;
+  cursor:pointer;
+  transition:border-color .14s,background-color .14s,box-shadow .14s;
 }
-.share-role-select:disabled{opacity:.4}
+.share-person select{padding:5px 24px 5px 9px;font-size:11px;background-position:right 7px center}
+
+.share-role-select:hover:not(:disabled),
+.share-person select:hover{
+  border-color:rgba(212,168,87,0.5);background-color:rgba(0,0,0,0.45);
+}
+.share-role-select:focus-visible,
+.share-person select:focus-visible{
+  outline:none;border-color:var(--gold-light);
+  box-shadow:0 0 0 3px rgba(212,168,87,0.16);
+}
+.share-role-select option,
+.share-person select option{background:#141622;color:var(--cream)}
+
+.share-role-select:disabled{opacity:.4;cursor:not-allowed}
 
 /* Solange geschrieben wird, keine zweite Änderung annehmen – sonst
    überholen sich zwei Schreibvorgänge in Firestore. */

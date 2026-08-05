@@ -801,7 +801,46 @@ async function openShareDialog() {
   shareEl('share-dlg-people-section').style.display = me ? '' : 'none';
   if (!me) return;
 
-  if (entry?.docId) await loadShareHead(entry.docId);
+  if (entry?.docId) { await loadShareHead(entry.docId); return; }
+
+  /* >>> Kein Merkzettel heißt nicht „nicht freigegeben" <<<
+     Der Merkzettel steht im localStorage dieses Browsers. Wurde das Heft
+     aus der App oder aus einem anderen Browser freigegeben, gibt es hier
+     keinen – und das Fenster stand auf „noch nicht freigegeben", obwohl
+     die Freigabe längst lief. Deshalb zur Sicherheit in Firestore
+     nachsehen und den Merkzettel gleich nachtragen. */
+  await adoptExistingShare();
+}
+
+/** Sucht eine bestehende Freigabe zu diesem Heft und übernimmt sie. */
+async function adoptExistingShare() {
+  const status = shareEl('share-dlg-status');
+  const notebookId = currentNotebook?.id;
+  if (!notebookId) return;
+
+  status.textContent = t('share_checking');
+  try {
+    const api = await whenShareReady();
+    const head = await api.findOwnedDocForNotebook(notebookId);
+
+    // Zwischenzeitlich ein anderes Heft geöffnet? Dann gilt diese Antwort nicht.
+    if (!currentNotebook || currentNotebook.id !== notebookId) return;
+
+    if (!head) { status.textContent = ''; return; }
+
+    rememberShare(notebookId, {
+      docId: head.docId,
+      linkId: head.linkId || '',
+      url: head.linkId ? api.docUrlFor(head.linkId) : '',
+      linkMode: head.linkMode
+    });
+
+    shareHead = head;
+    renderShareHead();
+  } catch (err) {
+    console.warn('[Share] Bestehende Freigabe nicht abfragbar:', err?.message || err);
+    status.textContent = '';
+  }
 }
 
 async function loadShareHead(docId) {
@@ -940,6 +979,11 @@ async function ensureShareDocument() {
     await loadShareHead(entry.docId);
     return !!shareHead;
   }
+
+  /* Erst nachsehen, dann anlegen: sonst entstünde eine ZWEITE Freigabe
+     zum selben Heft, sobald die erste von einem anderen Gerät stammt. */
+  await adoptExistingShare();
+  if (shareHead) return true;
 
   shareEl('share-dlg-status').textContent = t('share_working');
 

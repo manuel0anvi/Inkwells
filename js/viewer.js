@@ -352,7 +352,8 @@ function buildPageElement(notebook, page, index) {
   for (const obj of (page.objects || [])) {
     if (!obj || !obj.src) continue;
     const wrap = document.createElement('div');
-    wrap.className = 'obj-wrap';
+    // 'back' = hinter Text und Handschrift, so wie es in der App gesetzt wurde
+    wrap.className = obj.layer === 'back' ? 'obj-wrap behind' : 'obj-wrap';
     wrap.style.left = (obj.x || 0) + 'px';
     wrap.style.top = (obj.y || 0) + 'px';
     wrap.style.width = (obj.w || 200) + 'px';

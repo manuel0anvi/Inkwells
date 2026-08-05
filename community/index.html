@@ -598,24 +598,11 @@ function renderFeed() {
           </button>
         </div>`;
 
-    if (replyCount > 0) {
-      html += `<div id="replies-list-${post.id}" style="display:none; flex-direction:column; gap:8px; margin-bottom:14px;">`;
-      post.replies.forEach(reply => {
-        const isAnonReply = ['Anonym', 'Anonymous', 'Anonimo'].includes(reply.author);
-        html += `
-          <div class="reply-item">
-            <div class="reply-meta">
-              ${isAnonReply ? '' : `<strong>${escapeHtml(reply.author)}</strong>`}
-              <span>${getFormattedDate(reply.created_at)}</span>
-              ${forumIsAdmin ? `<button type="button" class="forum-del-btn" onclick="adminDeleteReply('${post.id}', '${reply.id}')">${escapeHtml(t('admin_mod_delete_reply'))}</button>` : ''}
-            </div>
-            <div class="reply-text">${escapeHtml(reply.content)}</div>
-          </div>`;
-      });
-      html += `</div>`;
-    }
-
-    // Hidden reply form — shown only after clicking the button
+    /* >>> Erst das Formular, dann die Antworten <<<
+       Vorher stand es hinter der Liste. Bei einem Beitrag mit vielen
+       Antworten sprang der Klick auf „Antworten" damit ans Ende der Liste
+       – das Feld war außerhalb des Bildes und sah aus, als sei nichts
+       passiert. Es gehört direkt unter den Kopf der Antworten. */
     html += `
         <form id="reply-form-${post.id}" class="reply-form" onsubmit="handleCreateReply(event, '${post.id}')">
           <div class="reply-form-row">
@@ -635,8 +622,26 @@ function renderFeed() {
             </div>
           </div>
           <button type="submit" class="reply-submit-btn">${t('community_reply_btn')}</button>
-        </form>
-      </div>`;
+        </form>`;
+
+    if (replyCount > 0) {
+      html += `<div id="replies-list-${post.id}" style="display:none; flex-direction:column; gap:8px; margin-top:14px;">`;
+      post.replies.forEach(reply => {
+        const isAnonReply = ['Anonym', 'Anonymous', 'Anonimo'].includes(reply.author);
+        html += `
+          <div class="reply-item">
+            <div class="reply-meta">
+              ${isAnonReply ? '' : `<strong>${escapeHtml(reply.author)}</strong>`}
+              <span>${getFormattedDate(reply.created_at)}</span>
+              ${forumIsAdmin ? `<button type="button" class="forum-del-btn" onclick="adminDeleteReply('${post.id}', '${reply.id}')">${escapeHtml(t('admin_mod_delete_reply'))}</button>` : ''}
+            </div>
+            <div class="reply-text">${escapeHtml(reply.content)}</div>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
 
     card.innerHTML = html;
     container.appendChild(card);
@@ -660,6 +665,12 @@ function escapeHtml(text) {
 document.addEventListener('DOMContentLoaded', () => {
   (async () => {
     await ensureForumIdentity();
+
+    /* Die Adminsitzung endet, sobald man die Verwaltung verlässt – hier
+       wird das erledigt (js/common.js). Erst danach fragen, sonst sähe
+       man die Löschen-Knöpfe genau so lange aufblitzen, wie das Abmelden
+       dauert. */
+    await (window.inkwellAdminSessionEnded || Promise.resolve());
 
     // Vor dem ersten Zeichnen klären, ob moderiert werden darf – sonst
     // erschiene der Feed zweimal, einmal ohne und einmal mit Knöpfen.
