@@ -785,6 +785,7 @@ async function openShareDialog() {
 
   // Ohne Netz sofort Bescheid geben, statt in eine Zeitgrenze zu laufen
   const needs = shareEl('share-dlg-needs-account');
+  removeMicrosoftLinkButton(needs);
   if (shareIsOffline()) {
     needs.textContent = t('share_offline');
     needs.style.display = 'block';
@@ -799,7 +800,14 @@ async function openShareDialog() {
   needs.style.display = me ? 'none' : 'block';
   shareEl('share-dlg-link-section').style.display = me ? '' : 'none';
   shareEl('share-dlg-people-section').style.display = me ? '' : 'none';
-  if (!me) return;
+  if (!me) {
+    /* Steht der Knopf wirklich da, ist „melde dich an" die falsche
+       Auskunft – angemeldet ist man ja, es fehlt nur der zweite Schritt. */
+    if (renderMicrosoftLinkButton(needs, () => openShareDialog())) {
+      needs.textContent = t('share_microsoft_step');
+    }
+    return;
+  }
 
   if (entry?.docId) { await loadShareHead(entry.docId); return; }
 
@@ -1238,19 +1246,31 @@ function switchDashTab(which) {
    Firebase nimmt bei Microsoft – anders als bei Google – keine Anmeldung
    an, die es nicht selbst begonnen hat (nachgemessen am 2.8.2026, siehe
    CLOUD_SETUP.md). Ohne diesen Knopf gäbe es für Microsoft-Konten also
-   überhaupt keine geteilten Dokumente. Bei Google erscheint er nicht. */
-function renderMicrosoftLinkButton(hint) {
+   überhaupt keine geteilten Dokumente. Bei Google erscheint er nicht.
+
+   Zwei Aufrufer: der Reiter der geteilten Dokumente und der
+   Freigabe-Dialog. Im Dialog fehlte er lange – dort las man nur „melde
+   dich an", obwohl man angemeldet war und nur dieser eine Schritt
+   fehlte. Deshalb sagt `danach`, was nach dem Gelingen neu zu zeichnen
+   ist, statt dass jede Stelle ihren eigenen Knopf baut.
+
+   @param {HTMLElement} hint    der Hinweis, hinter den er gesetzt wird
+   @param {() => any} [danach]  nach geglückter Anmeldung
+   @returns {HTMLButtonElement|undefined} nur, wenn er wirklich dasteht */
+function renderMicrosoftLinkButton(hint, danach) {
   if (!hint) return;
   if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'microsoft') return;
   if (!isInkwellLoggedIn()) return;
 
   const btn = document.createElement('button');
-  btn.id = 'shared-ms-link';
   /* Der Knopf steht bewusst NEBEN dem Raster, nicht darin: als Kind von
      .nb-grid wurde er auf Kartenbreite gezogen, und die Beschriftung brach
      dreizeilig um. Und er kommt NACH dem Hinweis – erst der Satz, der
-     erklärt, warum es ihn gibt, dann der Knopf. */
-  btn.className = 'btn-m';
+     erklärt, warum es ihn gibt, dann der Knopf.
+
+     Erkannt wird er an der Klasse, nicht mehr an einer Kennung: seit es
+     ihn an zwei Stellen gibt, gäbe eine Kennung sie doppelt. */
+  btn.className = 'btn-m ms-link-btn';
   btn.style.cssText = 'padding:8px 18px; font-size:12px; margin:0 0 24px;'
     + 'background:var(--gold-dim); border-color:var(--gold-light); color:var(--gold-light);';
   btn.textContent = t('shared_link_microsoft') || 'Für geteilte Dokumente anmelden';
@@ -1261,6 +1281,7 @@ function renderMicrosoftLinkButton(hint) {
       const api = await whenInkwellShareReady();
       await api.signInMicrosoftInteractive(getRememberedEmail() || '');
       document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      if (danach) { await danach(); return; }
       await startWatchingShared().catch(() => {});
       renderSharedDocs();
     } catch (err) {
@@ -1280,6 +1301,13 @@ function renderMicrosoftLinkButton(hint) {
   });
 
   hint.insertAdjacentElement('afterend', btn);
+  return btn;
+}
+
+/** Raeumt einen zuvor gesetzten Knopf weg – er steht direkt hinter dem Hinweis. */
+function removeMicrosoftLinkButton(hint) {
+  const dahinter = hint?.nextElementSibling;
+  if (dahinter?.classList.contains('ms-link-btn')) dahinter.remove();
 }
 
 function renderSharedDocs() {
@@ -1288,7 +1316,7 @@ function renderSharedDocs() {
   if (!grid) return;
   grid.innerHTML = '';
   // Liegt außerhalb des Rasters, wird von grid.innerHTML also nicht geleert
-  document.getElementById('shared-ms-link')?.remove();
+  removeMicrosoftLinkButton(hint);
 
   /* Zuerst gefragt: geteilte Dokumente liegen nur in Firestore, es gibt
      davon keine Fassung auf diesem Gerät. Ohne Verbindung ist die Liste

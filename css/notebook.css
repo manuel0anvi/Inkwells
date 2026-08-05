@@ -86,9 +86,21 @@
   padding: 100px 20px 40px;
   min-height: 100vh;
 }
+/* Der Titel gehoert in die MITTE der Seite, nicht in die Mitte des
+   Platzes, der zwischen den Knoepfen uebrigbleibt.
+
+   Vorher hiess es hier `auto minmax(0,1fr) auto`: links der 32px kleine
+   Zurueck-Knopf, rechts „Freigeben" und „Exportieren" mit zusammen gut
+   250px. Die mittlere Spalte begann also links frueh und endete rechts
+   zeitig – ihre Mitte lag um die halbe Differenz neben der Seitenmitte,
+   und der Titel wanderte mit. Je laenger die Beschriftungen wurden,
+   desto schiefer stand er.
+
+   1fr aussen macht beide Seitenspalten gleich breit. Damit liegt die
+   mittlere Spalte mittig, ganz gleich, was in den Knoepfen steht. */
 .viewer-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 1fr minmax(0, auto) 1fr;
   align-items: center;
   max-width: 1180px;
   margin: 0 auto 24px;
@@ -110,8 +122,10 @@
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   flex-shrink: 0;
+  justify-self: start;
 }
 .viewer-bar #viewer-title {
+  grid-column: 2;
   font-family: 'Cormorant Garamond', serif;
   font-size: 32px;
   font-style: italic;

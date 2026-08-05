@@ -92,6 +92,7 @@ const T = {
 
     // Geteilte Dokumente – Freigeben
     share_needs_account: 'Zum Teilen musst du mit deinem Google- oder Microsoft-Konto angemeldet sein.',
+    share_microsoft_step: 'Für geteilte Dokumente braucht Microsoft einen zweiten Schritt: Firebase nimmt nur eine Anmeldung an, die es selbst begonnen hat. Ein Klick auf den Knopf darunter holt das nach – meist ohne dass du etwas eingeben musst.',
     share_offline: 'Keine Verbindung zum Freigabe-Dienst. Prüfe deine Internetverbindung.',
     share_link_anyone: 'Jeder mit dem Link',
     share_saved: 'Übernommen.',
@@ -393,6 +394,7 @@ const T = {
 
     // Shared documents – sharing side
     share_needs_account: 'To share, sign in with your Google or Microsoft account.',
+    share_microsoft_step: 'Shared documents need one extra step with Microsoft: Firebase only accepts a sign-in it started itself. The button below does that — usually without you having to type anything.',
     share_offline: 'No connection to the sharing service. Check your internet connection.',
     share_link_anyone: 'Anyone with the link',
     share_saved: 'Applied.',
@@ -694,6 +696,7 @@ const T = {
 
     // Documenti condivisi – lato proprietario
     share_needs_account: 'Per condividere devi aver effettuato l\'accesso con il tuo account Google o Microsoft.',
+    share_microsoft_step: 'Per i documenti condivisi Microsoft richiede un passo in più: Firebase accetta solo un accesso avviato da lui stesso. Il pulsante qui sotto lo fa — di solito senza dover digitare nulla.',
     share_offline: 'Nessuna connessione al servizio di condivisione. Controlla la connessione.',
     share_link_anyone: 'Chiunque abbia il link',
     share_saved: 'Applicato.',
