@@ -127,7 +127,21 @@
           <!-- Die Verwaltung gehört neben das Anlegen, nicht auf die
                Zeile „Alle Seiten" – dort sah sie aus, als betreffe sie
                nur diese eine Zeile. -->
+          <button class="side-mgr-btn" id="btn-nb-search" data-i18n-title="searchInNotebook" title="Im Heft suchen">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <circle cx="5" cy="5" r="3.4" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M7.6 7.6L10.5 10.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
           <button class="side-mgr-btn" id="btn-sec-mgr" data-i18n-title="manageSections" title="Abschnitte verwalten">✎</button>
+        </div>
+        <!-- Die Suche im Heft. Sie ersetzt den Baum darunter, solange
+             etwas darin steht – die Ergebnisse gehoeren an dieselbe
+             Stelle wie die Ueberschriften, zu denen sie fuehren. -->
+        <div class="side-search" id="side-search" style="display:none">
+          <input id="nb-search-input" type="text" autocomplete="off" spellcheck="false"
+                 data-i18n-ph="searchInNotebookPlaceholder" placeholder="Im Heft suchen …">
+          <button id="nb-search-clear" data-i18n-title="cancel" title="Abbrechen">✕</button>
         </div>
         <div class="side-tree" id="side-tree"></div>
       </div>

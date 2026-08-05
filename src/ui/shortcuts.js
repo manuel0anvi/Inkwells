@@ -69,7 +69,11 @@
   const RUNNERS = {
     help:        () => openShortcutsTab(),
     save:        () => saveNow(),
-    search:      () => { const i = E('home-search-input'); if (i) { i.focus(); i.select(); } },
+    // Im Heft die Suche darin, sonst die ueber alle Hefte
+    search:      () => {
+      if (inJournal() && typeof openNbSearch === 'function') { openNbSearch(); return; }
+      const i = E('home-search-input'); if (i) { i.focus(); i.select(); }
+    },
     newNotebook: () => E('btn-new-nb')?.click(),
     home:        () => E('btn-home')?.click(),
     pageDown:    () => scrollPages(1),

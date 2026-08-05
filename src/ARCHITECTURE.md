@@ -115,6 +115,11 @@ src/
 ### `ui/sidebar.js`
 - **Navigation Tree:** renderSideTree (Ausschnitte + Überschriften)
 - **Page Management:** scrollToHdg, setActivePg, renumberVisiblePages
+- **Suche im Heft:** openNbSearch, closeNbSearch, renderNbSearchResults,
+  jumpToSearchHit. Die Treffer stehen **im Baum**, an der Stelle der
+  Überschriften — `renderSideTree()` zweigt dorthin ab, solange
+  `_nbSearchQuery` gesetzt ist. So überlebt die Trefferliste jeden der
+  vielen `renderSideTree()`-Aufrufe. Jeder Treffer nennt seinen Abschnitt.
 - **Abschnittsverwaltung:** openSecMgr, renderSecMgrBody/-Side/-Pages —
   links die Abschnitte als Filter, rechts die Seiten des Hefts mit
   anklickbarem Etikett. `_secMgrFilter`: `'*'` alle, `''` ohne Abschnitt,

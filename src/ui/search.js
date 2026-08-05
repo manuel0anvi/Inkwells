@@ -168,33 +168,30 @@
     }
   }
 
+  /* ── Zum Treffer springen ────────────────────────────────────────
+     >>> Was hier nicht stimmte <<<
+     Es lief ueber `hit.sec || nb.sections[0]` und stieg bei `!sec` ganz
+     aus. Eine Seite ohne Etikett wurde damit NIE angesprungen – man
+     landete bloss irgendwo im Heft. Und eine Seite mit Etikett landete
+     notfalls im ERSTEN Abschnitt, in dem sie gar nicht steht.
+
+     Jetzt bekommt openNotebook das Ziel gleich mit und waehlt selbst den
+     Ausschnitt, in dem die Seite zu sehen ist. Das spart auch die beiden
+     Zeitgeber: gezeichnet wird einmal, nicht dreimal. */
   function openHit(hit) {
     reset();
 
-    if (hit.kind === 'notebook') {
+    if (hit.kind === 'notebook') { openNotebook(hit.nb.id); return; }
+
+    if (hit.kind === 'section') {
       openNotebook(hit.nb.id);
+      const nb = getNb(hit.nb.id) || hit.nb;
+      const sec = (nb.sections || []).find(s => String(s.id) === String(hit.sec.id));
+      if (sec) openSection(sec);
       return;
     }
 
-    // Heft öffnen, dann zum richtigen Abschnitt und zur Seite springen
-    openNotebook(hit.nb.id);
-
-    const sec = hit.sec || (hit.nb.sections || [])[0];
-    if (!sec) return;
-
-    setTimeout(() => {
-      try {
-        openSection(sec, hit.page ? hit.page.id : null);
-        if (hit.page) {
-          setTimeout(() => {
-            const el = document.querySelector(`[data-pgid="${hit.page.id}"]`);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 120);
-        }
-      } catch (err) {
-        console.error('[Search] Sprung zum Treffer fehlgeschlagen:', err);
-      }
-    }, 60);
+    openNotebook(hit.nb.id, { pageId: hit.page.id });
   }
 
   function reset() {

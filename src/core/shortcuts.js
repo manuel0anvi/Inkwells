@@ -119,7 +119,9 @@ const SHORTCUT_ACTIONS = [
   // Allgemein
   { id: 'help',        group: 'general', labelKey: 'scHelp',        default: 'F1',           scope: 'global',  whileTyping: true },
   { id: 'save',        group: 'general', labelKey: 'scSave',        default: 'Ctrl+S',       scope: 'global',  whileTyping: true },
-  { id: 'search',      group: 'general', labelKey: 'scSearch',      default: 'Ctrl+F',       scope: 'home',    whileTyping: true },
+  // Gilt in beiden Ansichten: auf der Startseite ueber alle Hefte, im
+  // Heft nur darin. Der Laeufer entscheidet, welche der beiden gemeint ist.
+  { id: 'search',      group: 'general', labelKey: 'scSearch',      default: 'Ctrl+F',       scope: 'global',  whileTyping: true },
 
   // Navigation
   { id: 'newNotebook', group: 'nav',     labelKey: 'scNewNotebook', default: 'Ctrl+N',       scope: 'home',    whileTyping: true },

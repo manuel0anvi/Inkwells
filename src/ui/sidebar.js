@@ -31,6 +31,12 @@ function renderSideTree() {
   const nb = getNb(); const tree = E('side-tree'); tree.innerHTML = ''; if (!nb) return;
   getSections(nb);
 
+  /* Wird gerade gesucht, stehen hier die Treffer statt der Ueberschriften.
+     Der Umweg ueber renderSideTree ist Absicht: die Funktion wird aus
+     neun Dateien gerufen, und die Trefferliste soll dabei nicht
+     verschwinden. */
+  if (_nbSearchQuery) { renderNbSearchResults(nb, tree); return; }
+
   const gesamt = notebookPages(nb).length;
 
   /* ─ „Alle Seiten" ─ */
@@ -164,6 +170,181 @@ function renderSideTree() {
     tree.appendChild(body);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SUCHE IM HEFT
+
+   Dasselbe wie die Suche auf der Startseite, nur innerhalb eines Hefts –
+   und mit dem Abschnitt an jedem Treffer, denn genau danach sucht man
+   meistens: „wo stand das noch, in den Regeln oder in den Uebungen?"
+
+   Die Treffer stehen in der Navigation, an der Stelle der
+   Ueberschriften. Sie fuehren an dieselben Orte, also gehoeren sie
+   dorthin – und nicht in ein weiteres Fenster.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let _nbSearchQuery = '';
+const NB_SEARCH_MAX = 80;
+
+/** Der reine Text einer Seite – ohne Auszeichnung, ohne doppelte Leerzeichen. */
+function nbSearchPlainText(page) {
+  return (page.textContent || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function nbSearchSnippet(text, query) {
+  const idx = text.toLowerCase().indexOf(query);
+  if (idx === -1) return text.slice(0, 90);
+  const start = Math.max(0, idx - 30);
+  const end = Math.min(text.length, idx + query.length + 50);
+  return (start > 0 ? '… ' : '') + text.slice(start, end) + (end < text.length ? ' …' : '');
+}
+
+/** Baut den Ausschnitt mit hervorgehobenem Treffer – ohne innerHTML. */
+function nbSearchSnippetNode(snippet, query) {
+  const wrap = document.createElement('span');
+  wrap.className = 'nbs-hit-snippet';
+  const idx = snippet.toLowerCase().indexOf(query);
+  if (idx === -1) { wrap.textContent = snippet; return wrap; }
+
+  wrap.append(document.createTextNode(snippet.slice(0, idx)));
+  const mark = document.createElement('mark');
+  mark.textContent = snippet.slice(idx, idx + query.length);
+  wrap.append(mark, document.createTextNode(snippet.slice(idx + query.length)));
+  return wrap;
+}
+
+function renderNbSearchResults(nb, tree) {
+  const query = _nbSearchQuery;
+  const treffer = [];
+
+  for (const page of notebookPages(nb)) {
+    const text = nbSearchPlainText(page);
+    if (!text || !text.toLowerCase().includes(query)) continue;
+    treffer.push({
+      page,
+      sec: findSecForPage(page.id, nb),
+      pageNo: pageNumberOf(nb, page.id),
+      snippet: nbSearchSnippet(text, query)
+    });
+    if (treffer.length >= NB_SEARCH_MAX) break;
+  }
+
+  const kopf = document.createElement('div');
+  kopf.className = 'nbs-count';
+  kopf.textContent = treffer.length
+    ? t('searchResults').replace('{n}', String(treffer.length))
+    : t('searchNoResults').replace('{q}', query);
+  tree.appendChild(kopf);
+
+  for (const hit of treffer) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'nbs-hit';
+
+    const kopfzeile = document.createElement('span');
+    kopfzeile.className = 'nbs-hit-head';
+
+    const nr = document.createElement('span');
+    nr.className = 'nbs-hit-no';
+    nr.textContent = t('pageNo').replace('{n}', String(hit.pageNo));
+    kopfzeile.appendChild(nr);
+
+    /* Der Abschnitt an jedem Treffer – mit seinem Farbpunkt, damit man
+       ihn wiedererkennt, ohne den Namen zu lesen. */
+    const sec = document.createElement('span');
+    sec.className = 'nbs-hit-sec' + (hit.sec ? '' : ' none');
+    const punkt = document.createElement('span');
+    punkt.className = 'nbs-hit-dot';
+    if (hit.sec) punkt.style.background = colorForSection(hit.sec);
+    const name = document.createElement('span');
+    name.textContent = hit.sec ? getSectionDisplayName(hit.sec) : t('noSection');
+    sec.append(punkt, name);
+    kopfzeile.appendChild(sec);
+
+    row.append(kopfzeile, nbSearchSnippetNode(hit.snippet, query));
+    row.addEventListener('click', () => jumpToSearchHit(nb, hit.page));
+    tree.appendChild(row);
+  }
+}
+
+/**
+ * Zu einem Treffer springen – und dafür nötigenfalls den Ausschnitt
+ * wechseln. Ohne das führte ein Treffer ins Leere, sobald die Ansicht
+ * gerade auf einem Abschnitt stand, zu dem die Seite nicht gehört.
+ */
+function jumpToSearchHit(nb, page) {
+  const gezeigt = activeSection(nb);
+  const sichtbar = gezeigt ? pagesOfSec(gezeigt, nb) : notebookPages(nb);
+  const drin = sichtbar.some(p => String(p.id) === String(page.id));
+
+  if (drin) {
+    // Schon zu sehen – nur hinscrollen, nichts neu zeichnen
+    setActivePg(page.id);
+    const el = E('pages-wrap').querySelector('[data-pgid="' + cssEscape(page.id) + '"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const ziel = page.secId
+    ? (nb.sections || []).find(s => String(s.id) === String(page.secId)) || null
+    : null;
+  openSection(ziel, page.id);
+}
+
+function openNbSearch() {
+  const box = E('side-search');
+  const input = E('nb-search-input');
+  if (!box || !input) return;
+
+  // Die Leiste muss offen sein, sonst tippt man ins Unsichtbare
+  const panel = E('side-panel');
+  if (panel && !panel.classList.contains('open')) E('btn-panel-toggle')?.click();
+
+  box.style.display = 'flex';
+  input.focus();
+  input.select();
+}
+
+/** @param {boolean} [neuZeichnen] false, wenn der Aufrufer ohnehin zeichnet */
+function closeNbSearch(neuZeichnen = true) {
+  const box = E('side-search');
+  const input = E('nb-search-input');
+  if (box) box.style.display = 'none';
+  if (input) input.value = '';
+  _nbSearchQuery = '';
+  if (neuZeichnen) renderSideTree();
+}
+
+E('btn-nb-search')?.addEventListener('click', () => {
+  const box = E('side-search');
+  if (box && box.style.display !== 'none') closeNbSearch(); else openNbSearch();
+});
+
+E('nb-search-clear')?.addEventListener('click', () => closeNbSearch());
+
+E('nb-search-input')?.addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  // Unter zwei Zeichen trifft alles – dann lieber der gewohnte Baum
+  _nbSearchQuery = q.length >= 2 ? q : '';
+  renderSideTree();
+});
+
+E('nb-search-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeNbSearch(); }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    E('side-tree')?.querySelector('.nbs-hit')?.click();
+  }
+});
 
 /* ══════════════════════════════════════════════════════════════════════
    DEN BAUM NICHT STAENDIG NEU BAUEN

@@ -176,8 +176,17 @@ function redoPage() { return _stepHistory('redo', 'undo', 'redoNothing'); }
 /* HOME GRID, CTX MENU, NB MODAL moved to ui/homeGrid.js */
 
 /* ── OPEN NOTEBOOK ── */
-function openNotebook(id) {
+/**
+ * @param {string} id
+ * @param {{pageId?: string}} [opts] Sprungziel, z. B. aus der Suche.
+ *   Es sticht die Merkstelle: die Seite MUSS danach zu sehen sein,
+ *   notfalls wird dafür der Ausschnitt gewechselt.
+ */
+function openNotebook(id, opts = {}) {
   S.activeNbId = id; const nb = getNb();
+  // Eine offene Suche gehoert zum vorigen Heft. Ohne Neuzeichnen – das
+  // uebernimmt openSection weiter unten ohnehin.
+  if (typeof closeNbSearch === 'function') closeNbSearch(false);
 
   // Ein eigenes Heft ist immer beschreibbar. Ohne diese Zeile bliebe der
   // Nur-Lese-Modus hängen, wenn vorher ein fremdes Dokument offen war.
@@ -207,10 +216,23 @@ function openNotebook(id) {
      das Heft eine durchgehende Folge und der Filter die Ausnahme. */
   if (nb.activeSecId && !nb.sections.find(s => s.id === nb.activeSecId)) nb.activeSecId = '';
 
+  /* Ein Sprungziel aus der Suche geht vor. Verbirgt der gemerkte
+     Ausschnitt die gesuchte Seite, wird er gewechselt – sonst führte der
+     Treffer sichtbar ins Leere. */
+  const ziel = opts.pageId
+    ? notebookPages(nb).find(p => String(p.id) === String(opts.pageId))
+    : null;
+  if (ziel) {
+    const jetzt = activeSection(nb);
+    const zuSehen = jetzt ? pagesOfSec(jetzt, nb) : notebookPages(nb);
+    if (!zuSehen.some(p => p.id === ziel.id)) nb.activeSecId = ziel.secId || '';
+  }
+
   const sec = activeSection(nb);
   // Nur anspringen, wenn die Seite im gezeigten Ausschnitt auch vorkommt
   const sichtbar = sec ? pagesOfSec(sec, nb) : notebookPages(nb);
-  const start = sichtbar.some(p => String(p.id) === String(merk.pageId || '')) ? merk.pageId : null;
+  const start = ziel ? ziel.id
+    : (sichtbar.some(p => String(p.id) === String(merk.pageId || '')) ? merk.pageId : null);
 
   openSection(sec, start);
   renderSideTree();
