@@ -143,16 +143,22 @@
       name.className = 'export-sec-name';
       name.textContent = label;
 
+      // Punkt und Name gehoeren in EINE Rasterspalte, sonst schoebe der
+      // Punkt den Namen gegenueber den Auswahlzeilen darueber nach rechts
+      const body = document.createElement('span');
+      body.className = 'export-sec-body';
+      body.append(dot, name);
+
       const zahl = document.createElement('span');
       zahl.className = 'export-sec-count';
       zahl.textContent = String(anzahl);
 
-      row.append(box, dot, name, zahl);
+      row.append(box, body, zahl);
       secList.appendChild(row);
     };
 
     for (const sec of secs) {
-      zeile(sec.id, sec.name, colorForSection(sec.id),
+      zeile(sec.id, sec.name, colorForSection(sec),
         entries.filter(e => e.sec?.id === sec.id).length);
     }
     if (ohne) zeile('', t('noSection'), null, entries.filter(e => !e.sec).length);

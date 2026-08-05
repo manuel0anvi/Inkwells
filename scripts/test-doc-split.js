@@ -182,6 +182,26 @@ check('pageCount ist eine ganze Zahl', Number.isInteger(parts.head.pageCount), t
 const longName = splitNotebook({ ...notebook, name: 'A'.repeat(500) });
 check('Langer Name wird gekürzt', longName.head.title.length <= 200, true);
 
+/* ── Die gewählte Abschnittsfarbe übersteht den Rundlauf ──────────────
+   Sie wird sonst aus der Kennung gerechnet. Wer eine aussucht, muss sie
+   beim anderen wiederfinden – und ein Abschnitt ohne Wahl darf das Feld
+   gar nicht erst mitschleppen. */
+console.log('\nAbschnittsfarbe im Kopf');
+
+const bunt = JSON.parse(JSON.stringify(notebook));
+bunt.sections[0].color = '#2a5fa8';
+const buntParts = splitNotebook(bunt);
+
+check('Die gewählte Farbe steht im Kopf', buntParts.head.sections[0].color, '#2a5fa8');
+check('Ohne Wahl steht dort nichts',
+  Object.prototype.hasOwnProperty.call(buntParts.head.sections[1], 'color'), false);
+
+const buntBack = assembleNotebook(
+  { ...buntParts.head, notebookId: bunt.id }, buntParts.pages, buntParts.ink, buntParts.blobs);
+check('Und sie kommt zurück', buntBack.sections[0].color, '#2a5fa8');
+check('Der andere Abschnitt bleibt ohne',
+  Object.prototype.hasOwnProperty.call(buntBack.sections[1], 'color'), false);
+
 console.log('\nMerkzettel erkennt Änderungen');
 const fp1 = fingerprintNotebook(notebook);
 const edited = JSON.parse(JSON.stringify(notebook));

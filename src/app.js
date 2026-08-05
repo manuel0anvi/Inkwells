@@ -360,7 +360,7 @@ function appendPageDOM(page, index) {
   /* Der Farbstreifen sitzt als Rand am Seitenkopf und wird ueber eine
      Veraenderliche eingefaerbt – dasselbe Verfahren wie --nb-color bei den
      Karten der Startseite. Ohne Abschnitt bleibt der Kopf, wie er war. */
-  if (sec) div.style.setProperty('--sec-color', colorForSection(sec.id));
+  if (sec) div.style.setProperty('--sec-color', colorForSection(sec));
   hdr.classList.toggle('has-sec', !!sec);
 
   hdr.innerHTML = '<span class="j-page-left"><span class="j-page-num">'
@@ -452,7 +452,8 @@ function appendPageDOM(page, index) {
     // Geteiltes Dokument: die Änderung geht sofort an die anderen
     // (ui/collab.js bremst das auf einen sinnvollen Takt).
     if (window.Collab) Collab.noteTextChange(page.id, page.textContent);
-    renderSideTree();
+    // Nicht bei jedem Anschlag den ganzen Baum neu bauen
+    scheduleSideTree();
     maybeAutoPage();
     checkPageOverflow(textDiv, page);
     if (_showWhitespaceDebug) updateWhitespaceDebugOverlays();
@@ -574,7 +575,10 @@ function appendPageDOM(page, index) {
     document.execCommand('insertText', false, indented);
     setTimeout(() => { checkPageOverflow(textDiv, page); renderSideTree(); }, 20);
   });
-  const obs = new IntersectionObserver(entries => { if (entries[0].isIntersecting) { setActivePg(page.id); renderSideTree(); } }, { root: E('pg-scroll'), threshold: 0.4 }); obs.observe(div);
+  /* Nur die Markierung umsetzen, nicht den ganzen Baum neu bauen. Hier
+     stand renderSideTree() – bei hundert Seiten also ein vollstaendiger
+     Neuaufbau je Seite, die beim Scrollen sichtbar wird. */
+  const obs = new IntersectionObserver(entries => { if (entries[0].isIntersecting) { setActivePg(page.id); markActiveNavItem(); } }, { root: E('pg-scroll'), threshold: 0.4 }); obs.observe(div);
   updateUndoRedoUI();
   E('pages-wrap').appendChild(div);
   // Ab vielen Seiten werden weit entfernte Zeichenflächen entlastet

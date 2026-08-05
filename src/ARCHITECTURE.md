@@ -52,7 +52,8 @@ src/
 - **Data Queries:** getNb, getPage, notebookPages, visiblePages, pagesOfSec
 - **Data Builders:** makePage, clonePage, insertPageInto, pageIsEmpty, pagePreview
 - **Data Helpers:** getSections, activeSection, findSecForPage, setSectionOfPage,
-  pageNumberOf, colorForSection, normalizeNotebook, syncSectionIds
+  pageNumberOf, movePageBefore, colorForSection, sectionPalette,
+  normalizeNotebook, syncSectionIds
 
 > **Abschnitte sind Etiketten, keine Kapitel.** Die Reihenfolge eines Hefts
 > steht in `nb.pages`, die Zugehörigkeit einer Seite in `page.secId`. Ein
@@ -94,7 +95,17 @@ src/
 - **Abschnittsverwaltung:** openSecMgr, renderSecMgrBody/-Side/-Pages —
   links die Abschnitte als Filter, rechts die Seiten des Hefts mit
   anklickbarem Etikett. `_secMgrFilter`: `'*'` alle, `''` ohne Abschnitt,
-  sonst eine `secId`.
+  sonst eine `secId`. openSectionEditor setzt Name und Farbe.
+- **Umsortieren:** ensureSecMgrDnd, messeZeilen, zielStelle, reorderPageDom.
+  Die Zeilenmitten werden **einmal beim Aufnehmen** gemessen; `dragover`
+  sucht nur noch binär darin. Die Ablegemarke ist ein innerer Schatten, weil
+  eine eingeschobene Zeile die Messung ungültig machen würde.
+
+> **Der Baum wird nicht bei jeder Kleinigkeit neu gebaut.** renderSideTree()
+> läuft über alle gezeigten Seiten und fragt für jede das DOM ab. Beim
+> Scrollen genügt `markActiveNavItem()` (nur die Markierung), beim Tippen
+> `scheduleSideTree()` (gebremst). Vorher hing an beidem ein vollständiger
+> Neuaufbau — bei hundert Seiten der Engpass.
 
 ### `ui/toolbar.js`
 - **Mode Switching:** switchMode (pen1, pen2, hl, eraser, cursor)

@@ -1785,7 +1785,12 @@
         id: String(sec.id),
         name: String(sec.name || ''),
         pgIds: (sec.pgIds || []).map(String),
-        defaultBg: sec.defaultBg || liveNb.defaultBg || 'ruled'
+        defaultBg: sec.defaultBg || liveNb.defaultBg || 'ruled',
+        /* Ohne diese Zeile ginge eine selbst gewaehlte Farbe bei jedem
+           Struktur-Abgleich still verloren – hier wird feldweise neu
+           gebaut, was nicht aufgezaehlt ist, faellt weg. Leer heisst
+           "nicht gewaehlt", dann rechnet colorForSection eine aus. */
+        color: sec.color || ''
       }));
 
       /* >>> Die Etiketten reisen in den pgIds mit <<<

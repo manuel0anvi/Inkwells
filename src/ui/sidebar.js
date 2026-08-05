@@ -55,7 +55,7 @@ function renderSideTree() {
     row.innerHTML = '<span class="sec-dot"></span>'
       + '<span class="sec-name">' + getSectionDisplayName(sec) + '</span>'
       + '<span class="sec-pg-count">' + anzahl + '</span>';
-    row.querySelector('.sec-dot').style.background = colorForSection(sec.id);
+    row.querySelector('.sec-dot').style.background = colorForSection(sec);
     row.querySelector('.sec-name').addEventListener('dblclick', e => {
       e.stopPropagation();
       txtModal(t('rename'), sec.name).then(n => {
@@ -165,6 +165,48 @@ function renderSideTree() {
 
     tree.appendChild(body);
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DEN BAUM NICHT STAENDIG NEU BAUEN
+
+   renderSideTree() wird aus neun Dateien gerufen – unter anderem vom
+   Beobachter JEDER Seite, sobald sie sichtbar wird, und bei JEDEM
+   Tastendruck. Jeder Aufruf laeuft ueber alle gezeigten Seiten, fragt fuer
+   jede das DOM nach Ueberschriften und baut den ganzen Baum neu. Bei fuenf
+   Seiten faellt das nicht auf; bei hundert ist es beim Scrollen und beim
+   Schreiben der Engpass.
+
+   Zwei Ausweichungen, beide ohne Verlust an Verhalten:
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Beim Scrollen aendert sich am Baum nur EINES: welche Zeile hervorgehoben
+   ist. Also auch nur das umsetzen. */
+function markActiveNavItem() {
+  const nb = getNb();
+  const tree = E('side-tree');
+  if (!nb || !tree || !S.activePgId) return;
+
+  const marke = 'S.' + pageNumberOf(nb, S.activePgId);
+  let getroffen = false;
+  for (const item of tree.querySelectorAll('.nav-item')) {
+    const badge = item.querySelector('.nav-pg-badge');
+    // Die erste Ueberschrift der Seite, auf der man gerade steht
+    const treffer = !getroffen && badge && badge.textContent === marke;
+    item.classList.toggle('nav-active', treffer);
+    if (treffer) getroffen = true;
+  }
+}
+
+/* Beim Tippen aendern sich Ueberschriften wirklich – der Baum muss also
+   neu. Aber nicht bei jedem Anschlag. */
+let _sideTreeTimer = null;
+function scheduleSideTree(ms = 200) {
+  if (_sideTreeTimer) return;
+  _sideTreeTimer = setTimeout(() => {
+    _sideTreeTimer = null;
+    renderSideTree();
+  }, ms);
 }
 
 function scrollToHdg(h, lvl, pg) {
@@ -456,6 +498,62 @@ function renderSecMgrBody(focusSecId) {
   renderSecMgrPages(nb);
 }
 
+/* ── Name und Farbe eines Abschnitts ─────────────────────────────────
+   Die Farbe wird sonst aus der Kennung gerechnet – so haben zwei frisch
+   angelegte Abschnitte von selbst verschiedene Farben. Wer eine aussucht,
+   ueberschreibt das; „Automatisch" nimmt die Wahl wieder zurueck. */
+function openSectionEditor(sec, onDone) {
+  if (!mgrCanEdit()) return;
+  const ov = E('ov-sec-edit');
+  const nameIn = E('sec-edit-name');
+  const pal = E('sec-edit-palette');
+  const okBtn = E('sec-edit-ok');
+  if (!ov || !nameIn || !pal || !okBtn) return;
+
+  nameIn.value = sec.name || '';
+  let gewaehlt = sec.color || '';
+
+  const zeichnePalette = () => {
+    pal.innerHTML = '';
+
+    // Zuerst die gerechnete Farbe – erkennbar am gestrichelten Rand
+    const auto = document.createElement('button');
+    auto.type = 'button';
+    auto.className = 'cp-swatch auto' + (gewaehlt ? '' : ' active');
+    auto.style.background = colorForSection({ id: sec.id });
+    auto.title = t('colorAuto');
+    auto.addEventListener('click', () => { gewaehlt = ''; zeichnePalette(); });
+    pal.appendChild(auto);
+
+    for (const farbe of sectionPalette()) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cp-swatch' + (gewaehlt === farbe ? ' active' : '');
+      b.style.background = farbe;
+      b.addEventListener('click', () => { gewaehlt = farbe; zeichnePalette(); });
+      pal.appendChild(b);
+    }
+  };
+  zeichnePalette();
+
+  const schliessen = () => { ov.style.display = 'none'; nameIn.onkeydown = null; };
+
+  E('sec-edit-cancel').onclick = schliessen;
+  ov.onclick = e => { if (e.target === ov) schliessen(); };
+  okBtn.onclick = () => {
+    const name = nameIn.value.trim();
+    if (!name) { toast(t('enterName'), true); return; }
+    sec.name = name;
+    if (gewaehlt) sec.color = gewaehlt; else delete sec.color;
+    schliessen();
+    if (onDone) onDone();
+  };
+  nameIn.onkeydown = e => { if (e.key === 'Enter') okBtn.click(); };
+
+  ov.style.display = 'flex';
+  setTimeout(() => { nameIn.focus(); nameIn.select(); }, 30);
+}
+
 /* ── Links: die Abschnitte als Filter ── */
 function renderSecMgrSide(nb) {
   const side = E('sec-mgr-side');
@@ -483,26 +581,28 @@ function renderSecMgrSide(nb) {
   zeile('*', null, t('allPages'), notebookPages(nb).length);
 
   for (const sec of nb.sections) {
-    const row = zeile(String(sec.id), colorForSection(sec.id),
+    const row = zeile(String(sec.id), colorForSection(sec),
       getSectionDisplayName(sec), pagesOfSec(sec, nb).length);
 
     const tools = document.createElement('span');
     tools.className = 'mgr-side-tools';
 
+    /* Ein Fenster fuer Name UND Farbe statt zweier Knoepfe. Die Farbe
+       braucht eine Palette, und die passt nicht in eine 190px breite
+       Spalte. */
     const ren = document.createElement('button');
     ren.type = 'button';
     ren.className = 'mgr-side-tool';
     ren.textContent = '✎';
-    ren.title = t('rename');
-    ren.addEventListener('click', async e => {
+    ren.title = t('editSectionTitle');
+    ren.addEventListener('click', e => {
       e.stopPropagation();
-      if (!mgrCanEdit()) return;
-      const nextName = await txtModal(t('rename'), sec.name || '');
-      if (!nextName) return;
-      sec.name = nextName;
-      renderSideTree();
-      renderSecMgrBody();
-      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      openSectionEditor(sec, () => {
+        renderSideTree();
+        renderSecMgrBody();
+        refreshPageSectionMarks();
+        if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      });
     });
 
     const del = document.createElement('button');
@@ -542,6 +642,156 @@ function renderSecMgrSide(nb) {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   SEITEN UMSORTIEREN – ZIEHEN UND ABLEGEN
+
+   >>> Warum das mehr ist als drei Ereignisbehandler <<<
+   dragover feuert im Dutzend pro Sekunde. Die naheliegende Fassung fragt
+   dabei jede Zeile nach getBoundingClientRect() – bei 100 Seiten sind das
+   100 erzwungene Layout-Rechnungen je Mausbewegung, und genau daran
+   erstickt so eine Liste.
+
+   Deshalb: einmal beim Aufnehmen alle Mitten messen (offsetTop, das ist
+   scroll-unabhaengig) und danach nur noch binaer darin suchen. Die Marke
+   ist ein innerer Schatten und keine eingeschobene Zeile – ein Schatten
+   verschiebt nichts, die gemessenen Mitten bleiben also gueltig.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let _dragPgId = null;      // welche Seite gerade wandert
+let _dragRows = null;      // [{el, mitte}] in Listenkoordinaten
+let _dragBodyTop = 0;      // Oberkante der Liste auf dem Schirm
+let _markEl = null;        // wo die Marke gerade sitzt
+let _markVor = false;      // davor (true) oder dahinter (false)
+
+function messeZeilen(body) {
+  _dragBodyTop = body.getBoundingClientRect().top;
+  _dragRows = [];
+  for (const el of body.children) {
+    if (!el.classList.contains('mgr-pg-item')) continue;
+    _dragRows.push({ el, mitte: el.offsetTop + el.offsetHeight / 2 });
+  }
+}
+
+/** An welche Stelle der ANGEZEIGTEN Liste zeigt der Mauszeiger? */
+function zielStelle(body, clientY) {
+  if (!_dragRows || !_dragRows.length) return 0;
+  const y = clientY - _dragBodyTop + body.scrollTop;
+  let lo = 0, hi = _dragRows.length;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (_dragRows[m].mitte < y) lo = m + 1; else hi = m;
+  }
+  return lo;
+}
+
+function setzeMarke(stelle) {
+  const el = (stelle === null || !_dragRows || !_dragRows.length) ? null
+    : (stelle < _dragRows.length ? _dragRows[stelle].el
+                                 : _dragRows[_dragRows.length - 1].el);
+  const vor = stelle !== null && _dragRows && stelle < _dragRows.length;
+  if (_markEl === el && _markVor === vor) return;
+
+  if (_markEl) _markEl.classList.remove('drop-before', 'drop-after');
+  _markEl = el;
+  _markVor = vor;
+  if (el) el.classList.add(vor ? 'drop-before' : 'drop-after');
+}
+
+/* Am Rand mitscrollen. Ohne das kaeme man in einer langen Liste nicht
+   ueber den sichtbaren Ausschnitt hinaus – der Zeiger haelt ja die Seite. */
+function randScroll(body, clientY) {
+  const r = body.getBoundingClientRect();
+  const zone = 44;
+  if (clientY < r.top + zone) body.scrollTop -= 14;
+  else if (clientY > r.bottom - zone) body.scrollTop += 14;
+}
+
+/* Die Behandler haengen an der LISTE, nicht an den Zeilen: die Liste
+   ueberlebt jedes Neuzeichnen, die Zeilen nicht. Sonst haetten sich die
+   Behandler bei jedem renderSecMgrBody() gestapelt. */
+function ensureSecMgrDnd(body) {
+  if (body._dndReady) return;
+  body._dndReady = true;
+
+  body.addEventListener('dragover', e => {
+    if (!_dragPgId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setzeMarke(zielStelle(body, e.clientY));
+    randScroll(body, e.clientY);
+  });
+
+  body.addEventListener('dragleave', e => {
+    if (!body.contains(e.relatedTarget)) setzeMarke(null);
+  });
+
+  body.addEventListener('drop', e => {
+    if (!_dragPgId) return;
+    e.preventDefault();
+    const gezogen = _dragPgId;
+    const stelle = zielStelle(body, e.clientY);
+    setzeMarke(null);
+
+    const nb = getNb();
+    if (!nb || !mgrCanEdit()) return;
+
+    /* Die Stelle zaehlt in der ANGEZEIGTEN Liste, die womoeglich nur ein
+       Ausschnitt ist. Uebersetzt wird sie ueber den Nachbarn: „vor dieser
+       Seite" ist im Heft eindeutig, eine Zahl waere es nicht. */
+    const gezeigt = secMgrFilteredPages(nb);
+    let vorId;
+    if (stelle < gezeigt.length) {
+      vorId = gezeigt[stelle].id;
+    } else {
+      /* Ans Ende des Ausschnitts – nicht ans Ende des Hefts. Wer in
+         „Regeln" nach unten zieht, meint hinter die letzte Regelseite. */
+      const letzte = gezeigt[gezeigt.length - 1];
+      const alle = notebookPages(nb);
+      const j = alle.findIndex(p => String(p.id) === String(letzte?.id));
+      vorId = (j >= 0 && alle[j + 1]) ? alle[j + 1].id : null;
+    }
+
+    if (!movePageBefore(nb, gezogen, vorId)) return;
+
+    renderSecMgrBody();
+    reorderPageDom(nb);
+    renderSideTree();
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  });
+}
+
+/* Die Seiten im Editor in die neue Reihenfolge bringen.
+   >>> Warum nicht einfach openSection() <<<
+   Das baut jede Seite neu auf – bei hundert Seiten samt Zeichenflaechen,
+   Beobachtern und Bildern, und der Bildlauf springt an den Anfang. Hier
+   hat sich aber genau EINE Seite bewegt. Also nur die verschieben; eine
+   Zeichenflaeche behaelt ihr Bild dabei. */
+function reorderPageDom(nb) {
+  const wrap = E('pages-wrap');
+  if (!wrap) return;
+
+  let vorher = null;
+  for (const pg of visiblePages(nb)) {
+    const el = wrap.querySelector('[data-pgid="' + cssEscape(pg.id) + '"]');
+    if (!el) continue;
+    // Nur anfassen, was wirklich falsch steht
+    const stehtRichtig = vorher ? vorher.nextElementSibling === el
+                                : wrap.firstElementChild === el;
+    if (!stehtRichtig) {
+      if (vorher) vorher.after(el); else wrap.prepend(el);
+    }
+    vorher = el;
+  }
+
+  renumberVisiblePages();
+}
+
+/** Kennungen koennen alles enthalten – im Selektor muss das maskiert sein. */
+function cssEscape(value) {
+  const s = String(value);
+  return (window.CSS && CSS.escape) ? CSS.escape(s) : s.replace(/["\\]/g, '\\$&');
+}
+
 /* ── Rechts: die Seiten, in Heft-Reihenfolge ── */
 function renderSecMgrPages(nb) {
   const body = E('sec-mgr-body');
@@ -557,12 +807,41 @@ function renderSecMgrPages(nb) {
     return;
   }
 
+  ensureSecMgrDnd(body);
+
   for (const pg of pages) {
     const sec = findSecForPage(pg.id, nb);
     const item = document.createElement('div');
     item.className = 'mgr-pg-item';
-    if (sec) item.style.setProperty('--sec-color', colorForSection(sec.id));
+    item.dataset.pgid = String(pg.id);
+    if (sec) item.style.setProperty('--sec-color', colorForSection(sec));
     else item.classList.add('no-sec');
+
+    /* Ziehen zum Umsortieren. Der Griff links ist nur ein Zeichen – der
+       ganze Streifen ist ziehbar, sonst muesste man ein 13px breites Ziel
+       treffen. Klicken bleibt Klicken: ein Zug beginnt erst mit der
+       Bewegung, die Knoepfe rechts reagieren also weiterhin normal. */
+    item.draggable = true;
+    const griff = document.createElement('span');
+    griff.className = 'mgr-pg-grip';
+    griff.textContent = '⠿';
+    griff.title = t('dragToReorder');
+
+    item.addEventListener('dragstart', e => {
+      if (!mgrCanEdit()) { e.preventDefault(); return; }
+      _dragPgId = String(pg.id);
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Ohne Nutzlast startet in manchen Browsern gar kein Zug
+      try { e.dataTransfer.setData('text/plain', String(pg.id)); } catch (err) {}
+      messeZeilen(body);
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      setzeMarke(null);
+      _dragPgId = null;
+      _dragRows = null;      // haelt sonst geloeschte Zeilen fest
+    });
 
     // Die Zahl gilt im HEFT – vorher zählte sie je Abschnitt und
     // widersprach damit allem, was sonst „Seite 12" nennt
@@ -613,7 +892,7 @@ function renderSecMgrPages(nb) {
     });
 
     right.append(openBtn, delPgBtn);
-    item.append(num, info, chip, right);
+    item.append(griff, num, info, chip, right);
 
     item.addEventListener('contextmenu', e => {
       e.preventDefault();

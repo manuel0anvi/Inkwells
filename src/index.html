@@ -303,6 +303,24 @@
   </div>
 </div>
 
+<!-- ABSCHNITT BEARBEITEN
+     Name und Farbe an einer Stelle. Muss im Quelltext NACH ov-sec-mgr
+     stehen: beide Überlagerungen liegen auf z-index 900, die spätere
+     gewinnt. -->
+<div class="overlay" id="ov-sec-edit" style="display:none">
+  <div class="modal modal-nb">
+    <h3 id="sec-edit-title" data-i18n="editSectionTitle">Abschnitt bearbeiten</h3>
+    <label class="modal-label" data-i18n="notebookName">Name</label>
+    <input id="sec-edit-name" autocomplete="off" spellcheck="false">
+    <label class="modal-label" style="margin-top:14px" data-i18n="color">Farbe</label>
+    <div class="color-palette" id="sec-edit-palette"></div>
+    <div class="modal-btns">
+      <button id="sec-edit-cancel" data-i18n="cancel">Abbrechen</button>
+      <button id="sec-edit-ok" class="ok-btn" data-i18n="save">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- NB MODAL -->
 <div class="overlay" id="ov-nb" style="display:none">
   <div class="modal modal-nb">

@@ -94,7 +94,7 @@ function showPgSectionMenu(x, y, page, onDone) {
 
   for (const sec of getSections(nb)) {
     menu.appendChild(eintrag(
-      getSectionDisplayName(sec), colorForSection(sec.id),
+      getSectionDisplayName(sec), colorForSection(sec),
       jetzt && jetzt.id === sec.id, () => umhaengen(sec.id)
     ));
   }
@@ -133,7 +133,7 @@ function refreshPageSectionMarks() {
   for (const pgEl of QA('#pages-wrap .j-page')) {
     const sec = findSecForPage(pgEl.dataset.pgid, nb);
     const hdr = pgEl.querySelector('.j-page-hdr');
-    if (sec) pgEl.style.setProperty('--sec-color', colorForSection(sec.id));
+    if (sec) pgEl.style.setProperty('--sec-color', colorForSection(sec));
     else pgEl.style.removeProperty('--sec-color');
     if (hdr) hdr.classList.toggle('has-sec', !!sec);
     const btn = pgEl.querySelector('.pg-sec-btn');

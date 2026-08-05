@@ -92,6 +92,9 @@ const TRANSLATIONS = {
     sectionManagerHint: 'Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft. Links auswählen, rechts umhängen. Rechtsklick auf eine Seite für weitere Optionen.',
     addSection: '+ Abschnitt',
     deleteSectionAsk: 'Abschnitt "{name}" löschen? Die Seiten bleiben, sie verlieren nur das Etikett.',
+    editSectionTitle: 'Abschnitt bearbeiten',
+    colorAuto: 'Automatisch',
+    dragToReorder: 'Ziehen, um die Reihenfolge zu ändern',
     done: 'Fertig',
     
     // Page context menu
@@ -586,6 +589,9 @@ const TRANSLATIONS = {
     sectionManagerHint: 'Sections are labels: a page keeps its place in the notebook. Pick on the left, relabel on the right. Right-click a page for more options.',
     addSection: '+ Section',
     deleteSectionAsk: 'Delete section "{name}"? The pages stay, they only lose the label.',
+    editSectionTitle: 'Edit section',
+    colorAuto: 'Automatic',
+    dragToReorder: 'Drag to reorder',
     done: 'Done',
     
     // Page context menu
@@ -1079,6 +1085,9 @@ const TRANSLATIONS = {
     sectionManagerHint: 'Le sezioni sono etichette: una pagina mantiene il suo posto nel quaderno. Scegli a sinistra, cambia etichetta a destra. Clic destro su una pagina per altre opzioni.',
     addSection: '+ Sezione',
     deleteSectionAsk: 'Eliminare la sezione "{name}"? Le pagine restano e perdono soltanto la loro etichetta.',
+    editSectionTitle: 'Modifica sezione',
+    colorAuto: 'Automatico',
+    dragToReorder: 'Trascina per riordinare',
     done: 'Fatto',
     
     // Page context menu

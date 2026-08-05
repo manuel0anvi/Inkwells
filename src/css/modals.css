@@ -183,7 +183,15 @@
 }
 
 /* ── Abschnittsauswahl im Export ─────────────────────────────────────
-   Eine Zeile je Abschnitt mit Haekchen, Farbpunkt und Anzahl. */
+   Eine Zeile je Abschnitt mit Haekchen, Farbpunkt und Anzahl.
+
+   >>> Warum dasselbe Raster wie .opt-radio <<<
+   Darueber stehen im selben Dialog die Auswahlzeilen fuer die Seiten:
+   16px Spalte, 10px Abstand, kein Innenabstand links. Hier stand
+   stattdessen padding+gap – das Haekchen bekam zu viel Luft und die
+   Schrift stand gegenueber den Zeilen darueber versetzt. Jetzt dieselbe
+   erste Spalte, damit alles untereinander sitzt; der negative Aussenrand
+   laesst nur den Hover-Kasten ueber die Kante hinausgehen. */
 .export-sec-list {
   display: flex;
   flex-direction: column;
@@ -191,14 +199,16 @@
 }
 
 .export-sec-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: 10px;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  margin: 0 -8px;
+  padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: 5px;
   cursor: pointer;
-  transition: all .12s
+  transition: background .12s, border-color .12s
 }
 
 .export-sec-row:hover {
@@ -206,11 +216,26 @@
   border-color: var(--sb2)
 }
 
+.export-sec-row .pt-check {
+  width: 16px;
+  height: 16px
+}
+
+/* Farbpunkt und Name sitzen zusammen in der zweiten Spalte */
+.export-sec-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0
+}
+
 .export-sec-name {
-  flex: 1;
   font-family: 'Crimson Pro', serif;
   font-size: 14px;
-  color: var(--hi)
+  color: var(--hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
 }
 
 .export-sec-count {
@@ -263,6 +288,18 @@
 .cp-swatch.active {
   border-color: var(--gold);
   transform: scale(1.08)
+}
+
+/* „Automatisch" im Abschnitts-Editor: zeigt die aus der Kennung
+   gerechnete Farbe, gestrichelt umrandet, damit sie nicht wie eine
+   getroffene Wahl aussieht. */
+.cp-swatch.auto {
+  border-style: dashed;
+  opacity: .7
+}
+
+.cp-swatch.auto.active {
+  opacity: 1
 }
 
 /* Section manager modal */
@@ -363,7 +400,11 @@
 #sec-mgr-body {
   padding: 10px 14px;
   gap: 3px;
-  min-width: 0
+  min-width: 0;
+  /* Muss positioniert sein: das Ziehen misst die Zeilen ueber offsetTop,
+     und das zaehlt vom naechsten positionierten Vorfahren. Ohne das
+     laege die Ablegemarke um den Versatz des Fensters daneben. */
+  position: relative
 }
 
 .mgr-side-row {
@@ -508,8 +549,21 @@
   flex-shrink: 0
 }
 
-#sec-mgr-done {
-  border-radius: 12px;
+/* >>> Warum das hier stehen muss <<<
+   .ok-btn setzt nur Farben. Groesse, Schrift und Innenabstand kommen von
+   .modal-btns button – und diese Fussleiste ist kein .modal-btns. Der
+   Knopf bekam also Browser-Standardschrift in einer 12px runden Form:
+   die Schrift passte nicht hinein. Gilt genauso fuer den Uebertragungs-
+   Dialog, der dieselbe Fussleiste benutzt. */
+.sec-mgr-footer .ok-btn {
+  padding: 6px 20px;
+  border: none;
+  border-radius: 14px;
+  font-family: 'Crimson Pro', serif;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all .12s
 }
 
 .mgr-btn {
@@ -562,6 +616,37 @@
 
 #sec-mgr-body .mgr-pg-item.no-sec {
   border-left-color: var(--sb)
+}
+
+/* ── Ziehen und Ablegen ──────────────────────────────────────────────
+   Die Marke ist ein INNERER Schatten, keine eingeschobene Zeile. Ein
+   Schatten verschiebt nichts – die beim Aufnehmen gemessenen Zeilenmitten
+   bleiben damit gueltig, und die Liste zappelt nicht unter dem Zeiger. */
+.mgr-pg-grip {
+  color: var(--lo);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -1px;
+  cursor: grab;
+  flex-shrink: 0;
+  opacity: .4;
+  transition: opacity .12s
+}
+
+.mgr-pg-item:hover .mgr-pg-grip {
+  opacity: 1
+}
+
+.mgr-pg-item.dragging {
+  opacity: .35
+}
+
+.mgr-pg-item.drop-before {
+  box-shadow: inset 0 3px 0 -1px var(--gold)
+}
+
+.mgr-pg-item.drop-after {
+  box-shadow: inset 0 -3px 0 -1px var(--gold)
 }
 
 .mgr-pg-num {

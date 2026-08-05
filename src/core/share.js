@@ -859,12 +859,19 @@ function splitNotebook(notebook) {
     pageCount: pagesIn.length,
     pageOrder: pagesIn.map(p => String(p.id)),
     // Abschnitte sind nur Namen und Seitenlisten – klein genug für den Kopf
-    sections: (notebook.sections || []).map(sec => ({
-      id: String(sec.id),
-      name: String(sec.name || ''),
-      pgIds: (sec.pgIds || []).map(String),
-      defaultBg: sec.defaultBg || notebook.defaultBg || 'ruled'
-    })),
+    sections: (notebook.sections || []).map(sec => {
+      const eintrag = {
+        id: String(sec.id),
+        name: String(sec.name || ''),
+        pgIds: (sec.pgIds || []).map(String),
+        defaultBg: sec.defaultBg || notebook.defaultBg || 'ruled'
+      };
+      /* Nur wenn wirklich eine ausgesucht wurde. Ohne Wahl rechnet
+         colorForSection() eine aus der Kennung – ein leeres Feld
+         mitzuschreiben waere Rauschen im Kopf. */
+      if (sec.color) eintrag.color = String(sec.color);
+      return eintrag;
+    }),
     activeSecId: notebook.activeSecId || ''
   };
 

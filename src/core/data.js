@@ -267,22 +267,75 @@ function setSectionOfPage(nb, pgId, secId) {
   return true;
 }
 
-/* Die Farbe eines Abschnitts wird GERECHNET, nicht gespeichert.
+/* Die Farbe eines Abschnitts – gewählt, sonst gerechnet.
 
-   applyStruct() in ui/collab.js baut eingehende Abschnitte feldweise neu
-   auf und kennt nur id, name, pgIds und defaultBg – ein gespeichertes
-   sec.color verschwände bei jedem Struktur-Abgleich eines geteilten Hefts
-   stillschweigend. Aus der Kennung gerechnet gibt es nichts zu verlieren.
+   Wer keine aussucht, bekommt eine aus der Kennung: so haben zwei frisch
+   angelegte Abschnitte von selbst verschiedene Farben, ohne dass jemand
+   etwas tun muss. Sobald sec.color gesetzt ist, gilt die.
+
+   >>> Was am Speichern zu beachten war <<<
+   applyStruct() in ui/collab.js baut eingehende Abschnitte FELDWEISE neu
+   auf. Ein Feld, das dort nicht aufgezählt ist, verschwindet bei jedem
+   Struktur-Abgleich eines geteilten Hefts stillschweigend – genau deshalb
+   war die Farbe zuerst nur gerechnet. Sie steht jetzt in beiden Listen:
+   applyStruct und splitNotebook (core/share.js).
 
    Gleiches Verfahren wie colorForUid in core/share.js. */
-function colorForSection(secId) {
-  const palette = (typeof NB_COLORS !== 'undefined' && NB_COLORS.length)
-    ? NB_COLORS
-    : ['#c04040', '#c87a2a', '#2e8a46', '#2a5fa8', '#7a3aaa', '#8a5030', '#2a8a88', '#606060'];
+function colorForSection(sec) {
+  // Vertraegt beides: den Abschnitt oder bloss seine Kennung
+  const gewaehlt = (sec && typeof sec === 'object') ? sec.color : null;
+  if (gewaehlt) return gewaehlt;
+
+  const palette = sectionPalette();
   let hash = 0;
-  const key = String(secId || '');
+  const key = String((sec && typeof sec === 'object') ? sec.id : (sec || ''));
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
   return palette[hash % palette.length];
+}
+
+/**
+ * Eine Seite an eine andere Stelle im Heft setzen.
+ *
+ * @param {object} nb
+ * @param {string} pgId        die Seite, die wandert
+ * @param {string|null} vorId  sie landet VOR dieser Seite; null = ans Ende
+ * @returns {boolean} ob sich etwas geändert hat
+ *
+ * >>> Warum „vor dieser Seite" und keine Zahl <<<
+ * Gezogen wird in der Abschnittsverwaltung, und die zeigt womöglich nur
+ * einen Ausschnitt. Eine Zahl aus dieser Liste wäre im Heft die falsche.
+ * Ein Nachbar dagegen ist eindeutig: er steht im Heft an genau einer
+ * Stelle, gleich welcher Filter gerade wirkt.
+ */
+function movePageBefore(nb, pgId, vorId) {
+  const pages = nb?.pages;
+  if (!Array.isArray(pages)) return false;
+
+  const von = pages.findIndex(p => String(p.id) === String(pgId));
+  if (von < 0) return false;
+
+  let nach = (vorId === null || vorId === undefined)
+    ? pages.length
+    : pages.findIndex(p => String(p.id) === String(vorId));
+  if (nach < 0) nach = pages.length;
+
+  // Sie liegt schon dort – auch „vor dem eigenen Nachfolger" heißt das
+  if (nach === von || nach === von + 1) return false;
+
+  const [page] = pages.splice(von, 1);
+  // Nach dem Herausnehmen ist alles dahinter um eins gerückt
+  if (nach > von) nach--;
+  pages.splice(nach, 0, page);
+
+  syncSectionIds(nb);
+  return true;
+}
+
+/** Die Farben, die zur Auswahl stehen – dieselben wie bei den Heften. */
+function sectionPalette() {
+  return (typeof NB_COLORS !== 'undefined' && NB_COLORS.length)
+    ? NB_COLORS
+    : ['#c04040', '#c87a2a', '#2e8a46', '#2a5fa8', '#7a3aaa', '#8a5030', '#2a8a88', '#606060'];
 }
 
 /* ══════════════════════════════════════════════════════════════════════

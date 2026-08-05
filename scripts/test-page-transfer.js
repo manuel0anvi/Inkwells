@@ -335,6 +335,86 @@ function makeNotebook(ctx, name, n) {
       eigen.pages.map(p => p.secId), ['sA', 'sB']);
   }
 
+  /* ── Seiten umsortieren ──────────────────────────────────────────────
+     Gezogen wird in einer Liste, die womoeglich nur ein Ausschnitt ist.
+     Deshalb nimmt movePageBefore keinen Index, sondern den Nachbarn: der
+     steht im Heft an genau einer Stelle, gleich welcher Filter wirkt. */
+
+  console.log('\nSeiten umsortieren');
+
+  {
+    const ctx = loadData();
+    const nb = {
+      id: 'nb', defaultBg: 'ruled', schemaVersion: 2, sections: [],
+      pages: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
+    };
+
+    ctx.movePageBefore(nb, 'd', 'b');
+    check('Nach vorn gezogen', nb.pages.map(p => p.id), ['a', 'd', 'b', 'c']);
+
+    ctx.movePageBefore(nb, 'a', null);
+    check('Ans Ende gezogen', nb.pages.map(p => p.id), ['d', 'b', 'c', 'a']);
+
+    ctx.movePageBefore(nb, 'c', 'd');
+    check('Nach ganz vorn', nb.pages.map(p => p.id), ['c', 'd', 'b', 'a']);
+
+    ok('Auf den eigenen Platz aendert nichts', !ctx.movePageBefore(nb, 'd', 'b'));
+    ok('Vor sich selbst auch nicht', !ctx.movePageBefore(nb, 'd', 'd'));
+    ok('Eine unbekannte Seite bewegt sich nicht', !ctx.movePageBefore(nb, 'x', 'a'));
+    check('Und die Reihenfolge steht noch', nb.pages.map(p => p.id), ['c', 'd', 'b', 'a']);
+  }
+
+  {
+    // Die Etiketten bleiben, wo sie sind – die pgIds ziehen mit
+    const ctx = loadData();
+    const nb = {
+      id: 'nb', defaultBg: 'ruled',
+      pages: [{ id: 'r1' }, { id: 'u1' }, { id: 'r2' }],
+      sections: [
+        { id: 'sR', name: 'Regeln', pgIds: ['r1', 'r2'], defaultBg: 'ruled' },
+        { id: 'sU', name: 'Uebungen', pgIds: ['u1'], defaultBg: 'ruled' }
+      ]
+    };
+    ctx.normalizeNotebook(nb);
+
+    ctx.movePageBefore(nb, 'r2', 'u1');
+    check('Die Reihenfolge stimmt', nb.pages.map(p => p.id), ['r1', 'r2', 'u1']);
+    check('Die Etiketten kleben weiter', nb.pages.map(p => p.secId), ['sR', 'sR', 'sU']);
+    check('Und die abgeleiteten pgIds ziehen mit',
+      nb.sections.map(s => s.pgIds.join(',')), ['r1,r2', 'u1']);
+    check('Die Seitenzahl folgt der neuen Stelle', ctx.pageNumberOf(nb, 'u1'), 3);
+  }
+
+  /* ── Die Farbe eines Abschnitts ──────────────────────────────────────
+     Gewaehlt schlaegt gerechnet. Ohne Wahl bekommen zwei Abschnitte von
+     selbst verschiedene Farben – sonst muesste man bei jedem neuen erst
+     eine aussuchen. */
+
+  console.log('\nAbschnittsfarbe');
+
+  {
+    const ctx = loadData();
+    const eins = { id: 'sA', name: 'A' };
+    const zwei = { id: 'sB', name: 'B' };
+
+    ok('Ohne Wahl kommt eine Farbe heraus', /^#/.test(ctx.colorForSection(eins)));
+    ok('Zweimal dieselbe Kennung, dieselbe Farbe',
+      ctx.colorForSection(eins) === ctx.colorForSection({ id: 'sA' }));
+    ok('Verschiedene Kennungen, verschiedene Farben',
+      ctx.colorForSection(eins) !== ctx.colorForSection(zwei));
+
+    eins.color = '#123456';
+    check('Die gewaehlte gewinnt', ctx.colorForSection(eins), '#123456');
+
+    delete eins.color;
+    ok('Und ohne sie wieder die gerechnete',
+      ctx.colorForSection(eins) === ctx.colorForSection({ id: 'sA' }));
+
+    // Aeltere Aufrufer gaben bloss die Kennung mit
+    ok('Eine blosse Kennung geht auch noch',
+      ctx.colorForSection('sA') === ctx.colorForSection({ id: 'sA' }));
+  }
+
   console.log('\nEtikett wechseln');
 
   {
