@@ -36,13 +36,11 @@ function renderSideTree() {
   /* ─ „Alle Seiten" ─ */
   const alle = document.createElement('div');
   alle.className = 'sec-hdr filter-row' + (!nb.activeSecId ? ' active' : '');
+  // Die Verwaltung sitzt oben im Kopf neben „+ Abschnitt" – hier stand
+  // sie auf der Zeile „Alle Seiten" und sah aus, als betreffe sie nur die
   alle.innerHTML = '<span class="sec-dot all"></span>'
     + '<span class="sec-name">' + t('allPages') + '</span>'
-    + '<span class="sec-pg-count">' + gesamt + '</span>'
-    + '<button class="sec-edit-btn" title="' + t('manageSections') + '">✎</button>';
-  alle.querySelector('.sec-edit-btn').addEventListener('click', e => {
-    e.stopPropagation(); openSecMgr(activeSection(nb));
-  });
+    + '<span class="sec-pg-count">' + gesamt + '</span>';
   alle.addEventListener('click', () => { if (nb.activeSecId) openSection(null); });
   tree.appendChild(alle);
 
@@ -297,7 +295,7 @@ function showSecMgrPageMenu(x, y, page) {
     return btn;
   };
 
-  menu.appendChild(mkBtn(t('open'), async () => { secMgrOpenPage(nb, page); }));
+  menu.appendChild(mkBtn(t('goToPage'), async () => { secMgrOpenPage(nb, page); }));
 
   /* Frueher musste man den Zielnamen ABTIPPEN (txtModal) und die Eingabe
      wurde ueber den Namen verglichen – bei zwei aehnlich benannten
@@ -314,6 +312,12 @@ function showSecMgrPageMenu(x, y, page) {
   menu.appendChild(mkBtn(t('transferOpen'), async () => {
     closeSecMgr();
     await openPageTransfer([String(page.id)]);
+  }));
+
+  // Von hier aus mehrere waehlen, ohne den langen Druck zu kennen
+  menu.appendChild(mkBtn(t('pickSeveral'), async () => {
+    if (!mgrCanEdit()) return;
+    beginSecMgrPicking(String(page.id));
   }));
 
   menu.appendChild(mkBtn(t('deletePage'), async () => {
@@ -362,23 +366,9 @@ async function deletePageFromManager(page) {
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
 
-/** Eine neue Seite ans Ende des Hefts – mit Etikett (sec) oder ohne (null). */
-function addPageToSection(sec) {
-  const nb = getNb();
-  if (!nb) return;
-  if (!mgrCanEdit()) return;
-  const pg = makePage(sec?.defaultBg || nb.defaultBg || 'ruled');
-  insertPageInto(nb, sec, pg);
-
-  // Zeigt die Ansicht einen Ausschnitt, zu dem die Seite nicht gehört,
-  // bliebe sie unsichtbar – dann nur die Navigation nachziehen.
-  const gezeigt = activeSection(nb);
-  if (!gezeigt || (sec && String(gezeigt.id) === String(sec.id))) openSection(gezeigt, pg.id);
-  else renderSideTree();
-
-  renderSecMgrBody();
-  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-}
+/* „+ Seite" gibt es in der Verwaltung nicht mehr: Seiten entstehen beim
+   Schreiben von selbst, und der Knopf am unteren Heftrand macht dasselbe
+   an der Stelle, wo man ihn braucht. Er stand hier nur im Weg. */
 
 /* ── Seiten in ein anderes Heft ──────────────────────────────────────
    Bewegt selbst nichts: fragt, lässt transferPages() (core/data.js) die
@@ -412,8 +402,14 @@ async function openPageTransfer(preselectedPageIds = []) {
   const choice = await showPageTransferDialog(nb, targets, preselectedPageIds);
   if (!choice) return;
 
-  const res = transferPages(nb, choice.pageIds, choice.toNb, { copy: choice.copy });
+  const res = transferPages(nb, choice.pageIds, choice.toNb, {
+    copy: choice.copy,
+    keepSection: choice.keepSection
+  });
   if (!res.moved) return;
+
+  // Die uebertragenen Seiten sind weg oder woanders – die Auswahl endet
+  endSecMgrPicking();
 
   /* Genau ein Anstoß je Heft, erst NACH allen Seiten. Der eine Aufruf
      deckt Datei, Live-Raum und geteiltes Dokument ab (core/autoSave.js);
@@ -433,29 +429,43 @@ async function openPageTransfer(preselectedPageIds = []) {
     .replace('{name}', choice.toNb.name));
 }
 
-async function addSectionFromManager() {
+/**
+ * Einen Abschnitt anlegen – Name und Farbe in einem Aufwasch.
+ *
+ * @param {function} [danach] wird mit dem fertigen Abschnitt gerufen
+ *
+ * Ohne eigene Seite: ein Abschnitt ist ein Etikett, und ein Etikett, das
+ * noch auf keiner Seite klebt, ist voellig in Ordnung. Frueher musste
+ * zwingend eine Seite mit angelegt werden, weil ein Abschnitt ohne Seiten
+ * gar nicht anzuzeigen war.
+ */
+function createSection(danach) {
   const nb = getNb();
   if (!nb) return;
   if (!mgrCanEdit()) return;
-  const name = await txtModal(t('newSection'), t('newSection'));
-  if (!name) return;
-
   getSections(nb);
-  /* Ohne eigene Seite: ein Abschnitt ist ein Etikett, und ein Etikett, das
-     noch auf keiner Seite klebt, ist voellig in Ordnung. Frueher musste
-     zwingend eine Seite mit angelegt werden, weil ein Abschnitt ohne
-     Seiten gar nicht anzuzeigen war. */
-  const sec = { id: uid(), name, pgIds: [], defaultBg: nb.defaultBg };
-  nb.sections.push(sec);
-  renderSideTree();
-  renderSecMgrBody(sec.id);
-  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+
+  /* Erst nach dem Bestaetigen ins Heft – ein Abbruch soll nichts
+     hinterlassen. Ohne defaultBg: das heisst „wie das Heft". */
+  const sec = { id: uid(), name: t('newSection'), pgIds: [] };
+  openSectionEditor(sec, () => {
+    nb.sections.push(sec);
+    renderSideTree();
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    if (danach) danach(sec);
+  }, true);
+}
+
+function addSectionFromManager() {
+  createSection(sec => renderSecMgrBody(sec.id));
 }
 
 function closeSecMgr() {
   const ov = E('ov-sec-mgr');
   if (ov) ov.style.display = 'none';
   if (_secMgrCtxMenu) _secMgrCtxMenu.style.display = 'none';
+  // Eine Auswahl soll beim naechsten Aufmachen nicht noch dastehen
+  _secMgrSel = null;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -496,19 +506,28 @@ function renderSecMgrBody(focusSecId) {
 
   renderSecMgrSide(nb);
   renderSecMgrPages(nb);
+  // Muss NACH dem Aufbau laufen: die Klassen haengen an frischen Zeilen
+  paintSecMgrPicks();
 }
 
 /* ── Name und Farbe eines Abschnitts ─────────────────────────────────
    Die Farbe wird sonst aus der Kennung gerechnet – so haben zwei frisch
    angelegte Abschnitte von selbst verschiedene Farben. Wer eine aussucht,
    ueberschreibt das; „Automatisch" nimmt die Wahl wieder zurueck. */
-function openSectionEditor(sec, onDone) {
+function openSectionEditor(sec, onDone, neu = false) {
   if (!mgrCanEdit()) return;
   const ov = E('ov-sec-edit');
   const nameIn = E('sec-edit-name');
   const pal = E('sec-edit-palette');
+  const bgRow = E('sec-edit-bg-row');
   const okBtn = E('sec-edit-ok');
-  if (!ov || !nameIn || !pal || !okBtn) return;
+  if (!ov || !nameIn || !pal || !bgRow || !okBtn) return;
+
+  /* Dasselbe Fenster fuers Anlegen. Sonst muesste man erst einen
+     Abschnitt erzeugen und ihm dann in einem zweiten Schritt die Farbe
+     geben – die Wahl gehoert dorthin, wo er entsteht. */
+  E('sec-edit-title').textContent = neu ? t('newSection') : t('editSectionTitle');
+  okBtn.textContent = neu ? t('create') : t('save');
 
   nameIn.value = sec.name || '';
   let gewaehlt = sec.color || '';
@@ -536,6 +555,36 @@ function openSectionEditor(sec, onDone) {
   };
   zeichnePalette();
 
+  /* ── Das Papier des Abschnitts ────────────────────────────────────
+     Leer heisst „wie das Heft", und das ist der Normalfall. Deshalb
+     steht dafuer ein eigenes Feld ganz vorn, statt still eine Kopie des
+     Heft-Papiers zu setzen – die bliebe stehen, wenn man spaeter das
+     Papier des Hefts wechselt. */
+  const nb = getNb();
+  let bgWahl = sec.defaultBg || '';
+
+  const zeichneBg = () => {
+    buildBgRow(bgRow, bgWahl || bgForSection(null, nb), id => { bgWahl = id; markiereBgAuto(); });
+
+    const auto = document.createElement('button');
+    auto.type = 'button';
+    auto.className = 'bg-sw bg-sw-auto' + (bgWahl ? '' : ' active');
+    auto.title = t('bgLikeNotebook');
+    auto.style.cssText = BG_STYLE[nb?.defaultBg || 'ruled'];
+    auto.textContent = 'A';
+    auto.addEventListener('click', () => {
+      bgWahl = '';
+      [...bgRow.querySelectorAll('.bg-sw')].forEach(x => x.classList.remove('active'));
+      auto.classList.add('active');
+    });
+    bgRow.prepend(auto);
+  };
+  const markiereBgAuto = () => {
+    const auto = bgRow.querySelector('.bg-sw-auto');
+    if (auto) auto.classList.toggle('active', !bgWahl);
+  };
+  zeichneBg();
+
   const schliessen = () => { ov.style.display = 'none'; nameIn.onkeydown = null; };
 
   E('sec-edit-cancel').onclick = schliessen;
@@ -545,6 +594,7 @@ function openSectionEditor(sec, onDone) {
     if (!name) { toast(t('enterName'), true); return; }
     sec.name = name;
     if (gewaehlt) sec.color = gewaehlt; else delete sec.color;
+    if (bgWahl) sec.defaultBg = bgWahl; else delete sec.defaultBg;
     schliessen();
     if (onDone) onDone();
   };
@@ -573,7 +623,14 @@ function renderSecMgrSide(nb) {
     cnt.className = 'mgr-side-count';
     cnt.textContent = String(anzahl);
     row.append(dot, label, cnt);
-    row.addEventListener('click', () => { _secMgrFilter = key; renderSecMgrBody(); });
+    row.addEventListener('click', () => {
+      _secMgrFilter = key;
+      /* Die Auswahl endet beim Umschalten. Sonst stuenden in der Zaehlung
+         Seiten, die man gar nicht mehr sieht – und „Loeschen" traefe
+         mehr, als vor Augen liegt. */
+      _secMgrSel = null;
+      renderSecMgrBody();
+    });
     side.appendChild(row);
     return row;
   };
@@ -859,47 +916,198 @@ function renderSecMgrPages(nb) {
     vorschau.textContent = pagePreview(pg) || t('emptyPage');
     info.append(datum, vorschau);
 
-    // Das Etikett direkt hier umhängen – derselbe Weg wie am Seitenkopf
-    const chip = document.createElement('button');
-    chip.type = 'button';
+    /* Das Etikett ist nur noch ein Schild, kein Knopf. Geaendert wird es
+       ueber dieselben Befehle wie alles andere – ein Weg statt zweier. */
+    const chip = document.createElement('span');
     chip.className = 'mgr-pg-sec' + (sec ? '' : ' none');
     chip.textContent = sec ? getSectionDisplayName(sec) : t('noSection');
-    chip.title = t('setSection');
-    chip.addEventListener('click', e => {
-      e.stopPropagation();
-      if (!mgrCanEdit()) return;
-      const r = chip.getBoundingClientRect();
-      showPgSectionMenu(r.left, r.bottom + 4, pg, () => renderSecMgrBody());
+
+    // Das Haekchen der Mehrfachauswahl; sichtbar nur im Auswahlmodus
+    const haken = document.createElement('span');
+    haken.className = 'mgr-pg-pick';
+    haken.textContent = '✓';
+
+    item.append(haken, griff, num, info, chip);
+
+    /* ── Klicken, lange druecken ────────────────────────────────────
+       Ein Klick oeffnet die Befehle dieser Seite. Lange draufbleiben
+       schaltet in die Mehrfachauswahl, wie in einer Fotogalerie – dann
+       waehlt jeder weitere Klick nur noch aus.
+
+       Der Zeitgeber wird abgebrochen, sobald sich der Zeiger bewegt:
+       sonst faenge jedes Ziehen zugleich eine Auswahl an. */
+    let druckTimer = null, startX = 0, startY = 0;
+    const druckEnde = () => { clearTimeout(druckTimer); druckTimer = null; };
+
+    item.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      startX = e.clientX; startY = e.clientY;
+      druckEnde();
+      druckTimer = setTimeout(() => {
+        druckTimer = null;
+        if (!mgrCanEdit()) return;
+        beginSecMgrPicking(String(pg.id));
+      }, 450);
     });
-
-    const right = document.createElement('div');
-    right.className = 'mgr-pg-right';
-
-    const openBtn = document.createElement('button');
-    openBtn.type = 'button';
-    openBtn.className = 'mgr-mv-btn';
-    openBtn.textContent = t('open');
-    openBtn.addEventListener('click', () => { secMgrOpenPage(nb, pg); });
-
-    const delPgBtn = document.createElement('button');
-    delPgBtn.type = 'button';
-    delPgBtn.className = 'mgr-pg-del';
-    delPgBtn.textContent = '✕';
-    delPgBtn.title = t('deletePage');
-    delPgBtn.addEventListener('click', async e => {
-      e.stopPropagation();
-      await deletePageFromManager(pg);
+    item.addEventListener('pointermove', e => {
+      if (!druckTimer) return;
+      if (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) druckEnde();
     });
+    item.addEventListener('pointerup', druckEnde);
+    item.addEventListener('pointercancel', druckEnde);
+    item.addEventListener('dragstart', druckEnde);
 
-    right.append(openBtn, delPgBtn);
-    item.append(griff, num, info, chip, right);
+    item.addEventListener('click', e => {
+      // Der lange Druck hat eben schon gewaehlt – nicht gleich wieder ab
+      if (_secMgrClickSperre) return;
+      if (_secMgrSel) { toggleSecMgrPick(String(pg.id)); return; }
+      showSecMgrPageMenu(e.clientX, e.clientY, pg);
+    });
 
     item.addEventListener('contextmenu', e => {
       e.preventDefault();
+      if (_secMgrSel) { toggleSecMgrPick(String(pg.id)); return; }
       showSecMgrPageMenu(e.clientX, e.clientY, pg);
     });
+
     body.appendChild(item);
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MEHRERE SEITEN AUF EINMAL
+
+   Lange auf eine Seite druecken oeffnet die Auswahl, danach waehlt jeder
+   Klick aus. Gearbeitet wird ueber die Fussleiste: uebertragen, Abschnitt
+   festlegen, loeschen.
+
+   >>> Warum hier nicht neu gezeichnet wird <<<
+   Ein Neuaufbau der Liste bei jedem Antippen wuerde die fuer das Ziehen
+   gemessenen Zeilenmitten ungueltig machen und bei hundert Seiten
+   spuerbar ruckeln. Die Auswahl ist deshalb nur eine Klasse an der Zeile.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let _secMgrSel = null;          // null = keine Auswahl, sonst Set von pgIds
+let _secMgrClickSperre = false; // der lange Druck soll nicht doppelt wirken
+
+function beginSecMgrPicking(pgId) {
+  if (!_secMgrSel) _secMgrSel = new Set();
+  _secMgrSel.add(String(pgId));
+
+  /* Auf den langen Druck folgt noch ein Klick. Ohne diese Sperre naehme
+     der die eben getroffene Wahl sofort wieder zurueck. */
+  _secMgrClickSperre = true;
+  setTimeout(() => { _secMgrClickSperre = false; }, 400);
+
+  paintSecMgrPicks();
+}
+
+function endSecMgrPicking() {
+  _secMgrSel = null;
+  paintSecMgrPicks();
+}
+
+function toggleSecMgrPick(pgId) {
+  if (!_secMgrSel) return;
+  const key = String(pgId);
+  if (_secMgrSel.has(key)) _secMgrSel.delete(key); else _secMgrSel.add(key);
+  // Die letzte abgewaehlt: dann ist die Auswahl vorbei
+  if (!_secMgrSel.size) _secMgrSel = null;
+  paintSecMgrPicks();
+}
+
+/** Zeigt an, was gewaehlt ist – ohne die Liste neu zu bauen. */
+function paintSecMgrPicks() {
+  const body = E('sec-mgr-body');
+  if (!body) return;
+
+  body.classList.toggle('picking', !!_secMgrSel);
+  for (const el of body.children) {
+    if (!el.classList.contains('mgr-pg-item')) continue;
+    el.classList.toggle('picked', !!_secMgrSel && _secMgrSel.has(el.dataset.pgid));
+    /* Waehrend der Auswahl wird nicht umsortiert. Sonst finge ein
+       Weiterziehen nach dem langen Druck einen Zug an, den niemand
+       gemeint hat. */
+    el.draggable = !_secMgrSel;
+  }
+
+  const normal = E('sec-mgr-bar-normal');
+  const pick = E('sec-mgr-bar-pick');
+  if (normal) normal.style.display = _secMgrSel ? 'none' : '';
+  if (pick) pick.style.display = _secMgrSel ? '' : 'none';
+
+  const zahl = E('sec-mgr-pick-count');
+  if (zahl) zahl.textContent = t('transferCount').replace('{n}', String(_secMgrSel?.size || 0));
+}
+
+/* ── Was mit den gewaehlten Seiten geschieht ── */
+
+function pickAllSecMgr() {
+  const nb = getNb();
+  if (!nb) return;
+  _secMgrSel = new Set(secMgrFilteredPages(nb).map(p => String(p.id)));
+  paintSecMgrPicks();
+}
+
+async function deletePickedPages() {
+  const nb = getNb();
+  if (!nb || !_secMgrSel?.size) return;
+  if (!mgrCanEdit()) return;
+
+  const gewaehlt = secMgrPickedPages(nb);
+  /* Ein Heft ohne Seiten gibt es nicht. Statt hinterher eine leere
+     nachwachsen zu lassen, wird hier ehrlich abgelehnt. */
+  if (gewaehlt.length >= (nb.pages || []).length) {
+    await showAlert(t('lastPageStays'));
+    return;
+  }
+
+  const ok = await showConfirm(
+    t('deletePagesAsk').replace('{n}', String(gewaehlt.length)));
+  if (!ok) return;
+
+  const weg = new Set(gewaehlt.map(p => String(p.id)));
+  nb.pages = (nb.pages || []).filter(p => !weg.has(String(p.id)));
+  for (const id of weg) delete S.strokeHistory[id];
+  syncSectionIds(nb);
+
+  endSecMgrPicking();
+  renderSecMgrBody();
+  // Gelöschte Seiten stehen sonst noch im Editor
+  openSection(activeSection(nb));
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  toast(t('deletePagesDone').replace('{n}', String(weg.size)));
+}
+
+/** Allen gewaehlten Seiten dasselbe Etikett geben. */
+function setSectionForPicked(x, y) {
+  const nb = getNb();
+  if (!nb || !_secMgrSel?.size) return;
+  if (!mgrCanEdit()) return;
+
+  const gewaehlt = secMgrPickedPages(nb);
+  /* showPgSectionMenu arbeitet auf EINER Seite. Die erste bestimmt, was
+     im Menue als aktuell angehakt erscheint; angewandt wird die Wahl dann
+     auf alle – deshalb der Umweg ueber onDone. */
+  const vorher = gewaehlt.map(p => String(p.secId || ''));
+  showPgSectionMenu(x, y, gewaehlt[0], () => {
+    const neu = String(gewaehlt[0].secId || '');
+    for (let i = 1; i < gewaehlt.length; i++) setSectionOfPage(nb, gewaehlt[i].id, neu);
+    // Hat sich gar nichts geaendert, war es ein Klick auf das Bestehende
+    if (neu !== vorher[0] || gewaehlt.some((p, i) => String(p.secId || '') !== vorher[i])) {
+      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    }
+    endSecMgrPicking();
+    renderSecMgrBody();
+    renderSideTree();
+    refreshPageSectionMarks();
+  });
+}
+
+/** Die gewaehlten Seiten, in Heft-Reihenfolge. */
+function secMgrPickedPages(nb) {
+  if (!_secMgrSel) return [];
+  return notebookPages(nb).filter(p => _secMgrSel.has(String(p.id)));
 }
 
 /* Eine Seite aus der Verwaltung heraus aufschlagen.
@@ -918,35 +1126,32 @@ function openSecMgr(sec) {
   const closeBtn = E('sec-mgr-close');
   const doneBtn = E('sec-mgr-done');
   const addSecBtn = E('sec-mgr-add-sec');
-  const addPageBtn = E('sec-mgr-add-page');
-  if (!ov || !closeBtn || !doneBtn || !addSecBtn || !addPageBtn) return;
+  if (!ov || !closeBtn || !doneBtn || !addSecBtn) return;
 
   _secMgrFilter = sec ? String(sec.id) : '*';
+  _secMgrSel = null;                       // frisch aufgemacht, nichts gewaehlt
   renderSecMgrBody();
   ov.style.display = 'grid';
 
   closeBtn.onclick = () => closeSecMgr();
   doneBtn.onclick = () => closeSecMgr();
-  addSecBtn.onclick = async () => {
-    await addSectionFromManager();
+  addSecBtn.onclick = () => addSectionFromManager();
+
+  /* ── Die Sammelbefehle ── */
+  E('sec-mgr-pick-all').onclick = () => pickAllSecMgr();
+  E('sec-mgr-pick-done').onclick = () => endSecMgrPicking();
+  E('sec-mgr-pick-del').onclick = () => deletePickedPages();
+  E('sec-mgr-pick-sec').onclick = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setSectionForPicked(r.left, r.top - 8);
   };
-  addPageBtn.onclick = () => {
-    const nb = getNb();
-    if (!nb) return;
-    /* Die neue Seite bekommt das Etikett des gerade gezeigten Ausschnitts –
-       und keines, wenn „Alle Seiten" oder „Ohne Abschnitt" gewählt ist.
-       Vorher fiel sie ersatzweise in nb.sections[0], also in einen
-       Abschnitt, den man gar nicht angesehen hatte. */
-    const target = nb.sections.find(s => String(s.id) === _secMgrFilter) || null;
-    addPageToSection(target);
+  E('sec-mgr-pick-move').onclick = async () => {
+    const ids = [...(_secMgrSel || [])];
+    if (!ids.length) return;
+    closeSecMgr();
+    await openPageTransfer(ids);
   };
-  const transferBtn = E('sec-mgr-transfer');
-  if (transferBtn) {
-    transferBtn.onclick = async () => {
-      closeSecMgr();
-      await openPageTransfer();
-    };
-  }
+
   ov.onclick = (e) => {
     if (e.target === ov) closeSecMgr();
   };
@@ -954,18 +1159,11 @@ function openSecMgr(sec) {
 
 /* ── ADD SECTION ── */
 E('btn-add-sec').addEventListener('click', () => {
-  // Fremdes Dokument ohne Bearbeitungsrecht: nichts anlegen
-  if (S.readOnly) { toast(t('sharedNoRight')); return; }
-
-  txtModal(t('newSection'), t('newSection')).then(name => {
-    if (!name) return; const nb = getNb(); if (!nb) return;
-    getSections(nb);
-    // Auch hier ohne eigene Seite – siehe addSectionFromManager
-    const sec = { id: uid(), name, pgIds: [], defaultBg: nb.defaultBg };
-    nb.sections.push(sec);
-    renderSideTree();
+  createSection(sec => {
     openSection(sec);
-    toast(t('sectionCreated').replace('{name}', name));
-    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    toast(t('sectionCreated').replace('{name}', sec.name));
   });
 });
+
+/* Die Verwaltung sitzt jetzt hier oben, neben dem Anlegen. */
+E('btn-sec-mgr')?.addEventListener('click', () => openSecMgr(activeSection(getNb())));

@@ -107,13 +107,10 @@ function showPgSectionMenu(x, y, page, onDone) {
   neu.type = 'button';
   neu.className = 'ctx-item ctx-item-new';
   neu.textContent = t('addSection');
-  neu.addEventListener('click', async () => {
+  neu.addEventListener('click', () => {
     menu.style.display = 'none';
-    const name = await txtModal(t('newSection'), t('newSection'));
-    if (!name) return;
-    const sec = { id: uid(), name, pgIds: [], defaultBg: nb.defaultBg };
-    getSections(nb).push(sec);
-    umhaengen(sec.id);
+    // Derselbe Weg wie ueberall: Name und Farbe in einem Aufwasch
+    createSection(sec => umhaengen(sec.id));
   });
   menu.appendChild(neu);
 
@@ -126,11 +123,12 @@ function showPgSectionMenu(x, y, page, onDone) {
   menu.style.visibility = 'visible';
 }
 
-/** Farbstreifen und Knopf-Titel nachziehen, ohne alles neu zu zeichnen. */
+/** Farbstreifen, Papier und Knopf-Titel nachziehen, ohne alles neu zu zeichnen. */
 function refreshPageSectionMarks() {
   const nb = getNb();
   if (!nb) return;
   for (const pgEl of QA('#pages-wrap .j-page')) {
+    const info = getPage(pgEl.dataset.pgid);
     const sec = findSecForPage(pgEl.dataset.pgid, nb);
     const hdr = pgEl.querySelector('.j-page-hdr');
     if (sec) pgEl.style.setProperty('--sec-color', colorForSection(sec));
@@ -138,6 +136,23 @@ function refreshPageSectionMarks() {
     if (hdr) hdr.classList.toggle('has-sec', !!sec);
     const btn = pgEl.querySelector('.pg-sec-btn');
     if (btn) btn.title = sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection');
+
+    /* Das Papier zieht beim Umetikettieren mit (setSectionOfPage). Ohne
+       diese Zeilen stuende die neue Wahl zwar im Heft, zu sehen waere
+       aber weiter die alte. */
+    const page = info?.page;
+    if (page && !page.bgImg) {
+      const bg = page.bg || nb.defaultBg || 'ruled';
+      if (!pgEl.classList.contains('bg-' + bg)) {
+        // Nur die bg-Klasse tauschen; das Element traegt auch andere
+        for (const cls of [...pgEl.classList]) {
+          if (cls.startsWith('bg-')) pgEl.classList.remove(cls);
+        }
+        pgEl.classList.add('bg-' + bg);
+        const txt = pgEl.querySelector('.j-text');
+        if (txt && typeof applyTextLayoutForBg === 'function') applyTextLayoutForBg(txt, bg);
+      }
+    }
   }
 }
 

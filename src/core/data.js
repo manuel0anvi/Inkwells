@@ -59,8 +59,16 @@ function pagePreview(p) {
    nur im Weg. Angelegt wird deshalb nichts mehr. */
 function getSections(nb) {
   if (!Array.isArray(nb.sections)) nb.sections = [];
-  nb.sections.forEach(s => { if (!s.defaultBg) s.defaultBg = nb.defaultBg || 'ruled'; });
+  /* sec.defaultBg wird NICHT mehr vorsorglich gefuellt. Leer heisst jetzt
+     „nimm den Standard des Hefts" – und das ist der Normalfall. Vorher
+     stand hier eine Kopie von nb.defaultBg, und die blieb stehen, wenn
+     man spaeter das Papier des Hefts wechselte. */
   return nb.sections;
+}
+
+/** Das Papier eines Abschnitts – seines, sonst das des Hefts. */
+function bgForSection(sec, nb) {
+  return sec?.defaultBg || nb?.defaultBg || 'ruled';
 }
 
 /* ── Die Seiten eines Hefts, in Heft-Reihenfolge ─────────────────────
@@ -256,6 +264,12 @@ function findSecForPage(pgId, nb) {
 /**
  * Setzt das Etikett einer Seite – oder nimmt es weg (secId leer).
  * Die Position im Heft bleibt dabei unangetastet; genau darum geht es.
+ *
+ * >>> Das Papier zieht mit <<<
+ * Wer eine Seite einem Abschnitt zuschlaegt, will sie so aussehen lassen
+ * wie den Rest davon. Sie bekommt deshalb sofort dessen Papier – und ohne
+ * eigene Wahl des Abschnitts eben das des Hefts. Aendern laesst es sich
+ * danach weiterhin je Seite (Rechtsklick auf die Seite).
  */
 function setSectionOfPage(nb, pgId, secId) {
   const page = (nb?.pages || []).find(p => String(p.id) === String(pgId));
@@ -263,6 +277,12 @@ function setSectionOfPage(nb, pgId, secId) {
   const next = secId ? String(secId) : '';
   if (String(page.secId || '') === next) return false;
   if (next) page.secId = next; else delete page.secId;
+
+  if (next && !page.bgImg) {
+    const sec = (nb.sections || []).find(s => String(s.id) === next);
+    if (sec) page.bg = bgForSection(sec, nb);
+  }
+
   syncSectionIds(nb);
   return true;
 }
@@ -409,6 +429,8 @@ function insertPageInto(nb, sec, page, index) {
  * @param {object} toNb     Zielheft
  * @param {object} [options]
  * @param {boolean} [options.copy] true = kopieren, sonst verschieben
+ * @param {boolean} [options.keepSection] Etikett mitnehmen; fehlt der
+ *   Abschnitt im Ziel, wird er dort angelegt
  * @returns {{moved: number, pages: object[]}}
  *
  * >>> Was hier NICHT passieren darf <<<
@@ -432,21 +454,61 @@ function transferPages(fromNb, pageIds, toNb, options = {}) {
      kein Etikett – ihr eines aufzudrängen wäre geraten. */
   const toSec = (toNb.sections || []).find(s => s.id === toNb.activeSecId) || null;
 
+  /* ── Das Etikett mitnehmen ────────────────────────────────────────
+     Verglichen wird über den NAMEN, nicht über die Kennung: die ist je
+     Heft vergeben, dieselbe „Übungen" haben in zwei Heften zwangsläufig
+     verschiedene.
+
+     >>> Warum die Farbe festgeschrieben wird <<<
+     Ohne eigene Wahl rechnet colorForSection() sie aus der Kennung. Der
+     neue Abschnitt bekommt aber eine neue Kennung – und damit eine
+     andere Farbe. Wer seine Seiten samt Abschnitt hinüberschiebt, will
+     sie dort wiedererkennen; also wird die bisherige Farbe hier
+     ausgerechnet und festgehalten. */
+  const keepSec = !!options.keepSection;
+  const gemerkt = new Map();               // Name → Abschnitt im Ziel
+
+  const zielAbschnitt = (page) => {
+    if (!keepSec || !page.secId) return toSec;
+    const quelle = (fromNb.sections || []).find(s => String(s.id) === String(page.secId));
+    if (!quelle) return toSec;
+
+    const name = String(quelle.name || '');
+    if (gemerkt.has(name)) return gemerkt.get(name);
+
+    let ziel = (toNb.sections || []).find(s => String(s.name || '') === name);
+    if (!ziel) {
+      ziel = {
+        id: uid(),
+        name: quelle.name,
+        pgIds: [],
+        defaultBg: quelle.defaultBg || toNb.defaultBg || 'ruled',
+        color: colorForSection(quelle)
+      };
+      toNb.sections.push(ziel);
+    }
+    gemerkt.set(name, ziel);
+    return ziel;
+  };
+
   /* In der Reihenfolge des Ausgangshefts, nicht in der des Anklickens –
      sonst stünden die Seiten im Ziel durcheinander. */
   const wanted = new Set(pageIds.map(String));
   const ordered = notebookPages(fromNb).filter(p => wanted.has(String(p.id)));
 
   for (const page of ordered) {
+    const sec = zielAbschnitt(page);
     if (copy) {
-      insertPageInto(toNb, toSec, clonePage(page));
+      const kopie = clonePage(page);
+      delete kopie.secId;                   // insertPageInto setzt das richtige
+      insertPageInto(toNb, sec, kopie);
     } else {
       // Beim Verschieben behält die Seite ihre Kennung: sie gibt es
       // hinterher nur noch einmal, also kann nichts kollidieren.
       fromNb.pages = (fromNb.pages || []).filter(p => p.id !== page.id);
       if (S.strokeHistory) delete S.strokeHistory[page.id];
       delete page.secId;                    // das Etikett des alten Hefts gilt hier nicht
-      insertPageInto(toNb, toSec, page);
+      insertPageInto(toNb, sec, page);
     }
 
     result.moved++;

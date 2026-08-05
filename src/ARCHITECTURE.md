@@ -53,7 +53,18 @@ src/
 - **Data Builders:** makePage, clonePage, insertPageInto, pageIsEmpty, pagePreview
 - **Data Helpers:** getSections, activeSection, findSecForPage, setSectionOfPage,
   pageNumberOf, movePageBefore, colorForSection, sectionPalette,
-  normalizeNotebook, syncSectionIds
+  bgForSection, normalizeNotebook, syncSectionIds
+
+> **Farbe und Papier eines Abschnitts.** `sec.color` und `sec.defaultBg`
+> sind beide *optional*: leer heißt „ausrechnen" bzw. „wie das Heft". Die
+> Farbe stammt sonst aus `sec.id`, damit zwei frische Abschnitte von selbst
+> verschieden aussehen. `setSectionOfPage()` gibt einer Seite beim
+> Etikettieren sofort das Papier ihres Abschnitts — der Standard wirkt also
+> beim Zuordnen, nicht rückwirkend.
+>
+> `sec.color` muss in **beiden** Listen stehen, die Abschnitte feldweise neu
+> aufbauen: `applyStruct()` (ui/collab.js) und `splitNotebook()`
+> (core/share.js). Was dort fehlt, verschwindet beim nächsten Abgleich still.
 
 > **Abschnitte sind Etiketten, keine Kapitel.** Die Reihenfolge eines Hefts
 > steht in `nb.pages`, die Zugehörigkeit einer Seite in `page.secId`. Ein

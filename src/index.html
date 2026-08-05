@@ -124,6 +124,10 @@
         <div class="side-head">
           <span class="side-label" data-i18n="navigation">Navigation</span>
           <button class="side-add-sec" id="btn-add-sec" data-i18n="addSection" data-i18n-title="addSection" title="Neuer Abschnitt">+ Abschnitt</button>
+          <!-- Die Verwaltung gehört neben das Anlegen, nicht auf die
+               Zeile „Alle Seiten" – dort sah sie aus, als betreffe sie
+               nur diese eine Zeile. -->
+          <button class="side-mgr-btn" id="btn-sec-mgr" data-i18n-title="manageSections" title="Abschnitte verwalten">✎</button>
         </div>
         <div class="side-tree" id="side-tree"></div>
       </div>
@@ -283,7 +287,7 @@
       <h3 id="sec-mgr-title" data-i18n="manageSectionsTitle">Abschnitte verwalten</h3>
       <button class="modal-close-x" id="sec-mgr-close">✕</button>
     </div>
-    <p class="sec-mgr-hint" data-i18n="sectionManagerHint">Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft.</p>
+    <p class="sec-mgr-hint" data-i18n="sectionManagerHint">Abschnitte sind Etiketten: eine Seite behält ihren Platz im Heft. Klick auf eine Seite öffnet ihre Befehle, langes Drücken wählt mehrere aus, Ziehen sortiert um.</p>
     <!-- Links die Abschnitte als Filter, rechts die Seiten in
          Heft-Reihenfolge. Früher stand hier je Abschnitt ein Kasten mit
          eigener Seitenliste – das war die Kapitel-Sicht, und Seiten ohne
@@ -295,10 +299,21 @@
       </div>
       <div class="sec-mgr-body" id="sec-mgr-body"></div>
     </div>
+    <!-- Zwei Fussleisten, immer nur eine sichtbar. Im Auswahlmodus (lange
+         auf eine Seite druecken) treten die Sammelbefehle an die Stelle
+         der gewoehnlichen. -->
     <div class="sec-mgr-footer">
-      <button id="sec-mgr-add-page" class="mgr-btn" data-i18n="addPage">+ Seite</button>
-      <button id="sec-mgr-transfer" class="mgr-btn" data-i18n="transferOpen">In anderes Heft …</button>
-      <button class="ok-btn" id="sec-mgr-done" data-i18n="done">Fertig</button>
+      <div class="sec-mgr-bar" id="sec-mgr-bar-normal">
+        <button class="ok-btn" id="sec-mgr-done" data-i18n="done">Fertig</button>
+      </div>
+      <div class="sec-mgr-bar" id="sec-mgr-bar-pick" style="display:none">
+        <span class="sec-mgr-pick-count" id="sec-mgr-pick-count"></span>
+        <button id="sec-mgr-pick-all" class="mgr-btn" data-i18n="transferAll">Alle</button>
+        <button id="sec-mgr-pick-sec" class="mgr-btn" data-i18n="setSection">Abschnitt festlegen</button>
+        <button id="sec-mgr-pick-move" class="mgr-btn" data-i18n="transferOpen">In anderes Heft …</button>
+        <button id="sec-mgr-pick-del" class="mgr-btn danger" data-i18n="delete">Löschen</button>
+        <button class="ok-btn" id="sec-mgr-pick-done" data-i18n="done">Fertig</button>
+      </div>
     </div>
   </div>
 </div>
@@ -314,6 +329,10 @@
     <input id="sec-edit-name" autocomplete="off" spellcheck="false">
     <label class="modal-label" style="margin-top:14px" data-i18n="color">Farbe</label>
     <div class="color-palette" id="sec-edit-palette"></div>
+    <!-- Das Papier des Abschnitts. „Wie das Heft" ist der Normalfall und
+         steht deshalb als erstes darin. -->
+    <label class="modal-label" style="margin-top:14px" data-i18n="sectionBackground">Papier</label>
+    <div class="bg-row large" id="sec-edit-bg-row"></div>
     <div class="modal-btns">
       <button id="sec-edit-cancel" data-i18n="cancel">Abbrechen</button>
       <button id="sec-edit-ok" class="ok-btn" data-i18n="save">Speichern</button>
@@ -539,6 +558,16 @@
       <label for="pt-target-sel" data-i18n="transferTarget">Zielheft</label>
       <select id="pt-target-sel"></select>
     </div>
+
+    <!-- Steht nur da, wenn wenigstens eine gewählte Seite einen Abschnitt
+         trägt. Sonst wäre es eine Frage ohne Gegenstand. -->
+    <label class="pt-keepsec" id="pt-keepsec-row" style="display:none">
+      <input type="checkbox" class="pt-check" id="pt-keepsec" checked>
+      <span class="pt-keepsec-body">
+        <span class="pt-keepsec-title" data-i18n="transferKeepSection">Abschnitt mitnehmen</span>
+        <span class="pt-keepsec-hint" data-i18n="transferKeepSectionHint">Gibt es ihn im Zielheft nicht, wird er dort angelegt — mit demselben Namen und derselben Farbe.</span>
+      </span>
+    </label>
 
     <div class="sec-mgr-body" id="pt-list"></div>
 

@@ -340,6 +340,106 @@ function makeNotebook(ctx, name, n) {
      Deshalb nimmt movePageBefore keinen Index, sondern den Nachbarn: der
      steht im Heft an genau einer Stelle, gleich welcher Filter wirkt. */
 
+  /* ── Das Etikett mit ins andere Heft ─────────────────────────────────
+     Verglichen wird ueber den NAMEN: Kennungen sind je Heft vergeben,
+     dieselbe „Uebungen" hat in zwei Heften zwangslaeufig verschiedene.
+     Und die Farbe muss festgeschrieben werden – ohne eigene Wahl haengt
+     sie an der Kennung, und die ist im Ziel eine andere. */
+
+  console.log('\nAbschnitt beim Uebertragen mitnehmen');
+
+  {
+    const ctx = loadData();
+    const von = {
+      id: 'A', name: 'A', defaultBg: 'ruled',
+      pages: [{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }],
+      sections: [
+        { id: 'aR', name: 'Regeln', pgIds: ['a1', 'a2'], defaultBg: 'grid' },
+        { id: 'aU', name: 'Uebungen', pgIds: ['a3'], defaultBg: 'ruled' }
+      ]
+    };
+    const nach = { id: 'B', name: 'B', defaultBg: 'ruled', pages: [{ id: 'b1' }], sections: [] };
+    ctx.normalizeNotebook(von);
+    ctx.normalizeNotebook(nach);
+    ctx.S.notebooks.push(von, nach);
+
+    const farbeVorher = ctx.colorForSection(von.sections[0]);
+
+    ctx.transferPages(von, ['a1', 'a3'], nach, { keepSection: true });
+
+    check('Beide Abschnitte sind im Ziel entstanden',
+      nach.sections.map(s => s.name), ['Regeln', 'Uebungen']);
+    check('Die Seiten tragen die neuen Etiketten',
+      nach.pages.map(p => p.secId || '-'),
+      ['-', nach.sections[0].id, nach.sections[1].id]);
+    check('Die Farbe bleibt dieselbe', nach.sections[0].color, farbeVorher);
+    ok('Und die Kennung ist eine andere', nach.sections[0].id !== 'aR');
+    check('Der Hintergrund kommt mit', nach.sections[0].defaultBg, 'grid');
+  }
+
+  {
+    // Gibt es den Abschnitt im Ziel schon, wird er benutzt statt verdoppelt
+    const ctx = loadData();
+    const von = {
+      id: 'A', name: 'A', defaultBg: 'ruled',
+      pages: [{ id: 'a1' }],
+      sections: [{ id: 'aR', name: 'Regeln', pgIds: ['a1'], defaultBg: 'ruled' }]
+    };
+    const nach = {
+      id: 'B', name: 'B', defaultBg: 'ruled',
+      pages: [{ id: 'b1' }],
+      sections: [{ id: 'bR', name: 'Regeln', pgIds: [], defaultBg: 'ruled' }]
+    };
+    ctx.normalizeNotebook(von);
+    ctx.normalizeNotebook(nach);
+    ctx.S.notebooks.push(von, nach);
+
+    ctx.transferPages(von, ['a1'], nach, { keepSection: true });
+
+    check('Kein zweiter gleichen Namens', nach.sections.length, 1);
+    check('Die Seite haengt am vorhandenen', nach.pages[1].secId, 'bR');
+    check('Und die pgIds stimmen', nach.sections[0].pgIds, ['a1']);
+  }
+
+  {
+    // Ohne die Option bleibt es beim alten Verhalten: kein Etikett
+    const ctx = loadData();
+    const von = {
+      id: 'A', name: 'A', defaultBg: 'ruled',
+      pages: [{ id: 'a1' }],
+      sections: [{ id: 'aR', name: 'Regeln', pgIds: ['a1'], defaultBg: 'ruled' }]
+    };
+    const nach = { id: 'B', name: 'B', defaultBg: 'ruled', pages: [{ id: 'b1' }], sections: [] };
+    ctx.normalizeNotebook(von);
+    ctx.normalizeNotebook(nach);
+    ctx.S.notebooks.push(von, nach);
+
+    ctx.transferPages(von, ['a1'], nach, {});
+    check('Kein Abschnitt entsteht', nach.sections, []);
+    ok('Und die Seite traegt keinen', !nach.pages[1].secId);
+
+  }
+
+  {
+    /* Beim KOPIEREN trug die Kopie bisher die Kennung aus dem
+       Ausgangsheft weiter – ein Etikett, das es im Ziel gar nicht gibt
+       und das dort auf keinen Abschnitt zeigt. */
+    const ctx = loadData();
+    const von = {
+      id: 'A', name: 'A', defaultBg: 'ruled',
+      pages: [{ id: 'a1' }],
+      sections: [{ id: 'aR', name: 'Regeln', pgIds: ['a1'], defaultBg: 'ruled' }]
+    };
+    const nach = { id: 'C', name: 'C', defaultBg: 'ruled', pages: [{ id: 'c1' }], sections: [] };
+    ctx.normalizeNotebook(von);
+    ctx.normalizeNotebook(nach);
+    ctx.S.notebooks.push(von, nach);
+
+    ctx.transferPages(von, ['a1'], nach, { copy: true });
+    ok('Auch eine Kopie schleppt kein fremdes Etikett mit', !nach.pages[1].secId);
+    ok('Das Original behaelt seines', von.pages[0].secId === 'aR');
+  }
+
   console.log('\nSeiten umsortieren');
 
   {
@@ -389,6 +489,60 @@ function makeNotebook(ctx, name, n) {
      Gewaehlt schlaegt gerechnet. Ohne Wahl bekommen zwei Abschnitte von
      selbst verschiedene Farben – sonst muesste man bei jedem neuen erst
      eine aussuchen. */
+
+  /* ── Das Papier eines Abschnitts ─────────────────────────────────────
+     Leer heisst „wie das Heft" – und das ist der Normalfall. Wer eine
+     Seite einem Abschnitt zuschlaegt, will sie aussehen wie den Rest
+     davon; sie bekommt dessen Papier also sofort. */
+
+  console.log('\nPapier eines Abschnitts');
+
+  {
+    const ctx = loadData();
+    const nb = {
+      id: 'nb', defaultBg: 'ruled', schemaVersion: 2,
+      pages: [{ id: 'p1', bg: 'ruled' }, { id: 'p2', bg: 'blank' }],
+      sections: [
+        { id: 'sK', name: 'Kariert', pgIds: [], defaultBg: 'grid' },
+        { id: 'sA', name: 'Automatisch', pgIds: [] }
+      ]
+    };
+
+    check('Ein Abschnitt mit eigenem Papier', ctx.bgForSection(nb.sections[0], nb), 'grid');
+    check('Einer ohne nimmt das des Hefts', ctx.bgForSection(nb.sections[1], nb), 'ruled');
+    check('Und ohne Abschnitt auch', ctx.bgForSection(null, nb), 'ruled');
+
+    ctx.setSectionOfPage(nb, 'p2', 'sK');
+    check('Das Papier zieht beim Etikettieren mit', nb.pages[1].bg, 'grid');
+
+    ctx.setSectionOfPage(nb, 'p2', 'sA');
+    check('Beim Wechsel auf „automatisch" das des Hefts', nb.pages[1].bg, 'ruled');
+
+    // Etikett abnehmen laesst das Papier stehen – es war eine bewusste Wahl
+    nb.pages[1].bg = 'dotted';
+    ctx.setSectionOfPage(nb, 'p2', '');
+    check('Abnehmen ruehrt das Papier nicht an', nb.pages[1].bg, 'dotted');
+  }
+
+  {
+    // Eine Seite mit eigenem Bild behaelt es – dort gaebe es nichts zu malen
+    const ctx = loadData();
+    const nb = {
+      id: 'nb', defaultBg: 'ruled', schemaVersion: 2,
+      pages: [{ id: 'p1', bg: 'ruled', bgImg: 'data:image/png;base64,AAAA' }],
+      sections: [{ id: 'sK', name: 'K', pgIds: [], defaultBg: 'grid' }]
+    };
+    ctx.setSectionOfPage(nb, 'p1', 'sK');
+    check('Eine Seite mit Bildhintergrund bleibt unberuehrt', nb.pages[0].bg, 'ruled');
+  }
+
+  {
+    // getSections fuellt defaultBg nicht mehr vorsorglich
+    const ctx = loadData();
+    const nb = { id: 'nb', defaultBg: 'grid', pages: [], sections: [{ id: 's1', name: 'A', pgIds: [] }] };
+    ctx.getSections(nb);
+    ok('Kein stilles Kopieren des Heft-Papiers', !nb.sections[0].defaultBg);
+  }
 
   console.log('\nAbschnittsfarbe');
 

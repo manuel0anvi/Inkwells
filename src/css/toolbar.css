@@ -384,6 +384,28 @@
   border-radius: 8px
 }
 
+/* „Wie das Heft" im Abschnitts-Fenster: zeigt das Papier des Hefts, aber
+   gestrichelt umrandet und mit einem A – damit es nicht wie eine
+   getroffene Wahl aussieht. */
+.bg-sw-auto {
+  position: relative;
+  border-style: dashed !important;
+  border-color: var(--sb2) !important;
+  color: var(--md);
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 0 4px var(--sh)
+}
+
+.bg-sw-auto.active {
+  border-style: solid !important;
+  border-color: var(--gold) !important;
+  color: var(--gold)
+}
+
 #btn-zoom-out,
 #btn-zoom-in {
   font-size: 16px;

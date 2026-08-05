@@ -45,8 +45,8 @@ function showMsHint() {
  * @param {object} fromNb          Ausgangsheft
  * @param {object[]} targets       Hefte, die als Ziel in Frage kommen
  * @param {string[]} [preselected] Seiten, die schon angehakt sein sollen
- * @returns {Promise<{pageIds: string[], toNb: object, copy: boolean}|null>}
- *          null = abgebrochen
+ * @returns {Promise<{pageIds: string[], toNb: object, copy: boolean,
+ *          keepSection: boolean}|null>} null = abgebrochen
  *
  * Baut nur die Liste auf und liefert die Entscheidung zurück – bewegt
  * selbst nichts. Das tut transferPages() in core/data.js.
@@ -71,10 +71,21 @@ function showPageTransferDialog(fromNb, targets, preselected = []) {
   // Die Seiten in der Reihenfolge des Hefts – dieselbe Quelle wie überall
   const rows = notebookPages(fromNb).map(page => ({ page }));
 
+  const keepRow = E('pt-keepsec-row');
+  const keepBox = E('pt-keepsec');
+
   const refreshCount = () => {
     countEl.textContent = t('transferCount').replace('{n}', String(picked.size));
     E('pt-move').disabled = picked.size === 0 || !sel.value;
     E('pt-copy').disabled = picked.size === 0 || !sel.value;
+
+    /* Die Frage nach dem Abschnitt nur stellen, wenn es einen gibt.
+       Sonst stünde da eine Wahl ohne Gegenstand. */
+    if (keepRow) {
+      const mitAbschnitt = notebookPages(fromNb)
+        .some(p => picked.has(String(p.id)) && p.secId);
+      keepRow.style.display = mitAbschnitt ? '' : 'none';
+    }
   };
 
   rows.forEach((row, idx) => {
@@ -117,6 +128,7 @@ function showPageTransferDialog(fromNb, targets, preselected = []) {
     list.appendChild(item);
   });
 
+  if (keepBox) keepBox.checked = true;   // der Normalfall: mitnehmen
   refreshCount();
   E('ov-page-transfer').style.display = 'flex';
 
@@ -125,8 +137,10 @@ function showPageTransferDialog(fromNb, targets, preselected = []) {
       if (!picked.size || !sel.value) return;
       const toNb = targets.find(nb => nb.id === sel.value);
       if (!toNb) return;
+      const keepSection = !!(keepBox && keepBox.checked
+        && keepRow && keepRow.style.display !== 'none');
       close();
-      res({ pageIds: [...picked], toNb, copy });
+      res({ pageIds: [...picked], toNb, copy, keepSection });
     };
     const cancel = () => { close(); res(null); };
     const setAll = (on) => {

@@ -152,6 +152,47 @@
   font-size: 14px
 }
 
+/* „Abschnitt mitnehmen" – steht nur da, wenn wenigstens eine gewählte
+   Seite einen trägt. Dasselbe 16px-Raster wie die Auswahlzeilen im
+   Export, damit Häkchen und Schrift nicht auseinanderlaufen. */
+.pt-keepsec {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  margin: 0 22px 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--sb);
+  border-radius: 8px;
+  background: var(--sc);
+  cursor: pointer
+}
+
+.pt-keepsec .pt-check {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px
+}
+
+.pt-keepsec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0
+}
+
+.pt-keepsec-title {
+  font-family: 'Crimson Pro', serif;
+  font-size: 14px;
+  color: var(--hi)
+}
+
+.pt-keepsec-hint {
+  font-size: 11px;
+  color: var(--lo);
+  line-height: 1.45
+}
+
 /* Zählt links neben den Knöpfen mit, damit „Verschieben" nie ins Leere
    greift, ohne dass man die Häkchen abzählen müsste. */
 .pt-count {
@@ -503,7 +544,8 @@
   flex-shrink: 0
 }
 
-/* Das Etikett einer Seite, anklickbar */
+/* Das Etikett einer Seite – ein Schild, kein Knopf. Geaendert wird es
+   ueber dieselben Befehle wie alles andere. */
 .mgr-pg-sec {
   flex-shrink: 0;
   max-width: 120px;
@@ -515,15 +557,9 @@
   font-style: italic;
   padding: 2px 9px;
   border-radius: 10px;
-  cursor: pointer;
   color: var(--hi);
   background: color-mix(in srgb, var(--sec-color, var(--gd)) 22%, transparent);
-  border: 1px solid var(--sec-color, var(--gd));
-  transition: all .12s
-}
-
-.mgr-pg-sec:hover {
-  background: color-mix(in srgb, var(--sec-color, var(--gd)) 40%, transparent)
+  border: 1px solid var(--sec-color, var(--gd))
 }
 
 /* Ohne Etikett bleibt es blass – sonst sähe „kein Abschnitt" aus wie einer */
@@ -534,12 +570,6 @@
   border-color: var(--sb2)
 }
 
-.mgr-pg-sec.none:hover {
-  color: var(--md);
-  border-color: var(--gd);
-  background: var(--sh2)
-}
-
 .sec-mgr-footer {
   padding: 12px 22px;
   border-top: 1px solid var(--sb);
@@ -547,6 +577,22 @@
   justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0
+}
+
+/* Zwei Leisten, immer nur eine sichtbar: gewoehnlich und im Auswahlmodus */
+.sec-mgr-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: flex-end
+}
+
+.sec-mgr-pick-count {
+  flex: 1;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--gold)
 }
 
 /* >>> Warum das hier stehen muss <<<
@@ -647,6 +693,57 @@
 
 .mgr-pg-item.drop-after {
   box-shadow: inset 0 -3px 0 -1px var(--gold)
+}
+
+/* ── Mehrfachauswahl ─────────────────────────────────────────────────
+   Lange druecken schaltet sie ein. Das Haekchen steht immer im Aufbau,
+   nimmt aber erst im Auswahlmodus Platz ein – so muss die Liste dafuer
+   nicht neu gebaut werden, und die fuers Ziehen gemessenen Zeilenmitten
+   bleiben gueltig. */
+.mgr-pg-pick {
+  width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: transparent;
+  border-radius: 50%;
+  transition: width .14s, color .14s, background .14s;
+  box-shadow: inset 0 0 0 0 transparent
+}
+
+#sec-mgr-body.picking .mgr-pg-pick {
+  width: 16px;
+  height: 16px;
+  box-shadow: inset 0 0 0 1.5px var(--gd)
+}
+
+#sec-mgr-body.picking .mgr-pg-item.picked .mgr-pg-pick {
+  background: var(--gold);
+  color: var(--sh);
+  box-shadow: none
+}
+
+/* Im Auswahlmodus zieht man nicht um – ein Griff waere irrefuehrend */
+#sec-mgr-body.picking .mgr-pg-grip {
+  opacity: 0;
+  pointer-events: none
+}
+
+#sec-mgr-body.picking .mgr-pg-item {
+  cursor: pointer
+}
+
+#sec-mgr-body .mgr-pg-item.picked {
+  background: rgba(200, 169, 110, .1);
+  border-color: var(--gd)
+}
+
+/* Ausserhalb der Auswahl ist die ganze Zeile der Knopf */
+#sec-mgr-body .mgr-pg-item {
+  cursor: pointer
 }
 
 .mgr-pg-num {

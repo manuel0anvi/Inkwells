@@ -308,8 +308,12 @@ E('nb-modal-ok').addEventListener('click', async () => {
   
   if (_nbEditId) { 
     const nb = getNb(_nbEditId); 
-    nb.name = name; nb.color = _nbColor; nb.defaultBg = _nbBg; 
-    getSections(nb).forEach(s => s.defaultBg = _nbBg); 
+    nb.name = name; nb.color = _nbColor; nb.defaultBg = _nbBg;
+    /* Die Abschnitte werden NICHT mehr mit ueberschrieben. Ein Abschnitt
+       ohne eigenes Papier folgt dem Heft von selbst; einer mit eigenem
+       hat es sich verdient, behalten zu werden. Vorher ging beim
+       Wechseln des Heft-Papiers jede Abschnittswahl verloren. */
+    getSections(nb);
     E('ov-nb').style.display = 'none'; 
     if (S.activeNbId === _nbEditId) { setTitleBar(name, _nbColor); renderSideTree(); } 
     renderHomeGrid(); 
