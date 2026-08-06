@@ -785,6 +785,20 @@
         </div>
       </div>
 
+      <!-- Nur bei Microsoft eingeblendet (ui/auth.js): dort verlangt Firebase
+           für geteilte Dokumente einen zweiten Schritt, den die App beim
+           Start still nachholen kann. Bei Google gibt es nichts zu wählen. -->
+      <div id="auth-autolink-row" class="settings-row" style="display:none; background:var(--sidebar-bg); padding:12px; border-radius:6px; margin: 4px 0;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="auth-autolink">
+          <span class="toggle-slider"></span>
+        </label>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <span class="toggle-label" data-i18n="autoLinkShareSetting">Für geteilte Dokumente angemeldet bleiben</span>
+          <span style="font-size:11px;color:var(--text-muted);line-height:1.5;" data-i18n="autoLinkShareHint"></span>
+        </div>
+      </div>
+
       <!-- Speicherplatz im Cloud-Konto des Nutzers (Drive bzw. OneDrive) -->
       <div id="auth-cloud-usage-container" style="display:none; font-size:12px; margin: 4px 0; background:var(--sidebar-bg); padding:12px; border-radius:6px; flex-direction:column; gap:6px;">
         <div style="display:flex; justify-content:space-between; font-weight:500;">

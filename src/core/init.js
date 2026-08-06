@@ -107,8 +107,15 @@
      nicht auf die Cloud wartet. */
   try {
     if (typeof CloudSync_ !== 'undefined' && CloudSync_) {
-      CloudSync_.ensureFirebaseIdentity().then(ok => {
+      CloudSync_.ensureFirebaseIdentity().then(async ok => {
         console.log('[Init] Firebase-Kennung:', ok ? 'vorhanden' : ('fehlt (' + (CloudSync_.identityProblem || '?') + ')'));
+
+        /* Fehlt sie und ist der Nutzer einverstanden, holt Inkwell den
+           zweiten Microsoft-Schritt still nach – sonst müsste er dafür
+           jedes Mal den Knopf drücken. linkMicrosoftSilently() prüft
+           Anbieter und Einstellung selbst und tut sonst nichts. */
+        if (!ok) ok = await CloudSync_.linkMicrosoftSilently();
+
         if (ok) document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
       }).catch(err => console.warn('[Init] Firebase-Kennung:', err?.message || err));
     }

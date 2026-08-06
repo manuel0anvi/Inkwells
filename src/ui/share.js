@@ -192,8 +192,12 @@
      auf „den Knopf darunter" verwies – und darunter war nichts. Deshalb
      wird er hier einmal gebaut und an beiden Stellen benutzt.
 
+     Darunter steht das Häkchen, mit dem man sich das künftig ersparen
+     kann. Es gehört hierher und nicht nur in die Einstellungen: hier ist
+     der Moment, in dem einen der Schritt gerade stört.
+
      @param {(ok: boolean) => any} danach  gerufen, wenn der Schritt durch ist
-     @returns {HTMLButtonElement|null} null, wenn er hier nichts brächte
+     @returns {HTMLElement|null} null, wenn er hier nichts brächte
      ══════════════════════════════════════════════════════════════════ */
   function microsoftLinkButton(danach) {
     // Nur bei Microsoft, und nur wenn man in Inkwell überhaupt angemeldet
@@ -201,9 +205,15 @@
     if (window.CloudSync_?.getProviderId?.() !== 'microsoft') return null;
     if (!window.CloudSync_?.isAuthenticated?.()) return null;
 
+    const box = document.createElement('div');
+    /* align-items nach vorn: der Knopf steht sonst im Raster der geteilten
+       Hefte auf Kartenbreite und die Beschriftung bricht mehrzeilig um. */
+    box.style.cssText = 'margin-top:14px;display:flex;flex-direction:column;'
+      + 'gap:8px;align-items:flex-start;';
+
     const btn = document.createElement('button');
     btn.className = 'settings-btn';
-    btn.style.cssText = 'margin-top:14px;padding:8px 16px;font-size:13px;';
+    btn.style.cssText = 'padding:8px 16px;font-size:13px;';
     btn.textContent = t('sharedLinkMicrosoft');
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -214,7 +224,27 @@
       btn.textContent = vorher;
       await danach(ok);
     });
-    return btn;
+
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;gap:8px;align-items:flex-start;'
+      + 'font-size:12px;color:var(--md);line-height:1.5;cursor:pointer;max-width:380px;';
+    const haken = document.createElement('input');
+    haken.type = 'checkbox';
+    haken.style.cssText = 'margin-top:2px;flex:none;';
+    haken.checked = !!Settings.get('autoLinkShare');
+    haken.addEventListener('change', () => {
+      Settings.update({ autoLinkShare: haken.checked }).catch(() => {});
+    });
+    const text = document.createElement('span');
+    text.append(t('autoLinkShare'));
+    const hinweis = document.createElement('span');
+    hinweis.style.cssText = 'display:block;opacity:.75;margin-top:2px;';
+    hinweis.textContent = t('autoLinkShareHint');
+    text.appendChild(hinweis);
+    label.append(haken, text);
+
+    box.append(btn, label);
+    return box;
   }
 
   /** Setzt den Knopf unter die Erklärung – oder räumt ihn weg. */

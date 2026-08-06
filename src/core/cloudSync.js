@@ -680,7 +680,30 @@ class CloudSyncManager {
        der richtigen Adresse holt der Rest dieser Funktion nach. */
     const known = api.currentIdentity();
     const wanted = api.normalizeEmail(Settings.get('cloudEmail') || '');
-    if (known && !known.anonymous && wanted && known.email !== wanted) {
+    const fremd = known && !known.anonymous && wanted && known.email !== wanted;
+
+    /* >>> Nur abmelden, wenn wir uns auch wieder anmelden koennen <<<
+       Bei Microsoft geht das nicht: der Rest dieser Funktion laeuft in
+       signInWithProviderToken, und das weist Firebase fuer microsoft.com
+       grundsaetzlich ab (Begruendung dort). Abmelden hiesse hier also,
+       eine brauchbare Sitzung durch nichts zu ersetzen – und weil das bei
+       JEDEM Start laeuft, waere der Knopf jedes Mal wieder faellig.
+
+       Ein Wechsel des Kontos raeumt die Sitzung ohnehin auf: signOut()
+       weiter oben meldet auch bei Firebase ab. Was hier bliebe, waere
+       eine Abweichung ohne Wechsel – und die ist den Verlust nicht wert. */
+    const kannWiederAnmelden = this.getProviderId() !== 'microsoft';
+
+    if (fremd && !kannWiederAnmelden) {
+      /* Die Sitzung ist brauchbar – nur eben unter dieser Adresse. Das ist
+         allemal besser als gar keine, und die Adressen weichen bei
+         Microsoft schon dann ab, wenn Graph einen anderen Alias nennt als
+         das Token. Ein echter Kontowechsel raeumt ohnehin ueber signOut(). */
+      console.warn('[CloudSync] Firebase kennt', known.email, '– erwartet wird', wanted,
+        '· Sitzung bleibt stehen, bei Microsoft gibt es keinen Weg zurueck');
+      this.identityProblem = null;
+      return true;
+    } else if (fremd) {
       console.warn('[CloudSync] Firebase kennt noch', known.email, '– erwartet wird', wanted);
       try {
         await api.signOutIdentity();
@@ -749,6 +772,54 @@ class CloudSyncManager {
       this.identityError = (code ? code + ': ' : '') + (err?.message || String(err));
       this.identityProblem = 'failed';
       return false;
+    }
+  }
+
+  /**
+   * Derselbe Schritt, aber ohne Zutun – beim Start der App.
+   *
+   * Läuft nur, wenn der Nutzer ausdrücklich einverstanden ist
+   * (Einstellung autoLinkShare). Klappt es nicht, passiert nichts:
+   * kein Fenster, keine Meldung, der Knopf bleibt wie bisher stehen.
+   *
+   * @returns {Promise<boolean>} true, wenn Firebase den Nutzer jetzt kennt
+   */
+  async linkMicrosoftSilently() {
+    if (this.getProviderId() !== 'microsoft') return false;
+    if (!Settings.get('autoLinkShare')) return false;
+    if (!this.isAuthenticated()) return false;
+
+    let api;
+    try {
+      api = await this._whenShareReady();
+    } catch (err) {
+      return false;
+    }
+
+    /* Dem Hauptprozess Bescheid geben, sonst blitzt Firebases
+       Anmeldefenster beim Start kurz auf. Die Marke verfällt von selbst –
+       ein späteres, gewolltes Fenster darf nicht darunter leiden. */
+    try { window.api?.setSilentAuth?.(true); } catch (e) { /* ohne Brücke egal */ }
+
+    try {
+      const user = await api.signInMicrosoftSilently(Settings.get('cloudEmail') || '');
+      if (!user) {
+        console.log('[CloudSync] Stille Anmeldung nicht möglich – dafür braucht es einen Klick');
+        return false;
+      }
+      await Settings.update({ cloudIdentityMissing: false });
+      this.identityProblem = null;
+      this.identityError = '';
+      console.log('[CloudSync] Firebase-Kennung still hergestellt:', api.currentIdentity()?.email || '?');
+      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      this._notify();
+      return true;
+    } catch (err) {
+      // Beim Start darf das nichts kosten – nur ins Log, nicht auf den Schirm
+      console.warn('[CloudSync] Stille Anmeldung fehlgeschlagen:', err?.code || '', err?.message || err);
+      return false;
+    } finally {
+      try { window.api?.setSilentAuth?.(false); } catch (e) { /* siehe oben */ }
     }
   }
 

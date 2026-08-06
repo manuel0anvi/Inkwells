@@ -359,6 +359,44 @@ async function signInMicrosoftInteractive(loginHint = '') {
   return result.user;
 }
 
+/* Antworten, die schlicht heissen „dafuer braucht es einen Menschen". Kein
+   Fehler, sondern das erwartete Ende eines stillen Versuchs. */
+const STILL_GESCHEITERT = /login_required|interaction_required|consent_required|account_selection_required|popup-blocked|popup-closed-by-user|cancelled-popup-request|user-cancelled/i;
+
+/**
+ * Derselbe Ablauf, aber ohne Zutun – fuer den Start der App.
+ *
+ * Microsoft kennt dafuer prompt=none: entweder es liegt eine gueltige
+ * Sitzung vor (als Cookie, aus der OneDrive-Anmeldung derselben
+ * Electron-Sitzung), dann kommt sofort ein Token zurueck. Oder es kommt
+ * login_required – dann ist eine Eingabe noetig und wir lassen es.
+ *
+ * Firebase oeffnet dafuer trotzdem sein Fenster. Damit beim Start nichts
+ * aufblitzt, meldet der Aufrufer das vorher an (siehe
+ * linkMicrosoftSilently in core/cloudSync.js); main.js laesst das Fenster
+ * dann unsichtbar.
+ *
+ * @param {string} [loginHint] Adresse, unter der es versucht wird
+ * @returns {Promise<object|null>} null, wenn es ohne Eingabe nicht geht
+ */
+async function signInMicrosoftSilently(loginHint = '') {
+  const provider = new OAuthProvider('microsoft.com');
+  provider.addScope('email');
+
+  const params = { tenant: 'consumers', prompt: 'none' };
+  if (loginHint) params.login_hint = loginHint;
+  provider.setCustomParameters(params);
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (err) {
+    const text = String(err?.code || '') + ' ' + String(err?.message || '');
+    if (STILL_GESCHEITERT.test(text)) return null;
+    throw err;
+  }
+}
+
 /**
  * Meldet sich, sobald Firebase den Anmeldestand kennt und bei jedem
  * weiteren Wechsel. Gibt die Abmeldefunktion zurück.
@@ -2291,6 +2329,7 @@ const InkwellShare = {
   // Anmeldung
   signInWithProviderToken,
   signInMicrosoftInteractive,
+  signInMicrosoftSilently,
   signOutIdentity,
   currentIdentity,
   hasRealIdentity,
@@ -2349,7 +2388,8 @@ export default InkwellShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
-  signInWithProviderToken, signInMicrosoftInteractive, signOutIdentity, currentIdentity, hasRealIdentity,
+  signInWithProviderToken, signInMicrosoftInteractive, signInMicrosoftSilently,
+  signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
   setLinkMode, rotateLink,

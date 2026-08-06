@@ -24,7 +24,9 @@ contextBridge.exposeInMainWorld('api', {
   moveFile:      (o, n) => ipcRenderer.invoke('move-file', o, n),
   fileExists:        (p) => ipcRenderer.invoke('file-exists', p),
   getAppVersion:     () => ipcRenderer.invoke('get-app-version'),
-  
+  // Das nächste Anmeldefenster bleibt unsichtbar (stiller Versuch beim Start)
+  setSilentAuth:    (an) => ipcRenderer.send('silent-auth', !!an),
+
   // Updater controls
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate:  () => ipcRenderer.invoke('download-update'),

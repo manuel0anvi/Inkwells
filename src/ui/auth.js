@@ -201,6 +201,33 @@
     updateStatusText();
     updateStorageUI();
     updateSessionInfo();
+    updateAutoLinkRow();
+  }
+
+  /* Der Schalter „angemeldet bleiben" gilt nur für Microsoft: nur dort
+     verlangt Firebase den zweiten Schritt, den die App beim Start still
+     nachholen kann (core/cloudSync.js, linkMicrosoftSilently). Bei Google
+     läuft die Anmeldung ohnehin über das Token – da gäbe es nichts zu
+     entscheiden, und ein Schalter ohne Wirkung ist schlimmer als keiner. */
+  function updateAutoLinkRow() {
+    const row = E('auth-autolink-row');
+    const box = E('auth-autolink');
+    if (!row || !box) return;
+
+    const microsoft = CloudSync_.getProviderId() === 'microsoft';
+    row.style.display = microsoft ? 'flex' : 'none';
+    if (microsoft) box.checked = !!Settings.get('autoLinkShare');
+  }
+
+  E('auth-autolink')?.addEventListener('change', (e) => {
+    Settings.update({ autoLinkShare: !!e.target.checked }).catch(() => {});
+  });
+
+  /* Das Häkchen unter dem Anmeldeknopf schreibt dieselbe Einstellung.
+     Ohne das stünde der Schalter hier auf dem alten Stand, sobald man
+     beides in derselben Sitzung anfasst. */
+  if (typeof Settings?.onChange === 'function') {
+    Settings.onChange(() => updateAutoLinkRow());
   }
 
   function setProviderButton(btn, ready) {

@@ -22,6 +22,12 @@ const DEFAULT_SETTINGS = {
   cloudUserName: '',
   cloudUserPicture: '',
   cloudLastSync: '',
+  /* Darf sich die App beim Start von selbst bei den geteilten Dokumenten
+     anmelden? Nur bei Microsoft von Belang – dort geht es sonst nicht
+     ohne Klick (core/share.js, signInMicrosoftSilently). Aus, bis der
+     Nutzer ausdrücklich zustimmt: es öffnet eine Verbindung zu Microsoft,
+     und das tut man nicht ungefragt. */
+  autoLinkShare: false,
   // Nur abweichende Tastenkürzel: { aktionId: 'Ctrl+S' }. Leer = alles Standard.
   shortcuts: {},
   /* Eigene Heft-Freigaben, zwei Arten nebeneinander:

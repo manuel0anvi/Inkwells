@@ -83,6 +83,13 @@ let pendingDeepLink = null; // Protocol deep link (inkwell://) received before r
 // Freigabe-Link (inkwell://share/<linkId>), der vor dem Fensterstart ankam
 let pendingShareLink = null;
 
+/* Bis wann ein Anmeldefenster STILL bleiben soll. Als Zeitpunkt und nicht
+   als Schalter, damit eine Marke, die niemand zurücknimmt, von selbst
+   verfällt – sonst bliebe ein späteres, gewolltes Anmeldefenster für
+   immer unsichtbar. */
+const SILENT_AUTH_MS = 10000;
+let stilleAnmeldungBis = 0;
+
 /* ── Zweites Exemplar mit eigenen Daten ───────────────────────────────
    Inkwell läuft normalerweise nur einmal: ein zweiter Start meldet sich
    beim ersten und beendet sich selbst. Das ist richtig so – zwei Fenster
@@ -368,8 +375,21 @@ function createWindow() {
 
   /* Mit show:false muss jemand das Fenster zeigen – das ist hier. Der
      Titel wird festgehalten: die Anmeldeseiten setzen unterwegs ihre
-     eigenen, teils technischen Überschriften. */
+     eigenen, teils technischen Überschriften.
+
+     >>> Ausser bei einem stillen Versuch <<<
+     Beim Start probiert die App die Microsoft-Anmeldung mit prompt=none
+     (signInMicrosoftSilently). Firebase macht auch dafür sein Fenster
+     auf – sichtbar wäre das ein Aufblitzen bei jedem Start, für etwas,
+     das den Nutzer nichts angeht. Also bleibt es zu, und wenn nach der
+     Zeitgrenze nichts geschehen ist, wird es geschlossen: ein
+     unsichtbares Fenster, das auf eine Eingabe wartet, kann niemand
+     bedienen. */
   win.webContents.on('did-create-window', (child) => {
+    if (stilleAnmeldungBis > Date.now()) {
+      setTimeout(() => { if (!child.isDestroyed()) child.close(); }, SILENT_AUTH_MS);
+      return;
+    }
     child.once('ready-to-show', () => child.show());
     // Falls die Seite gar nicht lädt, soll das Fenster trotzdem erscheinen
     setTimeout(() => { if (!child.isDestroyed() && !child.isVisible()) child.show(); }, 4000);
@@ -502,6 +522,12 @@ ipcMain.handle('install-and-restart', () => {
 });
 
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+/* Der nächste Anmeldeversuch läuft ohne Zutun – das Fenster dazu bleibt
+   unsichtbar. Siehe did-create-window weiter oben. */
+ipcMain.on('silent-auth', (_, an) => {
+  stilleAnmeldungBis = an ? Date.now() + SILENT_AUTH_MS : 0;
+});
 
 ipcMain.handle('open-external', (_, url) => {
   shell.openExternal(url);
