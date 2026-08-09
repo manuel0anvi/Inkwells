@@ -29,6 +29,11 @@ const root = path.join(__dirname, '..');
 const yjsSource = fs.readFileSync(path.join(root, 'src', 'lib', 'yjs.bundle.js'), 'utf8');
 const collabSource = fs.readFileSync(path.join(root, 'src', 'ui', 'collab.js'), 'utf8');
 const textSource = fs.readFileSync(path.join(root, 'src', 'canvas', 'text.js'), 'utf8');
+/* collab.js schickt eingehenden Text durch die Bereinigung, bevor er ins
+   DOM geht (core/sanitize.js). Ohne diese Zeile faende es die Funktion
+   nicht. Im nachgebauten document reicht sie den Text unveraendert
+   durch – geprueft wird sie da, wo sie wirkt: npm run test:sanitize. */
+const sanitizeSource = fs.readFileSync(path.join(root, 'src', 'core', 'sanitize.js'), 'utf8');
 
 /* ── Der Briefkasten zwischen den Clients ───────────────────────────── */
 
@@ -204,6 +209,7 @@ function makeClient(name, uid, notebook) {
   /* canvas/text.js liefert flatTextOf und die Umrechnung der Stellen.
      Ohne sie könnte collab.js die Marken der anderen nicht auf den
      hiesigen Text beziehen – genau das wird hier geprüft. */
+  vm.runInContext(sanitizeSource, ctx);
   vm.runInContext(textSource, ctx);
   vm.runInContext(collabSource, ctx);
 
@@ -761,7 +767,21 @@ function check(label, actual, expected) {
   await wait(40);
   check('Die Zahl aus der Textänderung gilt', s1.Collab.caretOf('uidV'), 25);
 
-  // Und eine ältere Anwesenheitsmeldung darf sie nicht wieder überschreiben
+  /* Und eine Anwesenheitsmeldung darf sie nicht wieder überschreiben,
+     solange der Vorrang der Textänderung gilt (OP_CARET_TTL_MS).
+
+     >>> Warum hier noch einmal gesendet wird <<<
+     Der Vorrang läuft nach knapp einer Sekunde ab, gemessen an der echten
+     Uhr. Steht der Rechner in genau diesem Moment (Virenscanner,
+     Dateisynchronisation), war er beim Prüfen schon abgelaufen und die
+     Anwesenheit galt zu Recht – die Prüfung schlug fehl, ohne dass etwas
+     kaputt war. Genau einmal beobachtet und lange gesucht.
+
+     Die Absicht bleibt dieselbe: die Anwesenheit trifft NACH der
+     Textänderung ein und darf sie trotzdem nicht verdrängen. Nur die
+     Uhr wird davor zurückgesetzt. */
+  publish({ k: 'y', p: 'p1', u: '', c: 25, by: 'uidV', at: Date.now() });
+  await wait(40);
   presence.set('uidV', karte(12));
   announcePresence();
   check('Die Anwesenheit überschreibt sie nicht', s1.Collab.caretOf('uidV'), 25);

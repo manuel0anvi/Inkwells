@@ -3,7 +3,15 @@
    JOURNAL v5 — unified nav+sections panel
    ══════════════════════════════════════════════════════════ */
 
-let _showWhitespaceDebug = false;
+/* An window, nicht als blosses `let`.
+
+   Ein `let` auf oberster Ebene eines klassischen Scripts wird KEINE
+   Eigenschaft von window – canvas/text.js liest aber genau
+   window._showWhitespaceDebug ab. Der Wert war dort also immer undefined,
+   und updateWhitespaceDebugOverlays() stieg jedes Mal sofort wieder aus:
+   das Kuerzel meldete "Formatierungszeichen: EIN", gezeichnet wurde nie
+   etwas. */
+window._showWhitespaceDebug = false;
 
 /* ══════════════════════════════════════════════════════════
    RÜCKGÄNGIG / WIEDERHOLEN
@@ -80,7 +88,7 @@ function _applyPageSnapshot(page, snap) {
   if (!pgEl) return;
 
   const textDiv = pgEl.querySelector('.j-text');
-  if (textDiv) textDiv.innerHTML = page.textContent;
+  if (textDiv) textDiv.innerHTML = sanitizePageHtml(page.textContent);
 
   // Entlastete Zeichenflächen erst wieder aufbauen, sonst geht das Zeichnen ins Leere
   if (window.PageCanvases) PageCanvases.ensure(page.id);
@@ -120,20 +128,27 @@ function pushTypingHistory(page) {
   pushPageHistory(page);
 }
 
+/* Setzt die Knöpfe für Rückgängig/Wiederholen auf verfügbar oder nicht.
+
+   >>> Zurzeit tut das nichts <<<
+   Die beiden Knöpfe sind aus der Werkzeugleiste entfernt (index.html);
+   beides läuft über die Kürzel. Die Funktion bleibt trotzdem stehen, und
+   zwar mit Absicht: sie wird an dreizehn Stellen gerufen (app.js,
+   canvas/objects.js, core/importExport.js, ui/toolbar.js). Diese Aufrufe
+   zu entfernen wäre viel Änderung ohne jede Wirkung – und käme ein Knopf
+   je zurück, müsste man sie alle wieder einsetzen und würde welche
+   vergessen. Hier steht deshalb der eine Ort, an dem es wieder greift. */
 function updateUndoRedoUI() {
-  const entry = S.activePgId ? S.history[S.activePgId] : null;
   const undoBtn = E('btn-undo');
   const redoBtn = E('btn-redo');
+  if (!undoBtn && !redoBtn) return;
 
-  if (undoBtn) {
-    const can = !!entry && entry.undo.length > 0;
-    undoBtn.disabled = !can;
-    undoBtn.classList.toggle('disabled', !can);
-  }
-  if (redoBtn) {
-    const can = !!entry && entry.redo.length > 0;
-    redoBtn.disabled = !can;
-    redoBtn.classList.toggle('disabled', !can);
+  const entry = S.activePgId ? S.history[S.activePgId] : null;
+  for (const [btn, seite] of [[undoBtn, 'undo'], [redoBtn, 'redo']]) {
+    if (!btn) continue;
+    const moeglich = !!entry && entry[seite].length > 0;
+    btn.disabled = !moeglich;
+    btn.classList.toggle('disabled', !moeglich);
   }
 }
 
@@ -282,7 +297,7 @@ function openSection(sec = null, scrollToPgId = null) {
   if (pages.length) setActivePg(scrollToPgId || pages[0].id);
   updateUndoRedoUI();
   E('pg-scroll').scrollTop = 0;
-  setupScrollAutoPage(sec);
+  setupScrollAutoPage();
   renderSideTree();
   requestAnimationFrame(() => {
     refreshSizer();
@@ -454,7 +469,8 @@ function appendPageDOM(page, index) {
     + ';top:64px;left:72px;right:' + rightPad + 'px;bottom:24px'
     + ';pointer-events:' + (S.mode === 'cursor' ? 'auto' : 'none')
     + ';white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word';
-  textDiv.innerHTML = page.textContent || '';
+  // Fremder Seitentext geht immer durch die Bereinigung (core/sanitize.js)
+  textDiv.innerHTML = sanitizePageHtml(page.textContent);
 
   textDiv.querySelectorAll('h1,h2,h3').forEach(h => {
     const p = document.createElement('p');
@@ -496,7 +512,7 @@ function appendPageDOM(page, index) {
     scheduleSideTree();
     maybeAutoPage();
     checkPageOverflow(textDiv, page);
-    if (_showWhitespaceDebug) updateWhitespaceDebugOverlays();
+    if (window._showWhitespaceDebug) updateWhitespaceDebugOverlays();
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
   /* Vor der Änderung sichern – hier ist der Text noch im alten Zustand.
@@ -654,7 +670,7 @@ function updateAddPageBtnVisibility() {
   }
 }
 
-function setupScrollAutoPage(sec) {
+function setupScrollAutoPage() {
   const sc = E('pg-scroll');
   if (!sc._hasScrollListener) {
     sc.addEventListener('scroll', () => {
@@ -854,10 +870,3 @@ E('btn-add-page-end').addEventListener('click', async () => {
 
 showHome();
 
-// Web-App: Auto-open login if requested via URL
-if (window.location.search.includes('login=1')) {
-  setTimeout(() => {
-    const btnUser = document.getElementById('btn-user');
-    if (btnUser) btnUser.click();
-  }, 100);
-}

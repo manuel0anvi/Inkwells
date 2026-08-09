@@ -32,9 +32,21 @@ src/
 │   └── responsive.css           # Media queries, mobile, touch optimizations
 │
 ├── app.js                       # Main app orchestration
-├── index.html                   # HTML structure + script loader
-└── style.css                    # Main stylesheet (imports all css/ modules)
+└── index.html                   # HTML structure + script loader
 ```
+
+> **Der Baum oben ist ein Ausschnitt.** Er stammt aus der Zeit des
+> Refactorings und nennt nur die Module, um die es damals ging.
+> Dazugekommen sind seither unter anderem `core/share.js`,
+> `core/cloudSync.js`, `core/sanitize.js`, `ui/collab.js` und
+> `ui/sharedDocs.js` — die Freigaben, die Cloud und die Live-Bearbeitung.
+> Was eine Datei tut, steht in ihrem Kopf; die Statistik weiter unten ist
+> ebenfalls nicht mehr aktuell.
+
+> **`style.css` gibt es nicht mehr.** Es hat die acht Module unter `css/`
+> per `@import` eingebunden, wurde von `index.html` aber nie geladen —
+> die bindet sie einzeln ein. Zwei Wege nebeneinander, von denen einer
+> tot war.
 
 ## 🔄 Module & Ihre Aufgaben
 
@@ -62,9 +74,12 @@ src/
 > Etikettieren sofort das Papier ihres Abschnitts — der Standard wirkt also
 > beim Zuordnen, nicht rückwirkend.
 >
-> `sec.color` muss in **beiden** Listen stehen, die Abschnitte feldweise neu
-> aufbauen: `applyStruct()` (ui/collab.js) und `splitNotebook()`
-> (core/share.js). Was dort fehlt, verschwindet beim nächsten Abgleich still.
+> `sec.color` muss in **allen drei** Listen stehen, die Abschnitte feldweise
+> neu aufbauen: `applyStruct()` (ui/collab.js), `splitNotebook()`
+> (core/share.js) und `adoptRoom()` (ui/sharedDocs.js). Was dort fehlt,
+> verschwindet beim nächsten Abgleich still — in `adoptRoom()` fehlte die
+> Farbe, und damit verlor der Besitzer sie bei jedem Öffnen seines
+> freigegebenen Hefts.
 
 > **Abschnitte sind Etiketten, keine Kapitel.** Die Reihenfolge eines Hefts
 > steht in `nb.pages`, die Zugehörigkeit einer Seite in `page.secId`. Ein
@@ -237,7 +252,11 @@ src/
 <script src="app.js"></script>             <!-- benötigt: alles oben -->
 ```
 
-## 🎨 CSS-Ladreihenfolge (style.css)
+## 🎨 CSS-Ladreihenfolge (index.html)
+
+Die Reihenfolge unten ist die, in der `index.html` die Module einbindet.
+Früher stand sie als `@import`-Kette in `style.css` — die Datei ist weg,
+weil sie niemand geladen hat.
 
 ```css
 /* Foundation: Colors, reset, typography */

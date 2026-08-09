@@ -446,6 +446,16 @@
        der Raum verlangt eine Kennung, der Versuch endete nur mit einer
        roten Warnung im Streifen, obwohl alles in Ordnung ist. */
     if (window.Collab && api.hasRealIdentity()) {
+      /* Die eigene Firebase-Kennung in den Kopf eintragen. Der Besitzer
+         baut daraus die Rollenliste des Raums – ohne sie gibt es fuer
+         diese Person keinen Live-Betrieb (core/share.js, registerMyUid).
+         Schlaegt es fehl, wird trotzdem geoeffnet: gespeichert wird
+         weiterhin ueber Firestore. */
+      // Mit ?. gefragt: eine aeltere core/share.js kennt es noch nicht.
+      // Dann bleibt es beim bisherigen Verhalten – lieber ohne die
+      // Eintragung als gar kein Dokument.
+      api.registerMyUid?.(fresh.docId, fresh)?.catch?.(() => {});
+
       Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit', {
         isOwner: false,
         ownerUid: fresh.owner,
@@ -526,11 +536,19 @@
 
     // Der Raum ist die massgebliche Fassung, die eigenen Seiten haengen an
     nb.pages = (roomNb.pages || []).concat(extras);
+    /* >>> Feldweise – also muss JEDES Feld hier stehen <<<
+       Was nicht aufgezaehlt ist, faellt beim Uebernehmen still weg. Die
+       Farbe fehlte: wer einem Abschnitt von Hand eine gab, verlor sie bei
+       jedem Oeffnen seines freigegebenen Hefts. Leer heisst "nicht
+       gewaehlt", dann rechnet colorForSection() eine aus der Kennung.
+       Dieselbe Liste gibt es in applyStruct() (ui/collab.js) und
+       splitNotebook() (core/share.js) – alle drei muessen gleich bleiben. */
     nb.sections = (roomNb.sections || []).map(sec => ({
       id: String(sec.id),
       name: String(sec.name || ''),
       pgIds: [],                       // gleich unten abgeleitet
-      defaultBg: sec.defaultBg || nb.defaultBg || 'ruled'
+      defaultBg: sec.defaultBg || nb.defaultBg || 'ruled',
+      color: sec.color || ''
     }));
 
     /* Ein Etikett, das es im Raum nicht mehr gibt, wird abgenommen – die
@@ -611,10 +629,14 @@
       revision: loaded.head.revision
     });
 
-    // Der Raum kann anders aussehen als die Datei – neu aufbauen.
+    /* Der Raum kann anders aussehen als die Datei – neu aufbauen.
+       Ueber activeSection() und nicht ueber einen Rueckfall auf den ersten
+       Abschnitt: null heisst "alle Seiten", und das ist der Normalfall.
+       Derselbe Fehler stand in rerenderPages() (ui/collab.js) – ohne
+       Abschnitte wurde dort gar nicht aufgebaut, mit Abschnitten sprang
+       die Ansicht in den ersten. */
     if (S.activeNbId === nb.id && typeof openSection === 'function') {
-      const sec = (nb.sections || []).find(s => s.id === nb.activeSecId) || (nb.sections || [])[0];
-      if (sec) openSection(sec);
+      openSection(typeof activeSection === 'function' ? activeSection(nb) : null);
     }
 
     watchOpenDocument(entry.docId);
@@ -624,8 +646,15 @@
        Eingeladenen, dass hier jemand ohne Netz weiterschreiben könnte
        (core/share.js, joinDocRoom). */
     if (window.Collab) {
-      Collab.start(entry.docId, nb, crdtState, true, { isOwner: true, ownerUid: me.uid })
-        .catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
+      /* Die Rollenliste des Raums. Sie kommt aus dem Kopf und wird beim
+         Betreten in die Realtime Database geschrieben – dort koennen die
+         Regeln nicht in Firestore nachschlagen und brauchen deshalb
+         Kennungen statt Adressen (website/database.rules.json). */
+      Collab.start(entry.docId, nb, crdtState, true, {
+        isOwner: true,
+        ownerUid: me.uid,
+        memberUids: api.roomRolesFrom ? api.roomRolesFrom(loaded.head) : {}
+      }).catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
     }
   }
 
@@ -769,7 +798,17 @@
          Live-Sitzung – sein Heft behält er. */
       if (S.sharedDoc.isOwner) {
         if (!head) { endLiveSession(); applyReadOnlyChrome(false, null); }
-        else S.sharedDoc.revision = head.revision;
+        else {
+          S.sharedDoc.revision = head.revision;
+          /* Wer dazukommt, traegt seine Kennung selbst ein – der Kopf
+             aendert sich dadurch, und erst dann kann der Besitzer ihn in
+             die Rollenliste des Raums aufnehmen. Ohne dieses Nachziehen
+             bekaeme ein frisch Eingeladener bis zum naechsten Oeffnen
+             keinen Live-Betrieb. */
+          if (window.Collab?.refreshRoomRoles && window.InkwellShare?.roomRolesFrom) {
+            window.Collab.refreshRoomRoles(window.InkwellShare.roomRolesFrom(head));
+          }
+        }
         return;
       }
 

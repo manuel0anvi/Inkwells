@@ -103,10 +103,10 @@
   }
 
   function toggleFormatMarks() {
-    if (typeof _showWhitespaceDebug === 'undefined') return;
-    _showWhitespaceDebug = !_showWhitespaceDebug;
+    // Ueber window: canvas/text.js liest von dort, app.js schreibt dorthin
+    window._showWhitespaceDebug = !window._showWhitespaceDebug;
     if (typeof updateWhitespaceDebugOverlays === 'function') updateWhitespaceDebugOverlays();
-    toast(_showWhitespaceDebug ? t('formattingOn') : t('formattingOff'));
+    toast(window._showWhitespaceDebug ? t('formattingOn') : t('formattingOff'));
   }
 
   /* ── Verteiler ─────────────────────────────────────────────────── */

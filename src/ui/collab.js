@@ -1227,8 +1227,12 @@
     const vorher = (caret !== null && typeof flatTextOf === 'function')
       ? flatTextOf(textDiv) : null;
 
+    /* Der Text kommt aus dem Raum, also von aussen – bereinigen, bevor
+       er ins DOM geht. Der Yjs-Stand bleibt unangetastet: dort steht
+       weiterhin, was der andere geschickt hat, sonst liefen die beiden
+       Fassungen auseinander und jeder Abgleich schriebe hin und her. */
     entry.applying = true;
-    textDiv.innerHTML = nextText;
+    textDiv.innerHTML = sanitizePageHtml(nextText);
     entry.applying = false;
 
     if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
@@ -1916,9 +1920,21 @@
     if (!liveNb || typeof openSection !== 'function') return;
     if (typeof S !== 'undefined' && S.activeNbId !== liveNb.id) return;
 
-    const sections = liveNb.sections || [];
-    const sec = sections.find(s => s.id === liveNb.activeSecId) || sections[0];
-    if (!sec) return;
+    /* >>> Der Ausschnitt bleibt der, auf den DIESE Ansicht eingestellt ist <<<
+       Hier stand ein Rueckfall auf sections[0], und darunter ein Ausstieg,
+       falls es gar keinen Abschnitt gibt. Beides stammt aus der Zeit, als
+       immer ein Abschnitt offen sein musste. Seit Abschnitte Etiketten
+       sind, ist activeSecId === '' der Normalfall und openSection(null)
+       heisst "alle Seiten" – und damit war beides falsch:
+
+         · Heft OHNE Abschnitte: sec blieb undefined, der Aufbau wurde
+           uebersprungen. Legte der andere eine Seite an, loeschte eine
+           oder sortierte um, sah man davon nichts.
+         · Heft MIT Abschnitten, Ansicht auf "alle Seiten": der Rueckfall
+           zog einen still in den ERSTEN Abschnitt.
+
+       activeSection() liefert genau das Richtige, null eingeschlossen. */
+    const sec = (typeof activeSection === 'function') ? activeSection(liveNb) : null;
 
     const scroller = E('pg-scroll');
     const top = scroller ? scroller.scrollTop : 0;
@@ -1998,7 +2014,9 @@
     try {
       room = await window.InkwellShare.joinDocRoom(id, {
         isOwner: !!opts.isOwner,
-        ownerUid: opts.ownerUid || ''
+        ownerUid: opts.ownerUid || '',
+        // Nur der Besitzer schreibt sie – siehe database.rules.json
+        memberUids: opts.memberUids || {}
       });
       lastError = '';
     } catch (err) {
@@ -2515,8 +2533,20 @@
     showLiveState();
   }
 
+  /**
+   * Die Rollenliste des Raums nachziehen (nur beim Besitzer). Wird
+   * gerufen, sobald sich der Kopf des Dokuments aendert – etwa weil
+   * jemand neu dazugekommen ist und seine Kennung eingetragen hat.
+   */
+  function refreshRoomRoles(rollen) {
+    if (!room || typeof room.setRoles !== 'function') return;
+    room.setRoles(rollen).catch(err =>
+      console.warn('[Collab] Rollen nicht aufgefrischt:', err?.message || err));
+  }
+
   window.Collab = {
-    start, stop, setCanWrite, noteTextChange, noteStroke, notePage, noteChange,
+    start, stop, setCanWrite, refreshRoomRoles,
+    noteTextChange, noteStroke, notePage, noteChange,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
     // Nur die fremden Marken – die Tabelle zum Abfotografieren
     fremdeMarken: zeigeFremdeMarken,
