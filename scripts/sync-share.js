@@ -5,8 +5,9 @@
    Hält die gemeinsam genutzten Module von App und Website gleich.
 
    Manches wird an zwei Stellen gebraucht:
-     · src/core/share.js  →  website/js/share.js   Freigabe über Firestore
-     · src/core/docx.js   →  website/js/docx.js    Word-Export
+     · src/core/share.js    →  website/js/share.js     Freigabe über Firestore
+     · src/core/docx.js     →  website/js/docx.js      Word-Export
+     · src/core/sanitize.js →  website/js/sanitize.js  Seitentext bereinigen
 
    Die App wird ohne den Ordner website/ ausgeliefert (electron-builder
    nimmt nur src/**), deshalb geht es nicht mit einer einzigen Datei.
@@ -42,7 +43,8 @@ const root = path.join(__dirname, '..');
 
 const PAIRS = [
   { source: ['src', 'core', 'share.js'], target: ['website', 'js', 'share.js'] },
-  { source: ['src', 'core', 'docx.js'], target: ['website', 'js', 'docx.js'] }
+  { source: ['src', 'core', 'docx.js'], target: ['website', 'js', 'docx.js'] },
+  { source: ['src', 'core', 'sanitize.js'], target: ['website', 'js', 'sanitize.js'] }
 ];
 
 function header(sourceRel) {

@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script src="../../src/core/sanitize.js"></script>
+<script>
+const zeilen = [];
+let offen = '';
+
+function abschnitt(name) { offen = name; zeilen.push(''); zeilen.push(name); }
+
+function pruefe(was, bedingung, hinweis) {
+  zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
+}
+
+/* Enthaelt das Ergebnis irgendetwas, was der Browser ausfuehren wuerde?
+   Bewusst nicht nur nach "script" gesucht: gefaehrlich sind vor allem die
+   Ereignis-Attribute, und die heissen alle on… */
+function istHarmlos(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  for (const el of t.content.querySelectorAll('*')) {
+    for (const a of el.attributes) {
+      if (/^on/i.test(a.name)) return false;
+      if (/^(src|href|srcset|formaction|data|xlink:href)$/i.test(a.name)) return false;
+    }
+    if (/^(SCRIPT|IFRAME|OBJECT|EMBED|IMG|SVG|LINK|META|FORM|INPUT|VIDEO|AUDIO)$/.test(el.tagName)) return false;
+  }
+  return true;
+}
+
+/* ── 1. Nichts Ausfuehrbares kommt durch ──────────────────────────── */
+
+abschnitt('Angriffe');
+
+const angriffe = [
+  ['Bild mit onerror',        '<img src=x onerror="window.__BOOM=1">'],
+  ['Script-Element',          '<script>window.__BOOM=1<\/script>'],
+  ['SVG mit onload',          '<svg onload="window.__BOOM=1"></svg>'],
+  ['onclick am Absatz',       '<p onclick="window.__BOOM=1">Text</p>'],
+  ['iframe mit javascript:',  '<iframe src="javascript:window.__BOOM=1"></iframe>'],
+  ['Link nach aussen',        '<a href="https://boese.example">klick</a>'],
+  ['style mit url()',         '<p style="background:url(https://boese.example/x)">Text</p>'],
+  ['Formular',                '<form action="https://boese.example"><input name="a"></form>'],
+  ['verschachtelt versteckt', '<div><b><img src=x onerror="window.__BOOM=1"></b></div>'],
+  ['Grossschreibung',         '<IMG SRC=x ONERROR="window.__BOOM=1">'],
+  ['data-Attribut',           '<p data-x="window.__BOOM=1">Text</p>']
+];
+
+for (const [name, roh] of angriffe) {
+  const raus = sanitizePageHtml(roh);
+  pruefe(name, istHarmlos(raus), JSON.stringify(raus));
+}
+
+// Und zwar wirklich: das Ergebnis ins Dokument haengen darf nichts ausloesen
+const buehne = document.createElement('div');
+document.body.appendChild(buehne);
+for (const [, roh] of angriffe) buehne.innerHTML = sanitizePageHtml(roh);
+pruefe('Eingesetzt loest nichts aus', !window.__BOOM, 'window.__BOOM wurde gesetzt');
+
+/* ── 2. Der Editor-Text bleibt unversehrt ─────────────────────────── */
+
+abschnitt('Was der Editor erzeugt');
+
+function bleibt(name, roh, muss) {
+  const raus = sanitizePageHtml(roh);
+  pruefe(name, muss.every(m => raus.includes(m)), JSON.stringify(raus));
+}
+
+bleibt('Absatz',              '<p>Hallo Welt</p>', ['<p>', 'Hallo Welt']);
+bleibt('Fett',                '<p><b>fett</b></p>', ['<b>', 'fett']);
+bleibt('Kursiv',              '<p><i>kursiv</i></p>', ['<i>', 'kursiv']);
+bleibt('Unterstrichen',       '<p><u>unter</u></p>', ['<u>', 'unter']);
+bleibt('Ueberschrift H1',     '<p class="j-title-1">Titel</p>', ['j-title-1', 'Titel']);
+bleibt('Ueberschrift H2',     '<p class="j-title-2">Titel</p>', ['j-title-2']);
+bleibt('Echtes h1',           '<h1>Titel</h1>', ['<h1>', 'Titel']);
+bleibt('Zeilenumbruch',       'a<br>b', ['<br>']);
+bleibt('Farbe als font',      '<font color="#c04040">rot</font>', ['color="#c04040"', 'rot']);
+bleibt('Farbe als style',     '<span style="color:#2a5fa8">blau</span>', ['color', 'blau']);
+bleibt('Farbe rgb()',         '<span style="color:rgb(192,64,64)">rot</span>', ['color', 'rot']);
+bleibt('Einrueckung/Leerraum','<p>  zwei Leerzeichen</p>', ['zwei Leerzeichen']);
+bleibt('Verschachtelt',       '<p><b><i>beides</i></b></p>', ['<b>', '<i>', 'beides']);
+
+abschnitt('Text geht nie verloren');
+
+const rausTabelle = sanitizePageHtml('<table><tr><td>Zelle</td></tr></table>');
+pruefe('Verbotenes Element wird ausgepackt, Text bleibt',
+  rausTabelle.includes('Zelle'), JSON.stringify(rausTabelle));
+
+const rausBild = sanitizePageHtml('<p>davor<img src=x onerror=alert(1)>danach</p>');
+pruefe('Text um ein entferntes Bild herum bleibt',
+  rausBild.includes('davor') && rausBild.includes('danach'), JSON.stringify(rausBild));
+
+abschnitt('Randfaelle');
+
+pruefe('Leer bleibt leer', sanitizePageHtml('') === '', 'nicht leer');
+pruefe('null wird zu leer', sanitizePageHtml(null) === '', 'nicht leer');
+pruefe('undefined wird zu leer', sanitizePageHtml(undefined) === '', 'nicht leer');
+const zweimal = sanitizePageHtml(sanitizePageHtml('<p><b>x</b></p>'));
+pruefe('Zweimal bereinigt aendert nichts mehr',
+  zweimal === sanitizePageHtml('<p><b>x</b></p>'), zweimal);
+
+window.__ergebnis = zeilen.join('\n');
+</script>
+</body>
+</html>

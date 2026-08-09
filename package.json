@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "web": "node scripts/serve-website.js",
-    "test": "node scripts/test-doc-split.js && node scripts/test-page-transfer.js && node scripts/test-collab-text.js && node scripts/test-collab-caret.js && node scripts/test-collab-sync.js && node scripts/test-shared-save.js && node scripts/test-cloud-match.js && node scripts/test-cloud-trash-move.js && node scripts/test-trash-sync.js && node scripts/test-view-state.js",
+    "test": "node scripts/test-doc-split.js && node scripts/test-page-transfer.js && node scripts/test-collab-text.js && node scripts/test-collab-caret.js && node scripts/test-collab-sync.js && node scripts/test-shared-save.js && node scripts/test-cloud-match.js && node scripts/test-cloud-trash-move.js && node scripts/test-trash-sync.js && node scripts/test-view-state.js && node scripts/sync-share.js --check",
     "build": "npm test && node scripts/build-release.js",
     "sync-share": "node scripts/sync-share.js",
     "check-share": "node scripts/sync-share.js --check",
@@ -16,19 +16,10 @@
     "deploy-web": "node scripts/sync-share.js && node scripts/deploy-website.js",
     "pull-web": "node scripts/pull-website.js",
     "test:rules": "firebase emulators:exec --project inkwell-rules-test --only firestore,database \"node scripts/test-rules.js\"",
-    "test:objects": "electron scripts/test-object-layers"
+    "test:objects": "electron scripts/test-object-layers",
+    "test:sanitize": "electron scripts/test-sanitize"
   },
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "manuel0anvi",
-      "repo": "inkwell"
-    }
-  ],
-  "dependencies": {
-    "electron-updater": "^6.8.3",
-    "pdfjs-dist": "^3.11.174"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",
     "electron": "^33.0.0",

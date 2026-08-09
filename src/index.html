@@ -2,6 +2,9 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<!-- Zweite Schicht unter core/sanitize.js. main.js schickt dieselbe
+     Regel zusaetzlich als Kopfzeile mit (UI_CSP). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>Inkwell</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="dns-prefetch" href="https://fonts.googleapis.com">
@@ -1065,7 +1068,6 @@
   </div>
 </div>
 
-<div class="toasts" id="toasts"></div>
 
 <script src="lib/pdf.min.js"></script>
 <script>
@@ -1073,6 +1075,9 @@
 </script>
 <!-- Core state, dialogs, data -->
 <script src="core/webAPI.js"></script>
+<!-- Bereinigt fremden Seitentext, bevor er ins DOM geht. Muss vor
+     app.js, ui/collab.js und core/importExport.js geladen sein. -->
+<script src="core/sanitize.js"></script>
 <script src="core/state.js"></script>
 <script src="core/translations.js"></script>
 <script src="core/dialogs.js"></script>

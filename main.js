@@ -222,6 +222,29 @@ const UI_MIME = {
   '.wasm': 'application/wasm'
 };
 
+/* ── Content-Security-Policy der Oberflaeche ──────────────────────────
+   Zweite Schicht unter der Bereinigung des Seitentextes
+   (src/core/sanitize.js). Die Bereinigung ist die eigentliche
+   Absicherung; hier steht, was selbst dann noch nicht geht, wenn sie
+   einmal eine Luecke haette.
+
+   >>> Warum connect-src so weit bleibt <<<
+   Die App redet mit Google Drive, Microsoft Graph, Firestore, der
+   Realtime Database und beiden Anmeldediensten – teils ueber Adressen,
+   die die Bibliotheken selbst zusammensetzen. Eine enge Liste haette
+   genau eine Art von Fehler zur Folge: die Cloud faellt still aus, und
+   zwar erst beim Nutzer. Eingeschraenkt wird deshalb das, was einem
+   eingeschleusten Schnipsel wirklich nuetzt:
+
+     · script-src   kein <script src="https://fremd"> mehr
+     · object-src   keine Plugins
+     · base-uri     kein <base>, das alle relativen Pfade umbiegt
+     · form-action  kein Formular, das Daten nach aussen schickt
+
+   Wer connect-src spaeter enger fassen will, muss vorher Anmeldung,
+   Hochladen und ein geteiltes Dokument einmal wirklich durchspielen. */
+const UI_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com; object-src 'none'; base-uri 'self'; form-action 'none'";
+
 function startUiServer() {
   return new Promise((resolve, reject) => {
     uiServer = http.createServer((req, res) => {
@@ -249,7 +272,8 @@ function startUiServer() {
         res.writeHead(200, {
           'Content-Type': UI_MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream',
           // Sonst zeigt die App nach einem Update noch die alten Dateien
-          'Cache-Control': 'no-store'
+          'Cache-Control': 'no-store',
+          'Content-Security-Policy': UI_CSP
         });
         res.end(data);
       });
@@ -645,26 +669,6 @@ function routeDeepLink(urlStr, { buffer = true } = {}) {
   return info;
 }
 
-function extractOAuthCallback(urlStr) {
-  if (!urlStr || typeof urlStr !== 'string') return null;
-
-  let paramStr = '';
-  if (urlStr.includes('#')) {
-    paramStr = urlStr.split('#')[1] || '';
-  } else if (urlStr.includes('?')) {
-    paramStr = urlStr.split('?')[1] || '';
-  }
-
-  const params = new URLSearchParams(paramStr);
-  return {
-    url: urlStr,
-    accessToken: params.get('access_token') || '',
-    refreshToken: params.get('refresh_token') || '',
-    providerToken: params.get('provider_token') || '',
-    providerRefreshToken: params.get('provider_refresh_token') || ''
-  };
-}
-
 let oauthServer = null;
 
 ipcMain.handle('start-oauth-server', async () => {
@@ -797,68 +801,6 @@ ipcMain.handle('start-oauth-server', async () => {
   });
 });
 
-
-ipcMain.handle('start-oauth', async (_, url) => {
-  if (!win) return { ok: false, err: 'Main window not ready' };
-  if (!url || typeof url !== 'string') return { ok: false, err: 'Missing OAuth URL' };
-
-  const popup = new BrowserWindow({
-    width: 540,
-    height: 760,
-    parent: win,
-    modal: false,
-    show: true,
-    backgroundColor: '#12121a',
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      partition: 'persist:oauth'
-    }
-  });
-
-  const finishIfCallback = async (candidateUrl) => {
-    const result = extractOAuthCallback(candidateUrl);
-    if (!result || !result.accessToken) return false;
-
-    console.log('[Auth] OAuth callback captured in popup:', candidateUrl);
-    try { win.webContents.send('oauth-callback', candidateUrl); } catch (e) { console.warn('[main] Failed to forward oauth callback:', e); }
-    if (!popup.isDestroyed()) popup.close();
-    return true;
-  };
-
-  popup.webContents.on('will-redirect', (event, candidateUrl) => {
-    if (extractOAuthCallback(candidateUrl)) {
-      event.preventDefault();
-      finishIfCallback(candidateUrl).catch(err => console.error('[main] OAuth callback handling failed:', err));
-    }
-  });
-
-  popup.webContents.on('will-navigate', (event, candidateUrl) => {
-    if (extractOAuthCallback(candidateUrl)) {
-      event.preventDefault();
-      finishIfCallback(candidateUrl).catch(err => console.error('[main] OAuth callback handling failed:', err));
-    }
-  });
-
-  popup.webContents.on('did-navigate', (event, candidateUrl) => {
-    finishIfCallback(candidateUrl).catch(err => console.error('[main] OAuth callback handling failed:', err));
-  });
-
-  popup.on('closed', () => {
-    if (win && !win.isDestroyed()) {
-      try { win.webContents.send('oauth-popup-closed'); } catch (e) {}
-    }
-  });
-
-  try {
-    await popup.loadURL(url);
-    return { ok: true };
-  } catch (err) {
-    if (!popup.isDestroyed()) popup.close();
-    return { ok: false, err: String(err) };
-  }
-});
 
 /* Ensure custom protocol is registered.
 
@@ -1098,6 +1040,24 @@ ipcMain.handle('load', async () => {
 
 // Settings management
 const settingsPath = path.join(app.getPath('userData'), 'inkwell-settings.json');
+
+/* Die Einstellungen enthalten cloudAccessToken und cloudRefreshToken. Sie
+   standen hier im Klartext im Protokoll – und main.js reicht zusätzlich
+   die Ausgaben des Fensters ans Terminal weiter, wo sie beim Vorführen,
+   in einem Bildschirmfoto oder in einer Fehlermeldung landen. Mit dem
+   Refresh-Token kommt man an das ganze Drive bzw. OneDrive.
+
+   Was der Wert IST, ist nie interessant – nur, ob überhaupt einer da ist.
+   Genau das bleibt lesbar. */
+function redactSettings(settings) {
+  if (!settings || typeof settings !== 'object') return settings;
+  const out = { ...settings };
+  for (const key of Object.keys(out)) {
+    if (!/token|secret|refresh|nonce/i.test(key)) continue;
+    out[key] = out[key] ? '<gesetzt, ' + String(out[key]).length + ' Zeichen>' : '';
+  }
+  return out;
+}
 console.log('[Settings] Settings file path:', settingsPath);
 
 ipcMain.handle('get-default-save-path', () => {
@@ -1116,7 +1076,7 @@ ipcMain.handle('load-settings', () => {
   try {
     if (fs.existsSync(settingsPath)) {
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      console.log('[Settings] Loaded:', settings);
+      console.log('[Settings] Loaded:', redactSettings(settings));
       return settings;
     }
     console.log('[Settings] No settings file found');
@@ -1127,7 +1087,7 @@ ipcMain.handle('load-settings', () => {
 });
 
 ipcMain.handle('save-settings', (_, data) => {
-  console.log('[Settings] Saving settings:', data);
+  console.log('[Settings] Saving settings:', redactSettings(data));
   try {
     fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2));
     console.log('[Settings] ✓ Settings saved');
@@ -1148,12 +1108,64 @@ ipcMain.handle('pick-folder', async (_, defaultPath) => {
   return r.filePaths[0];
 });
 
+/* ══════════════════════════════════════════════════════════════════════
+   WOHIN DIE OBERFLÄCHE SCHREIBEN DARF
+
+   Die Dateizugriffe hängen am Fenster (preload.js). Sie nahmen bisher
+   jeden Pfad an – wer im Fenster Code ausführen kann, konnte damit jede
+   Datei des Nutzers lesen, überschreiben oder löschen. Genau das ist der
+   Grund, warum fremder Seitentext jetzt bereinigt wird
+   (src/core/sanitize.js); hier steht die zweite Schicht darunter.
+
+   Erlaubt sind der eingestellte Speicherort (dort liegen die Hefte) und
+   der Datenordner der App. Ein Pfad, der weder unter dem einen noch unter
+   dem anderen liegt, wird abgewiesen.
+
+   Der Vergleich läuft über path.resolve und mit dem Trennzeichen dahinter
+   – sonst käme "…\Inkwell-heimlich" an "…\Inkwell" vorbei.
+   ══════════════════════════════════════════════════════════════════════ */
+
+function liegtUnter(kandidat, ordner) {
+  if (!ordner) return false;
+  const a = path.resolve(kandidat);
+  const b = path.resolve(ordner);
+  return a === b || a.startsWith(b + path.sep);
+}
+
+/** Der eingestellte Speicherort – aus derselben Datei, die ihn hält. */
+function erlaubteOrdner() {
+  const ordner = [app.getPath('userData')];
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const gespeichert = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      if (gespeichert && typeof gespeichert.saveLocation === 'string' && gespeichert.saveLocation) {
+        ordner.push(gespeichert.saveLocation);
+      }
+    }
+  } catch (err) { /* dann bleibt es beim Datenordner */ }
+  // Der Vorgabeort gilt immer, auch bevor er zum ersten Mal gespeichert ist
+  try { ordner.push(path.join(app.getPath('documents'), 'Inkwell')); } catch (err) {}
+  return ordner;
+}
+
+function pfadErlaubt(filePath) {
+  if (typeof filePath !== 'string' || !filePath) return false;
+  return erlaubteOrdner().some(o => liegtUnter(filePath, o));
+}
+
+/** Einheitliche Absage – und ein Eintrag im Protokoll, denn das ist nie normal. */
+function pfadAbgelehnt(was, filePath) {
+  console.error(`[Sicherheit] ${was} außerhalb des Speicherorts abgelehnt:`, filePath);
+  return { success: false, error: 'Pfad liegt außerhalb des Speicherorts' };
+}
+
 // File operations for auto-save
 // Schreibt immer erst vollständig in eine Nebendatei und ersetzt das Original
 // dann in einem Zug. Vorher wurde direkt in die .jrnl geschrieben – ein
 // Absturz oder Stromausfall mitten im Schreiben hinterließ eine abgeschnittene
 // Datei, das Notizbuch war damit verloren.
 ipcMain.handle('save-to-path', async (_, filePath, data) => {
+  if (!pfadErlaubt(filePath)) return pfadAbgelehnt('Schreiben', filePath);
   const tmpPath = `${filePath}.tmp`;
   try {
     const dir = path.dirname(filePath);
@@ -1187,6 +1199,7 @@ ipcMain.handle('save-to-path', async (_, filePath, data) => {
 });
 
 ipcMain.handle('load-from-path', async (_, filePath) => {
+  if (!pfadErlaubt(filePath)) return pfadAbgelehnt('Lesen', filePath);
   console.log('[Load] Loading from:', filePath);
   try {
     if (!fs.existsSync(filePath)) {
@@ -1243,6 +1256,7 @@ ipcMain.handle('save-registry', (_, data) => {
 });
 
 ipcMain.handle('delete-file', async (_, filePath) => {
+  if (!pfadErlaubt(filePath)) return pfadAbgelehnt('Löschen', filePath);
   console.log('[Delete] Deleting file:', filePath);
   try {
     if (fs.existsSync(filePath)) {
@@ -1260,6 +1274,8 @@ ipcMain.handle('delete-file', async (_, filePath) => {
 });
 
 ipcMain.handle('move-file', async (_, oldPath, newPath) => {
+  if (!pfadErlaubt(oldPath)) return pfadAbgelehnt('Verschieben (Quelle)', oldPath);
+  if (!pfadErlaubt(newPath)) return pfadAbgelehnt('Verschieben (Ziel)', newPath);
   console.log('[Move] Moving file:', oldPath, '->', newPath);
   try {
     if (!fs.existsSync(oldPath)) {
@@ -1279,5 +1295,6 @@ ipcMain.handle('move-file', async (_, oldPath, newPath) => {
 });
 
 ipcMain.handle('file-exists', async (_, filePath) => {
+  if (!pfadErlaubt(filePath)) return false;
   return fs.existsSync(filePath);
 });

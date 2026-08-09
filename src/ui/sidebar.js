@@ -27,6 +27,25 @@ function getSectionDisplayName(sec) {
    durchgehendes Heft.
    ══════════════════════════════════════════════════════════════════════ */
 
+/* Die Ueberschriften einer Seite, die gerade NICHT aufgebaut ist.
+
+   >>> Warum <template> und nicht ein loses <div> <<<
+   Hier stand `document.createElement('div')` samt innerHTML. Ein loses
+   div ist zwar nicht im Dokument, aber trotzdem lebendig: der Browser
+   laedt darin Bilder und feuert onerror. Bei einem fremden Heft genuegte
+   also das blosse Zeichnen des Baums, um dessen Code auszufuehren.
+
+   Der Inhalt eines <template> ist inert – dort passiert nichts. Die
+   Bereinigung kommt zusaetzlich dazu, damit hier dieselbe Regel gilt wie
+   ueberall sonst (core/sanitize.js). */
+function hdgsAusText(html) {
+  const halter = document.createElement('template');
+  halter.innerHTML = (typeof sanitizePageHtml === 'function')
+    ? sanitizePageHtml(html)
+    : '';
+  return halter.content;
+}
+
 function renderSideTree() {
   const nb = getNb(); const tree = E('side-tree'); tree.innerHTML = ''; if (!nb) return;
   getSections(nb);
@@ -122,7 +141,7 @@ function renderSideTree() {
         const pgNo = pageNumberOf(nb, pg.id);
         const livePgEl = E('pg-scroll').querySelector('[data-pgid="' + pg.id + '"]');
         let hdgs = livePgEl ? [...livePgEl.querySelectorAll('.j-text h1,.j-text h2,.j-text h3,.j-text p.j-title-1,.j-text p.j-title-2,.j-text p.j-title-3')]
-          : ([...((d => { d.innerHTML = pg.textContent || ''; return d; })(document.createElement('div'))).querySelectorAll('h1,h2,h3,p.j-title-1,p.j-title-2,p.j-title-3')]);
+          : ([...hdgsAusText(pg.textContent).querySelectorAll('h1,h2,h3,p.j-title-1,p.j-title-2,p.j-title-3')]);
         if (!hdgs.length) continue;
         hdgs.forEach(h => {
           const lvl = h.classList?.contains('j-title-1') ? 'h1' : h.classList?.contains('j-title-2') ? 'h2' : h.classList?.contains('j-title-3') ? 'h3' : h.tagName.toLowerCase();

@@ -323,9 +323,15 @@ function buildPdfPage(nb, sec, page, pageNo) {
   html += `<div class="ph"><span>${t('page') || 'Seite'} ${pageNo}</span><span>${fmt(page.date)}</span></div>`;
 
   // Text mit derselben Geometrie wie im Editor
-  if (page.textContent) {
+  /* Auch hier bereinigt: das erzeugte HTML wird in main.js in ein
+     eigenes Fenster geladen (export-pdf). Das traegt zwar kein
+     preload und damit kein window.api, koennte aber immer noch nach
+     aussen funken – ein fremdes Heft zu exportieren darf nichts
+     ausloesen. */
+  const exportText = sanitizePageHtml(page.textContent);
+  if (exportText) {
     html += `<div class="tx" style="line-height:${lh}px;padding-top:${pt}px;right:${rightPad}px">`
-      + page.textContent + '</div>';
+      + exportText + '</div>';
   }
 
   /* Eingefügte Bilder. Die Ebene entscheidet, ob sie über oder unter Text
