@@ -92,6 +92,20 @@ const STALE_SETTINGS = [
   'autoSaveInterval'
 ];
 
+/* Fürs Protokoll: die Einstellungen tragen cloudAccessToken und
+   cloudRefreshToken. Sie standen hier im Klartext in der Konsole, und
+   main.js reicht die Ausgaben des Fensters zusätzlich ans Terminal
+   weiter. Ob ein Token da ist, bleibt ablesbar – der Wert nicht. */
+function redactSettings(settings) {
+  if (!settings || typeof settings !== 'object') return settings;
+  const out = { ...settings };
+  for (const key of Object.keys(out)) {
+    if (!/token|secret|refresh|nonce/i.test(key)) continue;
+    out[key] = out[key] ? '<gesetzt, ' + String(out[key]).length + ' Zeichen>' : '';
+  }
+  return out;
+}
+
 class SettingsManager {
   constructor() {
     this.settings = { ...DEFAULT_SETTINGS };
@@ -126,7 +140,7 @@ class SettingsManager {
     }
     
     this._initialized = true;
-    console.log('[Settings] Initialization complete:', this.settings);
+    console.log('[Settings] Initialization complete:', redactSettings(this.settings));
   }
 
   async load() {
@@ -160,7 +174,7 @@ class SettingsManager {
         for (const key of STALE_SETTINGS) delete this.settings[key];
 
         this._loadedFromFile = true;
-        console.log('[Settings] Loaded from file:', this.settings);
+        console.log('[Settings] Loaded from file:', redactSettings(this.settings));
       }
     } catch (err) {
       console.warn('[Settings] Failed to load, using defaults:', err);
