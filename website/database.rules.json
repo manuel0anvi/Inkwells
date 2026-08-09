@@ -1,61 +1,152 @@
+/* ANWESENHEIT UND ÄNDERUNGSSTROM  ―  Realtime Database
 
+   Einspielen: Firebase Console → Realtime Database → Regeln.
+   Geprüft wird im Emulator: npm run test:rules
+
+   ── Warum es hier eine Rollenliste gibt ──────────────────────────
+   Wer zu einem geteilten Dokument gehört, steht in Firestore
+   (docs/{docId}.memberEmails). Die Realtime Database kann dort NICHT
+   nachschlagen – ihre Regeln kennen nur ihren eigenen Baum.
+
+   Vorher stand deshalb überall nur `auth != null`. Angemeldet ist aber
+   jeder: die App und die Website melden jedes Gerät anonym an, damit
+   Freigaben ohne Konto lesbar sind (signInAnonymously in share.js). Wer
+   eine docId kannte, konnte damit den gesamten Live-Textstrom eines
+   fremden Dokuments mitlesen UND eigene Änderungen hineinschreiben.
+   An eine docId kommt schon, wer einen reinen Lese-Link öffnet.
+
+   Deshalb führt der Besitzer unter roles/{docId} eine kleine Liste:
+   wer lesen darf (r) und wer schreiben darf (w). Sie wird geschrieben,
+   wenn er den Raum betritt – und genau dann ist sie auch nötig, denn
+   ohne ihn dürfen die Eingeladenen ohnehin nur lesen (onOwnerAway in
+   src/core/share.js). Es entsteht also keine Lage, in der jemand
+   schreiben dürfte, aber nicht in der Liste steht.
+
+   ── Gegen das Besetzen einer fremden Kennung ─────────────────────
+   roles/{docId} darf anlegen, wer sich selbst als owner einträgt –
+   danach nur noch dieser owner. Ein Fremder könnte also einen Raum
+   besetzen, BEVOR der echte Besitzer ihn zum ersten Mal betritt.
+   Dagegen prüft der Client beim Betreten, dass roles/{docId}/owner mit
+   dem Besitzer aus Firestore übereinstimmt, und bleibt sonst aus
+   (joinDocRoom). Die Regeln allein können das nicht entscheiden.
+*/
 {
   "rules": {
     ".read": false,
     ".write": false,
-
-    "presence": {
+    "roles": {
       "$docId": {
         ".read": "auth != null",
-
-        "$uid": {
-          ".write": "auth != null && auth.uid === $uid",
-          ".validate": "newData.hasChildren(['uid', 'initials', 'name', 'color'])",
-
-          "uid":      { ".validate": "newData.val() === $uid" },
-          "initials": { ".validate": "newData.isString() && newData.val().length <= 4" },
-          "name":     { ".validate": "newData.isString() && newData.val().length <= 120" },
-          "email":    { ".validate": "newData.isString() && newData.val().length <= 200" },
-          "color":    { ".validate": "newData.isString() && newData.val().length <= 32" },
-          "pageId":   { ".validate": "newData.isString() && newData.val().length <= 64" },
-          "offset":   { ".validate": "newData.isNumber()" },
-
-          "lockFrom": { ".validate": "newData.isNumber()" },
-          "lockTo":   { ".validate": "newData.isNumber()" },
-          "lockAt":   { ".validate": "newData.isNumber()" },
-          "cx":       { ".validate": "newData.isString() && newData.val().length <= 64" },
-
-          "at":       { ".validate": "newData.isNumber()" },
-
-          "lost":     { ".validate": "newData.isNumber()" },
-
-          "$other":   { ".validate": false }
+        ".write": "auth != null && (!data.exists() ? newData.child('owner').val() === auth.uid : data.child('owner').val() === auth.uid)",
+        ".validate": "newData.hasChild('owner')",
+        "owner": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
+        "r": {
+          "$uid": {
+            ".validate": "newData.isBoolean()"
+          }
+        },
+        "w": {
+          "$uid": {
+            ".validate": "newData.isBoolean()"
+          }
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
-
+    "presence": {
+      "$docId": {
+        ".read": "auth != null && root.child('roles').child($docId).child('r').child(auth.uid).val() === true",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && root.child('roles').child($docId).child('r').child(auth.uid).val() === true",
+          ".validate": "newData.hasChildren(['uid', 'initials', 'name', 'color'])",
+          "uid": {
+            ".validate": "newData.val() === $uid"
+          },
+          "initials": {
+            ".validate": "newData.isString() && newData.val().length <= 4"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length <= 120"
+          },
+          "email": {
+            ".validate": "newData.isString() && newData.val().length <= 200"
+          },
+          "color": {
+            ".validate": "newData.isString() && newData.val().length <= 32"
+          },
+          "pageId": {
+            ".validate": "newData.isString() && newData.val().length <= 64"
+          },
+          "offset": {
+            ".validate": "newData.isNumber()"
+          },
+          "lockFrom": {
+            ".validate": "newData.isNumber()"
+          },
+          "lockTo": {
+            ".validate": "newData.isNumber()"
+          },
+          "lockAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "cx": {
+            ".validate": "newData.isString() && newData.val().length <= 64"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "lost": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
     "ops": {
       "$docId": {
-        ".read": "auth != null",
-
+        ".read": "auth != null && root.child('roles').child($docId).child('r').child(auth.uid).val() === true",
         "$opId": {
-          ".write": "auth != null && (!data.exists() || data.child('by').val() === auth.uid || (!newData.exists() && data.child('at').isNumber() && data.child('at').val() < now - 600000))",
-
+          ".write": "auth != null && root.child('roles').child($docId).child('w').child(auth.uid).val() === true && (!data.exists() || data.child('by').val() === auth.uid || (!newData.exists() && data.child('at').isNumber() && data.child('at').val() < now - 600000))",
           ".validate": "newData.hasChildren(['k', 'p', 'by', 'at'])",
-
-          "k":  { ".validate": "newData.isString() && newData.val().length <= 8" },
-          "p":  { ".validate": "newData.isString() && newData.val().length <= 64" },
-          "by": { ".validate": "newData.val() === auth.uid" },
-          "at": { ".validate": "newData.isNumber()" },
-          "u":  { ".validate": "newData.isString() && newData.val().length <= 200000" },
-          "s":  { ".validate": "newData.hasChildren()" },
-
-          "c":  { ".validate": "newData.isNumber()" },
-          "lf": { ".validate": "newData.isNumber()" },
-          "lt": { ".validate": "newData.isNumber()" },
-          "cx": { ".validate": "newData.isString() && newData.val().length <= 64" },
-
-          "$other": { ".validate": false }
+          "k": {
+            ".validate": "newData.isString() && newData.val().length <= 8"
+          },
+          "p": {
+            ".validate": "newData.isString() && newData.val().length <= 64"
+          },
+          "by": {
+            ".validate": "newData.val() === auth.uid"
+          },
+          "at": {
+            ".validate": "newData.isNumber()"
+          },
+          "u": {
+            ".validate": "newData.isString() && newData.val().length <= 200000"
+          },
+          "s": {
+            ".validate": "newData.hasChildren()"
+          },
+          "c": {
+            ".validate": "newData.isNumber()"
+          },
+          "lf": {
+            ".validate": "newData.isNumber()"
+          },
+          "lt": {
+            ".validate": "newData.isNumber()"
+          },
+          "cx": {
+            ".validate": "newData.isString() && newData.val().length <= 64"
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       }
     }

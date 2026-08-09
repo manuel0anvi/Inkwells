@@ -376,6 +376,32 @@ service cloud.firestore {
                     .affectedKeys().hasOnly([myEmail()]);
       }
 
+      /* ── Die eigene Firebase-Kennung eintragen ────────────────────
+         Wer dazugehört, steht als ADRESSE in memberEmails. Die Regeln der
+         Realtime Database kennen aber nur auth.uid, und der Besitzer muss
+         dort eine Rollenliste hinterlegen (website/database.rules.json).
+         Dafür braucht er die Zuordnung Kennung → Adresse.
+
+         Jeder trägt deshalb seinen eigenen Eintrag ein, und ZWAR NUR den:
+         der Schlüssel muss die eigene uid sein und der Wert die eigene
+         Adresse. Wer nicht Mitglied ist, kommt gar nicht erst durch –
+         sonst könnte sich jemand über diesen Weg in die Rollenliste
+         schreiben lassen. Dasselbe Muster wie beim Selbsteintrag. */
+      function selfRegisterUid() {
+        return isVerifiedUser()
+               && myEmail() in head().memberEmails
+               && request.resource.data.diff(head()).affectedKeys()
+                    .hasOnly(['memberUids'])
+               /* Mit get(…, {}): beim ersten Eintrag gibt es das Feld noch
+                  gar nicht, und ein Zugriff auf einen fehlenden Schlüssel
+                  lässt die ganze Regel in einen Fehler laufen – sie würde
+                  dann ausgerechnet den erlaubten Fall abweisen. */
+               && request.resource.data.get('memberUids', {})
+                    .diff(head().get('memberUids', {}))
+                    .affectedKeys().hasOnly([request.auth.uid])
+               && request.resource.data.get('memberUids', {})[request.auth.uid] == myEmail();
+      }
+
       /* Wer Bearbeitungsrecht hat, darf den Inhalt neu schreiben – am Kopf
          aber nur die Angaben, die dazugehören. Titel, Rechte und die
          Mitgliederliste bleiben Sache des Besitzers. */
@@ -422,7 +448,8 @@ service cloud.firestore {
                     .affectedKeys().hasOnly([myEmail()]);
       }
 
-      allow update: if ownerUpdate() || editorUpdate() || selfJoin() || selfLeave();
+      allow update: if ownerUpdate() || editorUpdate() || selfJoin() || selfLeave()
+                    || selfRegisterUid();
 
       allow delete: if isDocOwner();
 

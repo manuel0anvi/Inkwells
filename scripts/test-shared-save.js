@@ -86,7 +86,7 @@ function fingerprintOf(notebook) {
  */
 function makeApp(setup = {}) {
   // Was das nachgebaute Firestore zu sehen bekommt
-  const calls = { save: [], pageText: [], collabStarts: [] };
+  const calls = { save: [], pageText: [], collabStarts: [], registerUid: [] };
 
   const notebook = setup.ownNotebook || makeNotebook('doc1');
   const roomNotebook = setup.roomNotebook || notebook;
@@ -160,6 +160,11 @@ function makeApp(setup = {}) {
     joinViaLink: async () => 'already',
     loadDocumentHead: async () => head,
     fingerprintNotebook: fingerprintOf,
+    /* Jeder traegt beim Oeffnen seine Firebase-Kennung im Kopf ein, damit
+       der Besitzer daraus die Rollenliste des Raums bauen kann
+       (core/share.js). Hier nur mitgezaehlt. */
+    registerMyUid: async (docId) => { calls.registerUid.push(docId); return true; },
+    roomRolesFrom: () => ({}),
     async loadDocument() {
       return {
         notebook: JSON.parse(JSON.stringify(roomNotebook)),

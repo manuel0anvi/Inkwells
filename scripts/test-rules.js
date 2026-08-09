@@ -366,11 +366,97 @@ function headData(overrides = {}) {
   await denied('Bearbeiter löscht das Dokument nicht', deleteDoc(doc(fsOf(EDITOR), 'docs/dok4')));
   await ok('Der Besitzer schon', deleteDoc(doc(fsOf(OWNER), 'docs/dok4')));
 
+  /* ── Die eigene Kennung eintragen ─────────────────────────────────
+     Die Mitgliedschaft steht als ADRESSE im Kopf, die Regeln der
+     Realtime Database kennen aber nur auth.uid. Jeder trägt seine eigene
+     Kennung deshalb selbst ein; daraus baut der Besitzer die Rollenliste
+     des Raums (core/share.js, registerMyUid).
+
+     Die Gefahr dabei ist offensichtlich: wer hier einen FREMDEN Eintrag
+     anlegen könnte, käme über die Rollenliste in einen Raum, in den er
+     nicht gehört. Deshalb steht das hier.
+     ─────────────────────────────────────────────────────────────── */
+
+  section('Die eigene Kennung eintragen');
+
+  await ok('Der Bearbeiter trägt seine Kennung ein',
+    updateDoc(doc(fsOf(EDITOR), 'docs/dok1'), {
+      ['memberUids.' + EDITOR.uid]: EDITOR.mail
+    }));
+
+  await ok('Der Leser ebenso',
+    updateDoc(doc(fsOf(READER), 'docs/dok1'), {
+      ['memberUids.' + READER.uid]: READER.mail
+    }));
+
+  await denied('Aber nicht unter fremder Kennung',
+    updateDoc(doc(fsOf(EDITOR), 'docs/dok1'), {
+      ['memberUids.' + STRANGER.uid]: STRANGER.mail
+    }));
+
+  await denied('Und nicht mit fremder Adresse',
+    updateDoc(doc(fsOf(EDITOR), 'docs/dok1'), {
+      ['memberUids.' + EDITOR.uid]: OWNER.mail
+    }));
+
+  /* BLOCKED und nicht STRANGER: der ist weiter oben laengst zu dok1
+     eingeladen worden ("Besitzer laedt jemanden ein") und duerfte seine
+     Kennung daher zu Recht eintragen. Wer wirklich nicht dazugehoert,
+     ist hier der Gesperrte. */
+  await denied('Wer nicht dazugehört, trägt gar nichts ein',
+    updateDoc(doc(fsOf(BLOCKED), 'docs/dok1'), {
+      ['memberUids.' + BLOCKED.uid]: BLOCKED.mail
+    }));
+
+  await denied('Und nebenbei die Rolle anheben geht auch nicht',
+    updateDoc(doc(fsOf(READER), 'docs/dok1'), {
+      ['memberUids.' + READER.uid]: READER.mail,
+      members: { [READER.mail]: 'edit' }
+    }));
+
   /* ══════════════════════════════════════════════════════════════════
      REALTIME DATABASE
      ══════════════════════════════════════════════════════════════════ */
 
   const rtOf = (who) => person(env, who.uid, who.mail).database();
+
+  /* ── Die Rollenliste des Raums ────────────────────────────────────
+     Wer dazugehört, steht als ADRESSE in Firestore. Die Realtime
+     Database kann dort nicht nachschlagen, deshalb legt der Besitzer
+     unter roles/{docId} eine Liste mit KENNUNGEN ab. Erst sie öffnet
+     Anwesenheit und Änderungsstrom.
+
+     Vorher stand an beiden Stellen nur `auth != null`. Angemeldet ist
+     aber jeder – die App meldet jedes Gerät anonym an, damit Freigaben
+     ohne Konto lesbar sind. Wer eine docId kannte, kam damit an den
+     gesamten Live-Textstrom eines fremden Dokuments heran und konnte
+     hineinschreiben.
+     ─────────────────────────────────────────────────────────────── */
+
+  section('Realtime Database: die Rollenliste');
+
+  await denied('Ein Fremder legt keinen Raum unter fremder Kennung an',
+    set(ref(rtOf(STRANGER), 'roles/dok1'), { owner: OWNER.uid, r: {}, w: {} }));
+
+  const rollen = {
+    owner: OWNER.uid,
+    r: { [OWNER.uid]: true, [EDITOR.uid]: true, [READER.uid]: true },
+    w: { [OWNER.uid]: true, [EDITOR.uid]: true }
+  };
+
+  await ok('Der Besitzer legt den Raum an',
+    set(ref(rtOf(OWNER), 'roles/dok1'), rollen));
+
+  await denied('Danach übernimmt ihn niemand sonst',
+    set(ref(rtOf(EDITOR), 'roles/dok1'), {
+      owner: EDITOR.uid, r: { [EDITOR.uid]: true }, w: { [EDITOR.uid]: true }
+    }));
+
+  await denied('Auch der Bearbeiter trägt niemanden nach',
+    set(ref(rtOf(EDITOR), 'roles/dok1/w/' + STRANGER.uid), true));
+
+  await ok('Der Besitzer darf sie fortschreiben',
+    set(ref(rtOf(OWNER), 'roles/dok1'), rollen));
 
   section('Realtime Database: Anwesenheit');
 
@@ -391,10 +477,19 @@ function headData(overrides = {}) {
     set(ref(rtOf(READER), 'presence/dok1/' + EDITOR.uid), { ...card }));
   await denied('Und nicht mit erfundenen Feldern',
     set(ref(rtOf(EDITOR), 'presence/dok1/' + EDITOR.uid), { ...card, schadhaft: 'x' }));
-  await ok('Mitlesen darf, wer angemeldet ist',
+  await ok('Mitlesen darf, wer in der Liste steht',
     get(ref(rtOf(READER), 'presence/dok1')));
   await denied('Ohne Anmeldung nicht',
     get(ref(env.unauthenticatedContext().database(), 'presence/dok1')));
+
+  /* >>> Der Fall, der vorher fehlte <<<
+     Ein Außenstehender ist angemeldet – anonym genügt, und anonym ist
+     hier jeder Besucher der Website. */
+  await denied('Ein Fremder liest die Anwesenheit nicht mit',
+    get(ref(rtOf(STRANGER), 'presence/dok1')));
+  await denied('Und meldet sich dort auch nicht an',
+    set(ref(rtOf(STRANGER), 'presence/dok1/' + STRANGER.uid),
+        { ...card, uid: STRANGER.uid, email: STRANGER.mail }));
 
   section('Realtime Database: der Änderungsstrom');
 
@@ -436,6 +531,23 @@ function headData(overrides = {}) {
   await denied('Und nicht überlang',
     set(ref(rtOf(EDITOR), 'ops/dok1/o6'), { ...opBase, k: 'y', u: 'x'.repeat(200001) }));
 
+  /* ── Nur lesen heißt nur lesen ─────────────────────────────────────
+     Der Leser steht in r, aber nicht in w. Vorher durfte er schreiben:
+     die Regel fragte allein nach `auth != null`. Damit konnte jemand mit
+     einem reinen Lese-Link Text und Striche in die laufende Sitzung
+     schieben – und weil der Text drüben in innerHTML landete, war das
+     mehr als Sachbeschädigung. */
+  await denied('Wer nur lesen darf, schreibt nicht in den Strom',
+    set(ref(rtOf(READER), 'ops/dok1/oL'),
+        { p: 'p1', by: READER.uid, at: Date.now(), k: 'y', u: 'AAAA' }));
+  await ok('Mitlesen darf er', get(ref(rtOf(READER), 'ops/dok1')));
+
+  await denied('Ein Fremder liest den Strom nicht mit',
+    get(ref(rtOf(STRANGER), 'ops/dok1')));
+  await denied('Und schreibt erst recht nicht hinein',
+    set(ref(rtOf(STRANGER), 'ops/dok1/oF'),
+        { p: 'p1', by: STRANGER.uid, at: Date.now(), k: 'y', u: 'AAAA' }));
+
   section('Realtime Database: aufräumen');
 
   await env.withSecurityRulesDisabled(async (ctx) => {
@@ -449,7 +561,7 @@ function headData(overrides = {}) {
     });
   });
 
-  await ok('Alte fremde Einträge darf jeder wegräumen',
+  await ok('Alte fremde Einträge darf jeder Schreibende wegräumen',
     remove(ref(rtOf(EDITOR), 'ops/dok1/alt')));
   await denied('Frische fremde Einträge nicht',
     remove(ref(rtOf(EDITOR), 'ops/dok1/frisch')));
