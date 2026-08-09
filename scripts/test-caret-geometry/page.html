@@ -1,0 +1,480 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+<link rel="stylesheet" href="../../src/css/layout.css">
+<style>
+  body { margin: 0; background: #222; }
+  /* Wie in index.html: die Seiten stecken im Bildlauf und werden dort
+     als Ganzes skaliert (app.js/zoom.js setzen genau dieses transform). */
+  #pg-scroll { position: relative; overflow: auto; height: 900px; }
+  #pages-wrap { transform-origin: top center; }
+</style>
+</head>
+<body>
+<div id="pg-scroll"><div id="pages-wrap"></div></div>
+
+<script src="../../src/core/sanitize.js"></script>
+<script>
+/* canvas/text.js fragt getZoom() ab. In der App kommt das aus
+   core/zoom.js; hier wird es gesetzt, damit jeder Zoom prüfbar ist. */
+let _zoom = 1;
+function getZoom() { return _zoom; }
+</script>
+<script src="../../src/canvas/text.js"></script>
+<script>
+const zeilen = [];
+function abschnitt(name) { zeilen.push(''); zeilen.push(name); }
+function notiz(text) { zeilen.push('     ' + text); }
+function pruefe(was, bedingung, hinweis) {
+  zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
+}
+
+const NL = String.fromCharCode(10);
+
+const PAGE_W = 794, PAGE_H = 1123;
+const LH = 32, FS = 17;
+const PT = Math.round(LH - FS * 0.78);   // ptForBg('ruled'), wie in der App
+
+/* Baut eine Seite genau so auf wie appendPageDOM() in app.js – dieselben
+   Maße, dieselben Inline-Stile. Nur daran gemessen sagt die Prüfung etwas
+   über die echte App aus. */
+function bauSeite(html) {
+  const wrap = document.getElementById('pages-wrap');
+  wrap.innerHTML = '';
+
+  const div = document.createElement('div');
+  div.className = 'j-page bg-ruled';
+  div.dataset.pgid = 'p1';
+  div.style.width = PAGE_W + 'px';
+  div.style.minHeight = PAGE_H + 'px';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'j-page-hdr';
+  hdr.innerHTML = '<span class="j-page-num">Seite 1</span>';
+  div.appendChild(hdr);
+
+  const textDiv = document.createElement('div');
+  textDiv.className = 'j-text';
+  textDiv.contentEditable = 'true';
+  textDiv.style.cssText = 'font-size:' + FS + 'px;line-height:' + LH + 'px;padding-top:' + PT + 'px'
+    + ';top:64px;left:72px;right:32px;bottom:24px'
+    + ';white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word';
+  textDiv.innerHTML = html;
+
+  /* Denselben Stilblock wie appendPageDOM() je Seite einsetzt. Ohne ihn
+     haetten die Ueberschriften ihre Grundgroesse, und die Messung
+     bezoege sich auf etwas, das es in der App nicht gibt. */
+  const st = document.createElement('style');
+  const sel = '[data-pgid="p1"] .j-text';
+  st.textContent =
+      sel + ' p.j-title-1{font-size:' + Math.round(LH * 0.75) + 'px}'
+    + sel + ' p.j-title-2{font-size:' + Math.round(LH * 0.65) + 'px}'
+    + sel + ' p.j-title-3{font-size:' + Math.round(LH * 0.58) + 'px}'
+    + sel + ' h1{font-size:' + Math.round(LH * 0.75) + 'px}'
+    + sel + ' h2{font-size:' + Math.round(LH * 0.65) + 'px}'
+    + sel + ' h3{font-size:' + Math.round(LH * 0.58) + 'px}';
+  div.appendChild(st);
+  div.appendChild(textDiv);
+
+  wrap.appendChild(div);
+  return { div: div, textDiv: textDiv };
+}
+
+/** Auf welcher Zeile des Papiers liegt diese gerechnete Oberkante? */
+function zeilenNummer(top) {
+  return (top - 64 - PT) / LH;
+}
+
+/** Zählt die Umbrüche vor einer Stelle – ohne Zeilenumbruch ist das die Zeile. */
+function zeileLautText(text, pos) {
+  let n = 0;
+  for (let i = 0; i < pos; i++) if (text[i] === NL) n++;
+  return n;
+}
+
+/**
+ * Prüft für JEDE Stelle eines umbruchfreien Textes, dass die gerechnete
+ * Marke auf der Zeile sitzt, die der Text vorgibt. Leerer Rückgabewert
+ * heißt: alles in Ordnung.
+ */
+function jedeStelleAufIhrerZeile(div, textDiv, zoom) {
+  const flach = flatTextOf(textDiv);
+  for (let pos = 0; pos <= flach.length; pos++) {
+    const erwartet = zeileLautText(flach, pos);
+    const rect = caretRectAt(textDiv, pos, flach);
+    if (!rect) return 'Stelle ' + pos + ': kein Rechteck';
+    const box = lineBoxOf(div, textDiv, rect, zoom);
+    const n = zeilenNummer(box.top);
+    if (Math.abs(n - erwartet) > 0.02) {
+      return 'Stelle ' + pos + ': Zeile ' + n.toFixed(3) + ' statt ' + erwartet
+        + ' (top=' + box.top.toFixed(1) + ')';
+    }
+  }
+  return '';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   1. REINER TEXT MIT UMBRUECHEN
+
+   Der haeufigste Fall: sobald nur getippt wird, haelt der Editor die
+   ganze Seite als EINEN Textknoten mit echten Umbruechen.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Reiner Text: jede Stelle auf ihrer Zeile');
+
+{
+  const text = 'eins' + NL + 'zwei' + NL + 'drei' + NL + 'vier';
+  const seite = bauSeite(text);
+  const flach = flatTextOf(seite.textDiv);
+
+  pruefe('Flacher Text stimmt', flach === text, JSON.stringify(flach));
+
+  const fehler = jedeStelleAufIhrerZeile(seite.div, seite.textDiv, 1);
+  pruefe('Alle ' + (flach.length + 1) + ' Stellen sitzen auf der richtigen Zeile',
+    fehler === '', fehler);
+
+  // Die Hoehe ist immer eine volle Zeile – so hoch ist auch das Sperrband
+  const b0 = lineBoxOf(seite.div, seite.textDiv, caretRectAt(seite.textDiv, 0, flach), 1);
+  pruefe('Die Marke ist genau eine Zeile hoch', b0.height === LH, String(b0.height));
+
+  const ende0 = lineBoxOf(seite.div, seite.textDiv, caretRectAt(seite.textDiv, 4, flach), 1);
+  const anfang1 = lineBoxOf(seite.div, seite.textDiv, caretRectAt(seite.textDiv, 5, flach), 1);
+  pruefe('Zeilenende und nächster Zeilenanfang liegen eine Zeile auseinander',
+    Math.abs(zeilenNummer(anfang1.top) - zeilenNummer(ende0.top) - 1) < 0.001,
+    'Ende ' + ende0.top + ' / Anfang ' + anfang1.top);
+
+  pruefe('Der Zeilenanfang sitzt am linken Textrand',
+    Math.abs(anfang1.left - 72) < 1.5, String(anfang1.left));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   2. LEERE ZEILEN  ―  der Fall, an dem die Marke nach oben links sprang
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Leere Zeilen (Enter am Ende)');
+
+{
+  const seite = bauSeite('oben' + NL + NL + NL + 'unten');
+  const fehler = jedeStelleAufIhrerZeile(seite.div, seite.textDiv, 1);
+  pruefe('Auch über leere Zeilen hinweg richtig', fehler === '', fehler);
+
+  const nurEnter = bauSeite('text' + NL);
+  const f2 = flatTextOf(nurEnter.textDiv);
+  const rEnde = caretRectAt(nurEnter.textDiv, f2.length, f2);
+  pruefe('Hinter dem letzten Enter gibt es ein Rechteck', !!rEnde, 'null');
+  if (rEnde) {
+    const n = zeilenNummer(lineBoxOf(nurEnter.div, nurEnter.textDiv, rEnde, 1).top);
+    pruefe('Und es ist die zweite Zeile', Math.abs(n - 1) < 0.001, 'Zeile ' + n);
+  }
+
+  const vorne = bauSeite(NL + NL + 'spaet');
+  const f3 = flatTextOf(vorne.textDiv);
+  const r3 = caretRectAt(vorne.textDiv, 0, f3);
+  pruefe('Leere Zeile ganz oben liefert ein Rechteck', !!r3, 'null');
+  if (r3) {
+    const n = zeilenNummer(lineBoxOf(vorne.div, vorne.textDiv, r3, 1).top);
+    pruefe('Und sitzt auf Zeile 0', Math.abs(n) < 0.001, 'Zeile ' + n);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   3. WIE EINE LEERE ZEILE IM DOM WIRKLICH AUSSIEHT
+
+   Wichtig fuer die Beurteilung: ein von Hand geschriebenes <p></p> ist
+   NICHT das, was der Editor erzeugt – und es hat gar keine Hoehe.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Wie eine leere Zeile im DOM aussieht');
+
+{
+  const seite = bauSeite('');
+  seite.textDiv.focus();
+  document.execCommand('insertText', false, 'erste');
+  document.execCommand('insertParagraph');
+  document.execCommand('insertParagraph');
+  document.execCommand('insertText', false, 'dritte');
+  notiz('contenteditable erzeugt: ' + JSON.stringify(seite.textDiv.innerHTML));
+
+  const hoehen = function (html) {
+    const b = bauSeite(html);
+    return [].slice.call(b.textDiv.querySelectorAll('p'))
+      .map(function (p) { return p.getBoundingClientRect().height; });
+  };
+  const nackt = hoehen('<p>erste</p><p></p><p>dritte</p>');
+  const mitBr = hoehen('<p>erste</p><p><br></p><p>dritte</p>');
+  notiz('<p></p> Hoehen:     ' + nackt.join(', '));
+  notiz('<p><br></p> Hoehen: ' + mitBr.join(', '));
+
+  pruefe('Ein leerer Absatz MIT <br> ist eine volle Zeile hoch',
+    Math.abs(mitBr[1] - LH) < 0.5, String(mitBr[1]));
+  pruefe('Ein nacktes <p></p> hat dagegen gar keine Höhe',
+    nackt[1] === 0, String(nackt[1]));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   4. ABSAETZE UND AUSZEICHNUNG
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Absätze, Fett, Überschriften');
+
+{
+  /* <p><br></p> und nicht <p></p>: das erste ist, was contenteditable bei
+     Enter erzeugt, das zweite hat gar keine Hoehe und ist damit keine
+     sichtbare Zeile. */
+  const seite = bauSeite('<p>erste</p><p><br></p><p><b>dritte</b> Zeile</p>');
+  const flach = flatTextOf(seite.textDiv);
+  pruefe('Flacher Text über Absätze',
+    flach === 'erste' + NL + NL + 'dritte Zeile', JSON.stringify(flach));
+
+  const fehler = jedeStelleAufIhrerZeile(seite.div, seite.textDiv, 1);
+  pruefe('Auch über Absätze hinweg richtig', fehler === '', fehler);
+}
+
+{
+  const seite = bauSeite(
+    '<p class="j-title-1">Titel</p><p>Text</p><p><font color="#c04040">rot</font></p>');
+
+  /* Erst nachmessen, wie hoch eine Ueberschriftenzeile wirklich ist.
+     Danach entscheidet sich, ob eine Abweichung ein Fehler der Rechnung
+     ist oder der Zeilenhoehe im Stil. */
+  const ps = [].slice.call(seite.textDiv.querySelectorAll('p'));
+  notiz('Absatzhöhen: ' + ps.map(function (e) {
+    return e.getBoundingClientRect().height.toFixed(2);
+  }).join(', '));
+  notiz('Schriftgrößen: ' + ps.map(function (e) {
+    return getComputedStyle(e).fontSize + '/' + getComputedStyle(e).lineHeight;
+  }).join(', '));
+
+  /* >>> Was hier wirklich zaehlt <<<
+     Das Linienraster des Papiers ist ein fester 32er-Takt. Eine
+     Ueberschriftenzeile muss ihn nicht auf den Punkt treffen – die Marke
+     aber sehr wohl bei IHREM Text stehen. Verglichen wird deshalb gegen
+     das Zeichen an derselben Stelle, nicht gegen das Raster. */
+  const flach = flatTextOf(seite.textDiv);
+  let fehler = '';
+  for (let pos = 0; pos < flach.length && !fehler; pos++) {
+    if (flach[pos] === NL) continue;
+    const marke = lineBoxOf(seite.div, seite.textDiv,
+      caretRectAt(seite.textDiv, pos, flach), 1);
+    const zeichen = lineBoxOf(seite.div, seite.textDiv,
+      rectOfSpan(seite.textDiv, pos, pos + 1, 'links'), 1);
+    if (Math.abs(marke.top - zeichen.top) > 0.5 || Math.abs(marke.left - zeichen.left) > 0.5) {
+      fehler = 'Stelle ' + pos + ': Marke ' + marke.top.toFixed(1) + '/' + marke.left.toFixed(1)
+        + ', Zeichen ' + zeichen.top.toFixed(1) + '/' + zeichen.left.toFixed(1);
+    }
+  }
+  pruefe('Bei Überschrift und Farbe steht die Marke bei ihrem Zeichen', fehler === '', fehler);
+
+  /* Und die Reihenfolge muss stimmen: jede Zeile tiefer als die davor. */
+  const oben = [];
+  for (let pos = 0; pos <= flach.length; pos++) {
+    const r = caretRectAt(seite.textDiv, pos, flach);
+    if (r) oben.push(lineBoxOf(seite.div, seite.textDiv, r, 1).top);
+  }
+  let monoton = true;
+  for (let i = 1; i < oben.length; i++) if (oben[i] < oben[i - 1] - 0.5) monoton = false;
+  pruefe('Und keine Stelle springt nach oben', monoton, JSON.stringify(oben));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   5. GEZOOMTE SEITE
+
+   Der Zoom sitzt als transform:scale() auf pages-wrap. Alle gemessenen
+   Rechtecke sind dadurch vergroessert – lineBoxOf muss das
+   herausrechnen, denn die Marke wird IN der Seite platziert und dort
+   gilt die Grundgroesse.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Mit Zoom (die Marke wird in der Seite platziert)');
+
+[1.2, 0.6, 2.0].forEach(function (z) {
+  _zoom = z;
+  document.getElementById('pages-wrap').style.transform = 'scale(' + z + ')';
+
+  const seite = bauSeite('eins' + NL + 'zwei' + NL + 'drei');
+  const flach = flatTextOf(seite.textDiv);
+
+  const fehler = jedeStelleAufIhrerZeile(seite.div, seite.textDiv, z);
+  pruefe('Zoom ' + z + ': alle Stellen auf ihrer Zeile', fehler === '', fehler);
+
+  const b = lineBoxOf(seite.div, seite.textDiv, caretRectAt(seite.textDiv, 0, flach), z);
+  pruefe('Zoom ' + z + ': Höhe bleibt eine Zeile in Seitenmaßen',
+    Math.abs(b.height - LH) < 0.001, String(b.height));
+  pruefe('Zoom ' + z + ': linker Rand bleibt bei 72',
+    Math.abs(b.left - 72) < 1.5, String(b.left));
+});
+
+_zoom = 1;
+document.getElementById('pages-wrap').style.transform = 'scale(1)';
+
+/* ══════════════════════════════════════════════════════════════════
+   6. UMGEBROCHENE ZEILEN
+
+   Der Editor fuellt beim Klicken mit Leerzeichen auf, statt umzubrechen
+   (placeCaretAnywhere). Eine Seite besteht dadurch oft aus EINER sehr
+   langen logischen Zeile, die bloss umbricht. Fuer das Sperrband zaehlt
+   die SICHTBARE Zeile – dafuer muessen die Mitten stimmen.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Umgebrochene Zeilen');
+
+{
+  const lang = 'Wort '.repeat(60).trim();
+  const seite = bauSeite(lang);
+  const flach = flatTextOf(seite.textDiv);
+
+  const mitten = {};
+  for (let pos = 0; pos <= flach.length; pos++) {
+    const r = caretRectAt(seite.textDiv, pos, flach);
+    if (r) mitten[Math.round(lineBoxOf(seite.div, seite.textDiv, r, 1).top)] = true;
+  }
+  const sortiert = Object.keys(mitten).map(Number).sort(function (a, b) { return a - b; });
+  notiz(sortiert.length + ' sichtbare Zeilen bei ' + flach.length + ' Zeichen');
+
+  pruefe('Der lange Absatz bricht auf mehrere Zeilen um', sortiert.length > 3,
+    'nur ' + sortiert.length);
+
+  const abstaende = sortiert.slice(1).map(function (v, i) { return v - sortiert[i]; });
+  pruefe('Und die Zeilen liegen genau eine Zeilenhöhe auseinander',
+    abstaende.every(function (d) { return Math.abs(d - LH) < 0.001; }),
+    JSON.stringify(abstaende));
+
+  pruefe('Die erste umgebrochene Zeile sitzt auf Zeile 0',
+    Math.abs(zeilenNummer(sortiert[0])) < 0.001, String(sortiert[0]));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   7. GEGENPROBE MIT DEM BROWSER SELBST
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Gegenprobe: unsere Marke gegen die des Browsers');
+
+{
+  const seite = bauSeite('eins' + NL + 'zwei' + NL + 'drei' + NL + 'vier');
+  const flach = flatTextOf(seite.textDiv);
+  seite.textDiv.focus();
+
+  /* >>> Eine Stelle direkt hinter einem Umbruch ist zweideutig <<<
+     Der Browser darf eine zusammengefallene Auswahl dort an BEIDEN Enden
+     zeichnen: am Ende der Zeile davor oder am Anfang der neuen. Das
+     nennt sich Affinitaet und haengt daran, wie die Marke dorthin
+     gelangt ist.
+
+     Fuer die FREMDE Marke gibt es diese Zweideutigkeit nicht: sie wird
+     nicht gesetzt, sondern gemessen – an dem Zeichen, das dort als
+     naechstes erscheint. Deshalb wird beides getrennt geprueft. */
+  const hinterUmbruch = function (pos) { return pos > 0 && flach[pos - 1] === NL; };
+
+  let fehler = '';
+  let zweideutige = 0;
+  for (let pos = 0; pos <= flach.length && !fehler; pos++) {
+    if (!setFlatCaret(seite.textDiv, pos)) continue;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) continue;
+    const echt = sel.getRangeAt(0).getBoundingClientRect();
+    if (!echt || (!echt.height && !echt.width)) continue;
+
+    const unser = caretRectAt(seite.textDiv, pos, flach);
+    if (!unser) { fehler = 'Stelle ' + pos + ': kein Rechteck'; break; }
+
+    const dEcht = lineBoxOf(seite.div, seite.textDiv, echt, 1).top;
+    const dUnser = lineBoxOf(seite.div, seite.textDiv, unser, 1).top;
+
+    if (Math.abs(dEcht - dUnser) > 0.5) {
+      if (hinterUmbruch(pos)) { zweideutige++; continue; }
+      fehler = 'Stelle ' + pos + ': Browser ' + dEcht + ', wir ' + dUnser;
+    }
+  }
+  pruefe('Wo der Browser eindeutig ist, sitzt unsere Marke gleich', fehler === '', fehler);
+  notiz(zweideutige + ' Stellen hinter einem Umbruch – dort ist der Browser zweideutig');
+
+  /* Und fuer genau diese Stellen die entscheidende Probe: unsere Marke
+     muss bei dem Zeichen stehen, das dort als naechstes getippt wird.
+     Das ist es, was der Nutzer sieht, und es ist eindeutig messbar. */
+  let fehler2 = '';
+  let geprueft = 0;
+  for (let pos = 0; pos <= flach.length && !fehler2; pos++) {
+    if (!hinterUmbruch(pos)) continue;
+    if (pos >= flach.length || flach[pos] === NL) continue;
+
+    const unser = lineBoxOf(seite.div, seite.textDiv, caretRectAt(seite.textDiv, pos, flach), 1);
+    const zeichen = lineBoxOf(seite.div, seite.textDiv,
+      rectOfSpan(seite.textDiv, pos, pos + 1, 'links'), 1);
+    geprueft++;
+    if (Math.abs(unser.top - zeichen.top) > 0.5 || Math.abs(unser.left - zeichen.left) > 0.5) {
+      fehler2 = 'Stelle ' + pos + ': Marke oben ' + unser.top + '/links ' + unser.left
+        + ', Zeichen oben ' + zeichen.top + '/links ' + zeichen.left;
+    }
+  }
+  pruefe('Hinter einem Umbruch steht sie beim nächsten Zeichen (' + geprueft + ' Stellen)',
+    fehler2 === '', fehler2);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   8. DIE BEREINIGUNG DARF KEINE STELLE VERSCHIEBEN
+
+   Seit fremder Text durch core/sanitize.js geht, sitzt zwischen dem, was
+   der andere geschickt hat, und dem, was hier im DOM steht, eine
+   Umformung. Verschoebe sie auch nur ein Zeichen, zeigte jede gemeldete
+   Stelle daneben – der Text saesse richtig, die Marke nicht. Genau das
+   Fehlerbild, um das es hier geht.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Bereinigung verschiebt keine Stelle');
+
+{
+  const faelle = [
+    ['reiner Text', 'eins' + NL + 'zwei' + NL + 'drei'],
+    ['Absätze', '<p>erste</p><p><br></p><p>dritte</p>'],
+    ['Fett und kursiv', '<p>ganz <b>dick</b> und <i>schief</i></p>'],
+    ['Farbe als font', '<p><font color="#c04040">rot</font> und schwarz</p>'],
+    ['Farbe als style', '<p><span style="color:#2a5fa8">blau</span>er Text</p>'],
+    ['Überschrift', '<p class="j-title-1">Titel</p><p>Text darunter</p>'],
+    ['Zeilenumbruch', 'a<br>b<br>c']
+  ];
+
+  let fehler = '';
+  for (let i = 0; i < faelle.length && !fehler; i++) {
+    const name = faelle[i][0], html = faelle[i][1];
+    const roh = bauSeite(html);
+    const vorher = flatTextOf(roh.textDiv);
+    const sauber = bauSeite(sanitizePageHtml(html));
+    const nachher = flatTextOf(sauber.textDiv);
+    if (vorher !== nachher) {
+      fehler = name + ': ' + JSON.stringify(vorher) + ' -> ' + JSON.stringify(nachher);
+    }
+  }
+  pruefe('Der flache Text ist vor und nach der Bereinigung derselbe', fehler === '', fehler);
+
+  // Und die Pixel ebenso
+  const html = '<p>erste</p><p><br></p><p><b>dritte</b> Zeile</p>';
+  const messen = function (h) {
+    const b = bauSeite(h);
+    const f = flatTextOf(b.textDiv);
+    const tops = [];
+    for (let p = 0; p <= f.length; p++) {
+      const r = caretRectAt(b.textDiv, p, f);
+      tops.push(r ? Math.round(lineBoxOf(b.div, b.textDiv, r, 1).top) : null);
+    }
+    return tops;
+  };
+  pruefe('Und jede Marke sitzt danach an derselben Stelle',
+    JSON.stringify(messen(html)) === JSON.stringify(messen(sanitizePageHtml(html))),
+    JSON.stringify(messen(html)) + ' vs ' + JSON.stringify(messen(sanitizePageHtml(html))));
+
+  // Ein Angriff mitten im Text: der Text bleibt, das Bild geht
+  const bereinigt = sanitizePageHtml('<p>davor<img src=x onerror="window.__BOOM=1">danach</p>');
+  const angriff = bauSeite(bereinigt);
+  const txt = flatTextOf(angriff.textDiv);
+  pruefe('Text um einen entfernten Angriff herum bleibt stehen',
+    txt.indexOf('davor') !== -1 && txt.indexOf('danach') !== -1, JSON.stringify(txt));
+  pruefe('Und der Angriff hat nichts ausgelöst', !window.__BOOM, 'window.__BOOM gesetzt');
+}
+
+window.__ergebnis = zeilen.join(NL);
+</script>
+</body>
+</html>

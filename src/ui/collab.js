@@ -1186,7 +1186,20 @@
       entry.applying = false;
     }
 
-    const nextText = entry.ytext.toString();
+    /* Einmal bereinigen, und zwar HIER – der bereinigte Stand ist ab
+       jetzt der Stand der Seite, im Datenmodell wie im DOM.
+
+       >>> Warum beides dasselbe sein muss <<<
+       Die Stellen der fremden Schreibmarken sind Zeichenzahlen im
+       flachen Text, und der wird aus dem DOM gelesen (flatTextOf).
+       Stünde im Modell etwas anderes als im DOM, zeigten alle Marken
+       und Sperrbaender um die Differenz daneben – der Text saesse
+       richtig, die Marke nicht. Genau dieses Fehlerbild.
+
+       Im Normalfall aendert die Bereinigung ohnehin nichts; sie greift
+       nur bei etwas, das der Editor nie erzeugt. Dann aber soll das
+       Aufgeraeumte auch das sein, was gesichert wird. */
+    const nextText = sanitizePageHtml(entry.ytext.toString());
     if (info.page.textContent === nextText) return;
     info.page.textContent = nextText;
 
@@ -1232,7 +1245,7 @@
        weiterhin, was der andere geschickt hat, sonst liefen die beiden
        Fassungen auseinander und jeder Abgleich schriebe hin und her. */
     entry.applying = true;
-    textDiv.innerHTML = sanitizePageHtml(nextText);
+    textDiv.innerHTML = nextText;   // schon bereinigt, siehe oben
     entry.applying = false;
 
     if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
