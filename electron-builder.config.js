@@ -31,11 +31,17 @@ module.exports = {
     createDesktopShortcut: true,
     perMachine: false
   },
+  // node_modules steht hier bewusst NICHT.
+  //
+  // electron-builder nimmt die Laufzeit-Abhaengigkeiten von sich aus mit
+  // und laesst die devDependencies weg. Ein ausdrueckliches Muster ueber
+  // node_modules hebt genau diese Filterung auf - firebase, esbuild, yjs
+  // und electron-builder selbst wanderten dadurch mit in den Installer,
+  // obwohl die App keine davon zur Laufzeit braucht.
   files: [
     'main.js',
     'preload.js',
     'src/**/*',
-    'node_modules/**/*',
     'icon.ico'
   ],
   directories: {

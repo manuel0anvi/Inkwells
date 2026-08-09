@@ -55,3 +55,13 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 *.swp
+
+# ── Nicht ins Repo ──────────────────────────────────────────────────
+# Beides lag eingecheckt herum und gehoert nicht dazu: das Zip ist eine
+# Sicherungskopie (2,8 MB), das Symbol eine abgeloeste Fassung. Die
+# Dateien bleiben oertlich liegen, nur Git fasst sie nicht mehr an.
+#
+# Aus der HISTORIE sind sie damit nicht weg - dafuer muesste man sie
+# umschreiben, und das ist auf einem gemeinsamen Branch tabu.
+final version.zip
+icon-notizbuch-alt.ico

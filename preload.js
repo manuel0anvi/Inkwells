@@ -32,7 +32,6 @@ contextBridge.exposeInMainWorld('api', {
   downloadUpdate:  () => ipcRenderer.invoke('download-update'),
   toggleDownloadPause: () => ipcRenderer.invoke('toggle-download-pause'),
   installAndRestart: () => ipcRenderer.invoke('install-and-restart'),
-  startOAuth: (url) => ipcRenderer.invoke('start-oauth', url),
   startOAuthServer: () => ipcRenderer.invoke('start-oauth-server'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (e, info) => cb(info)),
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', (e, info) => cb(info)),

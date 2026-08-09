@@ -496,11 +496,11 @@ function switchMode(mode) {
   updateUndoRedoUI();
 }
 
-E('btn-undo')?.addEventListener('click', undoPage);
-E('btn-redo')?.addEventListener('click', redoPage);
-
-// Rückgängig/Wiederholen laufen jetzt über die änderbaren Kürzel
-// (core/shortcuts.js) und rufen von dort undoPage()/redoPage() auf.
+/* Die Knöpfe für Rückgängig/Wiederholen gibt es nicht mehr (siehe
+   index.html). Beide laufen über die änderbaren Kürzel
+   (core/shortcuts.js) und rufen von dort undoPage()/redoPage() auf.
+   Hier standen bis zuletzt zwei addEventListener auf Elemente, die es
+   seit dem Entfernen der Knöpfe nicht mehr gibt. */
 
 /* TOOLBAR mode/pen/color/heading controls moved to ui/toolbar.js */
 

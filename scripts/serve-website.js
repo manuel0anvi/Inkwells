@@ -57,9 +57,13 @@ const server = http.createServer((req, res) => {
     return send(res, 400, 'Ungültige Adresse');
   }
 
-  // Ausbruch aus dem website-Ordner verhindern (z. B. /../../geheim)
-  const target = path.normalize(path.join(ROOT, urlPath));
-  if (!target.startsWith(ROOT)) {
+  /* Ausbruch aus dem website-Ordner verhindern (z. B. /../../geheim).
+
+     Mit dem Trennzeichen dahinter: ein reines startsWith(ROOT) laesst
+     einen Nachbarordner durch, dessen Name nur mit "website" ANFAENGT.
+     main.js macht es beim Ausliefern der Oberflaeche schon so. */
+  const target = path.resolve(path.join(ROOT, urlPath));
+  if (target !== ROOT && !target.startsWith(ROOT + path.sep)) {
     return send(res, 403, 'Zugriff verweigert');
   }
 
