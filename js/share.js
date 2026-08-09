@@ -371,6 +371,44 @@ async function signInMicrosoftInteractive(loginHint = '') {
   return result.user;
 }
 
+/* Antworten, die schlicht heissen „dafuer braucht es einen Menschen". Kein
+   Fehler, sondern das erwartete Ende eines stillen Versuchs. */
+const STILL_GESCHEITERT = /login_required|interaction_required|consent_required|account_selection_required|popup-blocked|popup-closed-by-user|cancelled-popup-request|user-cancelled/i;
+
+/**
+ * Derselbe Ablauf, aber ohne Zutun – fuer den Start der App.
+ *
+ * Microsoft kennt dafuer prompt=none: entweder es liegt eine gueltige
+ * Sitzung vor (als Cookie, aus der OneDrive-Anmeldung derselben
+ * Electron-Sitzung), dann kommt sofort ein Token zurueck. Oder es kommt
+ * login_required – dann ist eine Eingabe noetig und wir lassen es.
+ *
+ * Firebase oeffnet dafuer trotzdem sein Fenster. Damit beim Start nichts
+ * aufblitzt, meldet der Aufrufer das vorher an (siehe
+ * linkMicrosoftSilently in core/cloudSync.js); main.js laesst das Fenster
+ * dann unsichtbar.
+ *
+ * @param {string} [loginHint] Adresse, unter der es versucht wird
+ * @returns {Promise<object|null>} null, wenn es ohne Eingabe nicht geht
+ */
+async function signInMicrosoftSilently(loginHint = '') {
+  const provider = new OAuthProvider('microsoft.com');
+  provider.addScope('email');
+
+  const params = { tenant: 'consumers', prompt: 'none' };
+  if (loginHint) params.login_hint = loginHint;
+  provider.setCustomParameters(params);
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (err) {
+    const text = String(err?.code || '') + ' ' + String(err?.message || '');
+    if (STILL_GESCHEITERT.test(text)) return null;
+    throw err;
+  }
+}
+
 /**
  * Meldet sich, sobald Firebase den Anmeldestand kennt und bei jedem
  * weiteren Wechsel. Gibt die Abmeldefunktion zurück.
@@ -727,6 +765,12 @@ function describeDoc(docId, data) {
     memberEmails: Array.isArray(data.memberEmails) ? data.memberEmails : [],
     members,
     memberVia: via,
+    /* Firebase-Kennung je Adresse: { uid: email }.
+       Die Mitgliedschaft steht als ADRESSE im Kopf, die Regeln der
+       Realtime Database kennen aber nur auth.uid. Jeder trägt seine
+       eigene Kennung beim Öffnen selbst ein (registerMyUid), damit der
+       Besitzer daraus die Rollenliste des Raums bauen kann. */
+    memberUids: (data.memberUids && typeof data.memberUids === 'object') ? data.memberUids : {},
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
     updatedAt: toDate(data.updatedAt),
     createdAt: toDate(data.createdAt),
@@ -1731,6 +1775,56 @@ async function joinViaLink(docId) {
 }
 
 /**
+ * Trägt die eigene Firebase-Kennung im Kopf des Dokuments ein.
+ *
+ * >>> Wozu das gut ist <<<
+ * Wer dazugehört, steht als E-MAIL-ADRESSE im Kopf. Die Regeln der
+ * Realtime Database können damit nichts anfangen – dort gibt es nur
+ * auth.uid. Der Besitzer braucht aber genau diese Zuordnung, um die
+ * Rollenliste des Raums zu schreiben (joinDocRoom).
+ *
+ * Eingetragen wird ausschließlich der EIGENE Eintrag; die Regel prüft
+ * das noch einmal, genau wie beim Selbsteintrag über den Link.
+ *
+ * Schlägt es fehl, ist das kein Grund zum Abbrechen: dann gibt es für
+ * diese Person eben vorerst keine Live-Übertragung, gespeichert wird
+ * weiterhin über Firestore.
+ */
+async function registerMyUid(docId, head) {
+  const me = currentIdentity();
+  if (!me || me.anonymous || !me.email || !me.uid) return false;
+  if (head && head.memberUids && head.memberUids[me.uid] === me.email) return true;
+
+  try {
+    await updateDoc(doc(db, DOCS, docId), {
+      [`memberUids.${me.uid}`]: me.email
+    });
+    return true;
+  } catch (err) {
+    console.warn('[Share] Eigene Kennung nicht eingetragen:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Die Rollen des Raums, aus dem Kopf abgeleitet: { uid: 'view'|'edit' }.
+ *
+ * Nur der Besitzer braucht das – er schreibt daraus roles/{docId} in die
+ * Realtime Database. Wessen Kennung noch nicht eingetragen ist, fehlt
+ * hier und bekommt vorerst keinen Live-Betrieb; sobald er das Dokument
+ * einmal geöffnet hat, ist er beim nächsten Betreten des Besitzers dabei.
+ */
+function roomRolesFrom(head) {
+  const out = {};
+  for (const [uid, email] of Object.entries(head.memberUids || {})) {
+    const key = normalizeEmail(email);
+    if (!key || !head.memberEmails.includes(key)) continue;   // entfernt
+    out[uid] = normalizeRole(head.members[key]);
+  }
+  return out;
+}
+
+/**
  * Holt Kopf und Inhalt eines Dokuments.
  * @returns {Promise<{notebook:object, head:object}>}
  */
@@ -1957,6 +2051,44 @@ async function joinDocRoom(docId, options = {}) {
 
   const meRef = ref(rtdb, `presence/${docId}/${me.uid}`);
   const opsRef = ref(rtdb, `ops/${docId}`);
+  const rolesRef = ref(rtdb, `roles/${docId}`);
+
+  /* ── Wer darf hier lesen und schreiben? ────────────────────────────
+     Die Mitgliedschaft steht in Firestore, und die Realtime Database
+     kann dort nicht nachschlagen (Begründung in
+     website/database.rules.json). Der Besitzer legt sie deshalb hier ab.
+
+     Geschrieben wird sie beim Betreten des Besitzers – und genau dann
+     ist sie auch nötig: ohne ihn dürfen die Eingeladenen ohnehin nur
+     lesen (onOwnerAway weiter unten). Es gibt also keinen Zustand, in
+     dem jemand schreiben dürfte, aber noch nicht eingetragen ist. */
+  if (options.isOwner) {
+    const r = { [me.uid]: true };
+    const w = { [me.uid]: true };
+    for (const [uid, rolle] of Object.entries(options.memberUids || {})) {
+      if (!uid) continue;
+      r[uid] = true;
+      if (rolle === 'edit') w[uid] = true;
+    }
+    await set(rolesRef, { owner: me.uid, r, w });
+  } else {
+    /* >>> Gehört dieser Raum wirklich dem, dem das Dokument gehört? <<<
+       roles/{docId} darf anlegen, wer sich selbst als owner einträgt.
+       Ein Fremder könnte einen Raum also besetzen, bevor der echte
+       Besitzer ihn zum ersten Mal betritt – und sich damit Lese- und
+       Schreibrecht an einer fremden Sitzung geben. Die Regeln können das
+       nicht entscheiden, sie kennen den Firestore-Kopf nicht. Hier ist
+       die Stelle, an der beides zusammenkommt. */
+    const wanted = options.ownerUid || '';
+    if (wanted) {
+      const snap = await rtGet(rolesRef);
+      const eingetragen = snap.exists() ? (snap.val() || {}).owner : null;
+      if (eingetragen && eingetragen !== wanted) {
+        throw new Error('ROOM_OWNER_MISMATCH: Der Raum gehört einer anderen '
+          + 'Kennung als das Dokument – Live-Betrieb bleibt aus.');
+      }
+    }
+  }
 
   const card = {
     uid: me.uid,
@@ -2277,11 +2409,38 @@ async function joinDocRoom(docId, options = {}) {
     for (const stop of stops) { try { stop(); } catch (e) {} }
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
+
+    /* Der Besitzer nimmt die Rollenliste wieder mit. Sie gilt nur,
+       solange er da ist – wer eingeladen ist, darf ohne ihn ohnehin nur
+       lesen. Bleibt sie stehen, behielte ein später Entfernter seinen
+       Zugang zum Raum bis zum nächsten Betreten des Besitzers. */
+    if (options.isOwner) {
+      try { await remove(rolesRef); } catch (e) { /* dann beim nächsten Mal */ }
+    }
   }
 
   pruneOps();
 
-  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, leave };
+  /**
+   * Die Rollenliste des Raums neu schreiben. Nur der Besitzer darf das,
+   * und nur er ruft es auf: wer neu dazukommt, traegt seine Kennung im
+   * Kopf des Dokuments ein, und erst danach kann sie hier landen
+   * (ui/sharedDocs.js, watchOpenDocument).
+   */
+  async function setRoles(rollen) {
+    if (!options.isOwner || left) return;
+    const r = { [me.uid]: true };
+    const w = { [me.uid]: true };
+    for (const [uid, rolle] of Object.entries(rollen || {})) {
+      if (!uid) continue;
+      r[uid] = true;
+      if (rolle === 'edit') w[uid] = true;
+    }
+    try { await set(rolesRef, { owner: me.uid, r, w }); }
+    catch (err) { console.warn('[Share] Rollenliste nicht geschrieben:', err?.message || err); }
+  }
+
+  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles, leave };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────
@@ -2303,6 +2462,7 @@ const InkwellShare = {
   // Anmeldung
   signInWithProviderToken,
   signInMicrosoftInteractive,
+  signInMicrosoftSilently,
   signOutIdentity,
   currentIdentity,
   hasRealIdentity,
@@ -2333,6 +2493,8 @@ const InkwellShare = {
   joinViaLink,
   loadDocument,
   loadPage,
+  registerMyUid,
+  roomRolesFrom,
 
   // Hilfsmittel
   docUrlFor,
@@ -2361,13 +2523,15 @@ export default InkwellShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
-  signInWithProviderToken, signInMicrosoftInteractive, signOutIdentity, currentIdentity, hasRealIdentity,
+  signInWithProviderToken, signInMicrosoftInteractive, signInMicrosoftSilently,
+  signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
   setLinkMode, rotateLink,
   setMember, removeMember, leaveDocument, unblockMember, listMembers,
   listSharedDocs, watchSharedDocs, watchDocument, resolveLink, joinViaLink,
-  loadDocument, loadPage, docUrlFor, appUrlFor, normalizeEmail, looksLikeEmail,
+  loadDocument, loadPage, registerMyUid, roomRolesFrom,
+  docUrlFor, appUrlFor, normalizeEmail, looksLikeEmail,
   splitNotebook, assembleNotebook, fingerprintNotebook,
   joinDocRoom, savePageText, initialsOf, colorForUid
 };

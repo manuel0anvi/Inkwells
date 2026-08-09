@@ -379,7 +379,8 @@ function buildPageElement(notebook, page, index) {
     `font-size:17px;line-height:${lh}px;padding-top:${pt}px;`
     + `top:64px;left:72px;right:${rightPad}px;bottom:24px;`
     + 'white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word';
-  textDiv.innerHTML = page.textContent || '';
+  // Fremdes Heft: der Text geht durch die Bereinigung (js/sanitize.js)
+  textDiv.innerHTML = sanitizePageHtml(page.textContent);
 
   // Überschriften wie in der App auf p.j-title-* normalisieren
   textDiv.querySelectorAll('h1,h2,h3').forEach(h => {
