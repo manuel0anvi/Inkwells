@@ -36,7 +36,6 @@
 (function () {
   const overlay = E('ov-sync');
   const btn = E('btn-sync');
-  const badge = E('sync-badge');
   if (!overlay || !btn) return;
 
   const stateBox = E('sync-state');
@@ -68,11 +67,29 @@
 
   const istLoeschen = (action) => action === 'delete' || action === 'trash';
 
+  /* ── Die Zeichen ──────────────────────────────────────────────────
+     Gezeichnet wie überall sonst in der App: 24er-Raster, keine Füllung,
+     Strichstärke 2, Farbe über currentColor. Hier standen Emoji – die
+     bringen ihre eigene Farbe und ihre eigene Anmutung mit und sahen
+     neben dem übrigen Haus aus wie hereingeweht.
+     ───────────────────────────────────────────────────────────────── */
+
+  const SVG_AUF = '<path d="M4 20h16"/><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/>';
+  const SVG_AB = '<path d="M4 20h16"/><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/>';
+  const SVG_KORB = '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>';
+  const SVG_HAKEN = '<path d="M20 6L9 17l-5-5"/>';
+  const SVG_KREUZ = '<path d="M18 6L6 18M6 6l12 12"/>';
+
+  function svg(pfade) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+      + ' stroke-linecap="round" stroke-linejoin="round">' + pfade + '</svg>';
+  }
+
   /** Das Zeichen zur Art des Vorgangs. */
   function symbolFor(action) {
-    if (action === 'restore') return '↩';
-    if (istLoeschen(action)) return '🗑';
-    return '📤';
+    if (action === 'restore') return svg(SVG_AB);
+    if (istLoeschen(action)) return svg(SVG_KORB);
+    return svg(SVG_AUF);
   }
 
   /**
@@ -88,7 +105,28 @@
     if (eintrag.action === 'restore') return t('syncWaitingRestore') || 'Zurückholen ausstehend';
     if (eintrag.action === 'trash') return t('syncWaitingTrash') || 'Verschieben in den Papierkorb ausstehend';
     if (eintrag.action === 'delete') return t('syncWaitingDelete') || 'Löschung ausstehend';
-    return t('syncWaitingUpload') || 'wartet auf Upload';
+
+    /* >>> Warum hier eine Wartezeit stehen darf <<<
+       Hochgeladen wird von selbst – zwei Sekunden nach der letzten
+       Aenderung meldet AutoSave das Heft an, und die Warteschlange
+       laeuft alle fuenf Sekunden. Gebremst wird nur die WIEDERHOLUNG
+       desselben Hefts: hoechstens einmal je Minute, weil jedes Mal das
+       ganze Heft ueber die Leitung geht (MIN_UPLOAD_INTERVAL_MS).
+
+       Ohne diese Angabe sah das aus, als haenge es – und der Knopf
+       darunter las sich wie eine Aufforderung. Steht die Zeit da, ist
+       klar: es passiert von selbst, man muss nur nichts tun. */
+    const grund = t('syncWaitingUpload') || 'wird automatisch hochgeladen';
+    const rest = (window.CloudSync_ && typeof CloudSync_.getSecondsUntilNextUpload === 'function')
+      ? CloudSync_.getSecondsUntilNextUpload(eintrag.nbId) : 0;
+
+    // Auf fünf Sekunden gerundet: der Blick wird alle fünf aufgefrischt,
+    // eine sekundengenaue Zahl stünde die meiste Zeit falsch da.
+    if (rest > 5) {
+      return grund + ' ' + (t('syncInSeconds') || '(in ~{s} s)')
+        .replace('{s}', String(Math.round(rest / 5) * 5));
+    }
+    return grund;
   }
 
   /* ── Was steht aus? ───────────────────────────────────────────────── */
@@ -148,21 +186,23 @@
 
     if (!online) {
       klasse = 'offline';
-      zeichen = '⚠';
+      zeichen = svg('<path d="M12 9v4"/><path d="M12 17h.01"/>'
+        + '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>');
       text = n
         ? (t('syncStateOffline') || 'Ohne Internet — {n} Änderung(en) warten.').replace('{n}', n)
         : (t('syncStateOfflineIdle') || 'Ohne Internet. Alles Bisherige ist gesichert.');
     } else if (laeuft) {
       klasse = 'warten';
-      zeichen = '⟳';
+      zeichen = svg('<path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>'
+        + '<path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>');
       text = t('syncStateWorking') || 'Wird hochgeladen …';
     } else if (n) {
       klasse = 'warten';
-      zeichen = '⧗';
+      zeichen = svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>');
       text = (t('syncStateWaiting') || '{n} Änderung(en) warten').replace('{n}', n);
     } else {
       klasse = 'ok';
-      zeichen = '✓';
+      zeichen = svg(SVG_HAKEN);
       /* Wann zuletzt wirklich etwas abgeglichen wurde. Ohne diese Angabe
          steht dort nur „alles gesichert" – und das sagt nichts darüber,
          ob das vor einer Minute oder vor drei Tagen galt. */
@@ -173,7 +213,7 @@
         : (t('syncStateAllDone') || 'Alles gesichert');
     }
 
-    stateBox.className = 'sync-state ' + klasse;
+    stateBox.className = 'sync-state ' + klasse + (laeuft && online ? ' laeuft' : '');
     stateBox.innerHTML = '<span class="sync-state-icon">' + zeichen + '</span>'
       + '<span>' + escHtml(text) + '</span>';
   }
@@ -202,7 +242,7 @@
     const zeit = fmtTime(h.at);
     return '<div class="sync-item sync-item-status ' + (geschafft ? 'success' : 'failed') + '">'
       + '<div class="sync-item-icon ' + escHtml(h.action || 'upload') + '">'
-      + (geschafft ? '✓' : '✗') + '</div>'
+      + svg(geschafft ? SVG_HAKEN : SVG_KREUZ) + '</div>'
       + '<div class="sync-item-body">'
       + '<div class="sync-item-name">' + escHtml(h.nbName || h.nbId) + '</div>'
       + '<div class="sync-item-detail">' + escHtml(grund) + '</div>'
@@ -265,24 +305,30 @@
       && CloudSync_.isAuthenticated());
 
     btn.style.display = angemeldet ? 'flex' : 'none';
+    btn.classList.remove('ist-gesichert', 'ist-offen', 'laeuft');
     if (!angemeldet) {
-      if (badge) badge.style.display = 'none';
       // Ein offenes Fenster gehört zu, wenn die Anmeldung wegfällt
       if (overlay.style.display !== 'none') overlay.style.display = 'none';
       return;
     }
 
-    if (!badge) return;
-    const n = offeneVorgaenge().length;
-    if (n) {
-      badge.style.display = 'inline';
-      badge.textContent = n > 99 ? '99+' : String(n);
-      // Ohne Netz ein anderer Ton: die Zahl liegt dann fest
-      badge.classList.toggle('offline', CloudSync_.isOnline === false);
-    } else {
-      badge.style.display = 'none';
-      badge.classList.remove('offline');
-    }
+    /* Der Zustand steckt in der FARBE, nicht in einer Zahl daneben.
+
+       Gruen: alles ist oben. Blau: da wartet noch etwas – und weil es von
+       selbst hochgeht, ist das keine Aufforderung, sondern eine Auskunft.
+       Waehrend wirklich etwas laeuft, dreht sich das Zeichen dazu.
+
+       Ohne Netz bleibt es ebenfalls blau: "nicht alles ist oben" stimmt
+       dann ja genauso. Warum es wartet, sagt der Streifen im Fenster –
+       dafuer ist am Knopf kein Platz, und zwei Blautoene waeren keine
+       Auskunft, sondern ein Raetsel. */
+    const offen = offeneVorgaenge().length;
+    if (window.CloudSync_ && CloudSync_.syncing) btn.classList.add('laeuft');
+    else btn.classList.add(offen ? 'ist-offen' : 'ist-gesichert');
+
+    btn.title = offen
+      ? (t('syncStateWaiting') || '{n} Änderung(en) warten').replace('{n}', offen)
+      : (t('syncStateAllDone') || 'Alles gesichert');
   }
 
   /* ── Öffnen und Schließen ─────────────────────────────────────────── */

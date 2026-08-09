@@ -213,3 +213,25 @@
   z-index: 1;
 }
 
+
+/* ── Der Zustand der Synchronisation steckt in der Farbe ─────────────
+   Gruen: alles ist oben. Blau: da wartet noch etwas.
+
+   Statt einer Zahl in der Ecke. Ein Abzeichen mit einer Ziffer sieht aus
+   wie eine ungelesene Nachricht - etwas, das man wegdruecken soll. Hier
+   gibt es aber nichts wegzudruecken, es ist schlicht ein Zustand, und
+   der aendert sich von selbst.
+   ─────────────────────────────────────────────────────────────────── */
+
+#btn-sync svg { transition: stroke .18s ease-out }
+#btn-sync.ist-gesichert svg { stroke: var(--sync-ok) }
+#btn-sync.ist-offen svg { stroke: var(--sync-wait) }
+
+/* Waehrend etwas laeuft, dreht sich das Zeichen langsam - dann sieht man,
+   dass gerade wirklich etwas passiert, statt nur "es steht etwas aus". */
+#btn-sync.laeuft svg { stroke: var(--sync-wait); animation: sync-dreht 1.6s linear infinite }
+
+@keyframes sync-dreht {
+  from { transform: rotate(0deg) }
+  to   { transform: rotate(360deg) }
+}

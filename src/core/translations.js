@@ -498,7 +498,8 @@ const TRANSLATIONS = {
        Ueberschrift traegt, stuende er sonst zweimal untereinander. Die
        langen Fassungen mit {name} bleiben – sie gehen in die Toasts, und
        dort gibt es keine Ueberschrift. */
-    syncWaitingUpload: 'wartet auf Upload',
+    syncWaitingUpload: 'wird automatisch hochgeladen',
+    syncInSeconds: '(in ~{s} s)',
     syncWaitingDelete: 'Löschung ausstehend',
     syncWaitingTrash: 'Verschieben in den Papierkorb ausstehend',
     syncWaitingRestore: 'Zurückholen ausstehend',
@@ -1047,7 +1048,8 @@ const TRANSLATIONS = {
     syncStateOfflineIdle: 'No internet. Everything so far is saved.',
     syncQueuedRestore: '"{name}" — restore pending',
     syncNothingPending: 'Nothing pending',
-    syncWaitingUpload: 'waiting to upload',
+    syncWaitingUpload: 'uploads automatically',
+    syncInSeconds: '(in ~{s}s)',
     syncWaitingDelete: 'deletion pending',
     syncWaitingTrash: 'move to trash pending',
     syncWaitingRestore: 'restore pending',
@@ -1596,7 +1598,8 @@ const TRANSLATIONS = {
     syncStateOfflineIdle: 'Senza internet. Tutto quanto finora è salvato.',
     syncQueuedRestore: '"{name}" — ripristino in sospeso',
     syncNothingPending: 'Niente in sospeso',
-    syncWaitingUpload: 'in attesa di caricamento',
+    syncWaitingUpload: 'viene caricato automaticamente',
+    syncInSeconds: '(tra ~{s} s)',
     syncWaitingDelete: 'eliminazione in sospeso',
     syncWaitingTrash: 'spostamento nel cestino in sospeso',
     syncWaitingRestore: 'ripristino in sospeso',

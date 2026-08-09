@@ -262,6 +262,42 @@ function setTitleBar(name, color) {
 function showHome() {
   // Seite und Ausschnitt festhalten, bevor das Heft aus dem Blick gerät
   if (typeof flushNotebookView === 'function') flushNotebookView();
+
+  /* ── Beim Zumachen geht das Heft SOFORT hinauf ──────────────────────
+     Der Mindestabstand von einer Minute (MIN_UPLOAD_INTERVAL_MS) bremst
+     die Wiederholung desselben Hefts, solange man darin schreibt. Beim
+     Zumachen schreibt aber niemand mehr – dort ist er nur noch eine
+     Wartezeit, in der ein fertiges Heft ungesichert liegen bleibt.
+
+     Zwei Faelle, und beide muessen hier durch:
+
+       · noch nicht gespeichert  -> saveNow() schreibt die Datei UND
+         laedt sofort hoch (immediateCloud)
+       · schon gespeichert, aber der Upload haengt an der Bremse
+         -> flushNotebook() nimmt sie fuer dieses eine Heft zurueck
+
+     Der zweite Fall war die Luecke: ui/titlebar.js rief saveNow() nur
+     bei ungespeicherten Aenderungen. Lokal gespeichert, aber noch nicht
+     oben – genau dazwischen fiel das Heft hindurch.
+
+     Hier und nicht im Heim-Knopf, weil jeder Weg zurueck durch diese
+     Funktion laeuft: der Knopf, das Tastenkuerzel, ein entzogenes
+     geteiltes Dokument.
+
+     Ohne await: die Ansicht soll nicht auf die Leitung warten. */
+  const verlassen = (typeof S !== 'undefined') ? S.activeNbId : null;
+  if (verlassen && typeof AutoSave !== 'undefined' && AutoSave) {
+    try {
+      if (AutoSave.isDirty(verlassen)) {
+        AutoSave.saveNow(verlassen).catch(err =>
+          console.warn('[Home] Speichern beim Verlassen:', err?.message || err));
+      } else if (typeof CloudSync_ !== 'undefined' && CloudSync_?.flushNotebook) {
+        CloudSync_.flushNotebook(verlassen);
+      }
+    } catch (err) {
+      console.warn('[Home] Hochladen beim Verlassen:', err?.message || err);
+    }
+  }
   E('view-home').style.display = 'flex';
   E('view-journal').style.display = 'none';
   E('btn-home').style.display = 'none';

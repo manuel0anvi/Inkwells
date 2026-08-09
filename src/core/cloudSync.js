@@ -1154,6 +1154,39 @@ class CloudSyncManager {
     this._processQueue();
   }
 
+  /**
+   * Ein einzelnes wartendes Heft SOFORT hochladen, ohne den
+   * Mindestabstand abzuwarten.
+   *
+   * >>> Wofuer das da ist <<<
+   * Der Mindestabstand (MIN_UPLOAD_INTERVAL_MS) bremst nur die
+   * WIEDERHOLUNG desselben Hefts – sinnvoll, solange man darin
+   * weiterschreibt, denn jedes Mal geht das ganze Heft hinaus.
+   *
+   * Beim Zumachen ist er aber falsch: dort wird gerade nicht mehr
+   * geschrieben, und das Heft bliebe bis zu einer Minute ungesichert
+   * liegen. Wer die App in dieser Minute beendet, verliert zwar nichts
+   * (beim Beenden wird ohnehin alles hinausgedrueckt) – aber wer sein
+   * Heft zumacht, will es oben wissen, nicht "gleich".
+   *
+   * Nur was ohnehin schon wartet: ein Heft, an dem sich nichts geaendert
+   * hat, wird dadurch NICHT hochgeladen. Sonst ginge bei jedem Weg
+   * zurueck zur Uebersicht das ganze Heft ueber die Leitung.
+   *
+   * @param {string} nbId
+   * @returns {boolean} ob wirklich etwas angestossen wurde
+   */
+  flushNotebook(nbId) {
+    if (!nbId) return false;
+
+    const wartet = this.syncQueue.some(e => (typeof e === 'string' ? e : e.nbId) === nbId);
+    if (!wartet) return false;
+
+    this.immediateUploads.add(nbId);
+    this._processQueue();
+    return true;
+  }
+
   async flushPending() {
     if (!this._canSync() || !this.isOnline) return;
 

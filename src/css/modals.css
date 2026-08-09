@@ -1735,14 +1735,17 @@
   font-size: 9px;
 }
 
-.sync-item-icon.upload { background: rgba(100,149,237,0.2); color: #6495ed; }
-.sync-item-icon.delete { background: rgba(217,83,79,0.2); color: #d9534f; }
-.sync-item-icon.trash { background: rgba(224,166,58,0.2); color: #e0a63a; }
-.sync-item-icon.restore { background: rgba(92,184,92,0.2); color: #5cb85c; }
+/* Die Zeichen sind SVG im Stil des Hauses, nicht mehr Emoji. Groesse und
+   Strichstaerke hier, die Farbe ueber currentColor aus den Regeln darunter. */
+.sync-item-icon svg { width: 14px; height: 14px }
 
-.sync-item-status.success .sync-item-icon { background: rgba(92,184,92,0.2); color: #5cb85c; }
-.sync-item-status.failed .sync-item-icon { background: rgba(217,83,79,0.2); color: #d9534f; }
-.sync-item-status.queued .sync-item-icon { background: rgba(170,170,170,0.2); color: #999; }
+.sync-item-icon.upload  { background: var(--sync-wait-bg); color: var(--sync-wait) }
+.sync-item-icon.delete  { background: var(--sync-bad-bg);  color: var(--sync-bad) }
+.sync-item-icon.trash   { background: var(--sync-bad-bg);  color: var(--sync-bad) }
+.sync-item-icon.restore { background: var(--sync-ok-bg);   color: var(--sync-ok) }
+
+.sync-item-status.success .sync-item-icon { background: var(--sync-ok-bg);  color: var(--sync-ok) }
+.sync-item-status.failed  .sync-item-icon { background: var(--sync-bad-bg); color: var(--sync-bad) }
 
 .sync-item-body { flex: 1; min-width: 0; }
 .sync-item-name {
@@ -1777,26 +1780,54 @@
   color: var(--md);
 }
 
-.sync-state-icon { flex-shrink: 0; font-size: 13px; line-height: 1.35; }
+.sync-state-icon { flex-shrink: 0; display: flex; align-items: center; height: 18px }
+.sync-state-icon svg { width: 15px; height: 15px }
 
 .sync-state.ok {
-  border-color: rgba(92, 184, 92, .3);
-  background: rgba(92, 184, 92, .07);
+  border-color: var(--sync-ok-bg);
+  background: var(--sync-ok-bg);
 }
+.sync-state.ok .sync-state-icon { color: var(--sync-ok) }
 
 .sync-state.warten {
-  border-color: rgba(224, 166, 58, .35);
-  background: rgba(224, 166, 58, .08);
-  color: var(--text);
+  border-color: var(--sync-wait-bg);
+  background: var(--sync-wait-bg);
+  color: var(--hi);
 }
+.sync-state.warten .sync-state-icon { color: var(--sync-wait) }
+
+/* Dreht sich, solange wirklich etwas laeuft */
+.sync-state.warten.laeuft .sync-state-icon svg { animation: sync-dreht 1.6s linear infinite }
 
 .sync-state.offline {
-  border-color: rgba(217, 83, 79, .3);
-  background: rgba(217, 83, 79, .07);
-  color: var(--text);
+  border-color: var(--sync-bad-bg);
+  background: var(--sync-bad-bg);
+  color: var(--hi);
+}
+.sync-state.offline .sync-state-icon { color: var(--sync-bad) }
+
+
+/* Zurueckhaltender Knopf im Sync-Fenster.
+
+   Beides dort ist eine Abkuerzung, keine Aufgabe: hochgeladen wird von
+   selbst, und das Protokoll muss niemand leeren. Im gefuellten Goldton
+   der App lasen sie sich wie die Hauptsache - und der Eindruck, man
+   muesse selbst hochladen, war genau das Missverstaendnis. */
+.sync-quiet-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 5px 11px;
+  background: none;
+  border: 1px solid var(--sb);
+  border-radius: 6px;
+  color: var(--md);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
 }
 
-/* Der Zaehler am Titelleisten-Knopf. Ohne Netz ein anderer Ton: dann
-   heisst die Zahl nicht "wird gleich erledigt", sondern "liegt fest,
-   bis du wieder online bist". */
-.titlebar-badge.offline { background: #d9534f; }
+.sync-quiet-btn:hover {
+  color: var(--hi);
+  border-color: var(--sb2);
+}

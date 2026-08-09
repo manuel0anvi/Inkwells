@@ -19,7 +19,20 @@
   --pg: #ddd6c8;
   --pm: rgba(190, 120, 120, .18);
   --ptx: #1a1510;
-  --shad: 0 6px 40px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .03)
+  --shad: 0 6px 40px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .03);
+
+  /* Zustand der Synchronisation. Abgeleitet aus den Heftfarben in
+     core/state.js (#2e8a46 gruen, #2a5fa8 blau), fuer den dunklen Grund
+     aufgehellt - so wie --gb die hellere Fassung von --gold ist.
+
+     Vorher standen dort #5cb85c und #6495ed. Die kamen von auswaerts und
+     sahen neben dem warmen Gold der App auch so aus. */
+  --sync-ok: #4a9d63;
+  --sync-ok-bg: rgba(74, 157, 99, .16);
+  --sync-wait: #5b8fd4;
+  --sync-wait-bg: rgba(91, 143, 212, .16);
+  --sync-bad: #cc5b56;
+  --sync-bad-bg: rgba(204, 91, 86, .16)
 }
 
 *,

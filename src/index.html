@@ -51,7 +51,12 @@
          Steht neben dem Konto-Knopf, weil beides zum selben Thema
          gehoert - und in BEIDEN Ansichten, weil die Aenderungen beim
          Schreiben entstehen, nicht in der Uebersicht. Sichtbar nur bei
-         bestehender Anmeldung (ui/syncPanel.js). -->
+         bestehender Anmeldung.
+
+         Der Zustand steckt in der FARBE des Zeichens, nicht in einer Zahl
+         daneben: gruen heisst gesichert, blau heisst da ist noch etwas.
+         Eine Zahl am Rand war eine Meldung, die man wegdruecken will -
+         ein eingefaerbtes Zeichen ist einfach der Zustand (ui/syncPanel.js). -->
     <button class="titlebar-settings-btn" id="btn-sync" data-i18n-title="syncWindowOpen"
             title="Synchronisation" style="display:none">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -59,7 +64,6 @@
         <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
         <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
       </svg>
-      <span id="sync-badge" class="titlebar-badge" style="display:none">0</span>
     </button>
     <button class="titlebar-settings-btn" id="btn-profile" data-i18n-title="account" title="Profil/Cloud">
       <svg id="profile-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -532,7 +536,11 @@
       <div id="sync-pending-section" style="display:none;">
         <div class="sync-section-label" data-i18n="syncPendingHeader">Ausstehend</div>
         <div id="sync-pending-list" class="sync-list"></div>
-        <button id="sync-retry-all-btn" class="settings-btn" style="display:none; margin-top:8px; padding:6px 12px; font-size:12px;" data-i18n="syncRetryAll">Alle jetzt hochladen</button>
+        <!-- Leise gehalten: hochgeladen wird von selbst, der Knopf ist nur
+             die Abkuerzung fuer Ungeduldige. Im goldenen Stil der App sah
+             er aus wie die Hauptsache - und genau der Eindruck, man muesse
+             selbst etwas tun, sollte weg. -->
+        <button id="sync-retry-all-btn" class="sync-quiet-btn" style="display:none" data-i18n="syncRetryAll">Alle jetzt hochladen</button>
       </div>
 
       <!-- Zuletzt abgeschlossen -->
@@ -542,7 +550,7 @@
         <div id="sync-recent-empty" style="font-size:12px; color:var(--md); text-align:center; padding:10px 0; display:none;" data-i18n="syncRecentEmpty">Keine Einträge</div>
       </div>
 
-      <button id="sync-clear-log-btn" class="settings-btn" style="padding:5px 12px; font-size:11px; align-self:flex-end; color:var(--md);" data-i18n="syncClearLog">Protokoll löschen</button>
+      <button id="sync-clear-log-btn" class="sync-quiet-btn" style="align-self:flex-end" data-i18n="syncClearLog">Protokoll löschen</button>
     </div>
   </div>
 </div>
