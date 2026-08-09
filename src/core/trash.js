@@ -136,6 +136,60 @@ const Trash = {
     return this._entries.filter(e => !this._isTombstone(e)).length;
   },
 
+  /* ── Was am Papierkorb noch mit der Cloud abzugleichen ist ─────────
+     Der Papierkorb fuehrt seine ausstehenden Sachen SELBST, nicht in der
+     Warteschlange von CloudSync_. Drei Zustaende koennen offen sein, und
+     alle drei holt _catchUpCloudTrash() spaeter nach:
+
+       !cloudTrashed  die Cloud-Datei liegt noch im Hauptordner - das
+                      Verschieben in den Papierkorb-Ordner ist nicht
+                      durchgekommen (meist: kein Netz)
+       restored       ohne Netz zurueckgeholt, die Cloud-Datei liegt noch
+                      im Papierkorb-Ordner
+       purged         endgueltig geloescht, die Cloud-Datei steht noch aus
+
+     Bis dahin war davon nirgends etwas zu sehen: in der App war das Heft
+     weg, in der Cloud noch da, und niemand konnte sagen, dass da noch
+     etwas aussteht. Genau dafuer gibt es das Sync-Fenster
+     (ui/syncPanel.js).
+
+     Die Form ist bewusst dieselbe wie bei CloudSync_.getPendingActions(),
+     damit beide Listen ohne Umrechnung nebeneinander stehen koennen.
+
+     >>> Warum deletedAt als Zeitpunkt <<<
+     Einen eigenen Zeitstempel fuers Zurueckholen oder endgueltige
+     Loeschen gibt es nicht. deletedAt ist der einzige vorhandene und
+     stimmt fuer den haeufigsten Fall (Loeschen ohne Netz) genau.
+
+     @returns {Array<{nbId: string, nbName: string, action: string, queuedAt: string}>}
+  */
+  getPendingCloudActions() {
+    const offen = [];
+    for (const entry of this._entries) {
+      let action = null;
+
+      if (entry.restored) {
+        /* Ohne Datei-Kennung gibt es in der Cloud nichts zurueckzuholen -
+           _catchUpCloudTrash wirft so einen Eintrag beim naechsten Mal
+           einfach weg. Er wartet also auf nichts. */
+        if (entry.driveFileId) action = 'restore';
+      } else if (entry.purged) {
+        action = 'delete';
+      } else if (!entry.cloudTrashed) {
+        action = 'trash';
+      }
+
+      if (!action) continue;
+      offen.push({
+        nbId: entry.id,
+        nbName: entry.name || '',
+        action,
+        queuedAt: entry.deletedAt || ''
+      });
+    }
+    return offen;
+  },
+
   /* Grabsteine bleiben außen vor: Zurückholen und endgültiges Löschen
      meinen immer den lebenden Eintrag, nie den nachzuholenden Rest. */
   find(id) {

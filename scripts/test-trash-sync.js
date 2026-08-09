@@ -323,6 +323,60 @@ function syncedEntry(id, name) {
   check('Es gibt genau einen Eintrag', twice.Trash._entries.length, 1);
   check('Und der ist kein Grabstein', !!twice.Trash._entries[0].restored, false);
 
+  /* ══════════════════════════════════════════════════════════════════
+     WAS AM PAPIERKORB NOCH AUSSTEHT
+
+     getPendingCloudActions() ist die Auskunft, aus der das Sync-Fenster
+     seine Papierkorb-Zeilen baut (ui/syncPanel.js). Sie ist die EINZIGE
+     Quelle dafuer: der Papierkorb fuehrt seine offenen Sachen selbst und
+     steht nicht in der Warteschlange von CloudSync_.
+
+     Faellt sie falsch aus, sieht der Nutzer entweder etwas, das laengst
+     erledigt ist, oder – schlimmer – er sieht nichts, obwohl in der
+     Cloud noch eine Datei liegt.
+     ══════════════════════════════════════════════════════════════════ */
+
+  console.log('\n' + 'Was am Papierkorb noch aussteht');
+
+  {
+    const t = makeTrash([], { entries: [], exists: true }).Trash;
+    t._entries = [
+      // Ohne Netz geloescht: die Cloud-Datei liegt noch im Hauptordner
+      { id: 'a', name: 'Ohne Netz geloescht', cloudTrashed: false, deletedAt: '2026-01-01T10:00:00Z' },
+      // Erledigt – darf NICHT auftauchen
+      { id: 'b', name: 'Sauber verschoben', cloudTrashed: true, deletedAt: '2026-01-01T09:00:00Z' },
+      // Ohne Netz zurueckgeholt, Datei liegt noch im Papierkorb-Ordner
+      { id: 'c', name: 'Zurueckgeholt', restored: true, driveFileId: 'f9', deletedAt: '2026-01-01T08:00:00Z' },
+      // Endgueltig geloescht, Cloud-Datei steht noch aus
+      { id: 'd', name: 'Endgueltig weg', purged: true, deletedAt: '2026-01-01T07:00:00Z' }
+    ];
+
+    const offen = t.getPendingCloudActions();
+    check('Nur die offenen Faelle, nicht der erledigte',
+      offen.map(e => e.nbId), ['a', 'c', 'd']);
+    check('Die Art stimmt je Fall',
+      offen.map(e => e.action), ['trash', 'restore', 'delete']);
+    check('Der Name reist mit', offen[0].nbName, 'Ohne Netz geloescht');
+    check('Und ein Zeitpunkt auch', offen[0].queuedAt, '2026-01-01T10:00:00Z');
+  }
+
+  {
+    /* Ein zurueckgeholter Eintrag OHNE Datei-Kennung wartet auf nichts:
+       _catchUpCloudTrash wirft ihn beim naechsten Mal einfach weg. Stuende
+       er in der Liste, zeigte das Fenster dauerhaft einen Vorgang an, der
+       nie fertig wird. */
+    const t = makeTrash([], { entries: [], exists: true }).Trash;
+    t._entries = [{ id: 'e', name: 'Nie in der Cloud', restored: true, driveFileId: null }];
+    check('Zurueckgeholt ohne Cloud-Datei steht nicht aus',
+      t.getPendingCloudActions(), []);
+  }
+
+  {
+    const t = makeTrash([], { entries: [], exists: true }).Trash;
+    t._entries = [];
+    check('Leerer Papierkorb: nichts offen', t.getPendingCloudActions(), []);
+  }
+
   if (failed > 0) {
     console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);
     process.exit(1);

@@ -481,6 +481,28 @@ const TRANSLATIONS = {
     syncBackOnlineNamed: 'Wieder online – „{name}" und {n} weitere werden hochgeladen…',
     syncPanelNeedsAuth: 'Melde dich an, um den Sync-Status zu sehen.',
 
+    /* Das Sync-Fenster (ui/syncPanel.js). Der Streifen oben beantwortet
+       die Frage "ist alles gesichert?" auf einen Blick; die Listen
+       darunter sagen, was genau. */
+    syncWindowTitle: 'Synchronisation',
+    syncWindowOpen: 'Synchronisation',
+    syncStateAllDone: 'Alles gesichert',
+    syncStateAllDoneAt: 'Alles gesichert · zuletzt {time}',
+    syncStateWorking: 'Wird hochgeladen …',
+    syncStateWaiting: '{n} Änderung(en) warten',
+    syncStateOffline: 'Ohne Internet — {n} Änderung(en) warten. Sie gehen von selbst hoch, sobald du wieder online bist.',
+    syncStateOfflineIdle: 'Ohne Internet. Alles Bisherige ist gesichert.',
+    syncQueuedRestore: '„{name}" – Zurückholen ausstehend',
+    syncNothingPending: 'Nichts ausstehend',
+    /* Kurzform ohne Namen: in einer Zeile, die den Namen schon als
+       Ueberschrift traegt, stuende er sonst zweimal untereinander. Die
+       langen Fassungen mit {name} bleiben – sie gehen in die Toasts, und
+       dort gibt es keine Ueberschrift. */
+    syncWaitingUpload: 'wartet auf Upload',
+    syncWaitingDelete: 'Löschung ausstehend',
+    syncWaitingTrash: 'Verschieben in den Papierkorb ausstehend',
+    syncWaitingRestore: 'Zurückholen ausstehend',
+
     shortcuts: 'Tastenkürzel',
     scGroupGeneral: 'Allgemein',
     scGroupNav: 'Navigation',
@@ -1015,6 +1037,21 @@ const TRANSLATIONS = {
     syncBackOnlineNamed: 'Back online — "{name}" and {n} more uploading…',
     syncPanelNeedsAuth: 'Sign in to see sync status.',
 
+    syncWindowTitle: 'Sync',
+    syncWindowOpen: 'Sync',
+    syncStateAllDone: 'Everything saved',
+    syncStateAllDoneAt: 'Everything saved · last {time}',
+    syncStateWorking: 'Uploading …',
+    syncStateWaiting: '{n} change(s) waiting',
+    syncStateOffline: 'No internet — {n} change(s) waiting. They will upload on their own once you are back online.',
+    syncStateOfflineIdle: 'No internet. Everything so far is saved.',
+    syncQueuedRestore: '"{name}" — restore pending',
+    syncNothingPending: 'Nothing pending',
+    syncWaitingUpload: 'waiting to upload',
+    syncWaitingDelete: 'deletion pending',
+    syncWaitingTrash: 'move to trash pending',
+    syncWaitingRestore: 'restore pending',
+
     shortcuts: 'Keyboard shortcuts',
     scGroupGeneral: 'General',
     scGroupNav: 'Navigation',
@@ -1548,6 +1585,21 @@ const TRANSLATIONS = {
     syncOfflineToastCount: 'Offline: {n} modifiche in attesa di internet.',
     syncBackOnlineNamed: 'Di nuovo online — "{name}" e {n} altri in caricamento…',
     syncPanelNeedsAuth: 'Accedi per vedere lo stato di sincronizzazione.',
+
+    syncWindowTitle: 'Sincronizzazione',
+    syncWindowOpen: 'Sincronizzazione',
+    syncStateAllDone: 'Tutto salvato',
+    syncStateAllDoneAt: 'Tutto salvato · ultimo {time}',
+    syncStateWorking: 'Caricamento in corso …',
+    syncStateWaiting: '{n} modifica/modifiche in attesa',
+    syncStateOffline: 'Senza internet — {n} modifica/modifiche in attesa. Verranno caricate da sole quando tornerai online.',
+    syncStateOfflineIdle: 'Senza internet. Tutto quanto finora è salvato.',
+    syncQueuedRestore: '"{name}" — ripristino in sospeso',
+    syncNothingPending: 'Niente in sospeso',
+    syncWaitingUpload: 'in attesa di caricamento',
+    syncWaitingDelete: 'eliminazione in sospeso',
+    syncWaitingTrash: 'spostamento nel cestino in sospeso',
+    syncWaitingRestore: 'ripristino in sospeso',
 
     shortcuts: 'Scorciatoie da tastiera',
     scGroupGeneral: 'Generale',

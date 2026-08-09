@@ -155,7 +155,6 @@
       authLoggedOut.style.display = 'flex';
       authLoggedIn.style.display = 'none';
       if (syncPanelBtn) syncPanelBtn.style.display = 'none';
-      if (syncPanel) syncPanel.style.display = 'none';
 
       // Nach Ablauf der Sitzung: Konto benennen, damit der erneute Login
       // ein einzelner Klick ist (die E-Mail geht als login_hint mit).
@@ -176,11 +175,8 @@
     authLoggedOut.style.display = 'none';
     authLoggedIn.style.display = 'flex';
 
-    // Sync-Status-Knopf zeigen, wenn angemeldet
+    // Fuehrt ins Sync-Fenster (ui/syncPanel.js), nur bei Anmeldung sinnvoll
     if (syncPanelBtn) syncPanelBtn.style.display = 'block';
-    // Sync-Panel schließen, wenn es offen war – der Zustand wird beim
-    // Öffnen des Kontos neu aufgebaut
-    if (syncPanel) syncPanel.style.display = 'none';
 
     /* Angemeldet heißt online speichern. Früher gab es dafür einen
        Schalter; wer ihn übersah oder versehentlich umlegte, arbeitete
@@ -329,26 +325,21 @@
     return !Settings.get('cloudExpiredNoticeDismissed');
   }
 
+  const syncPanelBtn = E('auth-sync-panel-btn');
+
   function refreshProfileBadge() {
     const badge = E('profile-badge');
     if (!badge) return;
 
-    // Ausstehende Sync-Vorgänge zählen (nur wenn offline)
-    let pendingCount = 0;
-    if (window.CloudSync_ && !window.CloudSync_.isOnline
-        && typeof window.CloudSync_.getPendingActions === 'function') {
-      pendingCount = window.CloudSync_.getPendingActions().length;
-    }
+    /* Zaehlt NUR noch den ungelesenen Hinweis im Kontofenster.
 
+       Hier stand zusaetzlich die Zahl der ausstehenden Sync-Vorgaenge.
+       Seit der Sync-Knopf daneben seinen eigenen Zaehler hat, stuenden
+       zwei Abzeichen mit derselben Zahl nebeneinander – und das eine
+       davon am falschen Knopf. */
     const hasExpiredNotice = expiredNoticePending();
-    const showBadge = hasExpiredNotice || pendingCount > 0;
-
-    badge.style.display = showBadge ? 'block' : 'none';
-    if (pendingCount > 0) {
-      badge.textContent = pendingCount;
-    } else if (hasExpiredNotice) {
-      badge.textContent = '1';
-    }
+    badge.style.display = hasExpiredNotice ? 'block' : 'none';
+    if (hasExpiredNotice) badge.textContent = '1';
   }
 
   function refreshTitleBarAvatar() {
@@ -410,171 +401,22 @@
     cloudStatus.textContent = txt;
   }
 
-  /* ══════════════════════════════════════════════════════════════════
-     Sync-Status-Anzeige im Konto-Modal
-     ══════════════════════════════════════════════════════════════════ */
+  /* Das Sync-Fenster steht seit dieser Fassung fuer sich (ui/syncPanel.js)
+     und haengt an einem eigenen Knopf in der Titelleiste. Hier lag es als
+     ausgeklappter Abschnitt im Kontofenster, hinter einem zweiten Knopf –
+     wer nachsehen wollte, ob seine Hefte oben sind, musste erst das
+     Fenster zum ANMELDEN oeffnen. Gefunden hat es so kaum jemand.
 
-  const syncPanelBtn = E('auth-sync-panel-btn');
-  const syncPanel = E('auth-sync-panel');
-  const syncPendingBadge = E('auth-sync-pending-badge');
-  const syncCloseBtn = E('sync-panel-close-btn');
-  const syncRetryAllBtn = E('sync-retry-all-btn');
-  const syncClearLogBtn = E('sync-clear-log-btn');
-
-  /** Baut die Sync-Status-Liste im Konto-Modal neu auf. */
-  function renderSyncPanel() {
-    if (!syncPanel || syncPanel.style.display === 'none') return;
-    if (!window.CloudSync_) return;
-
-    const pending = CloudSync_.getPendingActions ? CloudSync_.getPendingActions() : [];
-    const history = CloudSync_.getSyncHistory ? CloudSync_.getSyncHistory() : [];
-
-    // Ausstehend
-    const pendingSection = E('sync-pending-section');
-    const pendingList = E('sync-pending-list');
-    if (pendingSection && pendingList) {
-      if (pending.length > 0) {
-        pendingSection.style.display = 'block';
-        pendingList.innerHTML = pending.map(e => {
-          const icon = e.action === 'delete' || e.action === 'trash' ? '🗑' : '📤';
-          const cls = e.action === 'delete' || e.action === 'trash' ? 'delete' : 'upload';
-          const label = e.action === 'delete' || e.action === 'trash'
-            ? (t('syncQueuedDelete') || 'Löschung ausstehend').replace('{name}', e.nbName || e.nbId)
-            : (t('syncQueuedItem') || 'wartet auf Upload').replace('{name}', e.nbName || e.nbId);
-          const time = fmtTime(e.queuedAt);
-          return `<div class="sync-item sync-item-status queued">
-            <div class="sync-item-icon ${cls}">${icon}</div>
-            <div class="sync-item-body">
-              <div class="sync-item-name">${escHtml(e.nbName || e.nbId)}</div>
-              <div class="sync-item-detail">${escHtml(label)}</div>
-            </div>
-            ${time ? `<div class="sync-item-time">${time}</div>` : ''}
-          </div>`;
-        }).join('');
-        if (syncRetryAllBtn && CloudSync_.isOnline) {
-          syncRetryAllBtn.style.display = 'block';
-        } else if (syncRetryAllBtn) {
-          syncRetryAllBtn.style.display = 'none';
-        }
-      } else {
-        pendingSection.style.display = 'none';
-      }
-    }
-
-    // Kürzlich synchronisiert
-    const recentList = E('sync-recent-list');
-    const recentEmpty = E('sync-recent-empty');
-    if (recentList && recentEmpty) {
-      const recent = history.filter(h => h.status === 'completed' || h.status === 'failed').slice(0, 10);
-      if (recent.length > 0) {
-        recentEmpty.style.display = 'none';
-        recentList.style.display = 'flex';
-        recentList.innerHTML = recent.map(h => {
-          const iconMap = { upload: '📤', delete: '🗑', trash: '🗑', restore: '📥' };
-          const icon = iconMap[h.action] || '📤';
-          const statusCls = h.status === 'completed' ? 'success' : 'failed';
-          const reason = h.status === 'completed'
-            ? (h.reason || (t('syncActionUpload') || 'Fertig'))
-            : (h.reason || 'Fehler');
-          const time = fmtTime(h.at);
-          return `<div class="sync-item sync-item-status ${statusCls}">
-            <div class="sync-item-icon ${h.action}">${h.status === 'completed' ? '✓' : '✗'}</div>
-            <div class="sync-item-body">
-              <div class="sync-item-name">${escHtml(h.nbName || h.nbId)}</div>
-              <div class="sync-item-detail">${escHtml(reason)}</div>
-            </div>
-            ${time ? `<div class="sync-item-time">${time}</div>` : ''}
-          </div>`;
-        }).join('');
-      } else {
-        recentList.style.display = 'none';
-        recentEmpty.style.display = 'block';
-      }
-    }
-
-    // Badge am Knopf
-    updateSyncBadge();
-  }
-
-  function updateSyncBadge() {
-    if (!syncPendingBadge || !syncPanelBtn) return;
-    if (!window.CloudSync_) return;
-
-    const pending = CloudSync_.getPendingActions ? CloudSync_.getPendingActions() : [];
-    if (pending.length > 0) {
-      syncPendingBadge.style.display = 'inline';
-      syncPendingBadge.textContent = pending.length;
-    } else {
-      syncPendingBadge.style.display = 'none';
-    }
-  }
-
-  function escHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  /** Kurze Uhrzeit aus einem ISO-Zeitstempel. */
-  function fmtTime(iso) {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '';
-      return d.toLocaleTimeString(typeof getLanguage === 'function' ? getLanguage() : 'de', { hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return ''; }
-  }
-
-  // Sync-Panel öffnen / schließen
-  if (syncPanelBtn && syncPanel) {
-    syncPanelBtn.addEventListener('click', () => {
-      const isOpen = syncPanel.style.display !== 'none';
-      syncPanel.style.display = isOpen ? 'none' : 'flex';
-      syncPanelBtn.style.display = isOpen ? 'block' : 'none';
-      if (!isOpen) renderSyncPanel();
-    });
-  }
-
-  if (syncCloseBtn && syncPanel && syncPanelBtn) {
-    syncCloseBtn.addEventListener('click', () => {
-      syncPanel.style.display = 'none';
-      syncPanelBtn.style.display = 'block';
-    });
-  }
-
-  // Alle jetzt hochladen
-  if (syncRetryAllBtn) {
-    syncRetryAllBtn.addEventListener('click', async () => {
-      if (!window.CloudSync_) return;
-      await CloudSync_.flushPending();
-      renderSyncPanel();
-    });
-  }
-
-  // Protokoll löschen
-  if (syncClearLogBtn) {
-    syncClearLogBtn.addEventListener('click', async () => {
-      if (typeof showConfirm === 'function') {
-        const ok = await showConfirm(t('syncClearLogConfirm') || 'Das Sync-Protokoll löschen?');
-        if (!ok) return;
-      }
-      if (window.CloudSync_ && typeof CloudSync_.clearSyncLog === 'function') {
-        await CloudSync_.clearSyncLog();
-      }
-      if (typeof toast === 'function') {
-        toast(t('syncLogCleared') || 'Sync-Protokoll gelöscht.');
-      }
-      renderSyncPanel();
-    });
-  }
+     Der Knopf "Synchronisation anzeigen" bleibt hier stehen und oeffnet
+     jetzt jenes Fenster; syncPanel.js haengt sich selbst daran.
+     Zaehler, Listen und Anschluesse liegen vollstaendig dort. */
 
   if (window.CloudSync_) {
     window.CloudSync_.onChange(() => {
       refreshTitleBarAvatar();
-      updateSyncBadge();
-      if (accountOverlay.style.display === 'flex') {
-        refreshUI();
-        renderSyncPanel();
-      }
+      // Zaehler und Listen des Sync-Fensters versorgt ui/syncPanel.js
+      // selbst – es haengt an derselben Meldung.
+      if (accountOverlay.style.display === 'flex') refreshUI();
     });
     refreshTitleBarAvatar();
   }
