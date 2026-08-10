@@ -311,15 +311,15 @@ body.touch-input .nb-card-edit-btn {
    das ist #txt-color-dropdown, und ui/toolbar.js setzt seine Stelle in
    Fensterkoordinaten – die Farbauswahl saesse daneben.
 
-   >>> WAS IN WELCHER REIHENFOLGE WEICHT <<<
-   Stufe 1 – Beschriftung und Zier. Kostet nichts als Aussehen.
-   Stufe 2 – was es anderswo auch gibt: Zoom + und − (zwei Finger und
-             Strg++/− tun dasselbe, der Prozentwert bleibt), Freigeben
-             und Exportieren (stehen weiterhin im Kontextmenue eines
-             Hefts auf der Startseite, wo sie vorher allein standen).
+   >>> WAS NOCH GEZIELT WEICHEN MUSS <<<
+   Stufe 1 – Beschriftung und Zier. Spart Platz, bevor die Paginierung
+            eingreift. Je weniger Seiten, desto besser.
+   Stufe 2 – entfällt. Die Paginierung (▶/◀ in ui/toolbar.js) fängt den
+            Rest auf. Früher wurden hier einzelne Knöpfe ausgeblendet, die
+            dann ganz weg waren; heute sind sie über ▶ erreichbar.
 
    Die Werkzeuge selbst, die Textformate und das Einfuegen bleiben immer
-   stehen: fuer das Einfuegen gibt es keinen zweiten Weg.
+   auf Seite 1 – für das Einfuegen gibt es keinen zweiten Weg.
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Stufe 1, Weg „Navigation offen" ────────────────────────────────
@@ -352,27 +352,8 @@ body.touch-input .nb-card-edit-btn {
   }
 }
 
-/* ── Stufe 2, Weg „Navigation offen" ───────────────────────────────── */
-@media (max-width:1130px) {
-
-  .journal-layout:has(#side-panel.open) #btn-zoom-in,
-  .journal-layout:has(#side-panel.open) #btn-zoom-out,
-  .journal-layout:has(#side-panel.open) #btn-doc-share,
-  .journal-layout:has(#side-panel.open) #btn-doc-export {
-    display: none
-  }
-
-  /* Der Speicherstand ist eine Anzeige, kein Weg zu etwas: gespeichert
-     wird von selbst und mit Strg+S. Er weicht deshalb hier mit. */
-  .journal-layout:has(#side-panel.open) #save-status {
-    display: none
-  }
-
-  .journal-layout:has(#side-panel.open) .tb-mode,
-  .journal-layout:has(#side-panel.open) .tb-opt {
-    padding: 4px 6px
-  }
-}
+/* ── Stufe 2 (alt) ist entfallen – die Paginierung (▶/◀) fängt den
+   Überlauf jetzt auf, statt einzelne Knöpfe ganz auszublenden. ──── */
 
 @media (max-width:900px) {
 
@@ -408,29 +389,15 @@ body.touch-input .nb-card-edit-btn {
     justify-content: flex-end
   }
 
-  /* Hide save text in vertical/portrait mode */
+  /* Hide save text in vertical/portrait mode – das Icon bleibt,
+     nur die Beschriftung weicht, um Platz zu sparen. */
   .save-text {
     display: none !important;
   }
 
-  /* ── Stufe 2, Weg „schmales Fenster" ─────────────────────────────
-     Siehe die Erklaerung ueber den Stufen weiter oben. */
-  #btn-zoom-in,
-  #btn-zoom-out,
-  #btn-doc-share,
-  #btn-doc-export {
-    display: none
-  }
-
-  /* ── Stufe 3, nur mit offener Navigation ─────────────────────────
-     Im Hochformat unter 800 px bleiben davon noch keine 540 px fuer
-     die Leiste uebrig – dann muss auch der letzte Zoomknopf weichen.
-     Er faellt am wenigsten ins Gewicht: im Hochformat passt Inkwell
-     die Seite ohnehin von selbst ein (core/zoom.js), zwei Finger
-     zoomen weiter, und Strg+0 setzt zurueck. */
-  .journal-layout:has(#side-panel.open) #btn-zoom-reset {
-    display: none
-  }
+  /* Ab hier übernimmt die Paginierung (▶/◀). Keine Knöpfe werden mehr
+     gezielt ausgeblendet – sie sind über ▶ erreichbar, statt ganz zu
+     verschwinden. */
 }
 
 @media (max-width:700px) {

@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="css/pages.css">
 <link rel="stylesheet" href="css/modals.css">
 <link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="lib/katex.min.css">
 </head>
 <body>
 
@@ -300,16 +301,21 @@
           </div>
 
           <div class="tb-sep"></div>
+          <!-- Einfügen: Bild, PDF, Datei – und die Tabelle mit ihrem
+               Raster (ui/insert.js). Ein Knopf statt vier, damit die
+               Leiste im Hochformat nicht überläuft. -->
           <div class="tb-grp">
-            <!-- Undo/Redo-Buttons entfernt -->
-            <div class="tb-sep-sm"></div>
-            <button class="tb-opt" id="btn-insert" data-i18n-title="insert" title="Einfügen">📎</button>
+            <button class="tb-opt" id="btn-insert" data-i18n-title="insert" title="Einfügen">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+                <path d="M8 3v10M3 8h10"/>
+              </svg>
+            </button>
           </div>
         </div>
 
         <div class="tb-zone tb-right">
           <div class="tb-sep"></div>
-          <div class="tb-grp">
+          <div class="tb-grp" data-tb-more="1">
             <button class="tb-opt save-status" id="save-status" data-i18n-title="saveNow" title="Speichern">
               <span class="save-icon" id="save-icon">○</span>
               <span class="save-text" id="save-text" data-i18n="saved">Gespeichert</span>
@@ -318,7 +324,7 @@
           <div class="tb-sep"></div>
           <!-- Freigeben und Exportieren direkt aus dem geöffneten Heft.
                Vorher ging beides nur über das Kontextmenü auf der Startseite. -->
-          <div class="tb-grp">
+          <div class="tb-grp" data-tb-more="2">
             <button class="tb-opt" id="btn-doc-share" data-i18n-title="shareTitle" title="Heft freigeben">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
@@ -334,11 +340,21 @@
             </button>
           </div>
           <div class="tb-sep"></div>
-          <div class="tb-grp">
+          <div class="tb-grp" data-tb-more="3">
             <button class="tb-opt" id="btn-zoom-out" data-i18n-title="zoomOut" title="Verkleinern">－</button>
             <button class="tb-opt" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom zurücksetzen" style="font-family:'DM Mono',monospace;font-size:10px;min-width:38px" >100%</button>
             <button class="tb-opt" id="btn-zoom-in" data-i18n-title="zoomIn" title="Vergrößern">＋</button>
           </div>
+
+          <!-- Pfeil-Navigation: Wenn die Leiste zu schmal ist, blättert
+               ▶ zur nächsten Seite an Knöpfen, ◀ zurück. Die echten
+               Knöpfe bleiben in der Leiste – sie werden nur gruppenweise
+               ein- und ausgeblendet, nicht in ein Menü verschoben.
+               Beide Pfeile sind standardmäßig unsichtbar. -->
+          <button class="tb-opt tb-page-btn" id="btn-tb-prev" style="display:none"
+                  data-i18n-title="tbPrev" title="Zurück">◀</button>
+          <button class="tb-opt tb-page-btn" id="btn-tb-next" style="display:none"
+                  data-i18n-title="tbNext" title="Mehr">▶</button>
         </div>
       </div>
       <div class="pg-scroll" id="pg-scroll">
@@ -718,6 +734,36 @@
   </div>
   <input type="color" id="custom-color-pop-input" value="#1a1510">
   <div class="custom-color-recent" id="custom-color-recent" style="display:none"></div>
+</div>
+
+<!-- Sammelbecken der Werkzeugleiste: was nicht mehr in die Zeile passt,
+     haengt ui/toolbar.js hier hinein – die echten Knoepfe, nicht Kopien,
+     damit sie ihre Handgriffe behalten. -->
+<div class="tb-more-pop" id="tb-more-pop" style="display:none"></div>
+
+<!-- Einfuegen. Der Knopf oeffnet das hier statt sofort den Dateidialog:
+     dazugekommen sind die Tabelle und, wenn es sie gibt, Formel und
+     Kommentar (ui/insert.js). -->
+<div class="insert-pop" id="insert-pop" style="display:none">
+  <button class="insert-item" id="ins-file">
+    <span class="insert-icon">🖼</span>
+    <span data-i18n="insertFile">Bild, PDF oder Datei …</span>
+  </button>
+
+  <button class="insert-item" id="ins-formula">
+    <span class="insert-icon" style="font-family:'DM Mono',monospace;font-size:14px">𝑓</span>
+    <span data-i18n="insertFormula">Formel …</span>
+  </button>
+
+  <div class="insert-head" data-i18n="insertTable">Tabelle</div>
+  <!-- Das Raster wie in Word: darueberfahren waehlt die Groesse, ein
+       Klick setzt sie. Die Zellen baut ui/insert.js. -->
+  <div class="tbl-grid" id="tbl-grid"></div>
+  <div class="tbl-grid-label" id="tbl-grid-label">&nbsp;</div>
+  <button class="insert-item" id="ins-table-custom">
+    <span class="insert-icon">⋯</span>
+    <span data-i18n="insertTableCustom">Benutzerdefiniert …</span>
+  </button>
 </div>
 
 <!-- Groesser und kleiner im Hochformat. Dort ist die Leiste zu schmal
@@ -1186,6 +1232,8 @@
 <script src="core/translations.js"></script>
 <script src="core/dialogs.js"></script>
 <script src="core/data.js"></script>
+<!-- Tabellen im Seitentext. Nach data.js, weil getPage gebraucht wird. -->
+<script src="core/tables.js"></script>
 <script src="core/settings.js"></script>
 <!-- Örtliche Zugangsdaten. Muss VOR cloudConfig.js kommen und ist nicht im
      Repo; fehlt die Datei, meldet die Konsole einen 404 und alles läuft
@@ -1220,6 +1268,7 @@
 <script src="ui/search.js"></script>
 <script src="ui/sidebar.js"></script>
 <script src="ui/toolbar.js"></script>
+<script src="ui/insert.js"></script>
 <script src="ui/settings.js"></script>
 <script src="ui/saveStatus.js"></script>
   <script src="ui/contextMenu.js"></script>
@@ -1251,6 +1300,9 @@
   <script src="ui/sharedDocs.js"></script>
   <!-- Yjs, zu einer Datei gebündelt (npm run build-yjs). Meldet sich als
        globales "Y" und trägt das gleichzeitige Tippen. -->
+  <script src="lib/katex.min.js"></script>
+  <script src="core/formula.js"></script>
+  <script src="ui/formula.js"></script>
   <script src="lib/yjs.bundle.js"></script>
   <!-- Live-Bearbeitung: Anwesenheit, Marker, gemeinsamer Text, Handschrift -->
   <script src="ui/collab.js"></script>

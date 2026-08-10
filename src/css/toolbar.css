@@ -433,6 +433,136 @@
   border-color: var(--gold)
 }
 
+/* ── Das Sammelbecken der Werkzeugleiste ──────────────────────────────
+   Was nicht mehr in die Zeile passt, steht hier untereinander
+   (ui/toolbar.js). Die Gruppen behalten ihr Aussehen, sie stehen nur
+   nicht mehr nebeneinander. */
+.tb-more-pop {
+  position: fixed;
+  z-index: 1300;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  padding: 8px
+}
+
+.tb-more-pop .tb-grp {
+  display: flex;
+  align-items: center;
+  gap: 2px
+}
+
+/* Die Pfeile zum Umblättern der Leiste. Sie erscheinen nur, wenn die
+   Leiste zu schmal ist – am rechten Rand, gut sichtbar. */
+.tb-page-btn {
+  font-size: 14px;
+  padding: 4px 7px;
+  flex-shrink: 0;
+  color: var(--gold);
+  border-color: var(--gd);
+  font-weight: bold
+}
+
+.tb-page-btn:hover {
+  background: var(--gold);
+  color: var(--sh)
+}
+
+/* ── Das Einfuegen-Menue ──────────────────────────────────────────── */
+.insert-pop {
+  position: fixed;
+  z-index: 1300;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 210px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  padding: 8px
+}
+
+.insert-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--hi);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer
+}
+
+.insert-item:hover {
+  background: var(--sh2)
+}
+
+.insert-icon {
+  width: 18px;
+  text-align: center;
+  opacity: .8
+}
+
+.insert-head {
+  color: var(--lo);
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 6px 10px 2px
+}
+
+/* Das Raster wie in Word: darueberfahren waehlt, ein Klick setzt. */
+.tbl-grid {
+  display: grid;
+  gap: 3px;
+  padding: 4px 10px
+}
+
+.tbl-cell {
+  width: 20px;
+  height: 16px;
+  border: 1px solid var(--sb2);
+  border-radius: 2px;
+  background: var(--sp);
+  cursor: pointer
+}
+
+.tbl-cell.an {
+  background: var(--gold);
+  border-color: var(--gold)
+}
+
+.tbl-grid-label {
+  color: var(--md);
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 11px;
+  padding: 0 10px 4px;
+  min-height: 15px
+}
+
+@media (any-pointer: coarse) {
+
+  .tbl-cell {
+    width: 28px;
+    height: 24px
+  }
+
+  .insert-item {
+    padding: 11px 10px;
+    font-size: 14px
+  }
+}
+
 /* ── Groesser und kleiner im Hochformat ───────────────────────────────
    Oeffnet sich am Prozentwert, sobald − und + fuer die schmale Leiste
    weichen mussten (css/responsive.css, Stufe 2). Die Knoepfe sind

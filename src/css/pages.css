@@ -188,6 +188,179 @@ body.touch-draw .j-canvas {
   line-height: inherit
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   TABELLEN AUF DEM PAPIER
+
+   Absichtlich `table-layout: auto`: die Spalte wächst mit dem, was
+   darin steht – genau das erwartet man von Word. Eine feste Breite
+   müsste beim Tippen nachgerechnet werden und säße nach jedem Abgleich
+   wieder anders.
+
+   Die Breite ist auf 100 % gedeckelt, sonst schöbe eine lange Zeile die
+   Tabelle über den Blattrand hinaus, wo sie abgeschnitten wird
+   (.j-page hat overflow: hidden).
+   ══════════════════════════════════════════════════════════════════════ */
+.j-text table.j-table {
+  border-collapse: collapse;
+  table-layout: auto;
+  max-width: 100%;
+  margin: 6px 0;
+  font-size: inherit
+}
+
+.j-text table.j-table td,
+.j-text table.j-table th {
+  border: 1px solid var(--pl, #d4cdc0);
+  padding: 3px 7px;
+  vertical-align: top;
+  /* Ohne das reisst ein langes Wort die Spalte auf, statt umzubrechen */
+  word-break: break-word;
+  overflow-wrap: break-word;
+  min-width: 28px;
+  /* Die Zellen sind LEER, ohne <br> (Begruendung in core/tables.js).
+     Bei einer Tabellenzelle wirkt `height` als MINDESTmass – eine leere
+     Zeile ist damit anzuklicken, ohne dass ein Platzhalter im Text
+     steht, den die Schreibmarken mitzaehlen muessten. */
+  height: 1.2em
+}
+
+.j-text table.j-table th {
+  font-weight: 600;
+  text-align: left;
+  background: rgba(0, 0, 0, .035)
+}
+
+/* Die Leiste an der Tabelle – dieselbe Machart wie die am Bild, aber am
+   Fenster statt an der Seite: so bleibt sie im Hochformat bedienbar,
+   statt mit dem Zoom zu schrumpfen. */
+.j-table-bar {
+  position: fixed;
+  z-index: 1260;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45)
+}
+
+.j-table-btn {
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center
+}
+
+.j-table-btn svg {
+  width: 100%;
+  height: 100%
+}
+
+.j-table-btn:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+@media (any-pointer: coarse) {
+
+  .j-table-btn {
+    width: 38px;
+    height: 38px
+  }
+}
+
+/* ── Mathematische Formeln (KaTeX) ────────────────────────────────── */
+
+/* Inline-Formel: fließt im Text mit, etwas vergrößert für Lesbarkeit.
+   KaTeX setzt eigene Schriftarten – deshalb kein font-family hier. */
+.j-text .j-formula {
+  display: inline;
+  cursor: pointer;
+  transition: background .12s
+}
+
+.j-text .j-formula:hover {
+  background: rgba(0, 0, 0, .04);
+  border-radius: 3px
+}
+
+/* Block-Formel: eigene Zeile, zentriert. Das <p> trägt .j-formula-block,
+   das innere <span> unverändert .j-formula. */
+.j-text p.j-formula-block {
+  text-align: center;
+  margin: 10px 0
+}
+
+.j-text p.j-formula-block .j-formula {
+  display: block
+}
+
+/* Die KaTeX-eigene Block-Darstellung innerhalb von .j-formula-block */
+.j-text .j-formula-block .katex-display {
+  margin: 0
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Formel-Editor (ui/formula.js)
+   ══════════════════════════════════════════════════════════════════ */
+.formula-preview {
+  min-height: 40px;
+  padding: 12px 14px;
+  background: var(--sp);
+  border: 1px solid var(--sb2);
+  border-radius: 8px;
+  overflow-x: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center
+}
+
+.formula-display-row {
+  display: flex;
+  gap: 16px;
+  margin: 8px 0 0
+}
+
+.formula-display-label {
+  font-size: 13px;
+  color: var(--md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px
+}
+
+.formula-display-label input[type="radio"] {
+  accent-color: var(--gold)
+}
+
+#formula-latex {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--sp);
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  color: var(--hi);
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical
+}
+
+#formula-latex:focus {
+  border-color: var(--gd);
+  outline: none
+}
+
 .j-text h1,
 .j-text p.j-title-1 {
   font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;

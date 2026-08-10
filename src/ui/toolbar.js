@@ -50,6 +50,159 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   }
 })();
 
+/* ══════════════════════════════════════════════════════════════════════
+   WAS NICHT MEHR HINEINPASST, WIRD UMBLÄTTERT
+
+   Die Leiste hat Stufen in css/responsive.css: erst weicht die
+   Beschriftung, dann, was es anderswo auch gibt. Das reicht, solange die
+   Zahl der Knöpfe feststeht – mit jedem neuen Werkzeug (Tabelle, Formel,
+   Formen, Lineal) müsste eine weitere Stufe dazu, und jede davon ist
+   geraten.
+
+   Deshalb die Pfeil-Navigation: gemessen wird, ob die Leiste breiter ist
+   als ihr Platz. Ist sie es, erscheint ▶ – ein Klick darauf blättert zur
+   nächsten „Seite" an Knöpfen, ◀ führt zurück. Die echten Knöpfe bleiben
+   in der Leiste und behalten ihre Handgriffe; sie werden nur gruppenweise
+   ein- und ausgeblendet.
+
+   >>> Warum nicht einfach seitlich rollen <<<
+   Das kann die Leiste längst (css/toolbar.css), aber was rechts
+   heraussteht, findet niemand – und ein waagerechtes Schieben in einer
+   40 px hohen Leiste trifft mit dem Finger ohnehin kaum jemand. Genau
+   deshalb gibt es die Stufen überhaupt.
+
+   >>> Und warum kein ⋯-Menü mehr <<<
+   Das Menü verbarg, dass es überhaupt etwas gibt. Die Pfeile zeigen
+   sichtbar: hier ist noch mehr. Außerdem kostete das Menü einen Klick
+   zum Öffnen und einen zum Auswählen – die Pfeile blättern mit einem
+   Klick eine ganze Seite um.
+   ══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const bar = E('toolbar');
+  const btnPrev = E('btn-tb-prev');
+  const btnNext = E('btn-tb-next');
+  if (!bar || !btnPrev || !btnNext) return;
+
+  /* Die Gruppen der Leiste, als flache Liste von links nach rechts –
+     jede Gruppe und jeder Trenner ist ein „Stück", das umgeblättert
+     werden kann. Die Pfeile selbst gehören nicht dazu. */
+  function stuecke() {
+    const alle = [];
+    for (const kind of bar.children) {
+      if (kind === btnPrev || kind === btnNext) continue;
+      alle.push(kind);
+    }
+    return alle;
+  }
+
+  /* Ein Pixel Spielraum: Chromium rechnet Breiten in Bruchteilen, und
+     scrollWidth rundet auf. Ohne das schöbe die Leiste beim Aufbau
+     grundlos etwas ins Menü. */
+  const zuEng = () => bar.scrollWidth > bar.clientWidth + 1;
+
+  let aktuelleSeite = 0;     // 0 = erste Seite
+  let seiten = [];           // [[stück, stück, ...], [stück, ...]]
+  let geplant = false;
+
+  /** Alle Stücke sichtbar machen – Ausgangszustand vor der Messung. */
+  function alleZeigen() {
+    for (const s of stuecke()) s.style.display = '';
+  }
+
+  /**
+   * Misst, wie viele Seiten nötig sind, und schneidet die Stücke zu.
+   *
+   * Weil die Pfeile selbst Platz brauchen, wird die Messung mit
+   * sichtbarem ▶-Knopf gemacht. Der ◀-Knopf ist auf Seite 0 nie
+   * sichtbar und wird erst nach dem ersten Blättern gebraucht.
+   */
+  function anpassen() {
+    geplant = false;
+    if (!bar.offsetParent) { alleZeigen(); btnNext.style.display = 'none'; btnPrev.style.display = 'none'; return; }
+
+    alleZeigen();
+    btnNext.style.display = 'none';
+    btnPrev.style.display = 'none';
+    aktuelleSeite = 0;
+    seiten = [];
+
+    if (!zuEng()) return;   // alles passt
+
+    // ▶ braucht selbst Platz – erst zeigen, dann messen
+    btnNext.style.display = '';
+    if (!zuEng()) return;   // mit Pfeil passt immer noch alles (unwahrscheinlich, aber möglich)
+
+    // In Seiten aufteilen: jedes Stück, das nicht mehr ganz hineinpasst,
+    // kommt auf die nächste Seite. Die Pfeile sind immer auf der ersten
+    // sichtbaren Seite dabei.
+    seiten.push([]);
+    let aufSeite = 0;
+
+    for (const s of stuecke()) {
+      // Sicherstellen, dass das Stück sichtbar ist
+      s.style.display = '';
+
+      if (!zuEng() && aufSeite === 0) {
+        // Passt noch auf die aktuelle (erste) Seite
+        seiten[0].push(s);
+      } else {
+        // Passt nicht mehr – ab auf die nächste Seite
+        if (seiten[aufSeite] && seiten[aufSeite].length) aufSeite++;
+        if (!seiten[aufSeite]) seiten.push([]);
+        seiten[aufSeite].push(s);
+      }
+    }
+
+    // Wenn alle Stücke auf Seite 0 sind, brauchen wir keine Pfeile
+    if (seiten.length <= 1) {
+      seiten = [];
+      alleZeigen();
+      btnNext.style.display = 'none';
+      btnPrev.style.display = 'none';
+      return;
+    }
+
+    // Erste Seite anzeigen
+    zeigeSeite(0);
+  }
+
+  /** Blendet alle Stücke einer Seite ein, die anderen aus. */
+  function zeigeSeite(nr) {
+    aktuelleSeite = nr;
+    const sichtbar = new Set(seiten[nr] || []);
+
+    for (const s of stuecke()) {
+      s.style.display = sichtbar.has(s) ? '' : 'none';
+    }
+
+    btnPrev.style.display = nr > 0 ? '' : 'none';
+    btnNext.style.display = nr < seiten.length - 1 ? '' : 'none';
+  }
+
+  function planen() {
+    if (geplant) return;
+    geplant = true;
+    requestAnimationFrame(anpassen);
+  }
+
+  btnNext.addEventListener('click', () => {
+    if (aktuelleSeite < seiten.length - 1) zeigeSeite(aktuelleSeite + 1);
+  });
+
+  btnPrev.addEventListener('click', () => {
+    if (aktuelleSeite > 0) zeigeSeite(aktuelleSeite - 1);
+  });
+
+  window.addEventListener('resize', planen, { passive: true });
+
+  /* Der Werkzeugwechsel blendet ganze Gruppen ein und aus (applyMode) –
+     danach ist die Rechnung eine andere. */
+  window.updateToolbarOverflow = planen;
+
+  document.addEventListener('DOMContentLoaded', planen);
+  planen();
+})();
+
 /** Zeichnet der Finger gerade, statt zu scrollen? */
 function touchDrawActive() {
   return !!S.touchDraw && typeof isDrawMode === 'function' && isDrawMode(S.mode);
@@ -609,6 +762,8 @@ function applyMode() {
   // Ob der Finger zeichnen darf, hängt am Werkzeug – siehe updateTouchDrawUI
   updateTouchDrawUI();
   updateCursor();
+  // Andere Gruppen sichtbar, andere Breite – der Auffangknopf rechnet neu
+  if (typeof window.updateToolbarOverflow === 'function') window.updateToolbarOverflow();
 }
 
 function updateCursor() {
