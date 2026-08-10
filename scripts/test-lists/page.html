@@ -165,6 +165,48 @@ pruefe('Und die anderen Zeilen bleiben stehen',
   feld.textContent.includes('zwei') && feld.textContent.includes('drei'), bau());
 
 /* ══════════════════════════════════════════════════════════════════
+   1b. DER EINE KNOPF IN DER LEISTE
+
+   Punkte und Nummern haben nur noch EINEN Knopf (ui/toolbar.js). Ohne
+   Angabe nimmt er die zuletzt benutzte Art – und muss trotzdem ein
+   Umschalter bleiben und kein Umsteller.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Der eine Knopf in der Leiste');
+
+stelle('<p>eins</p>', 0);
+Lists.apply('decimal', true);
+pruefe('Eine Nummernform merkt sich die Art', Lists.lastKind() === 'ol', Lists.lastKind());
+
+stelle('<p>zwei</p>', 0);
+Lists.toggle();
+pruefe('Der Knopf ohne Angabe macht dann auch Nummern',
+  !!feld.querySelector('ol') && !feld.querySelector('ul'), bau());
+
+Lists.toggle();
+pruefe('Noch ein Druck nimmt sie wieder weg', !feld.querySelector('ol,ul'), bau());
+
+/* Der Fall, an dem aus einem Umschalter ein Umsteller wird: die Marke
+   steht in einer Punkteliste, gemerkt ist aber eine ANDERE Punkteform.
+   Ohne die Sonderbehandlung in toggle() bekaeme man Quadrate statt gar
+   keiner Liste. */
+stelle('<p>x</p>', 0);
+Lists.apply('square', true);
+stelle('<ul class="j-list-disc"><li>a</li></ul>', 1);
+Lists.toggle();
+pruefe('Bei anderer gemerkter Form wird ausgeschaltet, nicht umgestellt',
+  !feld.querySelector('ul'), bau());
+
+/* Und umgekehrt: gemerkt sind Punkte, die Marke steht in Nummern. Dann
+   gilt die Art, in der die Marke steht. */
+stelle('<p>y</p>', 0);
+Lists.apply('disc', true);
+stelle('<ol class="j-list-decimal"><li>a</li></ol>', 1);
+Lists.toggle();
+pruefe('In einer Nummernliste schaltet der Knopf sie aus',
+  !feld.querySelector('ol') && !feld.querySelector('ul'), bau());
+
+/* ══════════════════════════════════════════════════════════════════
    2. EBENEN
    ══════════════════════════════════════════════════════════════════ */
 

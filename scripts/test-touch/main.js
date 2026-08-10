@@ -134,7 +134,7 @@ app.on('ready', async () => {
        32 px ist die untere Grenze, die ein Finger noch zuverlaessig
        trifft. Ohne die Regeln in responsive.css sind es 24. */
     abschnitt('Trefferflaechen (mindestens 32 px Kante)');
-    for (const sel of ['#fmt-ul', '#fmt-ul-more', '#fmt-ol', '#fmt-ol-more',
+    for (const sel of ['#fmt-list', '#fmt-list-more',
                        '#fmt-bold', '#fmt-h1', '#fmt-p', '.tb-mode',
                        '.pg-menu-btn', '#btn-panel-toggle']) {
       const m = await mitte(sel);
@@ -154,27 +154,50 @@ app.on('ready', async () => {
       'keine Marke im Text');
 
     await js(`setFlatCaret(document.querySelector('.j-text'), 2)`);
-    await tippe('#fmt-ul');
+    await tippe('#fmt-list');
     let html = await js(`document.querySelector('.j-text').innerHTML`);
     pruefe('Der Knopf laesst die Marke stehen und macht eine Liste',
       /<ul[^>]*j-list-/.test(html), html.slice(0, 140));
 
-    await tippe('#fmt-ol-more');
+    await tippe('#fmt-list-more');
     pruefe('Der schmale Knopf oeffnet die Auswahl',
       (await js(`getComputedStyle(document.getElementById('list-style-pop')).display`)) === 'block',
       'blieb zu');
+
+    /* Ein Fenster, zwei Gruppen: die Punkte und die Nummern. Beide
+       muessen da sein, sonst braeuchte es doch wieder zwei Knoepfe. */
+    const gruppen = await js(`({
+      punkte: document.querySelectorAll('#list-style-grid-ul .list-style-cell').length,
+      nummern: document.querySelectorAll('#list-style-grid-ol .list-style-cell').length })`);
+    pruefe('Sie enthaelt beide Gruppen (' + gruppen.punkte + ' Punkte, '
+      + gruppen.nummern + ' Nummern)', gruppen.punkte >= 6 && gruppen.nummern >= 7,
+      JSON.stringify(gruppen));
 
     const zelle = await mitte('.list-style-cell');
     pruefe('Die Zellen der Auswahl sind '
       + (zelle ? zelle.w + '×' + zelle.h : '?') + ' gross',
       !!zelle && Math.min(zelle.w, zelle.h) >= 32, 'zu klein');
 
-    await tippe('.list-style-cell:nth-child(2)');
+    // Eine NUMMERNform, obwohl der Knopf gerade Punkte zeigte
+    await tippe('#list-style-grid-ol .list-style-cell:nth-child(2)');
     html = await js(`document.querySelector('.j-text').innerHTML`);
-    pruefe('Ein Tipp auf eine Form wendet sie an', /j-list-paren/.test(html), html.slice(0, 140));
+    pruefe('Ein Tipp auf eine Nummernform wendet sie an', /j-list-paren/.test(html), html.slice(0, 140));
     pruefe('Und die Auswahl schliesst sich',
       (await js(`getComputedStyle(document.getElementById('list-style-pop')).display`)) === 'none',
       'blieb offen');
+
+    /* Der eine Knopf muss jetzt Nummern zeigen – sonst weiss niemand,
+       was ein Druck darauf anrichtet. */
+    pruefe('Der Knopf zeigt danach das Nummern-Bild',
+      (await js(`getComputedStyle(document.getElementById('list-icon-ol')).display`)) !== 'none'
+      && (await js(`getComputedStyle(document.getElementById('list-icon-ul')).display`)) === 'none',
+      'falsches Bild');
+
+    // Und noch einmal derselbe Knopf: die Liste muss WEG sein, nicht
+    // umgestellt – auch wenn die zuletzt gewaehlte Form eine andere ist.
+    await tippe('#fmt-list');
+    html = await js(`document.querySelector('.j-text').innerHTML`);
+    pruefe('Noch ein Druck nimmt die Liste weg', !/<(ul|ol)/.test(html), html.slice(0, 140));
 
     /* ── Mit dem Stift ──────────────────────────────────────────────── */
     abschnitt('Mit dem Stift');
@@ -185,9 +208,9 @@ app.on('ready', async () => {
         return !!(s.rangeCount && document.querySelector('.j-text').contains(s.getRangeAt(0).startContainer)); })()`),
       'keine Marke');
 
-    await stift('#fmt-ul');
+    await stift('#fmt-list');
     html = await js(`document.querySelector('.j-text').innerHTML`);
-    pruefe('Der Knopf wirkt auch mit dem Stift', /<ul[^>]*j-list-/.test(html), html.slice(0, 140));
+    pruefe('Der Knopf wirkt auch mit dem Stift', /<(ul|ol)[^>]*j-list-/.test(html), html.slice(0, 140));
 
     /* ── Umgeklappt ─────────────────────────────────────────────────── */
     abschnitt('Umgeklappt (quer nach hoch)');
@@ -208,11 +231,45 @@ app.on('ready', async () => {
     const leiste = await js(`Math.round(document.querySelector('.toolbar').getBoundingClientRect().height)`);
     pruefe('Die Werkzeugleiste bleibt eine Zeile (' + leiste + ' px)', leiste < 70, String(leiste));
 
-    const ul = await mitte('#fmt-ul');
-    pruefe('Der Aufzaehlungsknopf ist noch erreichbar',
+    const ul = await mitte('#fmt-list');
+    pruefe('Der Listenknopf ist noch erreichbar',
       !!ul && ul.x > 0 && ul.x < 800 && Math.min(ul.w, ul.h) >= 32, JSON.stringify(ul));
 
-    await js(`openListStylePop('ol', document.getElementById('fmt-ol-wrap'))`);
+    /* ── Nichts steht seitlich heraus ─────────────────────────────────
+       Die Leiste KANN rollen (css/toolbar.css), aber was rechts
+       heraussteht, findet niemand – und ein waagerechtes Schieben in
+       einer 40 px hohen Leiste trifft mit dem Finger ohnehin kaum
+       jemand. Geprueft wird deshalb ueber die Breiten, die ein
+       umgeklappter Laptop wirklich hat, mit und ohne Navigation.
+
+       Die eine Ausnahme steht ausdruecklich da: 700 px MIT offener
+       Navigation lassen keine 510 px fuer die Leiste – das ist ein
+       6,5 Zoll breites Fenster, kein umgeklappter Laptop. */
+    abschnitt('Die Leiste passt hinein, ohne zu schieben');
+    for (const [breite, hoehe, lage] of [[1400, 900, 'quer 1400'], [1200, 800, 'quer 1200'],
+                                          [1000, 800, 'quer 1000'], [900, 1300, 'hoch 900'],
+                                          [800, 1200, 'hoch 800'], [750, 1150, 'hoch 750'],
+                                          [700, 1100, 'hoch 700']]) {
+      win.setContentSize(breite, hoehe);
+      await new Promise(r => setTimeout(r, 450));
+
+      for (const navOffen of [false, true]) {
+        if (breite === 700 && navOffen) continue;   // siehe oben
+        await js(`document.getElementById('side-panel').classList.toggle('open', ${navOffen})`);
+        await new Promise(r => setTimeout(r, 350));
+        const m = await js(`(() => { const tb = document.querySelector('.toolbar');
+          return { platz: Math.round(tb.clientWidth), noetig: Math.round(tb.scrollWidth) }; })()`);
+        pruefe((lage + (navOffen ? ' + Navigation' : '')).padEnd(24)
+          + m.noetig + ' von ' + m.platz + ' px',
+          m.noetig <= m.platz, 'es stehen ' + (m.noetig - m.platz) + ' px heraus');
+      }
+      await js(`document.getElementById('side-panel').classList.remove('open')`);
+    }
+
+    win.setContentSize(800, 1200);
+    await new Promise(r => setTimeout(r, 450));
+
+    await js('openListStylePop()');
     await new Promise(r => setTimeout(r, 250));
     const kasten = await js(`(() => { const r = document.getElementById('list-style-pop').getBoundingClientRect();
       return { l: Math.round(r.left), r: Math.round(r.right), b: Math.round(r.bottom),
