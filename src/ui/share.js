@@ -231,31 +231,42 @@
        Zutun des Nutzers und würde geblockt. Deshalb wechselt der Knopf
        seine Beschriftung, und der nächste Druck ist der zweite Schritt.
        ══════════════════════════════════════════════════════════════════ */
-    const beschriften = () => {
-      const zweiter = !!window.CloudSync_?.microsoftNeedsGoogle?.();
-      btn.textContent = zweiter ? t('shareConfirmWithGoogle') : t('sharedLinkMicrosoft');
-      hinweisZweiterSchritt.style.display = zweiter ? 'block' : 'none';
-    };
+    btn.textContent = t('sharedLinkMicrosoft');
+
+    /* Der zweite Weg steht als EIGENER Knopf daneben, nicht als
+       wechselnde Beschriftung des ersten. Gemeldet wurde nämlich, dass
+       der Knopf „auf Schritt eins stehen bleibt" – bei einer Ursache,
+       die Firebase nicht eindeutig benennt, wäre das wieder so. Zwei
+       Knöpfe lassen die Wahl, und der zweite führt sicher ans Ziel. */
+    const btnGoogle = document.createElement('button');
+    btnGoogle.className = 'settings-btn';
+    btnGoogle.style.cssText = 'padding:8px 16px;font-size:13px;display:none;';
+    btnGoogle.textContent = t('shareConfirmWithGoogle');
 
     const hinweisZweiterSchritt = document.createElement('div');
     hinweisZweiterSchritt.style.cssText = 'font-size:12px;color:var(--md);'
       + 'line-height:1.5;max-width:380px;display:none;';
     hinweisZweiterSchritt.textContent = t('shareNeedsGoogleHint');
 
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
+    const beschriften = () => {
+      const zweiter = !!window.CloudSync_?.microsoftCanUseGoogle?.();
+      btnGoogle.style.display = zweiter ? '' : 'none';
+      hinweisZweiterSchritt.style.display = zweiter ? 'block' : 'none';
+    };
+
+    const drueckenMit = (fn) => async () => {
+      btn.disabled = btnGoogle.disabled = true;
       const vorher = btn.textContent;
       btn.textContent = t('shareCheckingAccount');
-
-      const ok = window.CloudSync_?.microsoftNeedsGoogle?.()
-        ? await CloudSync_.finishMicrosoftLinkWithGoogle()
-        : await CloudSync_.linkMicrosoftInteractively();
-
-      btn.disabled = false;
+      const ok = await fn();
+      btn.disabled = btnGoogle.disabled = false;
       btn.textContent = vorher;
       beschriften();
       await danach(ok);
-    });
+    };
+
+    btn.addEventListener('click', drueckenMit(() => CloudSync_.linkMicrosoftInteractively()));
+    btnGoogle.addEventListener('click', drueckenMit(() => CloudSync_.finishMicrosoftLinkWithGoogle()));
 
     const label = document.createElement('label');
     label.style.cssText = 'display:flex;gap:8px;align-items:flex-start;'
@@ -276,7 +287,11 @@
     label.append(haken, text);
 
     beschriften();
-    box.append(btn, hinweisZweiterSchritt, label);
+    const reihe = document.createElement('div');
+    reihe.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    reihe.append(btn, btnGoogle);
+
+    box.append(reihe, hinweisZweiterSchritt, label);
     return box;
   }
 

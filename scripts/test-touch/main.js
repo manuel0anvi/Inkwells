@@ -582,6 +582,19 @@ app.on('ready', async () => {
       + passung.platz + ' px)', passung.anteil > 0.9 && passung.anteil <= 1.001,
       'die Seite nutzt nur ' + Math.round(passung.anteil * 100) + '% der Breite');
 
+    /* >>> Und beim ÖFFNEN, nicht erst beim Umklappen <<<
+       Wer die App im Tablet-Modus startet und ein Heft öffnet, bekam die
+       Grundgröße: eingepasst wurde nur beim Wechsel des Formats und beim
+       Zoomen. Hier wird deshalb der Zoom absichtlich auf die Grundgröße
+       gestellt und dann ein Heft geöffnet – ohne jede Größenänderung. */
+    await js(`(() => { _zoom = 1.2; _verticalAutoFit = true;
+      openNotebook(S.notebooks[0].id); return true; })()`);
+    await new Promise(r => setTimeout(r, 700));
+    const zoomBeimOeffnen = await js('getZoom()');
+    pruefe('Beim Öffnen im Hochformat passt es sich gleich ein ('
+      + zoomBeimOeffnen.toFixed(2) + ')',
+      zoomBeimOeffnen < 1.19, 'es bleibt bei der Grundgröße, bis man umklappt');
+
     fertig(0);
   } catch (err) {
     zeilen.push('ABBRUCH ' + ((err && err.stack) || err));

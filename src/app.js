@@ -316,6 +316,13 @@ function openSection(sec = null, scrollToPgId = null) {
   setupScrollAutoPage();
   renderSideTree();
   requestAnimationFrame(() => {
+    /* >>> Erst einpassen, dann messen <<<
+       Im Hochformat gehört die Seite auf die Breite des Schirms
+       (core/zoom.js). Das lief bisher nur beim Umklappen und beim Zoomen –
+       wer die App im Tablet-Modus startet und ein Heft öffnet, bekam
+       deshalb die Grundgröße und musste selbst zurechtrücken. refreshSizer
+       braucht den gültigen Zoom ohnehin, sonst stimmt die Rollhöhe nicht. */
+    _applyZoom();
     refreshSizer();
     updateAddPageBtnVisibility();
     if (scrollToPgId) {
@@ -843,6 +850,18 @@ E('btn-panel-toggle').addEventListener('click', () => {
        Leiste fast aus. Ohne das hier folgte dem Wischen sein Klick, und
        der schloss die gerade aufgezogene Leiste sofort wieder. */
     e.preventDefault();
+
+    /* >>> Und die Bildschirmtastatur bleibt zu <<<
+       Das Band reicht bis in die Seite hinein. Endete das Wischen über
+       dem Text, hat der Browser dort die Schreibmarke gesetzt – und
+       Windows fährt daraufhin die Tastatur aus. Mitten in einer Geste,
+       die mit Schreiben nichts zu tun hat. Der Fokus gehört danach
+       niemandem. */
+    const fokus = document.activeElement;
+    if (fokus && fokus.classList && fokus.classList.contains('j-text')) {
+      try { fokus.blur(); } catch (err) { /* egal */ }
+    }
+
     setSidePanel(dx > 0);
   }, { passive: false });
 })();

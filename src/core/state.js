@@ -50,10 +50,20 @@ document.addEventListener('pointercancel', e => {
    zurueckgemeldet.
 
    Die Frage ist nicht, was das Geraet KANN, sondern was gerade benutzt
-   wird. Das steht erst im Ereignis. Zum Start wird angenommen, was ohne
-   Maus wahrscheinlich ist: ein Geraet, dessen primaerer Zeiger grob ist,
-   ist ein Tablet – dort gibt es kein :hover, und der Knopf muss von
-   Anfang an da sein.
+   wird. Das steht erst im Ereignis.
+
+   >>> Und bis das erste Ereignis kommt, gilt: angefasst <<<
+   Umgekehrt war es falsch herum. Wer den Laptop umklappt, hat danach
+   keine Maus mehr – aber auch noch kein Ereignis geschickt. Der Knopf
+   fehlte deshalb genau dann, wenn er gebraucht wurde, und erschien erst,
+   nachdem man irgendwohin getippt hatte. Gemeldet wurde das zweimal, im
+   Tablet-Modus wie im Hochformat.
+
+   Ein Geraet mit Beruehrungsschirm faengt jetzt im Finger-Zustand an.
+   Sobald sich wirklich eine Maus bewegt, wechselt es – und das dauert
+   keine Sekunde, wenn eine da ist. Windows meldet den Tablet-Modus
+   nirgends nach aussen; die ausbleibende Mausbewegung ist das einzige
+   verlaessliche Zeichen dafuer.
    ══════════════════════════════════════════════════════════════════════ */
 function setzeEingabeArt(pointerType) {
   const anfassen = pointerType === 'touch';
@@ -66,7 +76,7 @@ document.addEventListener('pointermove', e => {
   if (e.pointerType === 'mouse' && e.buttons === 0) setzeEingabeArt('mouse');
 }, { capture: true, passive: true });
 
-if (window.matchMedia('(pointer: coarse)').matches) {
+if ((navigator.maxTouchPoints || 0) > 0 || window.matchMedia('(pointer: coarse)').matches) {
   document.addEventListener('DOMContentLoaded', () => setzeEingabeArt('touch'));
 }
 

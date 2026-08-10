@@ -766,6 +766,71 @@
     return lockOwner(pageId, from, to);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DIE MARKE KOMMT GAR NICHT ERST IN EINE GESPERRTE ZEILE
+
+     Bis hierher wurde erst der ANSCHLAG abgewiesen (editBlockedBy in
+     'beforeinput'). Die Schreibmarke durfte trotzdem dort stehen, und
+     das hat zwei Nachteile, beide gemeldet:
+
+       · Es sieht aus, als könnte man schreiben. Man tippt einen Satz,
+         und nichts erscheint.
+       · Es gibt Wege an 'beforeinput' vorbei – eine Ersetzung durch die
+         Rechtschreibhilfe, ein Einfügen über das Kontextmenü des
+         Systems, eine Eingabemethode. Dann stand doch etwas da.
+
+     Deshalb wird die zusammengefallene Marke aus der Sperre
+     herausgeschoben, und zwar an die Stelle davor. MARKIEREN bleibt
+     erlaubt: eine Auswahl über mehrere Zeilen ist zum Lesen und Kopieren
+     da und ändert nichts.
+
+     Gehört die Sperre einem selbst (das kann nicht sein) oder gibt es
+     keine, passiert hier nichts.
+     ══════════════════════════════════════════════════════════════════ */
+  let letzterAusweich = 0;
+
+  function haltCaretAusSperre() {
+    if (!others.length) return;
+    /* Ohne Auswahl-Werkzeug gibt es hier nichts zu tun. Der Prüfstand
+       scripts/test-collab-sync.js fährt collab.js in einem nachgebauten
+       DOM ohne getSelection – und ein Fehler in diesem Takt hätte dort
+       die ganze Sitzung mitgerissen. */
+    if (typeof window.getSelection !== 'function') return;
+    if (typeof flatCaretPos !== 'function' || typeof setFlatCaret !== 'function') return;
+
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) return;   // Markieren ist erlaubt
+
+    const textDiv = document.activeElement;
+    if (!textDiv || !textDiv.classList || !textDiv.classList.contains('j-text')) return;
+    const pgEl = textDiv.closest('[data-pgid]');
+    if (!pgEl) return;
+
+    const pageId = pgEl.dataset.pgid;
+    let stelle;
+    try { stelle = flatCaretPos(textDiv); } catch (err) { return; }
+    if (stelle === null) return;
+
+    const person = lockOwner(pageId, stelle, stelle);
+    if (!person) return;
+
+    /* Vor die Sperre. Ist dort kein Platz (die Sperre fängt am
+       Seitenanfang an), dann dahinter – irgendwohin muss sie. */
+    const davor = person.lockFrom - 1;
+    const ziel = davor >= 0 ? davor : person.lockTo + 1;
+
+    let gesetzt = false;
+    try { gesetzt = setFlatCaret(textDiv, ziel); } catch (err) { gesetzt = false; }
+    if (!gesetzt) { try { textDiv.blur(); } catch (err) { /* egal */ } }
+
+    // Sagen, warum die Marke wegspringt – sonst wirkt es wie ein Fehler
+    const jetzt = Date.now();
+    if (jetzt - letzterAusweich > LOCK_HINT_MS) {
+      letzterAusweich = jetzt;
+      warnLocked(person);
+    }
+  }
+
   /** Sagt einmal Bescheid, warum nichts passiert – aber nicht bei jedem Anschlag. */
   function warnLocked(person) {
     const now = Date.now();
@@ -2343,8 +2408,11 @@
     // Jede Bewegung der eigenen Schreibmarke melden. selectionchange ist
     // das einzige Ereignis, das auch bei den Pfeiltasten und beim Klicken
     // kommt – 'input' allein würde die Hälfte verpassen.
-    document.addEventListener('selectionchange', reportCaret);
-    stops.push(() => document.removeEventListener('selectionchange', reportCaret));
+    /* Und beim selben Anlass: eine Marke, die in einer gesperrten Zeile
+       gelandet ist, wieder herausschieben (haltCaretAusSperre). */
+    const beiAuswahl = () => { haltCaretAusSperre(); reportCaret(); };
+    document.addEventListener('selectionchange', beiAuswahl);
+    stops.push(() => document.removeEventListener('selectionchange', beiAuswahl));
 
     reportCaret();
 
@@ -2374,6 +2442,9 @@
       reportCaret();
       renderCarets();
       renderLocks();
+      /* Auch ohne eigenes Zutun kann die Marke in eine Sperre geraten:
+         der andere beansprucht die Zeile, in der sie gerade steht. */
+      haltCaretAusSperre();
     }, 600);
 
     const scroller = E('pg-scroll');

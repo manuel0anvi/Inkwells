@@ -383,11 +383,15 @@ async function signInMicrosoftInteractive(loginHint = '') {
        stumm nichts mehr. Die Oberfläche macht daraus den Knopf
        „Mit Google bestätigen" (ui/share.js).
        ══════════════════════════════════════════════════════════════════ */
-    const anhang = OAuthProvider.credentialFromError(err);
-    if (!anhang) throw err;
-
+    /* Der Anhang darf FEHLEN. credentialFromError liefert ihn nicht in
+       jedem Fall zurück, und daran darf der zweite Schritt nicht
+       scheitern: worauf es ankommt, ist, dass Firebase den Nutzer unter
+       DIESER Adresse kennt – und das erledigt schon die Anmeldung über
+       Google. Der Anhang macht daraus zusätzlich ein Konto mit beiden
+       Wegen. Ohne ihn ging bisher gar nichts weiter: der Knopf blieb auf
+       Schritt eins stehen, und niemand kam je zu Schritt zwei. */
     offeneVerknuepfung = {
-      credential: anhang,
+      credential: OAuthProvider.credentialFromError(err) || null,
       email: normalizeEmail(err?.customData?.email) || normalizeEmail(loginHint),
       at: Date.now()
     };
@@ -420,22 +424,33 @@ function microsoftWartetAufGoogle() {
  *
  * @returns {Promise<object>} der jetzt angemeldete Nutzer
  */
-async function linkMicrosoftWithGoogle() {
-  if (!microsoftWartetAufGoogle()) throw new Error('NOTHING_PENDING');
-  const { credential, email } = offeneVerknuepfung;
+async function linkMicrosoftWithGoogle(emailHint = '') {
+  const wartet = microsoftWartetAufGoogle();
+  const credential = offeneVerknuepfung ? offeneVerknuepfung.credential : null;
+  const email = (wartet && wartet.email) || normalizeEmail(emailHint);
 
   const google = new GoogleAuthProvider();
   google.addScope('email');
   if (email) google.setCustomParameters({ login_hint: email });
 
   await signInWithPopup(auth, google);
-  try {
-    await linkWithCredential(auth.currentUser, credential);
-  } catch (err) {
-    /* Schon verknüpft? Dann ist genau das erreicht, was gewollt war.
-       Kommt vor, wenn der Knopf zweimal gedrückt wurde. */
-    if (err?.code !== 'auth/provider-already-linked'
-        && err?.code !== 'auth/credential-already-in-use') throw err;
+
+  /* Ab hier kennt Firebase den Nutzer unter seiner Adresse – das ist das
+     Ziel, und die geteilten Dokumente gehen damit. Das Anhängen von
+     Microsoft ist die Zugabe: es erspart den Umweg beim nächsten Mal.
+     Scheitert sie, wird das nicht zum Fehler des Ganzen gemacht. */
+  if (credential) {
+    try {
+      await linkWithCredential(auth.currentUser, credential);
+    } catch (err) {
+      /* Schon verknüpft? Dann ist genau das erreicht, was gewollt war.
+         Kommt vor, wenn der Knopf zweimal gedrückt wurde. */
+      if (err?.code !== 'auth/provider-already-linked'
+          && err?.code !== 'auth/credential-already-in-use') {
+        console.warn('[Share] Microsoft liess sich nicht anhängen:',
+          err?.code || '', err?.message || err);
+      }
+    }
   }
   offeneVerknuepfung = null;
   return auth.currentUser;
@@ -2063,6 +2078,12 @@ const CARET_THROTTLE_MS = 150;
    ui/collab.js, damit sich beides überlappt. */
 const LOCK_REFRESH_MS = 2000;
 
+/* So oft schreibt sich der Anwesenheitseintrag neu, auch wenn sich nichts
+   geändert hat – siehe setPage. Deutlich unter PRESENCE_STALE_MS
+   (90 s in ui/collab.js), damit ein Eintrag nie als alt gilt, solange
+   jemand wirklich da ist. */
+const PRESENCE_HEARTBEAT_MS = 12000;
+
 /* Angaben, die an einer Änderung MITREISEN dürfen, aber nicht müssen:
    Stelle der Schreibmarke (c) und die beanspruchten Zeilen (lf, lt).
    Kennt die veröffentlichte Regel sie nicht, geht die Änderung ohne sie
@@ -2425,7 +2446,30 @@ async function joinDocRoom(docId, options = {}) {
     /* Nichts Neues – aber eine bestehende Sperre muss trotzdem regelmäßig
        aufgefrischt werden, sonst läuft sie mitten im Schreiben ab. */
     const stale = from >= 0 && (Date.now() - card.lockAt) > LOCK_REFRESH_MS;
-    if (samePlace && sameLock && !stale) return;
+
+    /* ══════════════════════════════════════════════════════════════════
+       UND EIN LEBENSZEICHEN, AUCH WENN SICH NICHTS ÄNDERT
+
+       >>> Der Fall, den das repariert <<<
+       Der Besitzer macht die App zu und gleich wieder auf. Sein
+       onDisconnect-Auftrag von der ALTEN Verbindung läuft beim Server
+       erst Sekunden später ab – also NACH dem Beitreten der neuen. Er
+       setzt dann seinen Eintrag wieder auf `lost: 1`, obwohl er längst
+       wieder da ist. Für alle anderen bleibt er damit „nicht erreichbar",
+       und sie lesen nur noch.
+
+       Herauskommen konnte man daraus nicht: geschrieben wurde die
+       Anwesenheit nur bei einer Änderung, und wer gerade zusieht, ändert
+       nichts. Genau so wurde es gemeldet – „kurz raus und wieder rein,
+       bei den anderen steht immer noch Nur-Lesen".
+
+       Deshalb schreibt sich der Eintrag alle paar Sekunden von selbst neu.
+       Das kostet fast nichts und heilt jeden Fall, in dem er jemandem
+       abhandengekommen ist.
+       ══════════════════════════════════════════════════════════════════ */
+    const verblasst = Date.now() - lastPageWrite > PRESENCE_HEARTBEAT_MS;
+
+    if (samePlace && sameLock && !stale && !verblasst) return;
 
     const wasPage = card.pageId;
     card.pageId = pageId;

@@ -798,7 +798,7 @@ class CloudSyncManager {
     }
 
     try {
-      await api.linkMicrosoftWithGoogle();
+      await api.linkMicrosoftWithGoogle(Settings.get('cloudEmail') || '');
       await this._merkeKennung(api);
       return true;
     } catch (err) {
@@ -824,6 +824,21 @@ class CloudSyncManager {
     if (this.identityProblem === 'needsGoogle') return true;
     try { return !!window.InkwellShare?.microsoftWartetAufGoogle?.(); }
     catch (err) { return false; }
+  }
+
+  /**
+   * Ist der Umweg über Google gerade überhaupt einen Knopf wert?
+   *
+   * Nicht nur beim erkannten Konflikt: Firebase nennt für Microsoft
+   * mehrere ganz verschiedene Ursachen mit derselben Zeichenkette, und
+   * gemeldet wurde, dass der Knopf „auf Schritt eins stehen bleibt".
+   * Nach JEDEM gescheiterten Versuch steht der Weg deshalb offen – er
+   * kostet nichts und führt sicher ans Ziel, weil die Freigaben an der
+   * Adresse hängen und nicht an der Anmeldeart.
+   */
+  microsoftCanUseGoogle() {
+    if (this.getProviderId() !== 'microsoft') return false;
+    return this.microsoftNeedsGoogle() || this.identityProblem === 'failed';
   }
 
   /** Gemeinsamer Abschluss beider Wege: Firebase kennt den Nutzer jetzt. */

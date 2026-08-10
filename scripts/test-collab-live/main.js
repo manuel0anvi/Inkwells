@@ -105,7 +105,7 @@ app.on('ready', async () => {
       const erst = args[0];
       const stufe = (erst && typeof erst === 'object' && 'level' in erst) ? erst.level : args[1];
       const text = (erst && typeof erst === 'object' && 'message' in erst) ? erst.message : args[2];
-      if (Number(stufe) >= 3) ziel.push(String(text));
+      if (Number(stufe) >= 3 || /DIAG/.test(String(text))) ziel.push(String(text));
     }
 
     await Promise.all([A('pruefstand.beitreten()'), B('pruefstand.beitreten()')]);
@@ -193,6 +193,44 @@ app.on('ready', async () => {
       pruefe('Das zweite direkt darunter auf Zeile 3 – gemessen ' + z1,
         Math.abs(z1 - 3) < 0.01, 'es liegt ' + (z1 - 3) + ' Zeilen daneben');
     }
+
+    /* ══════════════════════════════════════════════════════════════════
+       2a. IN EINER GESPERRTEN ZEILE STEHT KEINE MARKE
+
+       Abgewiesen wurde bisher erst der Anschlag ('beforeinput'). Die
+       Marke durfte trotzdem dort stehen – es sah aus, als könnte man
+       schreiben, und an 'beforeinput' vorbei (Rechtschreibhilfe,
+       Einfügen über das System) ging es manchmal doch. Gemeldet als
+       „manchmal buggt es und man kann trotzdem schreiben".
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('In einer gesperrten Zeile steht keine Marke');
+
+    // Mitten in die gesperrte Zeile 2 zielen – dort tippt A gerade
+    await B('pruefstand.markeAuf(12)');
+    await warte(250);
+    const gelandet = await B('pruefstand.eigeneStelle()');
+    notiz('gesetzt auf 12, gelandet auf ' + gelandet);
+    pruefe('Die Marke wird aus der gesperrten Zeile herausgeschoben',
+      gelandet !== 12 && (gelandet === null || gelandet < 12),
+      'sie steht mitten in der Zeile, an der der andere schreibt');
+
+    /* Markieren muss erlaubt bleiben: eine Auswahl ändert nichts und ist
+       zum Lesen und Kopieren da. */
+    const markiert = await B(`(() => {
+      const td = document.querySelector('.j-text');
+      td.focus();
+      const a = flatRangeAt(td, 11), b = flatRangeAt(td, 14);
+      const r = document.createRange();
+      r.setStart(a.startContainer, a.startOffset);
+      r.setEnd(b.startContainer, b.startOffset);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true; })()`);
+    await warte(250);
+    const nochMarkiert = await B(`(() => { const s = getSelection();
+      return !!(s.rangeCount && !s.isCollapsed); })()`);
+    pruefe('Markieren bleibt trotzdem möglich', markiert && nochMarkiert === true,
+      'die Auswahl wurde mit aufgehoben');
 
     /* ══════════════════════════════════════════════════════════════════
        2b. WIE SCHNELL FOLGT DIE MARKE EINER REINEN BEWEGUNG?
@@ -285,7 +323,12 @@ app.on('ready', async () => {
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Die eigene Marke bleibt, wo sie war');
 
-    const basis = '<p>Alpha</p><p>Beta</p><p>Gamma</p>';
+    /* Sechs Zeilen, nicht drei: A schreibt oben, B steht unten. Mit drei
+       Zeilen deckte A's Sperre (eigene Zeile + die nächste) die Stelle von
+       B mit ab, und die Marke wurde – richtigerweise – herausgeschoben.
+       Geprüft werden soll hier aber das Nachführen bei fremdem Text. */
+    const basis = '<p>Alpha</p><p>Beta</p><p>Gamma</p>'
+      + '<p>Delta</p><p>Epsilon</p><p>Zeta</p>';
     await A(`pruefstand.setzeText(${JSON.stringify(basis)}, 0)`);
     await warte(700);
     await B(`pruefstand.setzeText(${JSON.stringify(basis)}, 0)`);
@@ -300,7 +343,8 @@ app.on('ready', async () => {
       + ' – hinter ' + JSON.stringify(bText.slice(-6)));
 
     // A schiebt oben etwas ein
-    await A(`pruefstand.setzeText(${JSON.stringify('<p>Alpha ZUSATZ</p><p>Beta</p><p>Gamma</p>')}, 11)`);
+    await A(`pruefstand.setzeText(${JSON.stringify('<p>Alpha ZUSATZ</p><p>Beta</p><p>Gamma</p>'
+      + '<p>Delta</p><p>Epsilon</p><p>Zeta</p>')}, 11)`);
     await warte(900);
 
     const nachher = await B('pruefstand.eigeneStelle()');
@@ -313,10 +357,11 @@ app.on('ready', async () => {
 
     /* Und derselbe Fall mit der Marke MITTEN im Text, hinter der Stelle,
        an der der andere schreibt. */
-    await B(`pruefstand.markeAuf(${bTextNeu.indexOf('Gamma') + 3})`);
+    await B(`pruefstand.markeAuf(${bTextNeu.indexOf('Epsilon') + 3})`);
     const vor2 = await B('pruefstand.eigeneStelle()');
     const umgebung = await B(`pruefstand.text().slice(${vor2 - 3}, ${vor2})`);
-    await A(`pruefstand.setzeText(${JSON.stringify('<p>Alpha ZUSATZ NOCHMAL</p><p>Beta</p><p>Gamma</p>')}, 19)`);
+    await A(`pruefstand.setzeText(${JSON.stringify('<p>Alpha ZUSATZ NOCHMAL</p><p>Beta</p><p>Gamma</p>'
+      + '<p>Delta</p><p>Epsilon</p><p>Zeta</p>')}, 19)`);
     await warte(900);
     const nach2 = await B('pruefstand.eigeneStelle()');
     const umgebung2 = await B(`pruefstand.text().slice(${nach2 - 3}, ${nach2})`);
