@@ -1010,6 +1010,36 @@ class CloudSyncManager {
     });
   }
 
+  /**
+   * Einen Vorgang als ERLEDIGT ins Protokoll schreiben, der gar nicht
+   * erst durch die Warteschlange musste.
+   *
+   * >>> Wofuer das gebraucht wird <<<
+   * Trash.moveToTrash() schiebt die Cloud-Datei selbst in den
+   * Papierkorb-Ordner, gleich beim Loeschen. Mit Netz klappt das sofort –
+   * und genau dann wurde bisher NICHTS vermerkt: nicht in der
+   * Warteschlange (es wartet ja nichts mehr) und nicht im Protokoll
+   * (dorthin schreibt sonst nur _runQueue).
+   *
+   * Fuer den Nutzer sah es deshalb so aus, als sei beim Loeschen mit
+   * Internet ueberhaupt nichts mit der Cloud geschehen. Ohne Internet
+   * tauchte es auf, mit Internet nicht – also genau andersherum, als man
+   * es erwartet.
+   *
+   * @param {{nbId: string, nbName?: string, action?: string, reason?: string}} vorgang
+   */
+  noteSyncDone(vorgang) {
+    if (!vorgang || !vorgang.nbId) return;
+    this._addSyncHistoryEntry({
+      nbId: vorgang.nbId,
+      nbName: vorgang.nbName || '',
+      action: vorgang.action || 'upload',
+      status: 'completed',
+      reason: vorgang.reason || ''
+    });
+    this._notify();
+  }
+
   /** Wie viele Hefte warten noch auf den Upload? */
   getPendingCount() {
     return this.syncQueue.filter(e => {
@@ -1281,11 +1311,13 @@ class CloudSyncManager {
           this._addSyncHistoryEntry({
             nbId, nbName, action,
             status: 'completed',
-            reason: action === 'trash' ? 'In Papierkorb verschoben' : 'Gelöscht'
+            reason: action === 'trash'
+              ? (typeof t === 'function' ? t('syncDoneTrash') : 'In den Papierkorb verschoben')
+              : (typeof t === 'function' ? t('syncDoneDelete') : 'Gelöscht')
           });
           if (action === 'trash' && typeof toast === 'function') {
             toast(typeof t === 'function'
-              ? t('syncSuccessItem').replace('{name}', nbName || nbId).replace('{reason}', 'In Papierkorb verschoben')
+              ? t('syncSuccessItem').replace('{name}', nbName || nbId).replace('{reason}', t('syncDoneTrash'))
               : `„${nbName || nbId}" in den Cloud-Papierkorb verschoben.`);
           }
         } else {
@@ -1294,7 +1326,7 @@ class CloudSyncManager {
           this._addSyncHistoryEntry({
             nbId, nbName, action: 'upload',
             status: 'completed',
-            reason: 'Fertig'
+            reason: (typeof t === 'function' ? t('syncDoneUpload') : 'Fertig')
           });
         }
 

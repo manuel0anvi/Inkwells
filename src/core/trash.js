@@ -285,11 +285,30 @@ const Trash = {
       console.warn('[Trash] Drive-Verschieben übersprungen:', err.message);
     }
 
-    // Ohne Netz ist die Cloud-Seite noch offen – in der Sync-Queue vermerken,
-    // damit der Nutzer im Konto-Modal sieht, was noch aussteht.
-    if (!entry.cloudTrashed && typeof CloudSync_ !== 'undefined' && CloudSync_
-        && typeof CloudSync_.queueNotebook === 'function') {
-      CloudSync_.queueNotebook(notebook.id, { action: 'trash', nbName: notebook.name, silent: true });
+    /* ── Im Sync-Fenster muss das IMMER auftauchen ────────────────────
+       Egal ob mit oder ohne Netz – wer ein Heft loescht, will sehen, was
+       damit in der Cloud geschieht.
+
+         · Cloud-Seite noch offen  -> in die Warteschlange, dort steht es
+           als wartend (blau), bis es durchkommt
+         · Cloud-Seite schon fertig -> ins Protokoll, dort steht es als
+           erledigt (gruen)
+
+       Der zweite Fall fehlte. Mit Internet klappt das Verschieben sofort,
+       und dann wurde weder etwas eingereiht noch etwas vermerkt: die
+       Loeschung war im Fenster ueberhaupt nicht zu sehen. Ohne Internet
+       tauchte sie auf, mit Internet nicht – also genau verkehrt herum. */
+    if (typeof CloudSync_ !== 'undefined' && CloudSync_) {
+      if (!entry.cloudTrashed && typeof CloudSync_.queueNotebook === 'function') {
+        CloudSync_.queueNotebook(notebook.id, { action: 'trash', nbName: notebook.name, silent: true });
+      } else if (entry.cloudTrashed && typeof CloudSync_.noteSyncDone === 'function') {
+        CloudSync_.noteSyncDone({
+          nbId: notebook.id,
+          nbName: notebook.name,
+          action: 'trash',
+          reason: (typeof t === 'function' && t('syncDoneTrash')) || 'In den Papierkorb verschoben'
+        });
+      }
     }
 
     this._entries.push(entry);

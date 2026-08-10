@@ -51,6 +51,8 @@ function check(label, actual, expected) {
  */
 function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
   const deletedFiles = [];
+  const vermerkt = [];
+  const eingereiht = [];
   const saved = {};
   const trashed = [];
   const deletedRemote = [];
@@ -62,6 +64,10 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
     setTimeout, clearTimeout,
 
     CloudSync_: {
+      // Neu: Vorgaenge, die gar nicht erst warten mussten, landen im
+      // Protokoll (siehe noteSyncDone in core/cloudSync.js)
+      noteSyncDone: (v) => { vermerkt.push(v); },
+      queueNotebook: (id, o) => { eingereiht.push({ id, action: (o || {}).action }); },
       loadTrashIndex: async () => index,
       // canSaveIndex: ob sich die gemeinsame Liste schreiben lässt
       saveTrashIndex: async (list) => {
@@ -115,7 +121,7 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'src/core/trash.js'), 'utf8'), ctx);
 
-  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed, deletedRemote, untrashed };
+  return { ctx, Trash: ctx.Trash, deletedFiles, saved, trashed, deletedRemote, untrashed, vermerkt, eingereiht };
 }
 
 /** Ein Eintrag, der schon einmal in der gemeinsamen Liste stand. */
@@ -375,6 +381,51 @@ function syncedEntry(id, name) {
     const t = makeTrash([], { entries: [], exists: true }).Trash;
     t._entries = [];
     check('Leerer Papierkorb: nichts offen', t.getPendingCloudActions(), []);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     EINE LOESCHUNG IST IMMER ZU SEHEN
+
+     Wer ein Heft loescht, will im Sync-Fenster sehen, was damit in der
+     Cloud geschieht - mit Netz wie ohne.
+
+     >>> Der Fehler, der hier festgehalten wird <<<
+     Mit Netz klappt das Verschieben in den Cloud-Papierkorb sofort. Dann
+     wurde WEDER etwas eingereiht (es wartet ja nichts mehr) NOCH etwas
+     vermerkt (ins Protokoll schreibt sonst nur _runQueue). Die Loeschung
+     war im Fenster ueberhaupt nicht zu sehen.
+
+     Ohne Netz tauchte sie dagegen auf. Also genau verkehrt herum: mit
+     Internet unsichtbar, ohne Internet sichtbar.
+     ══════════════════════════════════════════════════════════════════ */
+
+  console.log('\n' + 'Eine Loeschung ist immer zu sehen');
+
+  {
+    // MIT Netz: das Verschieben klappt sofort
+    const mitNetz = makeTrash([], { entries: [], exists: true });
+    await mitNetz.Trash.moveToTrash({ id: 'nb9', name: 'Tagebuch', pages: [] });
+
+    check('Mit Netz wird nichts eingereiht - es wartet ja nichts',
+      mitNetz.eingereiht, []);
+    check('Aber es steht als erledigt im Protokoll',
+      mitNetz.vermerkt.map(v => [v.nbId, v.action]), [['nb9', 'trash']]);
+    check('Mit dem Namen des Hefts', mitNetz.vermerkt[0].nbName, 'Tagebuch');
+  }
+
+  {
+    /* OHNE Netz scheitern BEIDE Wege: das Verschieben in den
+       Cloud-Papierkorb und der Notweg ueber das Loeschen. Nur canMove
+       abzuschalten hiesse "Verschieben geht nicht, Loeschen schon" - das
+       ist ein anderer Fall (so verhaelt sich OneDrive) und endet
+       richtigerweise ebenfalls als erledigt. */
+    const ohneNetz = makeTrash([], { entries: [], exists: true }, [],
+      { canMove: false, canDelete: false });
+    await ohneNetz.Trash.moveToTrash({ id: 'nb8', name: 'Notizen', pages: [] });
+
+    check('Ohne Netz wandert es in die Warteschlange',
+      ohneNetz.eingereiht.map(e => [e.id, e.action]), [['nb8', 'trash']]);
+    check('Und wird NICHT schon als erledigt vermerkt', ohneNetz.vermerkt, []);
   }
 
   if (failed > 0) {

@@ -1744,8 +1744,22 @@
 .sync-item-icon.trash   { background: var(--sync-bad-bg);  color: var(--sync-bad) }
 .sync-item-icon.restore { background: var(--sync-ok-bg);   color: var(--sync-ok) }
 
-.sync-item-status.success .sync-item-icon { background: var(--sync-ok-bg);  color: var(--sync-ok) }
-.sync-item-status.failed  .sync-item-icon { background: var(--sync-bad-bg); color: var(--sync-bad) }
+/* ── Die Farbe sagt den ZUSTAND, nicht die Art ─────────────────────
+   Blau: steht noch aus. Gruen: ist erledigt. Rot: ist schiefgegangen.
+
+   Die Regeln darueber faerben nach der ART des Vorgangs (hochladen,
+   loeschen, zurueckholen). Das ist nur richtig, solange die Art auch das
+   Interessante ist – in der Warteliste ist sie es nicht. Dort zaehlt
+   einzig: es ist noch nicht oben. Ein rotes Papierkorb-Zeichen neben
+   einem blauen Pfeil las sich wie zwei verschiedene Dringlichkeiten,
+   dabei warten beide auf dasselbe.
+
+   Diese Regeln stehen mit drei Klassen ueber den zweiklassigen darueber
+   und gewinnen deshalb unabhaengig von der Reihenfolge. */
+
+.sync-item-status.queued  .sync-item-icon { background: var(--sync-wait-bg); color: var(--sync-wait) }
+.sync-item-status.success .sync-item-icon { background: var(--sync-ok-bg);   color: var(--sync-ok) }
+.sync-item-status.failed  .sync-item-icon { background: var(--sync-bad-bg);  color: var(--sync-bad) }
 
 .sync-item-body { flex: 1; min-width: 0; }
 .sync-item-name {
