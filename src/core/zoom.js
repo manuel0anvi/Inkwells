@@ -70,13 +70,31 @@ function _applyZoom() {
     const totalH = pw.scrollHeight || (CFG.PAGE_H * Math.max(1, pw.children.length));
     sizer.style.height = Math.round(totalH * z) + 'px';
   }
-    const ta = z > 1.21 ? 'none' : 'pan-y';
+  /* ══ WER DIE FINGERBEWEGUNG BEKOMMT: BROWSER ODER STRICH ══
+     touch-action entscheidet, ob der Browser aus einem gezogenen Finger
+     ein Scrollen macht. Tut er das, bricht er den Strich nach wenigen
+     Pixeln mit pointercancel ab.
+
+     >>> Warum die Zeichenflaechen hier NICHTS mehr bekommen <<<
+     Hier stand derselbe Wert fuer alles, also auch pan-y auf jeder
+     .j-canvas – als INLINE-Stil. Damit kam die Regel aus css/pages.css
+     (body.touch-draw .j-canvas { touch-action: none }) nie zum Zug, denn
+     ein Inline-Stil schlaegt jedes Stylesheet. Ergebnis: mit dem Finger
+     liess sich ueberhaupt nicht zeichnen, egal wie der Schalter stand.
+     Die Zeichenflaechen entscheiden das jetzt allein ueber die Klasse am
+     body (ui/toolbar.js) – nur beim Vergroessern muss es trotzdem von
+     hier kommen, weil app.js das Schieben dann selbst uebernimmt. */
+  const ta = z > 1.21 ? 'none' : 'pan-y';
   pw.style.touchAction = ta;
-  document.querySelectorAll('.j-canvas').forEach(c => c.style.touchAction = ta);
+  document.querySelectorAll('.j-canvas').forEach(c => c.style.touchAction = z > 1.21 ? 'none' : '');
   const sc = E('pg-scroll');
   if (sc) { sc.style.overflow = ''; sc.style.touchAction = ta; }
+  const prozent = Math.round((z / BASE_ZOOM) * 100) + '%';
   const lbl = E('btn-zoom-reset');
-  if (lbl) lbl.textContent = Math.round((z / BASE_ZOOM) * 100) + '%';
+  if (lbl) lbl.textContent = prozent;
+  // Dieselbe Zahl noch einmal in der Auswahl im Hochformat (app.js)
+  const popLbl = E('zoom-pop-val');
+  if (popLbl) popLbl.textContent = prozent;
   if (z <= 1.21 && typeof window.resetPan === 'function') window.resetPan();
   rerenderCanvasesForZoom();
   updateAddPageBtnVisibility();

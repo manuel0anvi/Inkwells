@@ -116,6 +116,22 @@ function pushPageHistory(page) {
   updateUndoRedoUI();
 }
 
+/**
+ * Nimmt den zuletzt gesicherten Schritt wieder herunter.
+ *
+ * Für Änderungen, die doch nicht stattfanden: ein Strich, den ein zweiter
+ * Finger noch vor dem Absetzen abbricht (canvas/input.js). Ohne das bliebe
+ * ein Rückgängig-Schritt stehen, der nichts rückgängig macht – und der
+ * nächste Druck auf Strg+Z nähme dem Nutzer etwas weg, das er behalten
+ * wollte.
+ */
+function popPageHistory(pageId) {
+  const entry = pageId ? S.history[pageId] : null;
+  if (!entry || !entry.undo.length) return;
+  entry.undo.pop();
+  updateUndoRedoUI();
+}
+
 /** Wie pushPageHistory, fasst aber schnelles Tippen zu einem Schritt zusammen. */
 function pushTypingHistory(page) {
   if (!page || S._isUndoingOrRedoing) return;
@@ -756,16 +772,121 @@ function checkPageOverflow(textDiv, page) {
 }
 
 /* ── PANEL TOGGLE ── */
-E('btn-panel-toggle').addEventListener('click', () => {
-  const p = E('side-panel'); p.classList.toggle('open');
-  E('btn-panel-toggle').classList.toggle('active', p.classList.contains('open'));
+function setSidePanel(offen) {
+  const p = E('side-panel');
+  if (!p || p.classList.contains('open') === offen) return;
+  p.classList.toggle('open', offen);
+  E('btn-panel-toggle').classList.toggle('active', offen);
   setTimeout(() => _applyZoom(), 220);
+}
+
+E('btn-panel-toggle').addEventListener('click', () => {
+  setSidePanel(!E('side-panel').classList.contains('open'));
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ABSCHNITTE MIT DEM FINGER AUFZIEHEN
+
+   Mit der Maus ist der Knopf am Rand der Weg; mit dem Finger sucht man
+   ihn: 28 px in einer 36 px schmalen Leiste, weit weg vom Daumen. Gemeldet
+   wurde, dass ein Wischen an dieser Leiste nach rechts nichts tut, obwohl
+   genau das die erwartete Bewegung ist.
+
+   Angefasst wird die Leiste selbst, nicht der ganze linke Rand: dort liegt
+   im offenen Zustand der Baum, und ein Wischen darin soll ihn scrollen.
+   Nach links zu geht sie ueberall auf der Leiste zu.
+   ══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const panel = E('side-panel');
+  if (!panel) return;
+  const WISCH_MIN = 40;      // darunter ist es ein Tippen, kein Wischen
+  let x0 = 0, y0 = 0, aktiv = false;
+
+  panel.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { aktiv = false; return; }
+    // Im offenen Zustand zaehlt nur die schmale Leiste, nicht der Inhalt
+    const aufLeiste = !!e.target.closest('.side-strip');
+    aktiv = aufLeiste || !panel.classList.contains('open');
+    x0 = e.touches[0].clientX;
+    y0 = e.touches[0].clientY;
+  }, { passive: true });
+
+  panel.addEventListener('touchend', e => {
+    if (!aktiv) return;
+    aktiv = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    // Waagerecht muss es deutlich sein, sonst war es ein Scrollen
+    if (Math.abs(dx) < WISCH_MIN || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+    /* Das Wischen faengt oft auf dem Knopf selbst an – er fuellt die
+       Leiste fast aus. Ohne das hier folgte dem Wischen sein Klick, und
+       der schloss die gerade aufgezogene Leiste sofort wieder. */
+    e.preventDefault();
+    setSidePanel(dx > 0);
+  }, { passive: false });
+})();
 
 /* ── ZOOM BUTTONS ── */
 E('btn-zoom-in').addEventListener('click', zoomIn);
 E('btn-zoom-out').addEventListener('click', zoomOut);
-E('btn-zoom-reset').addEventListener('click', zoomReset);
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER ZOOM IM HOCHFORMAT
+
+   Quer stehen drei Knoepfe da: −, der Prozentwert, +. Im Hochformat ist
+   die Leiste zu schmal dafuer, und css/responsive.css nimmt − und + weg
+   (Stufe 2). Uebrig bleibt der Prozentwert – und der setzte nur zurueck.
+   Im Hochformat heisst „zuruecksetzen" aber: wieder einpassen, also
+   genau der Zustand, in dem man ohnehin schon ist. Ein Druck darauf tat
+   sichtbar nichts, und groesser oder kleiner ging gar nicht mehr.
+
+   Deshalb oeffnet er dort eine kleine Auswahl mit −, + und Einpassen.
+   Gefragt wird nicht nach der Fensterbreite, sondern danach, ob die
+   beiden Knoepfe gerade wirklich zu sehen sind: die Schwelle steht in der
+   Medienabfrage und haengt zusaetzlich an der Navigation.
+   ══════════════════════════════════════════════════════════════════════ */
+function zoomButtonsVisible() {
+  const btn = E('btn-zoom-in');
+  return !!btn && btn.offsetParent !== null;
+}
+
+function zoomPopOpen() {
+  return E('zoom-pop')?.style.display === 'flex';
+}
+
+function closeZoomPop() {
+  const pop = E('zoom-pop');
+  if (pop) pop.style.display = 'none';
+  document.removeEventListener('pointerdown', _zoomPopOutside, true);
+}
+
+function _zoomPopOutside(e) {
+  if (e.target.closest('#zoom-pop, #btn-zoom-reset')) return;
+  closeZoomPop();
+}
+
+function openZoomPop() {
+  const pop = E('zoom-pop'), anchor = E('btn-zoom-reset');
+  if (!pop || !anchor) return;
+  const r = anchor.getBoundingClientRect();
+  pop.style.display = 'flex';
+  // Erst messen, wenn es steht – vorher ist die Breite 0
+  const w = pop.offsetWidth || 150;
+  pop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))) + 'px';
+  pop.style.top = Math.round(r.bottom + 6) + 'px';
+  setTimeout(() => document.addEventListener('pointerdown', _zoomPopOutside, true), 0);
+}
+
+E('btn-zoom-reset').addEventListener('click', () => {
+  if (zoomButtonsVisible()) { zoomReset(); return; }
+  if (zoomPopOpen()) closeZoomPop(); else openZoomPop();
+});
+
+E('zoom-pop-out')?.addEventListener('click', zoomOut);
+E('zoom-pop-in')?.addEventListener('click', zoomIn);
+E('zoom-pop-fit')?.addEventListener('click', () => { zoomReset(); closeZoomPop(); });
 
 
 /* ── ADD PAGE BUTTON ── */
@@ -797,8 +918,14 @@ E('btn-add-page-end').addEventListener('click', async () => {
 ══════════════════════════════════════════════════════════ */
 (function () {
   let _pinchDist = 0, _pinchZoom = 1;
+  let _pinchMidX = 0, _pinchMidY = 0;
   let _panActive = false, _panStartX = 0, _panStartY = 0;
   let _panOriginX = 0, _panOriginY = 0; // current translate offset
+
+  const mitte = (e) => ({
+    x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+    y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+  });
 
   function isTouchUiTarget(target) {
     return !!target.closest('.pg-menu-btn, .pg-sec-btn, .j-page-actions, .j-page-hdr, .obj-wrap, .obj-handle, .obj-bar, #ctx-menu, .txt-color-dropdown, .custom-color-pop');
@@ -854,8 +981,13 @@ E('btn-add-page-end').addEventListener('click', async () => {
     }
 
     if (e.touches.length === 2) {
+      /* Der zweite Finger beendet einen laufenden Strich. Ohne das bliebe
+         von jedem Zoomen ein Strich stehen: Finger eins zeichnet weiter,
+         waehrend Finger zwei die Seite groesser zieht. */
+      if (S.isDrawing && typeof cancelActiveStroke === 'function') cancelActiveStroke();
       _pinchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
       _pinchZoom = _zoom;
+      const m = mitte(e); _pinchMidX = m.x; _pinchMidY = m.y;
       _panActive = false;
       e.preventDefault();
     } else if (e.touches.length === 1 && _zoom > panThreshold()) {
@@ -879,8 +1011,27 @@ E('btn-add-page-end').addEventListener('click', async () => {
     if (e.touches.length === 2 && _pinchDist > 0) {
       const d = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
       if (isVerticalMode()) _verticalAutoFit = false;
+      // Vor setZoom lesen: _applyZoom schreibt transform neu und wirft die
+      // Verschiebung dabei weg
+      const vorher = getPanOffset();
       setZoom(_pinchZoom * (d / _pinchDist));
-      resetPan();
+
+      /* ── Zwei Finger bewegen die Seite auch ───────────────────────
+         Hier wurde nur gezoomt. Solange der Finger noch scrollen durfte,
+         fiel das nicht auf; seit er zeichnet, ist das Schieben mit zwei
+         Fingern der einzige Weg, ueber der Seite weiterzukommen – und
+         genau das verspricht der Hinweis beim Einschalten. */
+      const m = mitte(e);
+      const dx = m.x - _pinchMidX, dy = m.y - _pinchMidY;
+      _pinchMidX = m.x; _pinchMidY = m.y;
+      if (_zoom > panThreshold()) {
+        setPan(vorher.x + dx / _zoom, vorher.y + dy / _zoom);
+      } else {
+        resetPan();
+        sc.scrollTop -= dy;
+        sc.scrollLeft -= dx;
+      }
+      updateAddPageBtnVisibility();
       e.preventDefault();
     } else if (e.touches.length === 1 && _panActive && _zoom > panThreshold()) {
       const dx = (e.touches[0].clientX - _panStartX) / _zoom;

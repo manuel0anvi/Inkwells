@@ -720,6 +720,15 @@
   <div class="custom-color-recent" id="custom-color-recent" style="display:none"></div>
 </div>
 
+<!-- Groesser und kleiner im Hochformat. Dort ist die Leiste zu schmal
+     fuer − und +, und der Prozentwert allein konnte nichts (app.js). -->
+<div class="zoom-pop" id="zoom-pop" style="display:none">
+  <button class="zoom-pop-btn" id="zoom-pop-out" data-i18n-title="zoomOut" title="Verkleinern">－</button>
+  <span class="zoom-pop-val" id="zoom-pop-val">100%</span>
+  <button class="zoom-pop-btn" id="zoom-pop-in" data-i18n-title="zoomIn" title="Vergrößern">＋</button>
+  <button class="zoom-pop-fit" id="zoom-pop-fit" data-i18n="zoomFit">Einpassen</button>
+</div>
+
 <!-- Die Auswahl aller Listenformen: Punkte und Nummern untereinander in
      EINEM Fenster, damit es dafuer nur einen Knopf braucht. Die Zellen
      kommen aus Lists.STYLES (ui/toolbar.js). -->

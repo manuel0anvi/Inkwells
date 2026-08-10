@@ -433,6 +433,66 @@
   border-color: var(--gold)
 }
 
+/* ── Groesser und kleiner im Hochformat ───────────────────────────────
+   Oeffnet sich am Prozentwert, sobald − und + fuer die schmale Leiste
+   weichen mussten (css/responsive.css, Stufe 2). Die Knoepfe sind
+   bewusst fingergross: im Hochformat gibt es hier nur Finger. */
+.zoom-pop {
+  position: fixed;
+  z-index: 1300;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  padding: 6px
+}
+
+.zoom-pop-btn {
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: 1px solid var(--sb2);
+  border-radius: 8px;
+  color: var(--hi);
+  font-size: 17px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center
+}
+
+.zoom-pop-btn:active {
+  background: var(--sh2)
+}
+
+.zoom-pop-val {
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--hi);
+  min-width: 46px;
+  text-align: center
+}
+
+.zoom-pop-fit {
+  height: 40px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--sb2);
+  border-radius: 8px;
+  color: var(--md);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap
+}
+
+.zoom-pop-fit:active {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
 .sz-row {
   display: flex;
   align-items: center;

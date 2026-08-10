@@ -6,46 +6,46 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 /* ══════════════════════════════════════════════════════════════════════
    MIT DEM FINGER ZEICHNEN
 
-   Aus, solange nichts anderes gesagt wird. Waere es an, liesse sich die
-   Seite mit einem Finger nicht mehr bewegen, sobald ein Zeichenwerkzeug
-   gewaehlt ist – und wer einen Stift hat, will genau das nicht.
+   An: wer ein Zeichenwerkzeug waehlt und die Seite anfasst, zeichnet –
+   mit Stift wie mit Finger. Die Seite bewegen dann zwei Finger oder der
+   Rand neben der Seite.
+
+   >>> Warum es nicht mehr aus ist <<<
+   Es war aus, umschaltbar ueber den Knopf hier. Gefunden hat den Knopf
+   niemand; zurueckgemeldet wurde „zeichnen geht nur mit dem Stift, mit
+   dem Finger gar nicht, egal was man drueckt". Dazu kam ein Fehler, der
+   den Schalter selbst wirkungslos machte (core/zoom.js, touch-action).
+   Wer den Finger lieber zum Blaettern hat, schaltet ihn hier ab – die
+   Einstellung heisst seitdem touchDrawOff.
 
    Der Knopf erscheint nur, wo es ueberhaupt einen Finger gibt. Auf einem
    Rechner ohne Beruehrungsschirm waere er eine Frage ohne Gegenstand.
    ══════════════════════════════════════════════════════════════════════ */
 (function () {
   const btn = E('btn-touch-draw');
-  if (!btn) return;
 
   const hatFinger = (navigator.maxTouchPoints || 0) > 0
     || window.matchMedia('(pointer: coarse)').matches;
-  if (!hatFinger) return;
 
+  S.touchDraw = !(typeof Settings !== 'undefined' && Settings.get && Settings.get('touchDrawOff'));
+  updateTouchDrawUI();
+
+  if (!btn || !hatFinger) return;
   btn.style.display = '';
-
-  const anwenden = () => {
-    btn.classList.toggle('active', !!S.touchDraw);
-    /* Beim Zeichnen mit dem Finger darf der Browser die Seite nicht
-       gleichzeitig scrollen – sonst bleibt vom Strich ein Ruckeln. */
-    document.body.classList.toggle('touch-draw', !!S.touchDraw);
-  };
-
-  S.touchDraw = !!(typeof Settings !== 'undefined' && Settings.get && Settings.get('touchDraw'));
-  anwenden();
 
   btn.addEventListener('click', () => {
     S.touchDraw = !S.touchDraw;
-    anwenden();
+    updateTouchDrawUI();
     toast(S.touchDraw ? t('touchDrawOn') : t('touchDrawOff'));
-    if (typeof Settings !== 'undefined' && Settings.set) Settings.set('touchDraw', S.touchDraw);
+    if (typeof Settings !== 'undefined' && Settings.set) Settings.set('touchDrawOff', !S.touchDraw);
   });
 
   // Die Einstellung wird erst nach dem Laden der Datei richtig bekannt
   if (typeof Settings !== 'undefined' && Settings.onChange) {
     Settings.onChange(s => {
-      if (!!s.touchDraw === !!S.touchDraw) return;
-      S.touchDraw = !!s.touchDraw;
-      anwenden();
+      if (!s.touchDrawOff === !!S.touchDraw) return;
+      S.touchDraw = !s.touchDrawOff;
+      updateTouchDrawUI();
     });
   }
 })();
@@ -53,6 +53,23 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 /** Zeichnet der Finger gerade, statt zu scrollen? */
 function touchDrawActive() {
   return !!S.touchDraw && typeof isDrawMode === 'function' && isDrawMode(S.mode);
+}
+
+/**
+ * Knopf und Klasse am body auf den Stand bringen.
+ *
+ * >>> Warum die Klasse am WERKZEUG haengt und nicht am Schalter <<<
+ * Sie schaltet touch-action der Zeichenflaechen ab (css/pages.css) – und
+ * das darf nur gelten, solange wirklich gezeichnet wird. Stuende sie
+ * schon in der Zeigerstellung, liesse sich die Seite dort nicht mehr mit
+ * dem Finger schieben, ohne dass jemand einen Strich vorhat.
+ *
+ * Muss deshalb bei JEDEM Werkzeugwechsel mitlaufen: applyMode() ruft es.
+ */
+function updateTouchDrawUI() {
+  const btn = E('btn-touch-draw');
+  if (btn) btn.classList.toggle('active', !!S.touchDraw);
+  document.body.classList.toggle('touch-draw', touchDrawActive());
 }
 
 /* Pen color presets */
@@ -589,6 +606,8 @@ function applyMode() {
   QA('.j-objects').forEach(o => o.style.pointerEvents = 'none');
   // Nur das Bild schaltet um; die Bedienteile regeln sich über .obj-chrome
   QA('.obj-body').forEach(o => o.style.pointerEvents = ic ? 'auto' : 'none');
+  // Ob der Finger zeichnen darf, hängt am Werkzeug – siehe updateTouchDrawUI
+  updateTouchDrawUI();
   updateCursor();
 }
 

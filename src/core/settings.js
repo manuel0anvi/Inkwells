@@ -6,10 +6,18 @@ const DEFAULT_SETTINGS = {
   saveLocation: null, // null means user needs to set it
   autoSaveEnabled: true,
   language: 'en', // de, en, it
-  /* Zeichnet der Finger, statt die Seite zu bewegen? Aus, solange nichts
-     anderes gesagt wird – wer einen Stift hat, will mit dem Finger
-     blättern. Umschaltbar in der Werkzeugleiste (ui/toolbar.js). */
-  touchDraw: false,
+  /* ── Zeichnet der Finger, oder bewegt er die Seite? ────────────────
+     Der Finger ZEICHNET, sobald ein Zeichenwerkzeug gewählt ist. Zum
+     Bewegen der Seite bleiben zwei Finger und der Rand neben der Seite.
+
+     >>> Warum die Frage jetzt andersherum steht <<<
+     Vorher hiess sie touchDraw und war aus, solange niemand den Schalter
+     in der Werkzeugleiste fand – und niemand fand ihn. Gemeldet wurde
+     das als „mit dem Finger geht es gar nicht". Wer den Finger doch lieber
+     zum Blättern hat (etwa mit einem Stift in der Hand), schaltet ihn in
+     der Werkzeugleiste weiterhin ab; DIESE Entscheidung steht hier.
+     Der alte Wert wird beim Laden weggeräumt (STALE_SETTINGS). */
+  touchDrawOff: false,
   cloudEnabled: false,
   // Cloud-Anbieter: 'google' (Drive) oder 'microsoft' (OneDrive).
   // Siehe core/cloudConfig.js und core/providers/.
@@ -89,7 +97,12 @@ const OBSOLETE_SETTINGS = [
 const STALE_SETTINGS = [
   // Ohne Wirkung: gespeichert wurde ohnehin immer zwei Sekunden nach der
   // letzten Änderung, gleich was dort stand (core/autoSave.js).
-  'autoSaveInterval'
+  'autoSaveInterval',
+  /* Abgelöst von touchDrawOff, das die Frage umdreht. Muss weg, nicht nur
+     unbeachtet bleiben: in JEDER vorhandenen Datei steht touchDraw: false,
+     und stünde der Wert weiter da, hätte die Umstellung genau bei denen
+     keine Wirkung, die sich beschwert haben. */
+  'touchDraw'
 ];
 
 /* Fürs Protokoll: die Einstellungen tragen cloudAccessToken und

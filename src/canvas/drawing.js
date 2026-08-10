@@ -8,9 +8,14 @@ function makeCanvas(w, h) {
   const ph = h || CFG.PAGE_H;
   c.width = Math.round(pw * dpr); c.height = Math.round(ph * dpr); 
   c.style.width = pw + 'px'; c.style.height = ph + 'px';
-  // touch-action:pan-y at ≤100%zoom: let vertical touch scroll pass through canvas to pg-scroll
-  // JS will override this to 'none' when in pan mode (>100%)
-  c.style.touchAction = 'pan-y';
+  /* touch-action steht in css/pages.css: pan-y, damit der Finger ueber der
+     Seite scrollt – und none, sobald er zeichnen soll (body.touch-draw).
+
+     >>> Hier stand es als INLINE-Stil, und das war der Fehler <<<
+     Ein Inline-Stil schlaegt jedes Stylesheet. Damit kam die Regel fuers
+     Zeichnen nie an: mit dem Finger liess sich ueberhaupt nichts malen,
+     egal wie der Schalter stand. Gesetzt wird es nur noch dort, wo es
+     wirklich vom Zustand abhaengt (core/zoom.js, beim Vergroesserten). */
   const ctx = c.getContext('2d'); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; return c;
 }
 

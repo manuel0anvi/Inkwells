@@ -145,9 +145,16 @@
   touch-action: pan-y
 }
 
-/* Zeichnet der Finger, darf der Browser nicht gleichzeitig scrollen –
-   sonst bleibt vom Strich ein Ruckeln. Zwei Finger zoomen weiterhin,
-   das faengt app.js selbst ab. */
+/* Zeichnet der Finger, darf der Browser die Seite nicht gleichzeitig
+   scrollen – sonst bricht er den Strich nach wenigen Pixeln mit
+   pointercancel ab. Genau das war der Grund, warum sich mit dem Finger
+   ueberhaupt nicht zeichnen liess: core/zoom.js schrieb hier zusaetzlich
+   ein touch-action als INLINE-Stil hin, und der schlaegt jede Regel von
+   hier. Die Zeile dort setzt jetzt nur noch beim Vergroesserten.
+
+   Die Klasse haengt am gewaehlten Werkzeug, nicht am Schalter allein
+   (ui/toolbar.js, updateTouchDrawUI). Zwei Finger bewegen und zoomen die
+   Seite weiterhin – das faengt app.js selbst ab. */
 body.touch-draw .j-canvas {
   touch-action: none
 }
@@ -398,6 +405,26 @@ body.touch-draw .j-canvas {
   transform-origin: 50% 50%;
   cursor: default;
   pointer-events: auto;
+}
+
+/* ── Das AUSGEWAEHLTE Bild gehoert dem Finger ────────────────────────
+   Ohne das entschied der Browser bei einem gezogenen Finger auf Scrollen:
+   die Seite lief weg, das Bild blieb liegen. Nur am ausgewaehlten, weil
+   ein Bild schnell die halbe Seite fuellt – darueber muss sich weiter
+   scrollen lassen, solange niemand es anfassen will. Die erste
+   Beruehrung waehlt deshalb nur aus (canvas/objects.js). */
+.obj-wrap.selected .obj-body {
+  touch-action: none
+}
+
+/* Waehrend ein Bild geschoben wird, darf es ueber den Seitenrand
+   hinausragen – sonst verschwindet es am Ende der Seite unter dem
+   Schnitt, und niemand sieht, dass es gerade auf die naechste Seite
+   wandert. Die Seite kommt dabei nach vorn, sonst deckte die folgende
+   das ueberstehende Stueck zu. */
+.j-page.obj-dragging {
+  overflow: visible;
+  z-index: 5
 }
 
 /* Griffe und Leiste – immer über allem, unabhängig von der Ebene des

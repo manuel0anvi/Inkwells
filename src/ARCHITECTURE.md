@@ -183,9 +183,25 @@ src/
 > noch **beim Zeichnen** abweist. Chromium meldet den Stift zusätzlich
 > als Berührung, die Handballensperre traf also den Stift selbst.
 >
-> Der Finger scrollt ebenso, es sei denn `S.touchDraw` ist an **und** ein
-> Zeichenwerkzeug gewählt. `S._drawPointerId` hält fest, wer den Strich
-> begonnen hat — sonst malte beim Zoomen der zweite Finger mit.
+> Der Finger **zeichnet**, sobald ein Zeichenwerkzeug gewählt ist; auf dem
+> Zeiger scrollt er. Bewegt wird die Seite dann mit zwei Fingern (`app.js`,
+> Pinch-Zweig — er schiebt seit demselben Umbau auch, nicht nur zoomt) oder
+> am Rand neben der Seite. Wer den Finger lieber zum Blättern hat, schaltet
+> ihn in der Leiste ab (`touchDrawOff`).
+>
+> Das war lange **kaputt**, ohne dass es jemand merkte: `touch-action` der
+> Zeichenfläche wurde an zwei Stellen als *Inline-Stil* gesetzt
+> (`canvas/drawing.js`, `core/zoom.js`), und der schlägt die Regel in
+> `css/pages.css`, die es fürs Zeichnen abschalten soll. Der Browser machte
+> aus der Bewegung ein Scrollen und brach den Strich mit `pointercancel` ab
+> — mit dem Finger ließ sich nichts malen, egal wie der Schalter stand.
+> Jetzt entscheidet allein die Klasse `body.touch-draw` (gesetzt in
+> `ui/toolbar.js`, `updateTouchDrawUI`, bei jedem Werkzeugwechsel).
+> Geprüft wird das Ergebnis, nicht die Einstellung: `npm run test:touch`.
+>
+> `S._drawPointerId` hält fest, wer den Strich begonnen hat — sonst malte
+> beim Zoomen der zweite Finger mit; kommt ein zweiter Finger dazu, wirft
+> `cancelActiveStroke()` den angefangenen Strich ganz weg.
 - **Drawing:** buildStroke, liveDrawIncr (live feedback)
 - **Erasing:** pointToLineDistance, strokeErase
 - **Caret Placement:** placeCaret, placeCaretAnywhere

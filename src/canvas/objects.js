@@ -464,8 +464,29 @@ function placeObject(objLayer, obj, page) {
     if (S.mode !== 'cursor') return;
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
     e.stopPropagation(); e.preventDefault();
+
+    /* ══════════════════════════════════════════════════════════════
+       MIT DEM FINGER: ERST ANTIPPEN, DANN SCHIEBEN
+
+       Ein Bild ist gross, oft die halbe Seite. Faengt das Verschieben
+       schon bei der ersten Beruehrung an, hat der Browser die Wahl
+       zwischen Scrollen und Schieben – und er entscheidet sich fuers
+       Scrollen: die Seite lief unter dem Finger weg, das Bild blieb
+       liegen. Genau so wurde es gemeldet.
+
+       Deshalb waehlt die erste Beruehrung nur aus. Erst am
+       AUSGEWAEHLTEN Bild steht touch-action: none (css/pages.css), und
+       dann gehoert die Bewegung dem Bild allein. Ueber einem nicht
+       ausgewaehlten Bild scrollt der Finger weiter wie ueberall sonst.
+       Maus und Stift treffen genau, fuer sie bleibt es beim ersten
+       Griff. */
+    if (e.pointerType === 'touch' && _selObj !== wrap) { select(); return; }
+
     select();
     body.setPointerCapture(e.pointerId);
+    // Waehrend des Zugs darf das Bild ueber den Seitenrand hinausragen
+    const startPgEl = wrap.closest('.j-page');
+    if (startPgEl) startPgEl.classList.add('obj-dragging');
     const sx = e.clientX, sy = e.clientY, ox = obj.x, oy = obj.y;
     const others = (page.objects || []).filter(o => o.id !== obj.id);
     let xs = [], ys = [], cxs = [], cys = [];
@@ -485,8 +506,88 @@ function placeObject(objLayer, obj, page) {
       obj.x = nx; obj.y = ny; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
       placeBar();
     };
-    const up = (ev) => { hideSnaps(); body.releasePointerCapture(ev.pointerId); body.removeEventListener('pointermove', mv); body.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
-    body.addEventListener('pointermove', mv); body.addEventListener('pointerup', up);
+    const up = (ev) => {
+      hideSnaps();
+      try { body.releasePointerCapture(ev.pointerId); } catch (err) { }
+      body.removeEventListener('pointermove', mv);
+      body.removeEventListener('pointerup', up);
+      body.removeEventListener('pointercancel', up);
+      if (startPgEl) startPgEl.classList.remove('obj-dragging');
+      // Losgelassen ueber einer anderen Seite? Dann gehoert es jetzt dorthin.
+      const gewandert = ev.type === 'pointerup' && moveToPageAt(ev.clientX, ev.clientY);
+      if (_hasMutated && !gewandert) noteObjectChanged();
+    };
+    body.addEventListener('pointermove', mv);
+    body.addEventListener('pointerup', up);
+    body.addEventListener('pointercancel', up);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     UEBER DEN SEITENRAND HINAUS
+
+     Ein Bild ans Seitenende zu schieben ging bisher „einfach weiter":
+     .j-page schneidet ab, das Bild verschwand unter dem Rand und lag
+     danach ausserhalb der Seite. Auf die naechste Seite kam es nur ueber
+     Ausschneiden und Einfuegen.
+
+     Jetzt entscheidet die Stelle, an der losgelassen wird. Sie wird ueber
+     die Rechtecke der Seiten gesucht und nicht ueber elementFromPoint:
+     unter dem Zeiger liegt das Bild selbst, das gerade geschoben wird.
+
+     Die Seite darf zu einem anderen Abschnitt gehoeren – gezeigt wird
+     ohnehin nur, was gerade sichtbar ist, und wo es hinfaellt, ist die
+     Absicht des Nutzers.
+     ══════════════════════════════════════════════════════════════════ */
+  function pageElAt(clientX, clientY) {
+    const seiten = QA('.j-page');
+    let naechste = null, kuerzeste = Infinity;
+    for (const el of seiten) {
+      const r = el.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return el;
+      /* Zwischen zwei Seiten liegt eine Luecke. Wer dort loslaesst, hat
+         nicht „daneben" gemeint – das Bild gehoert dann zur naechsten
+         Seite, sonst bliebe es im Nichts zwischen beiden haengen. */
+      const abstand = clientY < r.top ? r.top - clientY : clientY > r.bottom ? clientY - r.bottom : 0;
+      if (abstand < kuerzeste) { kuerzeste = abstand; naechste = el; }
+    }
+    return naechste;
+  }
+
+  /**
+   * Legt das Bild auf die Seite unter dieser Stelle, wenn es eine andere ist.
+   *
+   * @returns {boolean} ob es umgezogen ist
+   */
+  function moveToPageAt(clientX, clientY) {
+    const zielEl = pageElAt(clientX, clientY);
+    if (!zielEl || zielEl === wrap.closest('.j-page')) return false;
+
+    const info = getPage(zielEl.dataset.pgid);
+    const zielLayer = zielEl.querySelector('.j-objects');
+    if (!info || !zielLayer) return false;
+
+    // Beide Seiten aendern sich – beide brauchen ihren Rueckgaengig-Schritt
+    pushPageHistory(info.page);
+
+    /* Die neue Lage aus dem Bildschirm zurueckrechnen. Ueber die Ecke des
+       Rahmens, nicht ueber den Zeiger: sonst spraenge das Bild beim
+       Loslassen unter den Finger. */
+    const alt = wrap.getBoundingClientRect();
+    const ziel = zielEl.getBoundingClientRect();
+    obj.x = Math.round((alt.left - ziel.left) / _zoom);
+    obj.y = Math.round((alt.top - ziel.top) / _zoom);
+
+    page.objects = (page.objects || []).filter(o => o.id !== obj.id);
+    (info.page.objects || (info.page.objects = [])).push(obj);
+
+    deselect();
+    wrap.remove();
+    restackObjects(objLayer, page);
+    // Neu aufbauen: die Schliessungen hier zeigen alle auf die alte Seite
+    placeObject(zielLayer, obj, info.page);
+    updateUndoRedoUI();
+    noteObjectChanged();
+    return true;
   }
 
   body.addEventListener('pointerdown', beginInteraction);

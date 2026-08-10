@@ -109,12 +109,16 @@
   /* ── Was nur beim Zeigen erscheint, gibt es mit dem Finger nicht ──
      Ein Zeiger, der ueber etwas faehrt, ohne es zu beruehren, existiert
      hier nicht. Alles, was sich per :hover einblendet, bliebe also
-     unsichtbar – und damit unerreichbar. */
-  .sec-edit-btn,
-  .mgr-side-tools,
-  .nb-card-edit-btn {
-    opacity: 1
-  }
+     unsichtbar – und damit unerreichbar.
+
+     >>> Es stand hier, und es steht jetzt weiter unten <<<
+     Diese Abfrage sagt, was das Geraet KANN. Auf einem umklappbaren
+     Laptop trifft sie auch dann zu, wenn gerade mit der Maus gearbeitet
+     wird – der Punkteknopf stand deshalb dauerhaft auf jeder Heftkarte,
+     obwohl :hover dort tadellos funktioniert. Gemeldet wurde genau das.
+     Massgeblich ist jetzt, was gerade BENUTZT wird: body.touch-input,
+     gesetzt in core/state.js. Die Groessen bleiben hier, die brauchen
+     kein Ereignis. */
 
   /* Alle drei Kopfknoepfe zusammen groesser – einzeln waeren sie
      verschieden gross, und nebeneinander faellt das sofort auf. */
@@ -200,7 +204,6 @@
   }
 
   .nb-card-edit-btn {
-    opacity: 1;
     width: 32px;
     height: 28px;
     font-size: 15px
@@ -226,6 +229,24 @@
   .j-page-actions {
     gap: 6px
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SOLANGE WIRKLICH ANGEFASST WIRD
+
+   Der Punkteknopf einer Heftkarte und der Stift am Abschnitt erscheinen
+   sonst bei :hover. Mit dem Finger gibt es kein Schweben, also muessen
+   sie dann von selbst dastehen – aber eben NUR dann. Wer denselben
+   Laptop aufgeklappt mit der Maus benutzt, soll die aufgeraeumte
+   Uebersicht behalten.
+
+   Die Klasse setzt core/state.js nach der zuletzt benutzten Eingabeart;
+   dort steht auch, warum eine Medienabfrage das nicht leisten kann.
+   ══════════════════════════════════════════════════════════════════════ */
+body.touch-input .sec-edit-btn,
+body.touch-input .mgr-side-tools,
+body.touch-input .nb-card-edit-btn {
+  opacity: 1
 }
 
 /* VERTICAL / PORTRAIT MODE (16:10, tablet) */

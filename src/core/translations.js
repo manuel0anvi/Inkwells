@@ -91,6 +91,8 @@ const TRANSLATIONS = {
     zoomIn: 'Vergrößern',
     zoomOut: 'Verkleinern',
     zoomReset: 'Zoom zurücksetzen',
+    // Im Hochformat: die Seite wieder ganz auf den Schirm
+    zoomFit: 'Einpassen',
     
     // Colors
     colorBlack: 'Schwarz',
@@ -681,6 +683,7 @@ const TRANSLATIONS = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     zoomReset: 'Reset zoom',
+    zoomFit: 'Fit page',
     
     // Colors
     colorBlack: 'Black',
@@ -1263,6 +1266,7 @@ const TRANSLATIONS = {
     zoomIn: 'Ingrandisci',
     zoomOut: 'Riduci',
     zoomReset: 'Reimposta zoom',
+    zoomFit: 'Adatta',
     
     // Colors
     colorBlack: 'Nero',

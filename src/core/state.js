@@ -35,6 +35,41 @@ document.addEventListener('pointercancel', e => {
   if (e.pointerType === 'pen') { _penPointers.delete(e.pointerId); _penLiftTime = Date.now(); }
 }, { capture: true, passive: true });
 
+/* ══════════════════════════════════════════════════════════════════════
+   WIRD DAS GERAET GERADE ANGEFASST ODER GEZEIGT?
+
+   Gebraucht fuer alles, was sich sonst erst bei :hover einblendet – der
+   Punkteknopf einer Heftkarte, der Stift am Abschnitt. Ein Finger
+   schwebt nicht, mit ihm waeren sie unerreichbar.
+
+   >>> Warum das nicht die Medienabfrage macht <<<
+   css/responsive.css hat sie deshalb unter `any-pointer: coarse`
+   dauerhaft sichtbar gestellt. Auf einem umklappbaren Laptop trifft das
+   aber IMMER zu, auch aufgeklappt mit Maus – und dann steht der Knopf auf
+   jeder Karte, ohne dass ihn jemand braucht. Genau das wurde
+   zurueckgemeldet.
+
+   Die Frage ist nicht, was das Geraet KANN, sondern was gerade benutzt
+   wird. Das steht erst im Ereignis. Zum Start wird angenommen, was ohne
+   Maus wahrscheinlich ist: ein Geraet, dessen primaerer Zeiger grob ist,
+   ist ein Tablet – dort gibt es kein :hover, und der Knopf muss von
+   Anfang an da sein.
+   ══════════════════════════════════════════════════════════════════════ */
+function setzeEingabeArt(pointerType) {
+  const anfassen = pointerType === 'touch';
+  document.body.classList.toggle('touch-input', anfassen);
+}
+
+document.addEventListener('pointerdown', e => setzeEingabeArt(e.pointerType), { capture: true, passive: true });
+// Ein Zeiger, der sich BEWEGT, ohne zu druecken, kann nur eine Maus sein
+document.addEventListener('pointermove', e => {
+  if (e.pointerType === 'mouse' && e.buttons === 0) setzeEingabeArt('mouse');
+}, { capture: true, passive: true });
+
+if (window.matchMedia('(pointer: coarse)').matches) {
+  document.addEventListener('DOMContentLoaded', () => setzeEingabeArt('touch'));
+}
+
 const S = {
   notebooks: [], activeNbId: null, activePgId: null, mode: 'cursor',
   pen1: { color: '#1a1510', customColor: '#1a1510', szIdx: 1 },

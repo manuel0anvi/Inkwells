@@ -282,6 +282,38 @@ function attachInput(canvas, textDiv, objLayer, page) {
   });
 }
 
+/**
+ * Einen begonnenen Strich verwerfen, als haette es ihn nie gegeben.
+ *
+ * Gebraucht, sobald ein zweiter Finger dazukommt: der will zoomen oder
+ * schieben, nicht malen. Ohne das blieb von jedem Doppelgriff ein Strich
+ * quer ueber die Seite stehen – der erste Finger zeichnete ja weiter.
+ *
+ * Der Strich wird wieder herausgenommen, nicht nur beendet: er war ein
+ * Versehen, und rueckgaengig machen muesste man ihn sonst von Hand.
+ */
+function cancelActiveStroke() {
+  const stroke = S._cur;
+  S.isDrawing = false;
+  S._drawPointerId = null;
+  S._cur = null;
+  clearLiveCanvas();
+  if (!stroke) return;
+  clearTimeout(stroke._lineTimer);
+
+  const pgId = S.activePgId;
+  const liste = pgId ? S.strokeHistory[pgId] : null;
+  if (liste) {
+    const idx = liste.indexOf(stroke);
+    if (idx >= 0) liste.splice(idx, 1);
+    const pgEl = document.querySelector('.j-page[data-pgid="' + CSS.escape(pgId) + '"]');
+    const canvas = pgEl ? pgEl.querySelector('.j-canvas:not(.live-canvas)') : null;
+    if (canvas) redrawStrokes(canvas, liste);
+  }
+  // Der Zustand vor dem Strich liegt schon auf dem Stapel (handleDrawStart)
+  if (typeof popPageHistory === 'function') popPageHistory(pgId);
+}
+
 let _liveCanvas = null;
 function getLiveCtx(parentDiv, dw = CFG.PAGE_W, dh = CFG.PAGE_H) {
   const dpr = getCanvasDpr();
