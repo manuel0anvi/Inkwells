@@ -1040,6 +1040,22 @@ class CloudSyncManager {
     this._notify();
   }
 
+  /**
+   * Steht ueberhaupt etwas an, das die Cloud braucht?
+   *
+   * Gebraucht beim Beenden: ohne diese Frage lief dort jedes Mal ein
+   * Abgleich los, und die App brauchte immer eine Weile zum Zumachen -
+   * auch wenn schon alles oben war.
+   */
+  hatOffeneArbeit() {
+    if (!this._canSync() || !this.isOnline) return false;
+    if (this.syncQueue.length > 0) return true;
+    if (typeof Trash !== 'undefined' && Trash?.getPendingCloudActions) {
+      return Trash.getPendingCloudActions().length > 0;
+    }
+    return false;
+  }
+
   /** Wie viele Hefte warten noch auf den Upload? */
   getPendingCount() {
     return this.syncQueue.filter(e => {
@@ -1220,8 +1236,19 @@ class CloudSyncManager {
   async flushPending() {
     if (!this._canSync() || !this.isOnline) return;
 
-    // Auch ohne wartende Hefte kann im Papierkorb etwas offen sein
-    await this._catchUpTrash();
+    /* ── Den Papierkorb nur anfassen, wenn dort wirklich etwas offen ist ──
+       Hier stand ein bedingungsloses _catchUpTrash(). Das ist ein voller
+       Abgleich ueber das Netz - die gemeinsame Liste holen, den
+       Hauptordner auflisten - und er lief bei JEDEM Beenden, auch wenn
+       gar nichts anlag.
+
+       Beim Beenden ist das der Unterschied zwischen "geht sofort zu" und
+       "haengt eine Sekunde". Und noetig ist es nicht: was hier liegen
+       bleibt, holt der naechste Start nach, ebenso das Wiederverbinden. */
+    const papierkorbOffen = (typeof Trash !== 'undefined' && Trash?.getPendingCloudActions)
+      ? Trash.getPendingCloudActions().length > 0
+      : false;
+    if (papierkorbOffen) await this._catchUpTrash();
 
     if (this.syncQueue.length === 0) return;
 

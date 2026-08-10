@@ -198,20 +198,52 @@ function registriereBeendenHandler() {
   // auf die Bestätigung (mit Zeitgrenze, siehe main.js).
   if (window.api.onBeforeQuit) {
     window.api.onBeforeQuit(async () => {
-      /* >>> Zeigen, dass gerade etwas passiert <<<
-         Was jetzt folgt, dauert im schlechten Fall mehrere Sekunden. Ohne
-         Anzeige sieht das Fenster dabei aus wie eingefroren - und wer
-         dann nachhilft (zweiter Klick, Task-Manager), bricht genau das
-         Speichern ab, auf das er wartet.
+      /* ── Die Anzeige geht IMMER an, gleich beim Klick ────────────────
+         Sie ist die Antwort auf den Druck aufs Kreuz: der Klick ist
+         angekommen, es passiert etwas. Deshalb ohne Bedingung und als
+         allererstes, vor jeder Pruefung.
 
-         Ganz zu Beginn, vor dem ersten await: die Anzeige soll stehen,
-         bevor irgendetwas Zeit kostet. */
+         Dass sie bei einem schnellen Beenden nicht aufblitzt, regelt der
+         Stil: .quitting-box faengt erst nach 120 ms an einzublenden
+         (css/modals.css). Geht das Fenster vorher zu - der Normalfall,
+         gemessen elf Millisekunden -, bekommt man nie etwas zu sehen.
+         Dauert es laenger, ist die Anzeige schon da.
+
+         Das ist besser als eine Bedingung: die muesste raten, ob es
+         lange dauert. Der Stil weiss es, ohne zu raten. */
       const schliesst = document.getElementById('quitting');
       const stand = document.getElementById('quitting-title');
       const sageStand = (schluessel, rueckfall) => {
         if (stand) stand.textContent = (typeof t === 'function' && t(schluessel)) || rueckfall;
       };
       if (schliesst) schliesst.classList.add('an');
+
+      /* ── Und jetzt: ist ueberhaupt etwas zu tun? ─────────────────────
+         Ist alles gesichert, geht die App sofort zu - ohne Abgleich,
+         ohne Wartezeit.
+
+         Vorher lief hier jedes Mal derselbe Ablauf, samt eines vollen
+         Papierkorb-Abgleichs ueber das Netz. Zumachen dauerte dadurch
+         IMMER einen Moment, und die Anzeige meldete "Cloud wird auf den
+         neuesten Stand gebracht", obwohl gar nichts hochzuladen war. */
+      const offen = {
+        lokal: !!(typeof AutoSave !== 'undefined' && AutoSave.dirtyNotebooks.size > 0),
+        geteilt: !!(typeof window.sharedDocHatOffenes === 'function' && window.sharedDocHatOffenes()),
+        cloud: !!(typeof CloudSync_ !== 'undefined' && CloudSync_ && CloudSync_.hatOffeneArbeit
+                  && CloudSync_.hatOffeneArbeit()),
+        raum: !!(window.Collab && window.Collab.isLive && window.Collab.isLive())
+      };
+
+      if (!offen.lokal && !offen.geteilt && !offen.cloud && !offen.raum) {
+        // Die Merkstelle noch wegschreiben - eine Datei, nicht messbar.
+        // flushNotebookView() tut nichts, wenn nichts aussteht.
+        try {
+          if (typeof flushNotebookView === 'function') await flushNotebookView();
+        } catch (err) { /* daran soll das Beenden nicht haengen */ }
+        console.log('[Init] Nichts offen - schliesse sofort');
+        window.api.confirmQuit();
+        return;
+      }
 
       try {
         // 1. Lokal speichern – das hat Vorrang und geht schnell
@@ -234,7 +266,7 @@ function registriereBeendenHandler() {
       try {
         // Ein offenes geteiltes Dokument hat keine Datei – es wird in den
         // Raum zurückgeschrieben und taucht deshalb in AutoSave gar nicht auf.
-        if (S.sharedDoc && !S.readOnly && typeof window.flushSharedDocSave === 'function') {
+        if (offen.geteilt && typeof window.flushSharedDocSave === 'function') {
           await Promise.race([
             window.flushSharedDocSave(),
             new Promise(resolve => setTimeout(resolve, 3000))
@@ -245,13 +277,15 @@ function registriereBeendenHandler() {
       }
 
       try {
-        sageStand('quittingCloud', 'Cloud wird auf den neuesten Stand gebracht …');
+        // Nur ansagen, was auch geschieht - sonst stuende dort eine
+        // Meldung ueber Arbeit, die gar nicht stattfindet.
+        if (offen.cloud) sageStand('quittingCloud', 'Cloud wird auf den neuesten Stand gebracht …');
       } catch (e) { /* Anzeige darf das Beenden nie aufhalten */ }
 
       try {
         // 2. Cloud-Upload noch versuchen, aber das Schließen nicht blockieren.
         //    Was nicht mehr durchgeht, holt der nächste Start nach.
-        if (typeof CloudSync_ !== 'undefined' && CloudSync_) {
+        if (offen.cloud && typeof CloudSync_ !== 'undefined' && CloudSync_) {
           await Promise.race([
             CloudSync_.flushPending(),
             new Promise(resolve => setTimeout(resolve, 3000))

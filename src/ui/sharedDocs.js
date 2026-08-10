@@ -1164,6 +1164,11 @@
   window.openSharedDocumentByLink = openFromLink;
   window.flushSharedDocSave = startSave;
 
+  /* Steht im offenen geteilten Dokument etwas zum Zurueckschreiben an?
+     saveOpenDocument() steigt bei !dirty ohnehin sofort aus - fuer die
+     Anzeige beim Beenden muss man es aber VORHER wissen. */
+  window.sharedDocHatOffenes = () => !!(live && dirty && !S.readOnly);
+
   // Beim Start einmal nachsehen. Ohne Anmeldung passiert dabei nichts.
   startWatching().catch(err => console.warn('[SharedDocs] Start:', err?.message || err));
 })();
