@@ -355,8 +355,90 @@ async function signInMicrosoftInteractive(loginHint = '') {
   if (loginHint) params.login_hint = loginHint;
   provider.setCustomParameters(params);
 
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  try {
+    const result = await signInWithPopup(auth, provider);
+    offeneVerknuepfung = null;
+    return result.user;
+  } catch (err) {
+    if (err?.code !== 'auth/account-exists-with-different-credential') throw err;
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIESELBE ADRESSE, SCHON ÜBER GOOGLE ANGEMELDET
+
+       Firebase führt je E-Mail-Adresse EIN Konto. Wer sein
+       Microsoft-Konto auf eine Adresse angelegt hat, mit der er hier
+       schon einmal über Google angemeldet war (bei einer @gmail.com als
+       Microsoft-Konto keine Seltenheit), bekommt beim
+       Microsoft-Anmelden genau diesen Fehler.
+
+       Auflösen lässt sich das nur so, wie Firebase es vorsieht: einmal
+       mit dem BEKANNTEN Anbieter anmelden und die Microsoft-Anmeldung
+       daran anhängen. Danach gehören beide Wege zu einem Konto, und
+       Inkwell sieht dieselbe Person – wichtig, weil die Freigaben an der
+       Adresse hängen, nicht an der Anmeldeart.
+
+       Der Anhang bleibt hier liegen, statt gleich weiterzumachen: das
+       Fenster für Google braucht einen eigenen Klick. Ein zweites
+       Fenster ohne Zutun des Nutzers wird geblockt – es geht sonst
+       stumm nichts mehr. Die Oberfläche macht daraus den Knopf
+       „Mit Google bestätigen" (ui/share.js).
+       ══════════════════════════════════════════════════════════════════ */
+    const anhang = OAuthProvider.credentialFromError(err);
+    if (!anhang) throw err;
+
+    offeneVerknuepfung = {
+      credential: anhang,
+      email: normalizeEmail(err?.customData?.email) || normalizeEmail(loginHint),
+      at: Date.now()
+    };
+    const fehler = new Error('MICROSOFT_NEEDS_GOOGLE');
+    fehler.code = 'inkwell/microsoft-needs-google';
+    fehler.email = offeneVerknuepfung.email;
+    throw fehler;
+  }
+}
+
+/* Die Microsoft-Anmeldung, die auf ihre Verknüpfung wartet. Nur im
+   Speicher: eine Anmeldung von Microsoft ist Minuten gültig, nicht Tage. */
+let offeneVerknuepfung = null;
+
+/** Wartet gerade eine Microsoft-Anmeldung auf das Ja über Google? */
+function microsoftWartetAufGoogle() {
+  if (!offeneVerknuepfung) return null;
+  // Nach fünf Minuten ist die Anmeldung von Microsoft ohnehin abgelaufen
+  if (Date.now() - offeneVerknuepfung.at > 5 * 60 * 1000) {
+    offeneVerknuepfung = null;
+    return null;
+  }
+  return { email: offeneVerknuepfung.email };
+}
+
+/**
+ * Holt das Ja über Google und hängt Microsoft an dasselbe Konto.
+ *
+ * Muss aus einem KLICK heraus gerufen werden – es öffnet ein Fenster.
+ *
+ * @returns {Promise<object>} der jetzt angemeldete Nutzer
+ */
+async function linkMicrosoftWithGoogle() {
+  if (!microsoftWartetAufGoogle()) throw new Error('NOTHING_PENDING');
+  const { credential, email } = offeneVerknuepfung;
+
+  const google = new GoogleAuthProvider();
+  google.addScope('email');
+  if (email) google.setCustomParameters({ login_hint: email });
+
+  await signInWithPopup(auth, google);
+  try {
+    await linkWithCredential(auth.currentUser, credential);
+  } catch (err) {
+    /* Schon verknüpft? Dann ist genau das erreicht, was gewollt war.
+       Kommt vor, wenn der Knopf zweimal gedrückt wurde. */
+    if (err?.code !== 'auth/provider-already-linked'
+        && err?.code !== 'auth/credential-already-in-use') throw err;
+  }
+  offeneVerknuepfung = null;
+  return auth.currentUser;
 }
 
 /* Antworten, die schlicht heissen „dafuer braucht es einen Menschen". Kein
@@ -389,8 +471,25 @@ async function signInMicrosoftSilently(loginHint = '') {
 
   try {
     const result = await signInWithPopup(auth, provider);
+    offeneVerknuepfung = null;
     return result.user;
   } catch (err) {
+    /* Dieselbe Adresse gehört schon zu einer Anmeldung über Google. Die
+       Anmeldung von Microsoft ist damit gültig, aber heimatlos – hier
+       aufheben, damit der Knopf in der Oberfläche daraus den zweiten
+       Schritt machen kann, ohne noch einmal bei Microsoft zu fragen. */
+    if (err?.code === 'auth/account-exists-with-different-credential') {
+      const anhang = OAuthProvider.credentialFromError(err);
+      if (anhang) {
+        offeneVerknuepfung = {
+          credential: anhang,
+          email: normalizeEmail(err?.customData?.email) || normalizeEmail(loginHint),
+          at: Date.now()
+        };
+      }
+      return null;
+    }
+
     const text = String(err?.code || '') + ' ' + String(err?.message || '');
     if (STILL_GESCHEITERT.test(text)) return null;
     throw err;
@@ -2597,6 +2696,9 @@ const InkwellShare = {
   signInWithProviderToken,
   signInMicrosoftInteractive,
   signInMicrosoftSilently,
+  // Dieselbe Adresse gehört schon zu einer Google-Anmeldung
+  microsoftWartetAufGoogle,
+  linkMicrosoftWithGoogle,
   signOutIdentity,
   currentIdentity,
   hasRealIdentity,
@@ -2658,6 +2760,7 @@ export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
   signInWithProviderToken, signInMicrosoftInteractive, signInMicrosoftSilently,
+  microsoftWartetAufGoogle, linkMicrosoftWithGoogle,
   signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,

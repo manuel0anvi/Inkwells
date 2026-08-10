@@ -757,22 +757,83 @@ class CloudSyncManager {
 
     try {
       await api.signInMicrosoftInteractive(Settings.get('cloudEmail') || '');
-      await Settings.update({ cloudIdentityMissing: false });
-      this.identityProblem = null;
-      this.identityError = '';
-      console.log('[CloudSync] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
-      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
-      this._notify();
+      await this._merkeKennung(api);
       return true;
     } catch (err) {
       const code = err?.code || '';
       // Fenster zugemacht oder abgebrochen ist kein Fehler, den man melden muss
       if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/i.test(code)) return false;
+
+      /* Dieselbe Adresse gehört hier schon zu einer Anmeldung über Google.
+         Kein Fehler, sondern ein zweiter Schritt – und der braucht einen
+         eigenen Klick, weil er wieder ein Fenster öffnet (core/share.js). */
+      if (code === 'inkwell/microsoft-needs-google') {
+        console.log('[CloudSync] Adresse gehört schon zu einer Google-Anmeldung –',
+          'es fehlt die Bestätigung über Google');
+        this.identityProblem = 'needsGoogle';
+        this.identityError = '';
+        this._notify();
+        return false;
+      }
+
       console.warn('[CloudSync] Microsoft-Anmeldung bei Firebase fehlgeschlagen:', code, err?.message || err);
       this.identityError = (code ? code + ': ' : '') + (err?.message || String(err));
       this.identityProblem = 'failed';
       return false;
     }
+  }
+
+  /**
+   * Zweiter Teil davon: das Ja über Google, damit Microsoft an dasselbe
+   * Firebase-Konto kommt. Braucht einen eigenen Klick – es öffnet ein
+   * Fenster, und ein ungefragtes wird geblockt.
+   */
+  async finishMicrosoftLinkWithGoogle() {
+    let api;
+    try {
+      api = await this._whenShareReady();
+    } catch (err) {
+      this.identityProblem = 'offline';
+      return false;
+    }
+
+    try {
+      await api.linkMicrosoftWithGoogle();
+      await this._merkeKennung(api);
+      return true;
+    } catch (err) {
+      const code = err?.code || '';
+      if (/popup-closed-by-user|cancelled-popup-request|user-cancelled/i.test(code)) return false;
+      console.warn('[CloudSync] Verknüpfung über Google fehlgeschlagen:', code, err?.message || err);
+      this.identityError = (code ? code + ': ' : '') + (err?.message || String(err));
+      this.identityProblem = 'failed';
+      this._notify();
+      return false;
+    }
+  }
+
+  /**
+   * Wartet die Microsoft-Anmeldung noch auf das Ja über Google?
+   *
+   * Auch der stille Versuch beim Start kann darauf stoßen – der meldet
+   * aber nichts nach außen, damit beim Hochfahren nichts aufblitzt.
+   * Deshalb wird zusätzlich dort nachgesehen, wo die wartende Anmeldung
+   * wirklich liegt (core/share.js).
+   */
+  microsoftNeedsGoogle() {
+    if (this.identityProblem === 'needsGoogle') return true;
+    try { return !!window.InkwellShare?.microsoftWartetAufGoogle?.(); }
+    catch (err) { return false; }
+  }
+
+  /** Gemeinsamer Abschluss beider Wege: Firebase kennt den Nutzer jetzt. */
+  async _merkeKennung(api) {
+    await Settings.update({ cloudIdentityMissing: false });
+    this.identityProblem = null;
+    this.identityError = '';
+    console.log('[CloudSync] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
+    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    this._notify();
   }
 
   /**

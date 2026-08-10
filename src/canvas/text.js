@@ -526,31 +526,37 @@ function caretRectAt(textDiv, pos, text) {
 function lineBoxOf(pgEl, textDiv, rect, zoom) {
   const lh = parseInt(textDiv.style.lineHeight) || 32;
   const pageRect = pgEl.getBoundingClientRect();
+  const links = (rect.left - pageRect.left) / zoom;
 
-  /* Die Mitte war verlässlich, solange der Browser ein Zeichen-Rechteck
-     lieferte. Liefert er aber ein 0×0‑Rechteck (leere Zeile, Ende des
-     Absatzes), liegt die Mitte auf der Grundlinie der VORHERIGEN Zeile
-     – und das Band sitzt eine ganze Zeile zu hoch. Deshalb wird die
-     Oberkante genommen und auf das Zeilenraster gerundet.
+  /* >>> Kein Raster, sondern die Mitte – und warum das der Umweg wert war <<<
+     Zwei Anläufe haben hier danebengelegen, beide gemeldet:
 
-     >>> Das Raster fängt am TEXTFELD an, nicht an der Seite <<<
-     Hier stand `Math.round(raw / lh) * lh` – gerundet also auf Vielfache
-     der Zeilenhöhe ab dem oberen Seitenrand. Der Text beginnt aber nicht
-     dort: .j-text sitzt bei top:64 und hat obendrein einen Innenabstand
-     (19 px beim linierten Papier). Die erste Zeile fängt damit bei 83 an,
-     und 83 ist kein Vielfaches von 32 – jede Marke und jedes Band landete
-     13 px daneben, also fast eine halbe Zeile. Gemeldet wurde das als
-     „der Cursor des anderen steht falsch" und „das Sperrband auch".
+       1. Nur die Oberkante nehmen. Was getClientRects() liefert, ist mal
+          das Kästchen der Buchstaben (bei Zeilenhöhe 32 und Schriftgröße
+          17 rund 21 px, mittig in der Zeile), mal die ganze Zeile – die
+          Oberkante bedeutet also nicht immer dasselbe.
+       2. Auf ein Raster von Zeilenhöhen runden. Das Raster müsste dafür
+          überall gelten, und das tut es nicht: eine Überschrift ist
+          32,8 px hoch statt 32, und ab ihr ist jede Zeile darunter ein
+          Stück verschoben. Genau das war „die Zeilen sind teilweise
+          richtig, teilweise ein bisschen zu weit oben".
 
-     Gezählt wird deshalb von der Oberkante der ERSTEN Zeile aus. */
-  const textRect = textDiv.getBoundingClientRect();
-  const cs = (typeof getComputedStyle === 'function') ? getComputedStyle(textDiv) : null;
-  const pad = parseFloat(cs && cs.paddingTop) || parseFloat(textDiv.style.paddingTop) || 0;
-  const start = (textRect.top - pageRect.top) / zoom + pad;
+     Verlässlich ist die MITTE des gemessenen Rechtecks: der
+     Zeilendurchschuss liegt gleichmäßig über und unter den Buchstaben,
+     die Mitte des Kästchens ist also auch die Mitte der Zeile – ganz
+     gleich, wo diese Zeile sitzt und wie hoch ihr Absatz ist. Von dort
+     aus eine halbe Zeilenhöhe nach oben.
 
-  const raw = (rect.top - pageRect.top) / zoom;
-  const nr = Math.max(0, Math.round((raw - start) / lh));
-  return { top: start + nr * lh, height: lh, left: (rect.left - pageRect.left) / zoom };
+     Der Sonderfall, der den Rasterversuch ausgelöst hat: ein Rechteck
+     OHNE Höhe. Eine Mitte gibt es dann nicht, und die alte Rechnung legte
+     das Band eine Zeile zu hoch. Dafür steht die Abfrage darunter –
+     ohne Höhe zählt die Oberkante unverändert. */
+  if (!rect.height) {
+    return { top: (rect.top - pageRect.top) / zoom, height: lh, left: links };
+  }
+
+  const mitte = (rect.top + rect.height / 2 - pageRect.top) / zoom;
+  return { top: mitte - lh / 2, height: lh, left: links };
 }
 
 /* ══════════════════════════════════════════════════════════════════════

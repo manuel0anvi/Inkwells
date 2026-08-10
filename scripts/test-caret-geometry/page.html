@@ -280,6 +280,60 @@ abschnitt('Absätze, Fett, Überschriften');
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   4b. VIELE ÜBERSCHRIFTEN – DAS RASTER STIMMT DANN NICHT MEHR
+
+   >>> Was hier gemeldet wurde <<<
+   „Die Zeilen sind teilweise korrekt, teilweise ein bisschen zu weit
+   oben." Genau so sieht ein aufsummierter Fehler aus: oben stimmt es,
+   weiter unten immer weniger.
+
+   Eine Überschriftenzeile ist 32,8 px hoch, keine 32 – ihre Schrift
+   passt sonst nicht hinein. Ab ihr sitzt jede Zeile darunter ein Stück
+   tiefer, als ein starres Raster aus Zeilenhöhen annimmt. Nach zwanzig
+   Überschriften sind das 16 px, also eine halbe Zeile.
+
+   Geprüft wird deshalb hart gegen den Browser: der gerechnete Kasten
+   muss die Mitte des ZEICHENS enthalten, das an dieser Stelle steht.
+   Wer hier wieder auf ein Raster rundet, fällt hier durch.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Viele Überschriften (das starre Raster läuft weg)');
+
+{
+  let html = '';
+  for (let i = 0; i < 20; i++) {
+    html += '<p class="j-title-1">Kapitel ' + i + '</p><p>Ein Satz dazu.</p>';
+  }
+  const seite = bauSeite(html);
+  const flach = flatTextOf(seite.textDiv);
+  const pageRect = seite.div.getBoundingClientRect();
+
+  let fehler = '';
+  let groesste = 0;
+  for (let pos = 0; pos < flach.length; pos++) {
+    if (flach[pos] === NL) continue;
+    const zeichen = rectOfSpan(seite.textDiv, pos, pos + 1, 'links');
+    if (!zeichen) continue;
+    const box = lineBoxOf(seite.div, seite.textDiv, caretRectAt(seite.textDiv, pos, flach), 1);
+    const mitte = zeichen.top + zeichen.height / 2 - pageRect.top;
+
+    // Wie weit ist die Mitte des Kastens von der des Zeichens weg?
+    const ab = Math.abs((box.top + box.height / 2) - mitte);
+    if (ab > groesste) groesste = ab;
+    if (!fehler && (mitte < box.top || mitte > box.top + box.height)) {
+      fehler = 'Stelle ' + pos + ': Zeichenmitte ' + mitte.toFixed(1)
+        + ' liegt nicht im Kasten ' + box.top.toFixed(1)
+        + '…' + (box.top + box.height).toFixed(1);
+    }
+  }
+  notiz('größte Abweichung von der Zeilenmitte: ' + groesste.toFixed(1) + ' px');
+  pruefe('Auch nach zwanzig Überschriften liegt der Kasten auf der Zeile',
+    fehler === '', fehler);
+  pruefe('Und er sitzt nicht bloß knapp richtig (unter 1 px)',
+    groesste < 1, groesste.toFixed(1) + ' px daneben');
+}
+
+/* ══════════════════════════════════════════════════════════════════
    5. GEZOOMTE SEITE
 
    Der Zoom sitzt als transform:scale() auf pages-wrap. Alle gemessenen

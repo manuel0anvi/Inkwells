@@ -134,6 +134,8 @@
     if (problem === 'offline') return t('shareOffline');
     if (problem === 'signedOut') return t('shareNeedsAccount');
     if (problem === 'noIdToken') return t('shareNoIdToken');
+    // Die Adresse gehört hier schon zu einer Anmeldung über Google
+    if (problem === 'needsGoogle') return t('shareNeedsGoogleHint');
     if (problem === 'failed') {
       const detail = CloudSync_.identityError || '';
 
@@ -214,14 +216,44 @@
     const btn = document.createElement('button');
     btn.className = 'settings-btn';
     btn.style.cssText = 'padding:8px 16px;font-size:13px;';
-    btn.textContent = t('sharedLinkMicrosoft');
+
+    /* ══════════════════════════════════════════════════════════════════
+       ZWEI SCHRITTE, EIN KNOPF
+
+       Gehört die Adresse hier schon zu einer Anmeldung über Google – bei
+       einem Microsoft-Konto auf einer @gmail.com nicht selten –, weist
+       Firebase die Microsoft-Anmeldung ab
+       (auth/account-exists-with-different-credential). Aufzulösen ist das
+       nur, indem man sich einmal mit Google anmeldet und Microsoft daran
+       anhängt.
+
+       Beides in einem Klick geht nicht: das zweite Fenster käme ohne
+       Zutun des Nutzers und würde geblockt. Deshalb wechselt der Knopf
+       seine Beschriftung, und der nächste Druck ist der zweite Schritt.
+       ══════════════════════════════════════════════════════════════════ */
+    const beschriften = () => {
+      const zweiter = !!window.CloudSync_?.microsoftNeedsGoogle?.();
+      btn.textContent = zweiter ? t('shareConfirmWithGoogle') : t('sharedLinkMicrosoft');
+      hinweisZweiterSchritt.style.display = zweiter ? 'block' : 'none';
+    };
+
+    const hinweisZweiterSchritt = document.createElement('div');
+    hinweisZweiterSchritt.style.cssText = 'font-size:12px;color:var(--md);'
+      + 'line-height:1.5;max-width:380px;display:none;';
+    hinweisZweiterSchritt.textContent = t('shareNeedsGoogleHint');
+
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       const vorher = btn.textContent;
       btn.textContent = t('shareCheckingAccount');
-      const ok = await CloudSync_.linkMicrosoftInteractively();
+
+      const ok = window.CloudSync_?.microsoftNeedsGoogle?.()
+        ? await CloudSync_.finishMicrosoftLinkWithGoogle()
+        : await CloudSync_.linkMicrosoftInteractively();
+
       btn.disabled = false;
       btn.textContent = vorher;
+      beschriften();
       await danach(ok);
     });
 
@@ -243,7 +275,8 @@
     text.appendChild(hinweis);
     label.append(haken, text);
 
-    box.append(btn, label);
+    beschriften();
+    box.append(btn, hinweisZweiterSchritt, label);
     return box;
   }
 

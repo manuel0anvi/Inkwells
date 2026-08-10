@@ -46,12 +46,27 @@ function isVerticalMode() {
   return window.innerHeight > window.innerWidth;
 }
 
+/**
+ * Der Zoom, mit dem die Seite im Hochformat empfangen wird.
+ *
+ * >>> Eingepasst wird die BREITE, nicht die ganze Seite <<<
+ * Hier stand `Math.min(breite, hoehe)` – die ganze Seite musste also
+ * hineinpassen, Höhe eingeschlossen. Eine A4-Seite ist 1123 px hoch; auf
+ * einem Laptop bleiben davon gut 800, macht rund 70 % – und weil die
+ * Grundgröße 1,2 ist, standen als Anzeige knapp 60 %. Gemeldet wurde das
+ * als „auf dem Laptop ist der Zoom ganz klein eingestellt", und das ist
+ * es auch: Text in 10 px liest niemand gern.
+ *
+ * Eingepasst wird deshalb die Breite. Die Seite füllt den Schirm, und
+ * geblättert wird wie überall sonst auch – auf Papier sieht man ja
+ * ebenfalls nicht immer das ganze Blatt. Wer die ganze Seite sehen will,
+ * zieht sie mit zwei Fingern kleiner.
+ */
 function getVerticalFitZoom() {
   const sc = E('pg-scroll');
   if (!sc) return null;
   const availW = Math.max(1, sc.clientWidth - 16);
-  const availH = Math.max(1, sc.clientHeight - 16);
-  const fit = Math.min(availW / CFG.PAGE_W, availH / CFG.PAGE_H);
+  const fit = availW / CFG.PAGE_W;
   return Math.max(ZOOM_MIN, Math.min(VERTICAL_MAX_ZOOM, fit));
 }
 
@@ -159,9 +174,32 @@ function refreshSizer() {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   UMKLAPPEN UND ZURÜCK
+
+   >>> Warum der Laptop danach „ganz klein eingestellt" war <<<
+   Im Hochformat passt sich die Seite ein – das ist gewollt. Beim
+   Zurückklappen ins Querformat blieb dieser eingepasste Wert aber
+   einfach stehen: _applyZoom() rechnet nur im Hochformat neu, und
+   niemand setzte ihn zurück. Der Laptop stand danach dauerhaft auf gut
+   der Hälfte, ohne dass irgendetwas darauf hingedeutet hätte. Genau so
+   wurde es gemeldet.
+
+   Gemerkt wird deshalb, was im Querformat galt, und beim Zurückklappen
+   gilt es wieder – auch ein von Hand eingestellter Wert.
+   ══════════════════════════════════════════════════════════════════════ */
+let _querZoom = BASE_ZOOM;
+
 window.addEventListener('resize', () => {
   const nowVertical = isVerticalMode();
-  if (nowVertical && !_lastVerticalMode) _verticalAutoFit = true;
+  if (nowVertical && !_lastVerticalMode) {
+    _querZoom = _zoom;
+    _verticalAutoFit = true;
+  }
+  if (!nowVertical && _lastVerticalMode) {
+    _verticalAutoFit = false;
+    _zoom = _querZoom;
+  }
   _lastVerticalMode = nowVertical;
   _applyZoom();
 }, { passive: true });

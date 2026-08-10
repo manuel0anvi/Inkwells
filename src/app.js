@@ -788,39 +788,58 @@ E('btn-panel-toggle').addEventListener('click', () => {
    DIE ABSCHNITTE MIT DEM FINGER AUFZIEHEN
 
    Mit der Maus ist der Knopf am Rand der Weg; mit dem Finger sucht man
-   ihn: 28 px in einer 36 px schmalen Leiste, weit weg vom Daumen. Gemeldet
-   wurde, dass ein Wischen an dieser Leiste nach rechts nichts tut, obwohl
-   genau das die erwartete Bewegung ist.
+   ihn: 28 px in einer 36 px schmalen Leiste, weit weg vom Daumen.
 
-   Angefasst wird die Leiste selbst, nicht der ganze linke Rand: dort liegt
-   im offenen Zustand der Baum, und ein Wischen darin soll ihn scrollen.
-   Nach links zu geht sie ueberall auf der Leiste zu.
+   >>> Warum es NICHT an der Leiste selbst anfangen darf <<<
+   Der erste Anlauf horchte nur auf der Leiste. Die ist 36 px breit und
+   klebt am linken Fensterrand – bei einem Vollbild also am
+   BILDSCHIRMrand. Genau dort greift Windows selbst zu: ein Wischen von
+   links holt die Widgets herein. Gemeldet wurde beides, was daraus
+   folgt: „geht ganz selten" und „stattdessen geht dieses Microsoft-Ding
+   auf". Was Windows abfängt, sieht die App nie.
+
+   Deshalb reicht das Band jetzt RAND px über die Leiste hinaus. Der
+   Finger kann mitten im Fenster ansetzen, wo ihm niemand dazwischenkommt.
+   Zumachen geht überall auf der offenen Leiste – auch das war „richtig
+   schwer", solange es nur auf den 36 px am Bildschirmrand ging.
+
+   Waagerecht muss die Bewegung sein: senkrecht wird gescrollt. Und beim
+   Zeichnen gilt sie gar nicht, sonst würde jeder Strich am linken
+   Seitenrand die Leiste aufziehen.
    ══════════════════════════════════════════════════════════════════════ */
 (function () {
   const panel = E('side-panel');
-  if (!panel) return;
-  const WISCH_MIN = 40;      // darunter ist es ein Tippen, kein Wischen
+  const layout = document.querySelector('.journal-layout');
+  if (!panel || !layout) return;
+
+  const WISCH_MIN = 32;      // darunter ist es ein Tippen, kein Wischen
+  const RAND = 56;           // so weit rechts der Leiste darf es anfangen
   let x0 = 0, y0 = 0, aktiv = false;
 
-  panel.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { aktiv = false; return; }
-    // Im offenen Zustand zaehlt nur die schmale Leiste, nicht der Inhalt
-    const aufLeiste = !!e.target.closest('.side-strip');
-    aktiv = aufLeiste || !panel.classList.contains('open');
-    x0 = e.touches[0].clientX;
-    y0 = e.touches[0].clientY;
+  layout.addEventListener('touchstart', e => {
+    aktiv = false;
+    if (e.touches.length !== 1) return;
+    // Ein Zeichenwerkzeug hat Vorrang – der Strich gehört dem Papier
+    if (typeof touchDrawActive === 'function' && touchDrawActive()) return;
+
+    const t = e.touches[0];
+    const r = panel.getBoundingClientRect();
+    if (t.clientX > r.right + RAND) return;
+
+    aktiv = true;
+    x0 = t.clientX;
+    y0 = t.clientY;
   }, { passive: true });
 
-  panel.addEventListener('touchend', e => {
+  layout.addEventListener('touchend', e => {
     if (!aktiv) return;
     aktiv = false;
     const t = e.changedTouches && e.changedTouches[0];
     if (!t) return;
     const dx = t.clientX - x0, dy = t.clientY - y0;
-    // Waagerecht muss es deutlich sein, sonst war es ein Scrollen
-    if (Math.abs(dx) < WISCH_MIN || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (Math.abs(dx) < WISCH_MIN || Math.abs(dx) <= Math.abs(dy)) return;
 
-    /* Das Wischen faengt oft auf dem Knopf selbst an – er fuellt die
+    /* Das Wischen fängt oft auf dem Knopf selbst an – er füllt die
        Leiste fast aus. Ohne das hier folgte dem Wischen sein Klick, und
        der schloss die gerade aufgezogene Leiste sofort wieder. */
     e.preventDefault();

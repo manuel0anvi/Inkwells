@@ -1076,7 +1076,17 @@
         cx: typeof frisch.cx === 'string' ? frisch.cx : '',
         lockFrom: Number.isFinite(frisch.lockFrom) ? frisch.lockFrom : -1,
         lockTo: Number.isFinite(frisch.lockTo) ? frisch.lockTo : -1,
-        lockAt: Number.isFinite(frisch.lockAt) ? frisch.lockAt : 0
+        lockAt: Number.isFinite(frisch.lockAt) ? frisch.lockAt : 0,
+
+        /* Was die Anwesenheit sagt, bleibt daneben stehen – sie ist
+           JÜNGER (150 ms statt 300 ms) und damit genauer, sobald sie zum
+           hiesigen Text passt. Ob sie das tut, kann erst peopleOnPage
+           entscheiden: dort liegt der Text. Siehe dort. */
+        praesenz: (person.pageId === frisch.pageId
+                   && Number.isFinite(person.offset) && person.offset >= 0)
+          ? { offset: person.offset, cx: person.cx,
+              lockFrom: person.lockFrom, lockTo: person.lockTo, lockAt: person.lockAt }
+          : null
       };
     });
   }
@@ -1191,6 +1201,29 @@
 
     return peopleNow().filter(p => p.pageId === pageId).map(person => {
       if (inhalt === null || !Number.isFinite(person.offset) || person.offset < 0) return person;
+
+      /* ══════════════════════════════════════════════════════════════
+         DIE JÜNGERE STELLE, ABER NUR WENN SIE ZU DIESEM TEXT PASST
+
+         Beim Tippen gilt die Stelle aus der Textänderung (opCarets) –
+         sie gehört zum selben Text und kann deshalb nicht danebenliegen.
+         Sie ist aber bis zu 300 ms alt, und die Anwesenheit meldet alle
+         150 ms. Wer den Cursor nur BEWEGT, ohne zu tippen, wurde dadurch
+         bis zu 900 ms lang an seiner alten Stelle gezeigt: die Marke
+         stand sichtbar hinter dem, was der andere tat.
+
+         Übernommen wird die jüngere Stelle deshalb genau dann, wenn ihr
+         Anker HIER wiederzufinden ist. Das ist der Beweis, dass sie sich
+         auf denselben Text bezieht. Hat der andere inzwischen etwas
+         getippt, das hier noch fehlt, enthält der Anker genau diese
+         Zeichen – er wird nicht gefunden, und es bleibt bei der Stelle
+         aus der Textänderung. Genau davor sollte der Vorrang schützen. */
+      if (person.praesenz && person.praesenz.cx
+          && stelleAusAnker(inhalt, person.praesenz.offset, person.praesenz.cx) !== null) {
+        // Umgerechnet wird sie gleich darunter, wie jede andere auch –
+        // dann wandert die Sperre um denselben Betrag mit.
+        person = { ...person, ...person.praesenz };
+      }
 
       const stelle = findeStelle(inhalt, person.offset, person.cx);
       const versatz = stelle - person.offset;

@@ -249,6 +249,23 @@ body.touch-input .nb-card-edit-btn {
   opacity: 1
 }
 
+/* ── Und im Hochformat von vornherein ───────────────────────────────
+   Die Klasse oben kommt erst mit der ersten Berührung – wer den Laptop
+   gerade umgeklappt hat, musste deshalb erst irgendwohin tippen, damit
+   der Punkteknopf überhaupt erscheint. Genau so wurde es gemeldet.
+
+   Hochformat heißt bei einem Gerät mit Finger: Tablet. Dann gibt es kein
+   Schweben, und die Knöpfe gehören von Anfang an hin – ohne Ereignis,
+   also schon beim Aufbau der Seite. */
+@media (any-pointer: coarse) and (orientation: portrait) {
+
+  .sec-edit-btn,
+  .mgr-side-tools,
+  .nb-card-edit-btn {
+    opacity: 1
+  }
+}
+
 /* VERTICAL / PORTRAIT MODE (16:10, tablet) */
 @media (max-width:1100px) {
   .side-panel.open .side-content {

@@ -195,6 +195,40 @@ app.on('ready', async () => {
     }
 
     /* ══════════════════════════════════════════════════════════════════
+       2b. WIE SCHNELL FOLGT DIE MARKE EINER REINEN BEWEGUNG?
+
+       Beim Tippen gilt die Stelle aus der Textänderung – sie gehört zum
+       selben Text. Wer den Cursor nur BEWEGT, tippt aber nicht, und lag
+       dadurch bis zu 900 ms (OP_CARET_TTL_MS) hinter dem, was er tut:
+       die Marke stand sichtbar zurück. Gemeldet als „der Cursor ist zu
+       weit zurück".
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Eine reine Cursorbewegung kommt zügig an');
+
+    /* Erst tippen, damit die Stelle aus der Textänderung frisch ist und
+       ihren Vorrang wirklich ausübt – sonst prüft man ins Leere. */
+    await A(`pruefstand.setzeText(${JSON.stringify('<p>Eins</p><p>Zwei</p><p>DXreiZ</p><p>Vier</p>')}, 13)`);
+    await warte(150);
+    const vorSprung = await B('pruefstand.fremdeMarken()');
+
+    // Ans Ende von Zeile 3 („Vier"), ohne einen einzigen Anschlag
+    const zielStelle = await A('pruefstand.text().length');
+    const t1 = Date.now();
+    await A(`pruefstand.markeAuf(${zielStelle})`);
+    let gefolgt = null;
+    while (Date.now() - t1 < 1500) {
+      const m = await B('pruefstand.fremdeMarken()');
+      if (m.length && (!vorSprung.length || m[0].top !== vorSprung[0].top)) {
+        gefolgt = Date.now() - t1; break;
+      }
+      await warte(40);
+    }
+    pruefe('Die Marke folgt einer Bewegung nach '
+      + (gefolgt === null ? 'GAR NICHT' : gefolgt + ' ms'),
+      gefolgt !== null && gefolgt < 500,
+      'sie hängt an der letzten Textänderung fest');
+
+    /* ══════════════════════════════════════════════════════════════════
        3. FLACKERT ES?
 
        Wird bei jedem Bild ein neues Element gebaut, gibt es keinen

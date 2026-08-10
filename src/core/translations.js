@@ -328,6 +328,13 @@ const TRANSLATIONS = {
     shareCredentialRejected: 'Firebase hat den Anmelde-Nachweis abgelehnt. Diese Meldung nennt Firebase für mehrere Ursachen: der Anbieter ist nicht eingeschaltet, in der Console steht eine andere Anwendungs-ID als in cloudConfig.js, die Weiterleitungs-URL von Firebase fehlt beim Anbieter, oder das Konto stammt aus einem Mandanten, den der Anbieter dort nicht abdeckt (CLOUD_SETUP.md, Abschnitt C5). Die Originalmeldung steht dahinter.',
     shareMicrosoftUnsupported: 'Für geteilte Dokumente braucht Microsoft einen zweiten Schritt: Firebase nimmt nur eine Anmeldung an, die es selbst begonnen hat. Ein Klick auf den Knopf darunter holt das nach – meist ohne dass du etwas eingeben musst.',
     sharedLinkMicrosoft: 'Für geteilte Dokumente anmelden',
+    /* Zweiter Schritt, wenn dieselbe Adresse hier schon über Google
+       angemeldet war – bei einem Microsoft-Konto auf einer @gmail.com
+       der Normalfall. Beides gehört danach zu einem Konto. */
+    shareConfirmWithGoogle: 'Mit Google bestätigen',
+    shareNeedsGoogleHint: 'Diese Adresse gehört hier schon zu einer Anmeldung über Google. '
+      + 'Bestätige sie einmal mit Google – danach gehört dein Microsoft-Konto dazu, '
+      + 'und du kannst dich künftig mit beidem anmelden.',
     autoLinkShare: 'Künftig von selbst anmelden',
     autoLinkShareHint: 'Inkwell holt den Schritt beim Start still nach. Braucht Microsoft doch eine Eingabe, passiert nichts und der Knopf ist wieder da.',
     autoLinkShareSetting: 'Für geteilte Dokumente angemeldet bleiben',
@@ -917,6 +924,10 @@ const TRANSLATIONS = {
     shareCredentialRejected: 'Firebase rejected the sign-in proof. Firebase uses this one message for several causes: the provider is not enabled, the console holds a different application ID than cloudConfig.js, the Firebase redirect URL is missing at the provider, or the account comes from a tenant the provider does not cover there (CLOUD_SETUP.md, section C5). The original message follows.',
     shareMicrosoftUnsupported: 'Shared documents need one extra step with Microsoft: Firebase only accepts a sign-in it started itself. The button below does that — usually without you having to type anything.',
     sharedLinkMicrosoft: 'Sign in for shared documents',
+    shareConfirmWithGoogle: 'Confirm with Google',
+    shareNeedsGoogleHint: 'This address already belongs to a Google sign-in here. '
+      + 'Confirm it once with Google — after that your Microsoft account belongs to it too, '
+      + 'and you can use either one.',
     autoLinkShare: 'Do this automatically from now on',
     autoLinkShareHint: 'Inkwell repeats the step quietly at startup. If Microsoft does need input, nothing happens and the button is back.',
     autoLinkShareSetting: 'Stay signed in for shared documents',
@@ -1500,6 +1511,10 @@ const TRANSLATIONS = {
     shareCredentialRejected: 'Firebase ha rifiutato la prova di accesso. Firebase usa questo unico messaggio per piu cause: il fornitore non e attivo, nella console c\'e un ID applicazione diverso da cloudConfig.js, manca l\'URL di reindirizzamento di Firebase presso il fornitore, oppure l\'account proviene da un tenant che il fornitore non copre (CLOUD_SETUP.md, sezione C5). Segue il messaggio originale.',
     shareMicrosoftUnsupported: 'Per i documenti condivisi Microsoft richiede un passo in piu: Firebase accetta solo un accesso avviato da lui stesso. Il pulsante qui sotto lo fa — di solito senza dover digitare nulla.',
     sharedLinkMicrosoft: 'Accedi per i documenti condivisi',
+    shareConfirmWithGoogle: 'Conferma con Google',
+    shareNeedsGoogleHint: 'Questo indirizzo appartiene già a un accesso con Google. '
+      + 'Confermalo una volta con Google: da quel momento il tuo account Microsoft ne fa parte '
+      + 'e puoi usare entrambi.',
     autoLinkShare: 'D\'ora in poi fallo da solo',
     autoLinkShareHint: 'Inkwell ripete il passaggio in silenzio all\'avvio. Se Microsoft richiede comunque un\'immissione, non succede nulla e il pulsante torna.',
     autoLinkShareSetting: 'Resta connesso per i documenti condivisi',

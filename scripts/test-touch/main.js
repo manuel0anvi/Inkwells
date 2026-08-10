@@ -480,6 +480,30 @@ app.on('ready', async () => {
       (await js(`document.getElementById('side-panel').classList.contains('open')`)) === false,
       'sie blieb offen');
 
+    /* >>> Und jetzt mit Abstand zum Bildschirmrand <<<
+       Am Rand selbst greift Windows zu (Widgets), die App sieht davon
+       nichts. Deshalb muss es auch ein Stück weiter rechts anfangen
+       koennen – sonst geht es auf einem Vollbild fast nie. */
+    await ziehe(strip.x + 46, strip.y + 160, strip.x + 190, strip.y + 168);
+    pruefe('Auch mit Abstand zum Bildschirmrand zieht es auf',
+      (await js(`document.getElementById('side-panel').classList.contains('open')`)) === true,
+      'nur unmittelbar am Rand – und dort fängt Windows es ab');
+
+    /* Zumachen muss ueberall auf der offenen Leiste gehen, nicht nur auf
+       den 36 px ganz aussen. */
+    const inhalt = await mitte('#side-content');
+    await ziehe(inhalt.x, inhalt.y, inhalt.x - 120, inhalt.y + 8);
+    pruefe('Und aus dem Inhalt heraus geht sie wieder zu',
+      (await js(`document.getElementById('side-panel').classList.contains('open')`)) === false,
+      'sie blieb offen – genau das war „richtig schwer zuzumachen"');
+
+    /* Senkrecht ist kein Wischen, sondern Scrollen. Ohne diese
+       Gegenprobe wuerde jede Fingerbewegung links die Leiste bewegen. */
+    await ziehe(strip.x + 40, strip.y + 200, strip.x + 52, strip.y + 60);
+    pruefe('Senkrecht scrollt weiterhin, statt die Leiste zu bewegen',
+      (await js(`document.getElementById('side-panel').classList.contains('open')`)) === false,
+      'ein Scrollen hat die Leiste aufgezogen');
+
     /* ══════════════════════════════════════════════════════════════════
        DIE DREI PUNKTE AN DER HEFTKARTE
 
@@ -491,6 +515,18 @@ app.on('ready', async () => {
     await js('showHome()');
     await new Promise(r => setTimeout(r, 400));
 
+    /* >>> Im Hochformat schon VOR der ersten Beruehrung <<<
+       Die Klasse am body kommt erst mit einem Ereignis. Wer den Laptop
+       gerade umgeklappt hat, musste deshalb erst irgendwohin tippen,
+       damit der Knopf ueberhaupt erscheint – genau so gemeldet. Geprueft
+       wird deshalb mit einer frisch geladenen Seite, die noch nie
+       beruehrt wurde: die Medienabfrage muss allein reichen. */
+    await js(`document.body.classList.remove('touch-input')`);
+    await new Promise(r => setTimeout(r, 150));
+    pruefe('Im Hochformat stehen sie ohne jede Beruehrung da',
+      (await js(`getComputedStyle(document.querySelector('.nb-card-edit-btn')).opacity`)) === '1',
+      'erst nach dem ersten Antippen – dann findet sie niemand');
+
     await tippe('.nb-card-name');
     await js(`showHome()`);   // der Tipp oeffnet das Heft – wieder zurueck
     await new Promise(r => setTimeout(r, 400));
@@ -498,12 +534,53 @@ app.on('ready', async () => {
       (await js(`getComputedStyle(document.querySelector('.nb-card-edit-btn')).opacity`)) === '1',
       'unerreichbar: ein Finger schwebt nicht');
 
+    /* Aufgeklappt, also quer: dort arbeitet :hover tadellos, und eine
+       Karte ohne Knopf ist die aufgeraeumtere Uebersicht. */
+    win.setContentSize(1200, 800);
+    await new Promise(r => setTimeout(r, 500));
     await dbg.sendCommand('Input.dispatchMouseEvent',
       { type: 'mouseMoved', x: 400, y: 300, button: 'none', buttons: 0 });
     await new Promise(r => setTimeout(r, 200));
-    pruefe('Mit der Maus verschwinden sie wieder',
+    pruefe('Aufgeklappt und mit der Maus verschwinden sie wieder',
       (await js(`getComputedStyle(document.querySelector('.nb-card-edit-btn')).opacity`)) === '0',
       'sie stehen weiter auf jeder Karte');
+
+    /* >>> Und der Zoom darf nicht klein bleiben <<<
+       Im Hochformat passt sich die Seite ein. Beim Zurueckklappen blieb
+       dieser Wert einfach stehen – der Laptop stand danach dauerhaft auf
+       gut der Haelfte, ohne dass es jemand veranlasst haette. */
+    abschnitt('Umklappen und zurueck');
+    await js(`(() => { const nb = S.notebooks[0]; openNotebook(nb.id); return true; })()`);
+    await new Promise(r => setTimeout(r, 600));
+    const zoomQuer1 = await js('getZoom()');
+    win.setContentSize(800, 1200);
+    await new Promise(r => setTimeout(r, 700));
+    const zoomHoch1 = await js('getZoom()');
+    win.setContentSize(1200, 800);
+    await new Promise(r => setTimeout(r, 700));
+    const zoomQuer2 = await js('getZoom()');
+
+    pruefe('Im Hochformat passt sich die Seite ein ('
+      + zoomQuer1.toFixed(2) + ' auf ' + zoomHoch1.toFixed(2) + ')',
+      zoomHoch1 < zoomQuer1, 'sie passt sich nicht ein');
+    pruefe('Und zurueckgeklappt gilt wieder der alte Wert ('
+      + zoomHoch1.toFixed(2) + ' auf ' + zoomQuer2.toFixed(2) + ')',
+      Math.abs(zoomQuer2 - zoomQuer1) < 0.001,
+      'der eingepasste Wert bleibt stehen – der Laptop wirkt „ganz klein eingestellt"');
+
+    /* Und eingepasst heisst BREITE, nicht ganze Seite: eine A4-Seite in
+       voller Hoehe auf einen Laptop zu quetschen macht den Text
+       unlesbar klein. */
+    win.setContentSize(800, 1200);
+    await new Promise(r => setTimeout(r, 700));
+    const passung = await js(`(() => {
+      const sc = document.getElementById('pg-scroll');
+      const pg = document.querySelector('.j-page').getBoundingClientRect();
+      return { seite: Math.round(pg.width), platz: sc.clientWidth,
+               anteil: pg.width / sc.clientWidth }; })()`);
+    pruefe('Eingepasst wird die Breite (' + passung.seite + ' von '
+      + passung.platz + ' px)', passung.anteil > 0.9 && passung.anteil <= 1.001,
+      'die Seite nutzt nur ' + Math.round(passung.anteil * 100) + '% der Breite');
 
     fertig(0);
   } catch (err) {
