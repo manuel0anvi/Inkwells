@@ -59,14 +59,37 @@ function rtdbHost(datei) {
   try { return new URL(treffer[1]).hostname; } catch (e) { return null; }
 }
 
-/** Die script-src einer Seite als Liste von Quellen. */
-function scriptSrc(datei) {
-  const html = fs.readFileSync(path.join(root, datei), 'utf8');
-  const meta = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html);
-  if (!meta) return null;
-  const teil = meta[1].split(';').map(s => s.trim()).find(s => s.startsWith('script-src'));
+/** Die Quellen einer Direktive aus einer CSP-Regel. */
+function quellenAus(regel, direktive) {
+  const teil = regel.split(';').map(s => s.trim()).find(s => s.startsWith(direktive + ' '));
   if (!teil) return null;
   return teil.split(/\s+/).slice(1);
+}
+
+/** Die script-src aus dem <meta> einer Seite. */
+function scriptSrc(datei, direktive) {
+  const html = fs.readFileSync(path.join(root, datei), 'utf8');
+  const meta = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html);
+  return meta ? quellenAus(meta[1], direktive) : null;
+}
+
+/**
+ * Die script-src der KOPFZEILE, die der oertliche Server mitschickt.
+ *
+ * >>> Warum das eigens geprueft wird <<<
+ * Es gibt die Regel ZWEIMAL: als <meta> in src/index.html und als
+ * UI_CSP in main.js. Der Browser wendet beide an, und die strengere
+ * gewinnt - eine Erlaubnis nur an einer Stelle bringt gar nichts.
+ *
+ * Genau daran ist die Zusammenarbeit ein zweites Mal gescheitert: die
+ * Datenbank war im <meta> freigegeben, in der Kopfzeile nicht. Die
+ * Konsole nannte dabei die Regel aus der Kopfzeile, was aussah, als
+ * haette die Korrektur nichts bewirkt.
+ */
+function scriptSrcKopfzeile(direktive) {
+  const js = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
+  const m = /const UI_CSP = "([^"]+)"/.exec(js);
+  return m ? quellenAus(m[1], direktive) : null;
 }
 
 /**
@@ -103,10 +126,22 @@ const seiten = [
   'website/dashboard/index.html'
 ];
 
-for (const seite of seiten) {
-  const quellen = scriptSrc(seite);
-  check(seite + ' hat ueberhaupt eine script-src', Array.isArray(quellen), true);
-  check(seite + ' laesst ' + hostApp + ' durch', laesstDurch(quellen, hostApp), true);
+/* Beide Direktiven werden gebraucht: Long-Polling laedt ein <script>
+   UND baut einen Rahmen auf. Fehlt eine, bleibt der Weg zu. */
+for (const direktive of ['script-src', 'frame-src']) {
+  for (const seite of seiten) {
+    const quellen = scriptSrc(seite, direktive);
+    check(seite + ' · ' + direktive + ' vorhanden', Array.isArray(quellen), true);
+    check(seite + ' · ' + direktive + ' laesst die Datenbank durch',
+      laesstDurch(quellen, hostApp), true);
+  }
+
+  /* Die zweite Regel: die Kopfzeile des oertlichen Servers. Sie gilt
+     ZUSAETZLICH zum <meta> - beide muessen erlauben. */
+  const kopf = scriptSrcKopfzeile(direktive);
+  check('main.js · UI_CSP hat ' + direktive, Array.isArray(kopf), true);
+  check('main.js · UI_CSP laesst die Datenbank durch (' + direktive + ')',
+    laesstDurch(kopf, hostApp), true);
 }
 
 /* ── Und die Gegenprobe ────────────────────────────────────────────────

@@ -59,11 +59,25 @@
    * Vorher scheiterte sie stumm: die App sah aus wie immer, nur kam
    * nichts an und niemand wusste warum.
    */
+  /* Steht die Leitung zur Live-Datenbank? null = noch nichts gehoert. */
+  let verbindungSteht = null;
+  let stopVerbindung = null;
+
   function showLiveState() {
     const el = E('collab-state');
     if (!el) return;
 
     if (room) {
+      /* Betreten heisst noch nicht, dass etwas ankommt. Steht die
+         Leitung nicht, laeuft alles weiter, als sei nichts - geschrieben
+         wird in eine Warteschlange, die niemand sieht. Das gehoert in
+         den Streifen, und zwar solange es anhaelt. */
+      if (verbindungSteht === false) {
+        el.style.display = 'inline';
+        el.textContent = t('collabOffline') + ' — ' + t('collabBlocked');
+        el.title = '';
+        return;
+      }
       el.textContent = '';
       el.style.display = 'none';
       return;
@@ -2052,6 +2066,17 @@
         memberUids: opts.memberUids || {}
       });
       lastError = '';
+
+      /* Ab jetzt folgt der Streifen der Leitung. null heisst "noch nichts
+         gehoert" - dann wird nichts gemeldet, sonst blitzte bei jedem
+         Betreten kurz eine Warnung auf. */
+      verbindungSteht = null;
+      if (typeof room.onConnection === 'function') {
+        stopVerbindung = room.onConnection((steht) => {
+          verbindungSteht = steht;
+          showLiveState();
+        });
+      }
     } catch (err) {
       /* Bisher stand das nur in der Konsole – der Nutzer sah eine App, die
          aussah, als liefe alles, und wunderte sich, warum nichts ankommt.
@@ -2186,6 +2211,11 @@
     clearTimeout(fetchTimer);
     fetchTimer = null;
     fetchPending.clear();
+
+    // Die Beobachtung der Leitung ebenfalls abbestellen
+    if (typeof stopVerbindung === 'function') { try { stopVerbindung(); } catch (e) {} }
+    stopVerbindung = null;
+    verbindungSteht = null;
     reloading.clear();
     typedAt.clear();
     letzteEigeneStelle.clear();

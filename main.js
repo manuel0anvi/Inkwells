@@ -223,6 +223,20 @@ const UI_MIME = {
 };
 
 /* ── Content-Security-Policy der Oberflaeche ──────────────────────────
+
+   >>> ACHTUNG: es gibt sie ZWEIMAL <<<
+   Hier als Kopfzeile, und in src/index.html noch einmal als <meta>. Der
+   Browser wendet BEIDE an, und die strengere gewinnt - eine Erlaubnis
+   nur an einer Stelle bringt gar nichts.
+
+   Genau daran ist die Zusammenarbeit gescheitert: die Realtime Database
+   wurde im <meta> freigegeben, hier nicht, und der Rueckfallweg der
+   Datenbank (Long-Polling laedt <script src=".lp?...">) blieb weiter
+   gesperrt. Die Meldung in der Konsole nannte die Regel von HIER, was
+   wie ein unwirksamer Fix aussah.
+
+   scripts/test-csp-rtdb.js haelt beide Stellen gegen die Adresse aus
+   share.js.
    Zweite Schicht unter der Bereinigung des Seitentextes
    (src/core/sanitize.js). Die Bereinigung ist die eigentliche
    Absicherung; hier steht, was selbst dann noch nicht geht, wenn sie
@@ -243,7 +257,7 @@ const UI_MIME = {
 
    Wer connect-src spaeter enger fassen will, muss vorher Anmeldung,
    Hochladen und ein geteiltes Dokument einmal wirklich durchspielen. */
-const UI_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com; object-src 'none'; base-uri 'self'; form-action 'none'";
+const UI_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'";
 
 function startUiServer() {
   return new Promise((resolve, reject) => {

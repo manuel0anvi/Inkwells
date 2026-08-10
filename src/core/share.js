@@ -2031,6 +2031,14 @@ function colorForUid(uid) {
  * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerAway
  * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/onOp/leave
  */
+/** Ein Versprechen, das nach der Frist auf jeden Fall zurueckkommt. */
+function mitZeitgrenze(versprechen, ms) {
+  return Promise.race([
+    Promise.resolve(versprechen).catch(() => {}),
+    new Promise((fertig) => setTimeout(fertig, ms))
+  ]);
+}
+
 /**
  * Wartet, bis die Realtime Database wirklich erreichbar ist.
  *
@@ -2040,7 +2048,7 @@ function colorForUid(uid) {
  *
  * @throws {Error} RTDB_UNREACHABLE, wenn binnen der Frist nichts steht
  */
-function warteAufLeitung(mod, rtdb, timeoutMs = 8000) {
+function warteAufLeitung(mod, rtdb, timeoutMs = 12000) {
   const { ref, onValue } = mod;
   return new Promise((fertig, fehler) => {
     let stop = null;
@@ -2052,12 +2060,13 @@ function warteAufLeitung(mod, rtdb, timeoutMs = 8000) {
       if (typeof stop === 'function') stop();
       fn(arg);
     };
-    const uhr = setTimeout(() => schluss(fehler, new Error(
-      'RTDB_UNREACHABLE: Keine Verbindung zur Live-Datenbank.')), timeoutMs);
+    // Kein Fehler, nur eine Auskunft: false heisst "noch nicht", nicht
+    // "geht nicht". Siehe die Begruendung an der Aufrufstelle.
+    const uhr = setTimeout(() => schluss(fertig, false), timeoutMs);
 
     stop = onValue(ref(rtdb, '.info/connected'),
-      (snap) => { if (snap.val() === true) schluss(fertig); },
-      (err) => schluss(fehler, err));
+      (snap) => { if (snap.val() === true) schluss(fertig, true); },
+      () => schluss(fertig, false));
 
     // Kam die Antwort synchron, ist stop erst jetzt gesetzt
     if (erledigt && typeof stop === 'function') stop();
@@ -2104,16 +2113,25 @@ async function joinDocRoom(docId, options = {}) {
   const opsRef = ref(rtdb, `ops/${docId}`);
   const rolesRef = ref(rtdb, `roles/${docId}`);
 
-  /* ── Steht die Leitung ueberhaupt? ────────────────────────────────
+  /* ── Steht die Leitung? ───────────────────────────────────────────
      Die Realtime Database nimmt Schreibvorgaenge auch ohne Verbindung
-     entgegen und stellt sie zurueck. Das ist beim Arbeiten richtig -
-     hier ist es eine Falle: set() unten kaeme nie zurueck, joinDocRoom
-     haenge fuer immer, und der Streifen ueber dem Dokument sagte nichts.
+     entgegen und stellt sie zurueck. Beim Arbeiten ist das richtig; beim
+     BETRETEN ist es eine Falle, denn set() kaeme nie zurueck und
+     joinDocRoom haenge fuer immer.
 
-     Genau das ist passiert, als die CSP den Rueckfallweg der Datenbank
-     aussperrte: die App sah aus, als laufe sie, nur kam nie etwas an.
-     Deshalb zuerst nachsehen, mit Zeitgrenze. */
-  await warteAufLeitung(mod, rtdb);
+     >>> Warum das hier NICHT abbricht <<<
+     Zuerst stand hier ein Abbruch mit RTDB_UNREACHABLE. Das war zu
+     streng: auf einer traegen Leitung - Long-Polling statt WebSocket,
+     wie es hinter manchen Netzen noetig ist - dauert der Aufbau laenger
+     als jede Frist, die man ansetzen mag. Aus "langsam" wurde damit
+     "kaputt", und der Streifen meldete eine Blockade, wo nur Geduld
+     gefehlt hat.
+
+     Also: nachsehen, aber weitermachen. Steht die Leitung nicht, wird
+     unten nirgends darauf gewartet, und der Streifen sagt es - solange,
+     bis sie steht. Das Nachreichen erledigt die Datenbank selbst. */
+  const verbunden = await warteAufLeitung(mod, rtdb);
+  if (!verbunden) console.warn('[Share] Live-Datenbank noch nicht erreichbar – wird nachgereicht');
 
 
   /* ── Wer darf hier lesen und schreiben? ────────────────────────────
@@ -2133,7 +2151,11 @@ async function joinDocRoom(docId, options = {}) {
       r[uid] = true;
       if (rolle === 'edit') w[uid] = true;
     }
-    await set(rolesRef, { owner: me.uid, r, w });
+    /* Ohne Zeitgrenze: steht die Leitung nicht, kommt set() nie zurueck
+       und das Oeffnen des Hefts bliebe haengen. Der Schreibvorgang ist
+       damit nicht verloren - die Datenbank reicht ihn nach, sobald sie
+       wieder kann. */
+    await mitZeitgrenze(set(rolesRef, { owner: me.uid, r, w }), 8000);
   } else {
     /* >>> Gehört dieser Raum wirklich dem, dem das Dokument gehört? <<<
        roles/{docId} darf anlegen, wer sich selbst als owner einträgt.
@@ -2172,7 +2194,16 @@ async function joinDocRoom(docId, options = {}) {
        Jetzt wird gewartet, statt zu raten. Kommt nichts, ist das keine
        Störung: ohne anwesenden Besitzer dürfen die Eingeladenen ohnehin
        nur lesen. Der Streifen sagt es dann. */
-    await warteAufEinlass(mod, rtdb, docId, me.uid);
+    try {
+      await warteAufEinlass(mod, rtdb, docId, me.uid);
+    } catch (err) {
+      /* Ohne Leitung ist "der Besitzer hat dich nicht aufgenommen" die
+         falsche Auskunft - wir haben schlicht nie nachsehen koennen. */
+      if (!verbunden) {
+        throw new Error('RTDB_UNREACHABLE: Keine Verbindung zur Live-Datenbank.');
+      }
+      throw err;
+    }
   }
 
   const card = {
@@ -2525,7 +2556,25 @@ async function joinDocRoom(docId, options = {}) {
     catch (err) { console.warn('[Share] Rollenliste nicht geschrieben:', err?.message || err); }
   }
 
-  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles, leave };
+  /**
+   * Meldet laufend, ob die Verbindung zur Live-Datenbank steht.
+   *
+   * >>> Wofuer das da ist <<<
+   * Ein Raum, der betreten ist, heisst noch nicht, dass etwas ankommt.
+   * Reisst die Leitung - oder kam sie nie zustande, weil das Netz den
+   * Weg der Datenbank sperrt -, laeuft alles weiter, als sei nichts:
+   * geschrieben wird in eine Warteschlange, die niemand sieht.
+   *
+   * Damit kann der Streifen ueber dem Dokument den Zustand zeigen,
+   * solange er anhaelt, und ihn von selbst wieder wegnehmen.
+   */
+  function onConnection(cb) {
+    return onValue(ref(rtdb, '.info/connected'), (snap) => {
+      try { cb(snap.val() === true); } catch (e) { /* Anzeige darf nichts kosten */ }
+    });
+  }
+
+  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles, onConnection, leave };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────
