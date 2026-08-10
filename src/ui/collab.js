@@ -1511,6 +1511,12 @@
     textDiv.innerHTML = nextText;   // schon bereinigt, siehe oben
     entry.applying = false;
 
+    // Kommentar-Marken aus dem fremden Text wiederfinden
+    if (pgEl && typeof ensureCommentsFromMarkers === 'function') {
+      ensureCommentsFromMarkers(pgEl);
+      if (typeof window.refreshComments === 'function') window.refreshComments();
+    }
+
     if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
       let ziel = caret;
       const nachher = flatTextOf(textDiv);

@@ -100,6 +100,9 @@ function _applyPageSnapshot(page, snap) {
     objLayer.innerHTML = '';
     for (const obj of (page.objects || [])) placeObject(objLayer, obj, page);
   }
+
+  // Kommentar-Marken aus Firestore-Text wiederfinden
+  if (typeof ensureCommentsFromMarkers === 'function') ensureCommentsFromMarkers(pgEl);
 }
 
 /** Sichert den aktuellen Zustand einer Seite, bevor sie verändert wird. */
@@ -503,6 +506,10 @@ function appendPageDOM(page, index) {
     h.replaceWith(p);
   });
 
+  // Kommentar-Marken aus fremdem Text wiederfinden (noch bevor die
+  // Kommentardaten im Heft sind – siehe core/comments.js)
+  if (typeof ensureCommentsFromMarkers === 'function') ensureCommentsFromMarkers(div);
+
   const st = document.createElement('style');
   st.textContent = '[data-pgid="' + page.id + '"] .j-text p.j-title-1{font-size:' + Math.round(lh * .75) + 'px}[data-pgid="' + page.id + '"] .j-text p.j-title-2{font-size:' + Math.round(lh * .65) + 'px}[data-pgid="' + page.id + '"] .j-text p.j-title-3{font-size:' + Math.round(lh * .58) + 'px}[data-pgid="' + page.id + '"] .j-text h1{font-size:' + Math.round(lh * .75) + 'px}[data-pgid="' + page.id + '"] .j-text h2{font-size:' + Math.round(lh * .65) + 'px}[data-pgid="' + page.id + '"] .j-text h3{font-size:' + Math.round(lh * .58) + 'px}';
   div.appendChild(st);
@@ -587,6 +594,19 @@ function appendPageDOM(page, index) {
     if ((e.key === 'Tab' || e.key === 'Enter') && lockedHere(page, textDiv, 'insertText')) {
       e.preventDefault();
       return;
+    }
+
+    /* ── In einer Tabelle gelten Word-Regeln (core/tables.js) ──────
+       Tab in die nächste Zelle, in der letzten eine Zeile mehr; Enter
+       bleibt in der Zelle. Muss VOR den Aufzählungen stehen: eine Liste
+       in einer Tabellenzelle gibt es, und dann gewinnt die Tabelle –
+       sonst rückte Tab die Aufzählung ein, statt die Zelle zu wechseln. */
+    if (typeof handleTableKey === 'function' && !S.readOnly
+        && (e.key === 'Tab' || e.key === 'Enter')) {
+      if (handleTableKey(e)) {
+        textDiv.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
     }
 
     /* ── In einer Aufzählung gelten andere Regeln (core/lists.js) ──

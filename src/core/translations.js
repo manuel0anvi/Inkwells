@@ -130,6 +130,19 @@ const TRANSLATIONS = {
     ruler: 'Lineal',
     protractor: 'Geodreieck',
 
+    // Kommentare
+    addComment: 'Kommentar',
+    comments: 'Kommentare',
+    commentPlaceholder: 'Kommentar …',
+    commentMarker: 'Kommentar',
+    commentNeedsCaret: 'Erst in den Text klicken, dort soll die Marke hin.',
+    replyToComment: 'Antworten',
+    replyPlaceholder: 'Antwort schreiben …',
+    resolveComment: 'Erledigt',
+    reopenComment: 'Wieder öffnen',
+    deleteComment: 'Löschen',
+    confirmDeleteComment: 'Kommentar wirklich löschen?',
+
     tableRowAdd: 'Zeile darunter einfügen',
     tableRowDel: 'Zeile löschen',
     tableColAdd: 'Spalte rechts einfügen',
@@ -769,6 +782,19 @@ const TRANSLATIONS = {
     ruler: 'Ruler',
     protractor: 'Protractor',
 
+    // Comments
+    addComment: 'Comment',
+    comments: 'Comments',
+    commentPlaceholder: 'Comment …',
+    commentMarker: 'Comment',
+    commentNeedsCaret: 'Click in the text first to place the marker.',
+    replyToComment: 'Reply',
+    replyPlaceholder: 'Write a reply …',
+    resolveComment: 'Resolve',
+    reopenComment: 'Reopen',
+    deleteComment: 'Delete',
+    confirmDeleteComment: 'Really delete this comment?',
+
     tableRowAdd: 'Insert row below',
     tableRowDel: 'Delete row',
     tableColAdd: 'Insert column right',
@@ -1396,6 +1422,19 @@ const TRANSLATIONS = {
     // Righello e goniometro
     ruler: 'Righello',
     protractor: 'Goniometro',
+
+    // Commenti
+    addComment: 'Commento',
+    comments: 'Commenti',
+    commentPlaceholder: 'Commento …',
+    commentMarker: 'Commento',
+    commentNeedsCaret: 'Prima clicca nel testo per posizionare il segnalino.',
+    replyToComment: 'Rispondi',
+    replyPlaceholder: 'Scrivi una risposta …',
+    resolveComment: 'Risolto',
+    reopenComment: 'Riapri',
+    deleteComment: 'Elimina',
+    confirmDeleteComment: 'Eliminare davvero questo commento?',
 
     tableRowAdd: 'Inserisci riga sotto',
     tableRowDel: 'Elimina riga',

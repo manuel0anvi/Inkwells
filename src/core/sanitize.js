@@ -76,7 +76,7 @@
      einem style bleibt unten allein die Farbe stehen. Das Muster ist
      bewusst allgemein gehalten, damit eine neue Form nicht an zwei
      Stellen nachgetragen werden muss. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?)$/;
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?|comment-marker|resolved|no-data)$/;
 
   /* KaTeX erzeugt beim Rendern eine Vielzahl innerer Elemente mit eigenen
      Klassen. Sie alle aufzuzählen wäre brüchig – jede neue KaTeX-Version
@@ -138,6 +138,12 @@
       // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.
       if (name === 'data-latex' && el.tagName === 'SPAN'
           && el.classList.contains('j-formula')) continue;
+
+      // data-cid auf Kommentar-Marken: die Kennung des Kommentars, zu dem die
+      // Marke gehört. Ohne sie ginge die Verknüpfung zwischen Marke und Karte
+      // nach dem ersten Abgleich verloren.
+      if (name === 'data-cid' && el.tagName === 'SPAN'
+          && el.classList.contains('j-comment-marker')) continue;
 
       /* Alles Uebrige faellt weg: on*-Handler, src, href, srcset, formaction,
          data-*, xlink:href … Eine Liste des Verbotenen waere immer
