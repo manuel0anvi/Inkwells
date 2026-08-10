@@ -70,8 +70,28 @@
     }
 
     el.style.display = 'inline';
-    el.textContent = t('collabOffline');
+    el.textContent = t('collabOffline') + grundText();
     el.title = lastError || '';
+  }
+
+  /**
+   * Warum laeuft die Live-Uebertragung nicht?
+   *
+   * >>> Warum das im Streifen stehen muss <<<
+   * Bis hierher stand dort nur "Live-Uebertragung aus", und der Grund
+   * ausschliesslich im Tooltip und in der Konsole. Wer nicht auf die
+   * Idee kam, die Entwicklerwerkzeuge zu oeffnen, sah eine App, die
+   * einfach nicht zusammenarbeitet - ohne jeden Hinweis, woran es liegt.
+   * Ein blockierter Zugang zur Datenbank sieht dann genauso aus wie ein
+   * Besitzer, der das Heft noch nicht offen hat.
+   */
+  function grundText() {
+    if (!lastError) return '';
+    if (/RTDB_UNREACHABLE/.test(lastError)) return ' — ' + t('collabBlocked');
+    if (/ROOM_NOT_ADMITTED/.test(lastError)) return ' — ' + t('collabWaitingOwner');
+    if (/ROOM_OWNER_MISMATCH/.test(lastError)) return ' — ' + t('collabOwnerMismatch');
+    if (/PERMISSION_DENIED|permission_denied/i.test(lastError)) return ' — ' + t('collabDenied');
+    return '';
   }
 
   /* ── Yjs ──────────────────────────────────────────────────────────── */

@@ -451,10 +451,23 @@
          diese Person keinen Live-Betrieb (core/share.js, registerMyUid).
          Schlaegt es fehl, wird trotzdem geoeffnet: gespeichert wird
          weiterhin ueber Firestore. */
-      // Mit ?. gefragt: eine aeltere core/share.js kennt es noch nicht.
-      // Dann bleibt es beim bisherigen Verhalten – lieber ohne die
-      // Eintragung als gar kein Dokument.
-      api.registerMyUid?.(fresh.docId, fresh)?.catch?.(() => {});
+      /* >>> Abgewartet, nicht nebenher <<<
+         Hier stand ein Aufruf ohne await, und gleich danach betrat
+         Collab.start() den Raum. Der Besitzer kann die Kennung aber erst
+         in die Rollenliste aufnehmen, wenn sie im Kopf steht - und
+         solange sie fehlt, weist die Regel jede Anwesenheit ab. Der
+         Eingeladene bekam deshalb verlaesslich permission_denied, und es
+         half nur, das Dokument zuzumachen und neu zu oeffnen.
+
+         Der Fehler wird jetzt auch gemeldet statt verschluckt: ohne
+         Eintrag gibt es keinen Live-Betrieb, und das soll man sehen.
+
+         Mit ?. gefragt: eine aeltere core/share.js kennt es noch nicht. */
+      try {
+        await api.registerMyUid?.(fresh.docId, fresh);
+      } catch (err) {
+        console.warn('[SharedDocs] Eigene Kennung nicht eingetragen:', err?.message || err);
+      }
 
       Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit', {
         isOwner: false,

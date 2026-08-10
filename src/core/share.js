@@ -2031,6 +2031,69 @@ function colorForUid(uid) {
  * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerAway
  * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/onOp/leave
  */
+/**
+ * Wartet, bis die Realtime Database wirklich erreichbar ist.
+ *
+ * .info/connected ist die einzige verlässliche Auskunft darüber – ein
+ * Schreibvorgang meldet auch dann Erfolg, wenn er nur zwischengelagert
+ * wurde.
+ *
+ * @throws {Error} RTDB_UNREACHABLE, wenn binnen der Frist nichts steht
+ */
+function warteAufLeitung(mod, rtdb, timeoutMs = 8000) {
+  const { ref, onValue } = mod;
+  return new Promise((fertig, fehler) => {
+    let stop = null;
+    let erledigt = false;
+    const schluss = (fn, arg) => {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(uhr);
+      if (typeof stop === 'function') stop();
+      fn(arg);
+    };
+    const uhr = setTimeout(() => schluss(fehler, new Error(
+      'RTDB_UNREACHABLE: Keine Verbindung zur Live-Datenbank.')), timeoutMs);
+
+    stop = onValue(ref(rtdb, '.info/connected'),
+      (snap) => { if (snap.val() === true) schluss(fertig); },
+      (err) => schluss(fehler, err));
+
+    // Kam die Antwort synchron, ist stop erst jetzt gesetzt
+    if (erledigt && typeof stop === 'function') stop();
+  });
+}
+
+/**
+ * Wartet, bis der Besitzer diese Kennung in die Rollenliste des Raums
+ * aufgenommen hat.
+ *
+ * @throws {Error} ROOM_NOT_ADMITTED, wenn binnen der Frist nichts kommt
+ */
+function warteAufEinlass(mod, rtdb, docId, uid, timeoutMs = 25000) {
+  const { ref, onValue } = mod;
+  return new Promise((fertig, fehler) => {
+    let stop = null;
+    let erledigt = false;
+    const schluss = (fn, arg) => {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(uhr);
+      if (typeof stop === 'function') stop();
+      fn(arg);
+    };
+    const uhr = setTimeout(() => schluss(fehler, new Error(
+      'ROOM_NOT_ADMITTED: Der Besitzer hat diese Kennung noch nicht '
+      + 'aufgenommen.')), timeoutMs);
+
+    stop = onValue(ref(rtdb, `roles/${docId}/r/${uid}`),
+      (snap) => { if (snap.val() === true) schluss(fertig); },
+      (err) => schluss(fehler, err));
+
+    if (erledigt && typeof stop === 'function') stop();
+  });
+}
+
 async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
   const { mod, db: rtdb } = await loadRealtime();
@@ -2040,6 +2103,18 @@ async function joinDocRoom(docId, options = {}) {
   const meRef = ref(rtdb, `presence/${docId}/${me.uid}`);
   const opsRef = ref(rtdb, `ops/${docId}`);
   const rolesRef = ref(rtdb, `roles/${docId}`);
+
+  /* ── Steht die Leitung ueberhaupt? ────────────────────────────────
+     Die Realtime Database nimmt Schreibvorgaenge auch ohne Verbindung
+     entgegen und stellt sie zurueck. Das ist beim Arbeiten richtig -
+     hier ist es eine Falle: set() unten kaeme nie zurueck, joinDocRoom
+     haenge fuer immer, und der Streifen ueber dem Dokument sagte nichts.
+
+     Genau das ist passiert, als die CSP den Rueckfallweg der Datenbank
+     aussperrte: die App sah aus, als laufe sie, nur kam nie etwas an.
+     Deshalb zuerst nachsehen, mit Zeitgrenze. */
+  await warteAufLeitung(mod, rtdb);
+
 
   /* ── Wer darf hier lesen und schreiben? ────────────────────────────
      Die Mitgliedschaft steht in Firestore, und die Realtime Database
@@ -2076,6 +2151,28 @@ async function joinDocRoom(docId, options = {}) {
           + 'Kennung als das Dokument – Live-Betrieb bleibt aus.');
       }
     }
+
+    /* ── Warten, bis der Besitzer uns eingetragen hat ────────────────
+       Die Regel für presence verlangt roles/{docId}/r/{uid} === true,
+       und schreiben darf das nur der Besitzer. Bis dahin wird jeder
+       Versuch abgewiesen.
+
+       >>> Der Wettlauf, der hier verloren ging <<<
+       Beim Öffnen trägt der Eingeladene seine Kennung in den Kopf ein
+       (registerMyUid). Damit sie in der Rollenliste des Raums landet,
+       muss der Besitzer die Änderung erst bemerken und die Liste neu
+       schreiben – über Firestore zu ihm, dann in die Datenbank. Das
+       dauert einen Moment.
+
+       Vorher wurde sofort danach die Anwesenheit geschrieben: abgewiesen,
+       und dann aufgegeben. Es half nur, das Dokument zuzumachen und neu
+       zu öffnen – dann war die Kennung vom letzten Mal schon da. Genau
+       so hat es sich gemeldet.
+
+       Jetzt wird gewartet, statt zu raten. Kommt nichts, ist das keine
+       Störung: ohne anwesenden Besitzer dürfen die Eingeladenen ohnehin
+       nur lesen. Der Streifen sagt es dann. */
+    await warteAufEinlass(mod, rtdb, docId, me.uid);
   }
 
   const card = {
