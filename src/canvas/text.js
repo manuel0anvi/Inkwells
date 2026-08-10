@@ -526,8 +526,15 @@ function caretRectAt(textDiv, pos, text) {
 function lineBoxOf(pgEl, textDiv, rect, zoom) {
   const lh = parseInt(textDiv.style.lineHeight) || 32;
   const pageRect = pgEl.getBoundingClientRect();
-  const mitte = (rect.top + rect.height / 2 - pageRect.top) / zoom;
-  return { top: mitte - lh / 2, height: lh, left: (rect.left - pageRect.left) / zoom };
+  /* Die Mitte war verlässlich, solange der Browser ein Zeichen-Rechteck
+     lieferte. Liefert er aber ein 0×0‑Rechteck (leere Zeile, Ende des
+     Absatzes), liegt die Mitte auf der Grundlinie der VORHERIGEN Zeile
+     – und das Band sitzt eine ganze Zeile zu hoch.
+     Deshalb: Oberkante nehmen und auf das Raster der Zeilenhöhe runden.
+     So liegt das Band immer genau auf der Zeile, in der die Stelle steht. */
+  const raw = (rect.top - pageRect.top) / zoom;
+  const snapped = Math.round(raw / lh) * lh;
+  return { top: snapped, height: lh, left: (rect.left - pageRect.left) / zoom };
 }
 
 /* ══════════════════════════════════════════════════════════════════════

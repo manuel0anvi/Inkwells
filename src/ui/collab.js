@@ -510,7 +510,33 @@
      Textgeometrie wie flatRangeAt und werden dort auch geprüft
      (scripts/test-collab-caret.js). */
 
-  function renderCarets() {
+  /* ── Gerendert wird nur einmal je Frame ───────────────────────────
+     Das Drosseln in core/share.js (150 ms Marke, 1000 ms Seite)
+     ist eine Sache. Aber die Marke und die Sperre werden von
+     mehreren Stellen aus aufgerufen – bei jedem Eintreffen einer
+     Nachricht, beim Scrollen, nach einer Textänderung. Alle diese
+     Aufrufe im selben Frame müssen nur EIN Mal rendern.
+     Deshalb werden sie hier gesammelt und erst im nächsten
+     requestAnimationFrame ausgeführt. */
+
+  let _renderScheduled = false;
+
+  function _flushCaretsAndLocks() {
+    _renderScheduled = false;
+    _renderCaretsNow();
+    _renderLocksNow();
+  }
+
+  function scheduleCaretsAndLocks() {
+    if (_renderScheduled) return;
+    _renderScheduled = true;
+    requestAnimationFrame(_flushCaretsAndLocks);
+  }
+
+  function renderCarets() { scheduleCaretsAndLocks(); }
+  function renderLocks() { scheduleCaretsAndLocks(); }
+
+  function _renderCaretsNow() {
     document.querySelectorAll('.collab-caret').forEach(el => el.remove());
     if (!others.length) return;
 
@@ -709,6 +735,9 @@
 
   // Mehr Zeilen als das kann eine Sperre nie umfassen – Notbremse
   const LOCK_MAX_ZEILEN = 6;
+  // So viele Zeilen MINDESTENS sperren – der andere soll sehen, dass
+  // hier geschrieben wird, nicht nur einen schmalen Strich
+  const LOCK_MIN_ZEILEN = 2;
 
   /**
    * Die Zeilenkästen eines gesperrten Bereichs – einer je Bildschirmzeile.
@@ -722,6 +751,9 @@
    * Gerechnet wird deshalb aus der Geometrie: der Kasten der ersten Zeile
    * und der der letzten, und dazwischen je eine Zeilenhöhe. Das deckt
    * leere Zeilen genauso ab wie umbrochene.
+   *
+   * Seit dem 10.8.2026 kommt die Mindestzahl dazu: Liegen erste und
+   * letzte auf derselben Höhe, entsteht trotzdem ein zweites Band.
    */
   function lockZeilen(pgEl, textDiv, from, to, zoom) {
     const text = flatTextOf(textDiv);
@@ -734,14 +766,16 @@
     const hoehe = erste.height || 32;
 
     const zeilen = [erste];
-    for (let top = erste.top + hoehe; top <= letzte.top + hoehe / 2; top += hoehe) {
+    let top = erste.top + hoehe;
+    while (top <= letzte.top + hoehe / 2 || zeilen.length < LOCK_MIN_ZEILEN) {
       if (zeilen.length >= LOCK_MAX_ZEILEN) break;
       zeilen.push({ top, height: hoehe, left: erste.left });
+      top += hoehe;
     }
     return zeilen;
   }
 
-  function renderLocks() {
+  function _renderLocksNow() {
     document.querySelectorAll('.collab-lock').forEach(el => el.remove());
     if (!others.length) return;
 
@@ -1013,6 +1047,10 @@
   // So viele Zeichen je Seite reisen als Anker mit
   const CTX = 12;
 
+  // Maximaler Abstand, den ein gefundener Anker vom erwarteten Ort haben darf.
+  // Liegt er weiter weg, ist es fast sicher der falsche Treffer.
+  const CTY = 500;
+
   /** Der Anker um eine Stelle herum. */
   function ankerAt(text, pos) {
     return text.slice(Math.max(0, pos - CTX), pos + CTX);
@@ -1038,7 +1076,9 @@
     // Passt es dort, wo es soll? Der Normalfall, und er kostet fast nichts.
     if (text.slice(beginn, beginn + anker.length) === anker) return pos;
 
-    // Sonst die nächstgelegene Fundstelle nehmen
+    // Sonst die nächstgelegene Fundstelle nehmen – aber nur,
+    // wenn sie nah genug liegt. Sonst ist es ein Zufallstreffer
+    // und die ursprüngliche Stelle ist der bessere Schätzwert.
     let beste = -1;
     let abstand = Infinity;
     for (let i = text.indexOf(anker); i !== -1; i = text.indexOf(anker, i + 1)) {
@@ -1046,7 +1086,8 @@
       const d = Math.abs(kandidat - pos);
       if (d < abstand) { abstand = d; beste = kandidat; }
     }
-    return beste === -1 ? pos : beste;
+    if (beste !== -1 && abstand <= CTY) return beste;
+    return pos;
   }
 
   /**
@@ -1285,8 +1326,16 @@
     if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
       let ziel = caret;
       const nachher = flatTextOf(textDiv);
-      if (vorher !== null) {
-        try { ziel = shiftedPos(vorher, nachher, caret); } catch (e) { ziel = caret; }
+      /* Den Anker VOR dem DOM-Tausch nehmen. Er sucht dieselben
+         24 Zeichen im neuen Text – unabhängig davon, was sich sonst
+         geändert hat. shiftedPos mit textDelta verschmolz dagegen
+         lokale und fremde Änderungen zu einem Block, und die eigene
+         Marke sprang zum fremden Text („Cursor beim anderen"). */
+      if (vorher !== null && caret < vorher.length) {
+        try {
+          const anker = ankerAt(vorher, caret);
+          if (anker) ziel = findeStelle(nachher, caret, anker);
+        } catch (e) { /* bleibt caret */ }
       }
       let gesetzt = false;
       try { gesetzt = setFlatCaret(textDiv, ziel); } catch (e) { gesetzt = false; }
