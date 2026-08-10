@@ -247,6 +247,95 @@
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DIE WERKZEUGLEISTE MUSS OHNE SCHIEBEN HINEINPASSEN
+
+   Sie kann seitlich rollen (css/toolbar.css), aber das ist ein Notnagel
+   und keine Bedienung: was rechts heraussteht, findet niemand, und mit
+   dem Finger ist ein waagerechtes Schieben in einer 40 px hohen Leiste
+   kaum zu treffen. Im Hochformat – also sobald jemand den Laptop
+   umklappt – stand die Haelfte draussen.
+
+   >>> ENG WIRD ES AUF ZWEI WEGEN <<<
+   Der eine ist das schmale Fenster. Der andere ist die aufgeklappte
+   Navigation: sie nimmt rund 230 px weg, und die fehlen der Leiste
+   genauso. Eine Regel, die nur nach der Fensterbreite fragt, uebersieht
+   den zweiten Weg vollstaendig – bei 1200 px mit offener Navigation
+   standen gemessen 166 px draussen, ohne dass irgendeine Regel griff.
+   Jede Stufe steht deshalb zweimal da, einmal je Weg. Die Schwelle mit
+   Navigation liegt um deren Breite hoeher.
+
+   >>> WARUM NICHT CONTAINER-ABFRAGEN <<<
+   Sauberer waere `@container` an .editor-col – der schrumpft ja
+   wirklich mit, und beide Wege waeren damit derselbe. Es scheidet aus:
+   `container-type: inline-size` bringt Layout-Eingrenzung mit, und damit
+   wuerde .editor-col zum Bezugspunkt fuer `position: fixed` darin. Genau
+   das ist #txt-color-dropdown, und ui/toolbar.js setzt seine Stelle in
+   Fensterkoordinaten – die Farbauswahl saesse daneben.
+
+   >>> WAS IN WELCHER REIHENFOLGE WEICHT <<<
+   Stufe 1 – Beschriftung und Zier. Kostet nichts als Aussehen.
+   Stufe 2 – was es anderswo auch gibt: Zoom + und − (zwei Finger und
+             Strg++/− tun dasselbe, der Prozentwert bleibt), Freigeben
+             und Exportieren (stehen weiterhin im Kontextmenue eines
+             Hefts auf der Startseite, wo sie vorher allein standen).
+
+   Die Werkzeuge selbst, die Textformate und das Einfuegen bleiben immer
+   stehen: fuer das Einfuegen gibt es keinen zweiten Weg.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Stufe 1, Weg „Navigation offen" ────────────────────────────────
+   Ohne Navigation passt die volle Leiste bis etwa 1150 px; mit ihr
+   entsprechend rund 230 px frueher. */
+@media (max-width:1350px) {
+
+  .journal-layout:has(#side-panel.open) .tb-mode span,
+  .journal-layout:has(#side-panel.open) .tb-sep,
+  .journal-layout:has(#side-panel.open) .tb-sep-sm {
+    display: none
+  }
+
+  .journal-layout:has(#side-panel.open) .tb-grp {
+    gap: 1px
+  }
+}
+
+/* ── Stufe 1, Weg „schmales Fenster" ───────────────────────────────── */
+@media (max-width:1150px) {
+
+  .tb-mode span,
+  .tb-sep,
+  .tb-sep-sm {
+    display: none
+  }
+
+  .tb-grp {
+    gap: 1px
+  }
+}
+
+/* ── Stufe 2, Weg „Navigation offen" ───────────────────────────────── */
+@media (max-width:1130px) {
+
+  .journal-layout:has(#side-panel.open) #btn-zoom-in,
+  .journal-layout:has(#side-panel.open) #btn-zoom-out,
+  .journal-layout:has(#side-panel.open) #btn-doc-share,
+  .journal-layout:has(#side-panel.open) #btn-doc-export {
+    display: none
+  }
+
+  /* Der Speicherstand ist eine Anzeige, kein Weg zu etwas: gespeichert
+     wird von selbst und mit Strg+S. Er weicht deshalb hier mit. */
+  .journal-layout:has(#side-panel.open) #save-status {
+    display: none
+  }
+
+  .journal-layout:has(#side-panel.open) .tb-mode,
+  .journal-layout:has(#side-panel.open) .tb-opt {
+    padding: 4px 6px
+  }
+}
+
 @media (max-width:900px) {
 
   /* Stack: nav takes less space, pages scale down automatically */
@@ -281,38 +370,28 @@
     justify-content: flex-end
   }
 
-  .tb-mode span,
-  .tb-mode:not(.active) span {
-    display: none
-  }
-
-  .tb-sep {
-    display: none
-  }
-
   /* Hide save text in vertical/portrait mode */
   .save-text {
     display: none !important;
   }
 
-  /* ── Nur wenn die Navigation Platz wegnimmt ─────────────────────────
-     Aufgeraeumt wird erst, wenn es noetig ist. Steht die Leiste zu, ist
-     im Hochformat genug Raum – dann bleibt alles stehen, was hineinpasst.
-     :has() prueft den Zustand der Leiste am gemeinsamen Vorfahren; anders
-     kaeme die Werkzeugleiste nicht an ihn heran, sie ist ihr Nachbar. */
-  .journal-layout:has(#side-panel.open) .tb-sep-sm {
+  /* ── Stufe 2, Weg „schmales Fenster" ─────────────────────────────
+     Siehe die Erklaerung ueber den Stufen weiter oben. */
+  #btn-zoom-in,
+  #btn-zoom-out,
+  #btn-doc-share,
+  #btn-doc-export {
     display: none
   }
 
-  /* Zwei Finger tun dasselbe; der Prozentwert bleibt und setzt zurueck */
-  .journal-layout:has(#side-panel.open) #btn-zoom-in,
-  .journal-layout:has(#side-panel.open) #btn-zoom-out {
+  /* ── Stufe 3, nur mit offener Navigation ─────────────────────────
+     Im Hochformat unter 800 px bleiben davon noch keine 540 px fuer
+     die Leiste uebrig – dann muss auch der letzte Zoomknopf weichen.
+     Er faellt am wenigsten ins Gewicht: im Hochformat passt Inkwell
+     die Seite ohnehin von selbst ein (core/zoom.js), zwei Finger
+     zoomen weiter, und Strg+0 setzt zurueck. */
+  .journal-layout:has(#side-panel.open) #btn-zoom-reset {
     display: none
-  }
-
-  .journal-layout:has(#side-panel.open) .tb-mode,
-  .journal-layout:has(#side-panel.open) .tb-opt {
-    padding: 4px 6px
   }
 }
 
