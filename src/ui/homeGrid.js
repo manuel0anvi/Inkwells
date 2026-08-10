@@ -384,3 +384,26 @@ E('nb-modal-ok').addEventListener('click', async () => {
   }
 });
 document.addEventListener('keydown', e => { if (E('ov-nb').style.display !== 'none' && e.key === 'Enter') E('nb-modal-ok').click(); if (E('ov-nb').style.display !== 'none' && e.key === 'Escape') E('ov-nb').style.display = 'none'; });
+
+/* ── Scroll-Erkennung für Karten-Knöpfe ──────────────────────────────
+   Die drei Punkte (⋯) auf den Heft-Karten sollen nur beim Scrollen oder
+   im Tablet-Modus sichtbar sein, nicht bei jedem Hover mit der Maus. */
+(function () {
+  let scrollTimer = 0;
+  const SCROLL_VISIBLE_MS = 600;  // so lange bleiben die Knöpfe nach dem letzten Scrollen
+
+  function beimScrollen() {
+    document.body.classList.add('scrolling');
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      document.body.classList.remove('scrolling');
+    }, SCROLL_VISIBLE_MS);
+  }
+
+  window.addEventListener('scroll', beimScrollen, { passive: true });
+  // Auch im Fokus der Seitenleiste (pg-scroll) – die Startseite scrollt mit window,
+  // aber im Editor läuft scroll über #pg-scroll. Dort sind die Karten nicht zu sehen,
+  // trotzdem sauber bleiben.
+  const pgScroll = document.getElementById('pg-scroll');
+  if (pgScroll) pgScroll.addEventListener('scroll', beimScrollen, { passive: true });
+})();
