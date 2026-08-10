@@ -1,7 +1,38 @@
 /* Module: Responsive Design & Media Queries */
 
-/* Touch: make all interactive elements larger for fingers */
-@media (pointer:coarse) {
+/* ══════════════════════════════════════════════════════════════════════
+   MIT DEM FINGER BEDIENBAR
+
+   >>> Warum any-pointer und nicht pointer <<<
+   `pointer` fragt nach dem PRIMAEREN Zeiger – und der ist auf einem
+   umklappbaren Laptop das Trackpad, nicht der Finger. Auf genau der
+   Sorte Geraet, fuer die dieser Block gedacht ist, traf er also nie zu:
+
+     Reines Tablet          pointer: coarse   -> Block greift
+     Laptop mit Touchscreen pointer: fine     -> Block greift NICHT
+     Schreibtisch ohne Touch pointer: fine    -> Block greift nicht
+
+   Der mittlere Fall ist der wichtigste, und er fiel durch. Gemessen sind
+   die Knoepfe dann 28x24 statt 36x36 px, der schmale Teil des geteilten
+   Listenknopfs sogar nur 18 px breit – das trifft kein Finger. Schlimmer
+   noch: alles, was sich erst bei :hover einblendet (die Stiftknoepfe an
+   Heft und Abschnitt), war mit dem Finger UEBERHAUPT nicht erreichbar,
+   denn ein Finger schwebt nicht.
+
+   Und das Umklappen aendert daran nichts: Windows meldet das Trackpad
+   auch im Tablet-Modus weiter, der primaere Zeiger bleibt fein.
+
+   `any-pointer: coarse` fragt stattdessen: gibt es hier ueberhaupt
+   irgendetwas Grobes? Damit sind alle drei Faelle richtig bedient. Die
+   Umstellung kann nur MEHR Geraete treffen als vorher, nie weniger – wo
+   `pointer: coarse` zutrifft, trifft `any-pointer: coarse` auch zu.
+
+   Der Preis: wer einen Touchscreen hat und trotzdem mit der Maus
+   arbeitet, bekommt die groesseren Knoepfe ebenfalls. Fuer ein Heft, das
+   man jederzeit anfassen koennen soll, ist das die richtige Seite zum
+   Irren.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (any-pointer: coarse) {
 
   .tb-mode,
   .tb-opt,
