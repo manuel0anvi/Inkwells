@@ -62,23 +62,34 @@
     return STYLE_BY_ID.get(id) || STYLE_BY_ID.get(DEFAULT_UL);
   }
 
-  /* Zuletzt gewählte Form je Art. Bleibt über Sitzungen erhalten – wer
-     einmal auf Striche umgestellt hat, will sie beim nächsten Mal wieder. */
+  /* Zuletzt gewählte Form je Art, und welche Art zuletzt an der Reihe
+     war. Bleibt über Sitzungen erhalten – wer einmal auf Striche
+     umgestellt hat, will sie beim nächsten Mal wieder, und wer Nummern
+     benutzt, soll nicht bei jedem Start wieder Punkte bekommen.
+
+     Die Art wird eigens gemerkt, seit es nur noch EINEN Knopf gibt
+     (ui/toolbar.js): er muss ja wissen, was er beim Draufdrücken macht
+     und welches Bild er zeigt. */
   let letzterUl = DEFAULT_UL;
   let letzterOl = DEFAULT_OL;
+  let letzteArt = 'ul';
 
   function ladeGemerkteStile() {
     if (typeof Settings === 'undefined' || !Settings.get) return;
     const ul = Settings.get('listStyleUl');
     const ol = Settings.get('listStyleOl');
+    const art = Settings.get('listKind');
     if (STYLE_BY_ID.has(ul) && styleById(ul).tag === 'UL') letzterUl = ul;
     if (STYLE_BY_ID.has(ol) && styleById(ol).tag === 'OL') letzterOl = ol;
+    if (art === 'ul' || art === 'ol') letzteArt = art;
   }
 
   function merkeStil(style) {
-    if (style.tag === 'OL') letzterOl = style.id; else letzterUl = style.id;
+    if (style.tag === 'OL') { letzterOl = style.id; letzteArt = 'ol'; }
+    else { letzterUl = style.id; letzteArt = 'ul'; }
     if (typeof Settings !== 'undefined' && Settings.set) {
       Settings.set(style.tag === 'OL' ? 'listStyleOl' : 'listStyleUl', style.id);
+      Settings.set('listKind', letzteArt);
     }
   }
 
@@ -361,9 +372,30 @@
     return true;
   }
 
-  /** Der Knopf in der Leiste: die zuletzt gewählte Form dieser Art. */
+  /**
+   * Der Knopf in der Leiste.
+   *
+   * Ohne Angabe gilt die zuletzt benutzte Art – der Knopf trägt ja ihr
+   * Bild. Steht die Marke schon in einer Liste, gilt DEREN Art, sonst
+   * würde aus dem Ausschalten ein Umstellen: wer zuletzt Nummern gewählt
+   * hat und dann in einer Punkteliste auf den Knopf drückt, will sie weg
+   * haben und keine Nummern daraus machen.
+   *
+   * @param {'ul'|'ol'} [art]
+   */
   function toggle(art) {
-    return apply(art === 'ol' ? letzterOl : letzterUl, false);
+    const hier = activeStyleId();
+    const hierArt = hier ? (styleById(hier).tag === 'OL' ? 'ol' : 'ul') : null;
+    if (!art) art = hierArt || letzteArt;
+
+    /* Schon eine Liste dieser Art: der Knopf heißt jetzt „weg damit" –
+       und zwar bei JEDER Form, nicht nur bei der zuletzt gewählten.
+       Sonst würde aus dem Ausschalten ein Umstellen: wer zuletzt Striche
+       gewählt hat und in einer Punkteliste auf den Knopf drückt, bekäme
+       Striche statt gar keiner Liste. */
+    if (hierArt === art) return remove();
+
+    return apply(art === 'ol' ? letzterOl : letzterUl, true);
   }
 
   /**
@@ -744,6 +776,8 @@
     autoFormat,
     activeStyleId,
     lastStyleId(art) { return art === 'ol' ? letzterOl : letzterUl; },
+    /** Welche Art war zuletzt an der Reihe? Das Bild auf dem Knopf. */
+    lastKind() { return letzteArt; },
     loadSettings: ladeGemerkteStile
   };
 

@@ -70,8 +70,8 @@ const TRANSLATIONS = {
     // Aufzählungen (core/lists.js)
     listBullets: 'Aufzählung',
     listNumbers: 'Nummerierung',
-    listPickBullet: 'Aufzählungszeichen wählen',
-    listPickNumber: 'Nummernform wählen',
+    listButton: 'Liste',
+    listPick: 'Form der Liste wählen',
     listNone: 'Keine',
     listDisc: 'Punkt',
     listCircle: 'Ring',
@@ -660,8 +660,8 @@ const TRANSLATIONS = {
     // Aufzählungen (core/lists.js)
     listBullets: 'Bullet list',
     listNumbers: 'Numbered list',
-    listPickBullet: 'Choose a bullet',
-    listPickNumber: 'Choose a numbering',
+    listButton: 'List',
+    listPick: 'Choose a list style',
     listNone: 'None',
     listDisc: 'Dot',
     listCircle: 'Ring',
@@ -1242,8 +1242,8 @@ const TRANSLATIONS = {
     // Aufzählungen (core/lists.js)
     listBullets: 'Elenco puntato',
     listNumbers: 'Elenco numerato',
-    listPickBullet: 'Scegli il punto',
-    listPickNumber: 'Scegli la numerazione',
+    listButton: 'Elenco',
+    listPick: 'Scegli lo stile elenco',
     listNone: 'Nessuno',
     listDisc: 'Punto',
     listCircle: 'Cerchio',

@@ -320,7 +320,7 @@ window.addEventListener('resize', positionTextColorDropdown, { passive: true });
 E('pg-scroll').addEventListener('scroll', () => {
   if (E('txt-color-dropdown').style.display !== 'none') positionTextColorDropdown();
   if (E('custom-color-pop').style.display !== 'none' && _customColorAnchor) positionCustomColorPopover(_customColorAnchor);
-  if (_listPopArt) positionListStylePop(E(_listPopArt === 'ol' ? 'fmt-ol-wrap' : 'fmt-ul-wrap'));
+  if (_listPopOffen) positionListStylePop();
 }, { passive: true });
 
 /* Heading toggles */
@@ -395,11 +395,21 @@ function updateHdrBtns() {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   AUFZÄHLUNG UND NUMMERIERUNG
+   LISTEN – EIN GETEILTER KNOPF FÜR BEIDES
 
-   Zwei geteilte Knöpfe: die breite Hälfte schaltet die zuletzt gewählte
-   Form an und aus, die schmale öffnet die Auswahl aller Formen. Genau so
-   ist es in Word, und genau das erwartet, wer von dort kommt.
+   Die breite Hälfte schaltet die zuletzt benutzte Form an und aus, die
+   schmale öffnet die Auswahl. Darin stehen Punkte und Nummern
+   untereinander; welche Art es wird, entscheidet also die Zelle, die man
+   antippt – nicht schon der Knopf davor.
+
+   >>> Warum ein Knopf und nicht zwei <<<
+   Zwei geteilte Knöpfe sind vier Trefferflächen für eine einzige
+   Entscheidung. Nebeneinander sahen sie außerdem aus wie ein
+   Entweder-oder, obwohl beide dasselbe tun. Und im Hochformat kostete
+   das 71 px in einer Leiste, die dort ohnehin zu eng ist.
+
+   Damit der Knopf trotzdem sagt, was er tut, trägt er das Bild der
+   zuletzt benutzten Art: Punkte oder Nummern.
 
    Die Auswahl wird aus Lists.STYLES gebaut (core/lists.js) – die Formen
    stehen dort an einer Stelle, zusammen mit ihren Klassennamen und der
@@ -407,18 +417,25 @@ function updateHdrBtns() {
    nächsten Hinzufügen einer Form auseinanderlaufen.
    ══════════════════════════════════════════════════════════════════════ */
 
-let _listPopArt = null;   // 'ul' | 'ol', solange die Auswahl offen ist
+let _listPopOffen = false;
 
-function listArtOf(styleId) {
-  return (typeof Lists !== 'undefined' && Lists.styleById(styleId).tag === 'OL') ? 'ol' : 'ul';
+/** Zeigt der Knopf Punkte oder Nummern? */
+function setListIcon(art) {
+  const ul = E('list-icon-ul');
+  const ol = E('list-icon-ol');
+  if (!ul || !ol) return;
+  ul.style.display = art === 'ol' ? 'none' : '';
+  ol.style.display = art === 'ol' ? '' : 'none';
 }
 
 function updateListBtns() {
   if (typeof Lists === 'undefined') return;
   const aktiv = Lists.activeStyleId();
-  const art = aktiv ? listArtOf(aktiv) : null;
-  E('fmt-ul-wrap').classList.toggle('active', art === 'ul');
-  E('fmt-ol-wrap').classList.toggle('active', art === 'ol');
+  E('fmt-list-wrap').classList.toggle('active', !!aktiv);
+  /* Steht die Marke in einer Liste, zeigt der Knopf DEREN Art – sonst
+     die zuletzt benutzte. So heißt ein Druck darauf immer sichtbar
+     „diese Liste weg" bzw. „so eine Liste her". */
+  setListIcon(aktiv ? (Lists.styleById(aktiv).tag === 'OL' ? 'ol' : 'ul') : Lists.lastKind());
 }
 
 /* Die Schreibmarke steht im Text, nicht im Knopf. Ein Klick würde sie
@@ -428,8 +445,8 @@ function listNoBlur(el) {
   if (el) el.addEventListener('mousedown', e => e.preventDefault());
 }
 
-function buildListStyleGrid(art) {
-  const grid = E('list-style-grid');
+function buildListStyleGrid(gridId, art) {
+  const grid = E(gridId);
   const aktiv = Lists.activeStyleId();
   grid.innerHTML = '';
 
@@ -460,48 +477,45 @@ function buildListStyleGrid(art) {
   });
 }
 
-function positionListStylePop(anchorEl) {
+function positionListStylePop() {
   const pop = E('list-style-pop');
+  const anchorEl = E('fmt-list-wrap');
   if (!pop || !anchorEl) return;
   const r = anchorEl.getBoundingClientRect();
   pop.style.left = Math.round(r.left + r.width / 2) + 'px';
   pop.style.top = Math.round(r.bottom + 8) + 'px';
   pop.style.transform = 'translateX(-50%)';
 
-  // Am rechten Rand nicht aus dem Fenster laufen
+  // An keinem Rand aus dem Fenster laufen
   const box = pop.getBoundingClientRect();
-  const zuViel = box.right - (window.innerWidth - 8);
-  if (zuViel > 0) pop.style.left = Math.round(r.left + r.width / 2 - zuViel) + 'px';
+  const zuVielRechts = box.right - (window.innerWidth - 8);
+  if (zuVielRechts > 0) pop.style.left = Math.round(box.left - zuVielRechts + box.width / 2) + 'px';
+  const nachLinks = pop.getBoundingClientRect().left;
+  if (nachLinks < 8) pop.style.left = Math.round(8 + pop.getBoundingClientRect().width / 2) + 'px';
 }
 
-function openListStylePop(art, anchorEl) {
+function openListStylePop() {
   if (typeof Lists === 'undefined') return;
-  _listPopArt = art;
-  E('list-style-pop-title').textContent = t(art === 'ol' ? 'listNumbers' : 'listBullets');
-  buildListStyleGrid(art);
+  _listPopOffen = true;
+  buildListStyleGrid('list-style-grid-ul', 'ul');
+  buildListStyleGrid('list-style-grid-ol', 'ol');
   E('list-style-pop').style.display = 'block';
-  positionListStylePop(anchorEl);
+  positionListStylePop();
 }
 
 function closeListStylePop() {
   E('list-style-pop').style.display = 'none';
-  _listPopArt = null;
+  _listPopOffen = false;
 }
 
-['fmt-ul', 'fmt-ol', 'fmt-ul-more', 'fmt-ol-more', 'list-style-pop'].forEach(id => listNoBlur(E(id)));
+['fmt-list', 'fmt-list-more', 'list-style-pop'].forEach(id => listNoBlur(E(id)));
 
-E('fmt-ul').addEventListener('click', () => { Lists.toggle('ul'); setTimeout(updateHdrBtns, 0); });
-E('fmt-ol').addEventListener('click', () => { Lists.toggle('ol'); setTimeout(updateHdrBtns, 0); });
+E('fmt-list').addEventListener('click', () => { Lists.toggle(); setTimeout(updateHdrBtns, 0); });
 
-E('fmt-ul-more').addEventListener('click', e => {
+E('fmt-list-more').addEventListener('click', e => {
   e.stopPropagation();
-  if (_listPopArt === 'ul') return closeListStylePop();
-  openListStylePop('ul', E('fmt-ul-wrap'));
-});
-E('fmt-ol-more').addEventListener('click', e => {
-  e.stopPropagation();
-  if (_listPopArt === 'ol') return closeListStylePop();
-  openListStylePop('ol', E('fmt-ol-wrap'));
+  if (_listPopOffen) return closeListStylePop();
+  openListStylePop();
 });
 
 E('list-style-off').addEventListener('click', () => {
@@ -514,7 +528,7 @@ document.addEventListener('pointerdown', e => {
   if (!e.target.closest('#list-style-pop') && !e.target.closest('.tb-split')) closeListStylePop();
 });
 window.addEventListener('resize', () => {
-  if (_listPopArt) positionListStylePop(E(_listPopArt === 'ol' ? 'fmt-ol-wrap' : 'fmt-ul-wrap'));
+  if (_listPopOffen) positionListStylePop();
 }, { passive: true });
 
 /* Die zuletzt gewählte Form überdauert das Schließen der App. Beim Laden

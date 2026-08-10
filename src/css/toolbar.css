@@ -189,6 +189,18 @@
   margin-bottom: 8px
 }
 
+/* Punkte und Nummern stehen im selben Fenster – die zweite Ueberschrift
+   braucht Luft nach oben, sonst klebt sie am Raster darueber. */
+.list-style-pop-head-2 {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sb2)
+}
+
+.list-icon {
+  display: block
+}
+
 .list-style-grid {
   display: grid;
   grid-template-columns: repeat(4, 56px);
