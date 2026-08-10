@@ -467,6 +467,88 @@
 
   const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'SECTION']);
 
+  /* ══════════════════════════════════════════════════════════════════
+     AUFZÄHLUNGEN
+
+     >>> Warum die Marke als TEXT im Absatz steht und nicht als echte
+         Word-Nummerierung <<<
+     Eine richtige Nummerierung braucht einen eigenen Teil numbering.xml
+     mit Ebenendefinitionen – und Word bringt dafür seine eigenen
+     Abstände und Einzüge mit. Genau die sind hier das Problem: dieses
+     Dokument legt hinter den Text ein Bild der Seite mit den Linien des
+     Papiers und setzt jeden Absatz auf `w:lineRule="exact"`, damit die
+     Zeilen auf denselben Linien sitzen wie in der App. Eine
+     Word-Nummerierung würde in dieses Raster hineinregieren, und der
+     ganze Text darunter stünde neben den Linien.
+
+     Als Text im Absatz ist die Marke dagegen bloß ein Lauf wie jeder
+     andere: Zeilenhöhe, Farbe und Schrift bleiben, wie sie sind. Der
+     hängende Einzug sorgt dafür, dass umbrechende Zeilen unter dem Text
+     beginnen und nicht unter der Marke – so sieht es auch in der App
+     aus. Bearbeiten lässt sich die Liste in Word dann nicht mehr als
+     Liste; dieses Dokument ist ohnehin eine Abbildung der Seite und
+     keine Vorlage zum Weiterschreiben.
+     ══════════════════════════════════════════════════════════════════ */
+
+  // Muss zu css/pages.css und zu LIST_STYLES in core/lists.js passen
+  const LIST_BULLETS = {
+    disc: '●', circle: '○', square: '▪', dash: '–', arrow: '➤', check: '✓'
+  };
+
+  const LIST_INDENT_PX = 32;      // = padding-left je Ebene in css/pages.css
+  const LIST_HANGING_PX = 20;     // so weit steht die Marke davor
+
+  function romanOf(n) {
+    const paare = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
+      [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+    let rest = Math.max(1, n);
+    let out = '';
+    for (const [wert, zeichen] of paare) {
+      while (rest >= wert) { out += zeichen; rest -= wert; }
+    }
+    return out;
+  }
+
+  /** 1 -> A, 26 -> Z, 27 -> AA (wie CSS upper-alpha) */
+  function alphaOf(n) {
+    let rest = Math.max(1, n);
+    let out = '';
+    while (rest > 0) {
+      rest--;
+      out = String.fromCharCode(65 + (rest % 26)) + out;
+      rest = Math.floor(rest / 26);
+    }
+    return out;
+  }
+
+  /**
+   * Die Form einer Liste – mit demselben Wechsel je Ebene, den
+   * css/pages.css für die Voreinstellungen macht (● ○ ▪ bzw. 1. a. i.).
+   */
+  function listStyleIdOf(list, depth) {
+    const cls = typeof list.className === 'string' ? list.className : '';
+    const treffer = cls.match(/j-list-([a-z-]+)/);
+    let id = treffer ? treffer[1] : (list.tagName === 'OL' ? 'decimal' : 'disc');
+
+    if (id === 'disc') id = depth >= 3 ? 'square' : (depth === 2 ? 'circle' : 'disc');
+    else if (id === 'decimal') id = depth >= 3 ? 'lower-roman' : (depth === 2 ? 'lower-alpha' : 'decimal');
+    return id;
+  }
+
+  /** Die Marke des n-ten Punktes (n ab 1). */
+  function listMarkerOf(styleId, n) {
+    if (LIST_BULLETS[styleId]) return LIST_BULLETS[styleId];
+    switch (styleId) {
+      case 'paren': return n + ')';
+      case 'lower-alpha': return alphaOf(n).toLowerCase() + '.';
+      case 'alpha-paren': return alphaOf(n).toLowerCase() + ')';
+      case 'upper-alpha': return alphaOf(n) + '.';
+      case 'lower-roman': return romanOf(n).toLowerCase() + '.';
+      case 'upper-roman': return romanOf(n) + '.';
+      default: return n + '.';
+    }
+  }
+
   function paragraphStyleOf(el) {
     const tag = el.tagName;
     const cls = typeof el.className === 'string' ? el.className : '';
@@ -502,7 +584,11 @@
     };
     const ensureParagraph = () => current || openParagraph('body');
 
-    const walk = (node, format) => {
+    /**
+     * @param {object} [liste] die Liste, in der wir gerade stecken:
+     *        { depth, styleId, n } – n zählt die Punkte DIESER Liste
+     */
+    const walk = (node, format, liste) => {
       for (const child of node.childNodes) {
         if (child.nodeType === 3) {
           // &nbsp; kommt aus contenteditable und soll ein normales
@@ -535,18 +621,37 @@
         const color = inlineColorOf(child);
         if (color) next.color = color;
 
+        /* Eine Liste ist selbst kein Absatz, sondern die Hülle um ihre
+           Punkte. Sie merkt sich nur, auf welcher Ebene wir sind und
+           welche Marke gilt. */
+        if (tag === 'UL' || tag === 'OL') {
+          const tiefe = (liste ? liste.depth : 0) + 1;
+          current = null;
+          walk(child, next, { depth: tiefe, styleId: listStyleIdOf(child, tiefe), n: 0 });
+          current = null;
+          continue;
+        }
+
         if (BLOCK_TAGS.has(tag)) {
-          openParagraph(paragraphStyleOf(child));
-          walk(child, next);
+          const absatz = openParagraph(paragraphStyleOf(child));
+
+          if (tag === 'LI' && liste) {
+            liste.n++;
+            absatz.indentPx = liste.depth * LIST_INDENT_PX;
+            absatz.runs.push({ ...next, text: listMarkerOf(liste.styleId, liste.n) });
+            absatz.runs.push({ ...next, tab: true });
+          }
+
+          walk(child, next, liste);
           // Text, der NACH einem Block kommt, gehört in einen neuen Absatz
           current = null;
         } else {
-          walk(child, next);
+          walk(child, next, liste);
         }
       }
     };
 
-    walk(root, {});
+    walk(root, {}, null);
 
     // Reine Hüllen ohne Inhalt (verschachtelte divs) fallen weg; ein
     // <div><br></div> hat einen Umbruch-Lauf und bleibt als Leerzeile stehen.
@@ -613,6 +718,8 @@
     const rPr = `<w:rPr>${props.join('')}</w:rPr>`;
 
     if (run.lineBreak) return `<w:r>${rPr}<w:br/></w:r>`;
+    // Der Sprung von der Marke zum Text einer Aufzählung
+    if (run.tab) return `<w:r>${rPr}<w:tab/></w:r>`;
     return `<w:r>${rPr}<w:t xml:space="preserve">${esc(run.text)}</w:t></w:r>`;
   }
 
@@ -669,13 +776,23 @@
   function paragraphXml(paragraph, lh, options = {}) {
     const spec = styleSpec(paragraph.style, lh);
 
-    // Reihenfolge nach CT_PPr: pBdr, spacing, ind, sectPr
+    // Reihenfolge nach CT_PPr: pBdr, tabs, spacing, ind, sectPr
     const props = [];
     if (spec.border) {
       props.push(`<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="${PAPER_LINE.slice(1).toUpperCase()}"/></w:pBdr>`);
     }
+
+    /* Ein Punkt einer Aufzählung: der Text rückt ein, die Marke steht
+       davor (hängender Einzug). Der Tabulator dazwischen braucht einen
+       Anschlag genau am Textrand, sonst springt er auf Words
+       Voreinstellung und die Marke steht zu weit links. */
+    const einzug = Math.round((paragraph.indentPx || 0) * TWIPS_PER_PX);
+    if (einzug) props.push(`<w:tabs><w:tab w:val="left" w:pos="${einzug}"/></w:tabs>`);
+
     props.push(`<w:spacing w:before="0" w:after="0" w:line="${Math.round(lh * TWIPS_PER_PX)}" w:lineRule="exact"/>`);
-    props.push('<w:ind w:left="0" w:right="0" w:firstLine="0"/>');
+    props.push(einzug
+      ? `<w:ind w:left="${einzug}" w:right="0" w:hanging="${Math.round(LIST_HANGING_PX * TWIPS_PER_PX)}"/>`
+      : '<w:ind w:left="0" w:right="0" w:firstLine="0"/>');
     if (options.sectPr) props.push(options.sectPr);
 
     const runs = (options.leadingXml || '')
