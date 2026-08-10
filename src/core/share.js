@@ -2082,7 +2082,7 @@ const LOCK_REFRESH_MS = 2000;
    geändert hat – siehe setPage. Deutlich unter PRESENCE_STALE_MS
    (90 s in ui/collab.js), damit ein Eintrag nie als alt gilt, solange
    jemand wirklich da ist. */
-const PRESENCE_HEARTBEAT_MS = 12000;
+const PRESENCE_HEARTBEAT_MS = 5000;  // war 12000 – schneller erholen nach Besitzer-Wiedereinstieg
 
 /* Angaben, die an einer Änderung MITREISEN dürfen, aber nicht müssen:
    Stelle der Schreibmarke (c) und die beanspruchten Zeilen (lf, lt).
@@ -2401,6 +2401,11 @@ async function joinDocRoom(docId, options = {}) {
         + 'dann nicht auf. Abhilfe: website/database.rules.json in der '
         + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.');
     }
+    // Etwaigen lost-Vermerk der VORIGEN Verbindung überschreiben.
+    // Schließt der Besitzer die App und öffnet sie sofort wieder, feuert
+    // das alte onDisconnect serverseitig NACH der neuen Verbindung und
+    // setzt lost:1 auf den frischen Eintrag – das hier löscht es wieder.
+    await set(meRef, { ...card, lost: null, at: rtNow() });
   }
   if (!ownerMarkOk) await onDisconnect(meRef).remove();
 

@@ -82,7 +82,7 @@
     const z = e.target.closest('.tbl-cell');
     if (!z) return;
     schliessen();
-    stelleWiederher();
+    if (!stelleWiederher()) return;
     insertTable(+z.dataset.r, +z.dataset.c);
   });
 
@@ -95,7 +95,7 @@
     if (!antwort) return;
     const m = /^\s*(\d+)\s*[x×*,\s]\s*(\d+)\s*$/.exec(antwort);
     if (!m) { toast((typeof t === 'function' && t('insertTableBad')) || 'Bitte etwas wie 8x3.', true); return; }
-    stelleWiederher();
+    if (!stelleWiederher()) return;
     insertTable(+m[1], +m[2]);
   });
 
@@ -127,7 +127,7 @@
     schliessen();
   }
 
-  btn.addEventListener('click', () => {
+  btn.addEventListener('pointerdown', () => {
     if (offen()) { schliessen(); return; }
     merkeStelle();
     const r = btn.getBoundingClientRect();

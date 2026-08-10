@@ -126,9 +126,8 @@ const TRANSLATIONS = {
     shapeFill: 'Füllung',
     shapeStroke: 'Linienfarbe',
 
-    // Lineal und Geodreieck
+    // Lineal
     ruler: 'Lineal',
-    protractor: 'Geodreieck',
 
     // Kommentare
     addComment: 'Kommentar',
@@ -778,9 +777,8 @@ const TRANSLATIONS = {
     shapeFill: 'Fill',
     shapeStroke: 'Outline',
 
-    // Ruler and protractor
+    // Ruler
     ruler: 'Ruler',
-    protractor: 'Protractor',
 
     // Comments
     addComment: 'Comment',
@@ -1419,9 +1417,8 @@ const TRANSLATIONS = {
     shapeFill: 'Riempimento',
     shapeStroke: 'Contorno',
 
-    // Righello e goniometro
+    // Righello
     ruler: 'Righello',
-    protractor: 'Goniometro',
 
     // Commenti
     addComment: 'Commento',

@@ -1,10 +1,10 @@
 'use strict';
 
 /* ══════════════════════════════════════════════════════════════════════
-   LINEAL UND GEODREIECK
+   LINEAL
 
-   Zwei durchsichtige Zeichenhilfen, die über der Seite liegen und nicht
-   gespeichert werden. Beide lassen sich mit einem Finger oder der Maus
+   Eine durchsichtige Zeichenhilfe, die über der Seite liegt und nicht
+   gespeichert wird. Lässt sich mit einem Finger oder der Maus
    verschieben; das Mausrad dreht sie.
 
    >>> Warum sie auf einem eigenen Canvas gemalt werden <<<
@@ -23,8 +23,6 @@
   const LINEAL_W = 420;          // CSS-Pixel, gesamte Breite
   const LINEAL_H = 58;           // CSS-Pixel, gesamte Höhe
   const LINEAL_H_PAD = 16;       // Platz über den Strichen (für Griff)
-  const GEO_R = 150;             // Radius des Geodreiecks
-  const GEO_PAD = 20;            // Platz um das Geodreieck herum
 
   /* echte mm je CSS-Pixel. A4-Seite: 794 px / 210 mm ≈ 3,78 px/mm.
      Bei Zoom z: 1 mm = 3.78 * z px. */
@@ -49,7 +47,7 @@
     c.height = Math.round(h * dpr);
     c.style.width = w + 'px';
     c.style.height = h + 'px';
-    c.style.cssText = 'position:fixed;z-index:7000;pointer-events:auto;touch-action:none;display:none;'
+    c.style.cssText = 'position:fixed;z-index:700;pointer-events:auto;touch-action:none;display:none;'
       + 'width:' + w + 'px;height:' + h + 'px;';
     const ctx = c.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -110,93 +108,13 @@
     }
   }
 
-  /* ── Geodreieck malen ─────────────────────────────────────────────── */
-  const gSize = GEO_R * 2 + GEO_PAD * 2;
-  const geo = neuesCanvas(gSize, GEO_R + GEO_PAD * 2);
-  document.body.appendChild(geo.canvas);
-
-  function maleGeodreieck() {
-    const ctx = geo.ctx;
-    const dpr = geo.dpr;
-    const cx = GEO_R + GEO_PAD;
-    const cy = GEO_R + GEO_PAD;
-
-    ctx.clearRect(0, 0, gSize * dpr, gSize * dpr);
-
-    // Halbkreis-Hintergrund
-    ctx.fillStyle = 'rgba(220,230,245,0.82)';
-    ctx.strokeStyle = 'rgba(100,130,180,0.7)';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.arc(cx, cy, GEO_R, Math.PI, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Basislinie
-    ctx.beginPath();
-    ctx.moveTo(cx - GEO_R, cy);
-    ctx.lineTo(cx + GEO_R, cy);
-    ctx.stroke();
-
-    // Grad-Striche
-    for (let deg = 0; deg <= 180; deg++) {
-      const rad = (deg - 90) * Math.PI / 180;
-      const innerR = deg % 10 === 0 ? GEO_R - 20 : deg % 5 === 0 ? GEO_R - 14 : GEO_R - 10;
-      const outerR = GEO_R - 2;
-
-      const x1 = cx + Math.cos(rad) * innerR;
-      const y1 = cy - Math.sin(rad) * innerR;
-      const x2 = cx + Math.cos(rad) * outerR;
-      const y2 = cy - Math.sin(rad) * outerR;
-
-      ctx.strokeStyle = 'rgba(40,60,100,' + (deg % 10 === 0 ? '0.8' : '0.45') + ')';
-      ctx.lineWidth = deg % 10 === 0 ? 1.1 : 0.6;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-
-    // Grad-Zahlen
-    ctx.fillStyle = 'rgba(20,30,60,0.85)';
-    ctx.font = '9px "DM Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (let deg = 0; deg <= 180; deg += 10) {
-      const rad = (deg - 90) * Math.PI / 180;
-      const labelR = GEO_R - 30;
-      const lx = cx + Math.cos(rad) * labelR;
-      const ly = cy - Math.sin(rad) * labelR;
-      ctx.fillText(String(deg), lx, ly);
-    }
-
-    // Fadenkreuz in der Mitte
-    const crossLen = 10;
-    ctx.strokeStyle = 'rgba(180,40,40,0.7)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - crossLen);
-    ctx.lineTo(cx, cy + crossLen);
-    ctx.moveTo(cx - crossLen, cy);
-    ctx.lineTo(cx + crossLen, cy);
-    ctx.stroke();
-  }
-
   /* ── Zustand ──────────────────────────────────────────────────────── */
   const lineal = { x: 200, y: 300, winkel: 0, an: false };
-  const dreieck = { x: 300, y: 400, winkel: 0, an: false };
 
   function aktualisiereLinealPos() {
     ln.canvas.style.left = Math.round(lineal.x) + 'px';
     ln.canvas.style.top = Math.round(lineal.y) + 'px';
     ln.canvas.style.transform = 'rotate(' + (lineal.winkel || 0) + 'deg)';
-  }
-
-  function aktualisiereGeoPos() {
-    geo.canvas.style.left = Math.round(dreieck.x) + 'px';
-    geo.canvas.style.top = Math.round(dreieck.y) + 'px';
-    geo.canvas.style.transform = 'rotate(' + (dreieck.winkel || 0) + 'deg)';
   }
 
   /**
@@ -249,12 +167,10 @@
   }
 
   einfacheBewegung(ln.canvas, lineal, aktualisiereLinealPos);
-  einfacheBewegung(geo.canvas, dreieck, aktualisiereGeoPos);
 
   /* ── Neumalen bei Zoom-Änderung ────────────────────────────────────── */
   function beimZoomen() {
     if (lineal.an) maleLineal();
-    if (dreieck.an) maleGeodreieck();
   }
 
   // Die App feuert kein eigenes Zoom-Ereignis. Der sicherste Weg ist,
@@ -293,10 +209,7 @@
     }
 
     const btnL = knopf('btn-ruler', '📏', 'ruler', 'Lineal', umschaltenLineal);
-    const btnG = knopf('btn-protractor', '📐', 'protractor', 'Geodreieck', umschaltenGeodreieck);
-
     grp.appendChild(btnL);
-    grp.appendChild(btnG);
 
     // Vor den Pfeil-Knöpfen einfügen
     const prevBtn = E('btn-tb-prev');
@@ -315,9 +228,7 @@
 
   function aktualisiereKnopfZustand() {
     const btnL = E('btn-ruler');
-    const btnG = E('btn-protractor');
     if (btnL) btnL.classList.toggle('active', lineal.an);
-    if (btnG) btnG.classList.toggle('active', dreieck.an);
   }
 
   /* ── Ein- und Ausschalten ─────────────────────────────────────────── */
@@ -333,27 +244,8 @@
       maleLineal();
       ln.canvas.style.display = 'block';
       aktualisiereLinealPos();
-      if (dreieck.an) umschaltenGeodreieck();
     } else {
       ln.canvas.style.display = 'none';
-    }
-    aktualisiereKnopfZustand();
-  }
-
-  function umschaltenGeodreieck() {
-    dreieck.an = !dreieck.an;
-    if (dreieck.an) {
-      if (dreieck.x === 300 && dreieck.y === 400) {
-        const m = seitenMitte();
-        dreieck.x = m.x - gSize / 2;
-        dreieck.y = m.y - GEO_R;
-      }
-      maleGeodreieck();
-      geo.canvas.style.display = 'block';
-      aktualisiereGeoPos();
-      if (lineal.an) umschaltenLineal();
-    } else {
-      geo.canvas.style.display = 'none';
     }
     aktualisiereKnopfZustand();
   }
@@ -367,6 +259,14 @@
 
   /* ── Global erreichbar ────────────────────────────────────────────── */
   window.toggleRuler = umschaltenLineal;
-  window.toggleProtractor = umschaltenGeodreieck;
+
+  /** Gibt die aktuelle Lage des Lineals in Bildschirm-Koordinaten zurück,
+   *  oder null, wenn es ausgeschaltet ist. Für das Einrasten gezeichneter
+   *  Linien an der Lineal-Kante (siehe canvas/input.js). */
+  window.getRulerState = function () {
+    if (!lineal.an) return null;
+    return { x: lineal.x, y: lineal.y, winkel: lineal.winkel || 0,
+             w: LINEAL_W, h: LINEAL_H, hPad: LINEAL_H_PAD };
+  };
 
 })();

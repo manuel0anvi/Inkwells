@@ -186,6 +186,8 @@ E('pgctx-clear').addEventListener('click', async () => {
   const canvas = _pgCtxEl.querySelector('.j-canvas');
   if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
   _pgCtxEl.querySelector('.j-objects').innerHTML = '';
+  if (window.Collab) Collab.noteTextChange(_pgCtxPage.id, '');
+  if (window.markCurrentNotebookDirty) markCurrentNotebookDirty();
 });
 
 E('pgctx-delete').addEventListener('click', async () => {

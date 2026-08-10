@@ -84,6 +84,71 @@ function attachInput(canvas, textDiv, objLayer, page) {
   }
 
   /**
+   * Punkt an der Lineal-Kante einrasten lassen.
+   *
+   * @param {{x:number,y:number}} pt   Punkt in Seiten-Koordinaten
+   * @param {{x:number,y:number,winkel:number,w:number,h:number,hPad:number}} rs
+   *        Lineal-Zustand in Bildschirm-Koordinaten (von getRulerState)
+   * @param {HTMLCanvasElement} canvas
+   * @param {object} page  { w, h }
+   * @returns {null|{x:number,y:number,p:number}}  eingerasteter Punkt oder null
+   */
+  function snapToRuler(pt, rs, canvas, page) {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = (page.w || CFG.PAGE_W) / r.width;
+    const scaleY = (page.h || CFG.PAGE_H) / r.height;
+
+    // Bildschirm → Seite: Umkehrung von coords()
+    function toPage(sx, sy) {
+      return { x: (sx - r.left) * scaleX, y: (sy - r.top) * scaleY };
+    }
+
+    const rad = (rs.winkel * Math.PI) / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const cx = rs.x + rs.w / 2;   // Lineal-Mitte (Bildschirm)
+    const cy = rs.y + rs.h / 2;
+
+    // Zwei Punkte auf einer Kante um den Mittelpunkt drehen
+    function kante(sx1, sy1, sx2, sy2) {
+      // Relativ zum Mittelpunkt
+      const rx1 = sx1 - cx, ry1 = sy1 - cy;
+      const rx2 = sx2 - cx, ry2 = sy2 - cy;
+      // Drehen
+      const dx1 = rx1 * cos - ry1 * sin;
+      const dy1 = rx1 * sin + ry1 * cos;
+      const dx2 = rx2 * cos - ry2 * sin;
+      const dy2 = rx2 * sin + ry2 * cos;
+      // Zurück zu Bildschirm, dann zu Seite
+      return { a: toPage(cx + dx1, cy + dy1), b: toPage(cx + dx2, cy + dy2) };
+    }
+
+    const schwell = 8 * scaleX; // ~8 CSS-Pixel in Seiten-Koordinaten
+
+    // Nähe zur oberen und unteren Kante prüfen
+    const kanten = [
+      kante(rs.x, rs.y, rs.x + rs.w, rs.y),                          // oben
+      kante(rs.x, rs.y + rs.h, rs.x + rs.w, rs.y + rs.h)             // unten
+    ];
+
+    for (const k of kanten) {
+      const dx = k.b.x - k.a.x, dy = k.b.y - k.a.y;
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 0.001) continue;
+      // Projektion von pt auf die Kantenlinie
+      let t = ((pt.x - k.a.x) * dx + (pt.y - k.a.y) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const projX = k.a.x + t * dx;
+      const projY = k.a.y + t * dy;
+      const dist = Math.hypot(pt.x - projX, pt.y - projY);
+      if (dist < schwell) {
+        return { x: projX, y: projY, p: pt.p };
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Einen Strich beginnen – mit Stift, Maus oder Finger.
    *
    * Hiess handlePenStart und lief nur fuer den Stift. Gezeichnet wird
@@ -201,7 +266,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // Nur der Zeiger, der den Strich begonnen hat – ein zweiter Finger
     // beim Zoomen darf nicht mitmalen
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
-    e.preventDefault(); const c = coords(e); const ctx = canvas.getContext('2d');
+    e.preventDefault(); let c = coords(e);
+    // An der Lineal-Kante einrasten (siehe ui/ruler.js)
+    const rs = window.getRulerState?.();
+    if (rs) { const s = snapToRuler(c, rs, canvas, page); if (s) c = s; }
+    const ctx = canvas.getContext('2d');
     if (S.mode === 'eraser' && S.eraser.type === 'stroke') {
       strokeErase(c, page, canvas);
     }
