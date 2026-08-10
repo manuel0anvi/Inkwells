@@ -685,6 +685,59 @@ stehen. Damit ist auch klar, was die Sperre *nicht* leistet: zwei Clients
 können im selben Augenblick überlappende Bereiche beanspruchen. Das
 kostet nichts – es führt nur dazu, dass beide kurz schreiben dürfen.
 
+### Nachtrag vom 11. August 2026: fünf Fehler, und erst jetzt ein Prüfstand
+
+Rückmeldung aus dem Betrieb zu zweit: „zu zweit ist alles eher buggy und
+kaputt". Fünf Punkte, alle bestätigt — und alle **gemessen**, nicht
+erschlossen. Dazu gibt es jetzt
+[`scripts/test-collab-live`](scripts/test-collab-live) (`npm run
+test:live`): zwei echte Fenster mit dem echten `ui/collab.js`,
+`canvas/text.js` und Yjs; nur der Raum ist durch eine Brücke über den
+Hauptprozess ersetzt, und die gibt Nachrichten **ohne Verzögerung**
+weiter. Was danach an Wartezeit bleibt, ist die der App.
+
+**Die Marke und das Band saßen eine halbe Zeile zu tief.** Die Korrektur
+vom 10.8. rundete die Zeile auf ein Raster (`lineBoxOf`) — aber auf eines,
+das am oberen **Seitenrand** anfängt. Der Text beginnt dort nicht: `.j-text`
+sitzt bei `top:64` und hat 19 px Innenabstand, die erste Zeile also bei 83,
+und 83 ist kein Vielfaches von 32. Jede Marke und jedes Band landete 13 px
+daneben. Gezählt wird jetzt von der Oberkante der ersten Zeile aus.
+[`scripts/test-caret-geometry`](scripts/test-caret-geometry) hatte das
+sofort gemeldet — es war nach der Korrektur nur niemand mehr gelaufen.
+
+**Es flackerte.** `_renderCaretsNow` und `_renderLocksNow` warfen bei
+**jedem Bild** alle Elemente weg und bauten sie neu. Ein frisches Element
+hat keinen vorigen Zustand, von dem aus es sich bewegen könnte — die
+weichen Übergänge in `css/layout.css` liefen deshalb nie, die Marke sprang
+jedes Mal neu ins Bild. Jetzt gibt es je Person ein Element, das bleibt und
+nur seine Werte bekommt.
+
+**Beim Durchtippen kam gar nichts an.** Der Takt für den Text war eine
+**Entprellung**: jeder Anschlag stellte die 300 ms zurück. Wer schneller
+tippt als das — also jeder —, schickte während des Schreibens nichts; beim
+anderen erschien der Text erst in der Tipp-Pause. Im Prüfstand: zwei
+Sekunden Dauertippen, null Zeichen angekommen. Jetzt eine **Drossel mit
+sofortigem ersten Schlag** — gemessen 60 ms bis zum ersten Zeichen.
+
+**Die eigene Marke sprang in den fremden Text.** `applyRemoteText` suchte
+den Anker nur, wenn die Marke **nicht** am Textende stand
+(`caret < vorher.length`). Genau dort steht sie aber meistens. Sonst blieb
+die Stelle dieselbe **Zahl**, während der Text durch die fremde Änderung
+länger wurde — die Marke stand plötzlich mittendrin, und zwar dort, wo der
+andere gerade tippt. Jetzt gilt: Anker zuerst, und wenn der andere mitten
+in ihn hineingeschrieben hat und er dadurch verschwunden ist, der
+Textvergleich (`shiftedPos`). Beide Lücken waren je einmal gemeldet worden;
+erst zusammen decken sie den Fall ab.
+
+**Die Sperre umfasst die eigene Zeile und die nächste** — das galt schon,
+sah durch den 13-px-Versatz aber falsch aus. Jetzt nachgemessen: Band eins
+auf der Zeile des Schreibenden, Band zwei direkt darunter.
+
+> **Für den nächsten Fehler hier:** erst `npm run test:live` und
+> `npm run test:caret` laufen lassen, dann eine Ursache behaupten. Dieser
+> Bereich hat zweimal eine Runde Codelesen gekostet, die fünf echte, aber
+> jeweils falsche Ursachen gefunden hat.
+
 ### Warum Stufe 8 entfällt
 
 Seitensperren waren als *Ersatz* gedacht, solange es kein CRDT gibt: immer

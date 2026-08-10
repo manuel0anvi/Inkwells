@@ -1,0 +1,242 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+<link rel="stylesheet" href="../../src/css/layout.css">
+<style>
+  body { margin: 0; background: #222; }
+  /* Wie in index.html: die Seiten stecken im Bildlauf und werden dort
+     als Ganzes skaliert (app.js/zoom.js setzen genau dieses transform). */
+  #pg-scroll { position: relative; overflow: auto; height: 900px; }
+  #pages-wrap { transform-origin: top center; }
+</style>
+</head>
+<body>
+<div id="pg-scroll"><div id="pages-wrap"></div></div>
+<div id="collab-people" style="display:none"></div>
+<span id="collab-state"></span>
+
+<script src="../../src/lib/yjs.bundle.js"></script>
+<script src="../../src/core/sanitize.js"></script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   DIE APP, SO WEIT COLLAB SIE BRAUCHT
+
+   Nachgebaut wird nur, was ui/collab.js wirklich anfasst. Alles, worauf
+   es ankommt – Textgeometrie, Yjs, die Marken, die Sperre – ist der
+   ECHTE Code aus src/.
+   ══════════════════════════════════════════════════════════════════════ */
+const { ipcRenderer } = require('electron');
+
+const WER = decodeURIComponent(location.search.replace(/^\?/, '')) || 'A';
+const PAGE_W = 794, PAGE_H = 1123;
+const LH = 32, FS = 17;
+const PT = Math.round(LH - FS * 0.78);       // ptForBg('ruled'), wie in der App
+const ZOOM = 1.2;
+
+const E = id => document.getElementById(id);
+const QA = sel => [...document.querySelectorAll(sel)];
+function t(key) { return key; }
+function getZoom() { return ZOOM; }
+function toast() {}
+function renderSideTree() {}
+function openSection() {}
+function redrawStrokes() {}
+function placeObject() {}
+function updateAddPageBtnVisibility() {}
+
+const seite = { id: 'p1', textContent: '', inkStrokes: [], objects: [] };
+const heft = { id: 'nb1', name: 'Probe', pages: [seite], sections: [] };
+
+const S = {
+  notebooks: [heft], activeNbId: 'nb1', activePgId: 'p1', mode: 'cursor',
+  readOnly: false, strokeHistory: {}, history: {}, sharedDoc: null
+};
+function getNb() { return heft; }
+function getPage(pgId) { return pgId === seite.id ? { nb: heft, page: seite } : null; }
+function visiblePages() { return heft.pages; }
+
+/* Die Seite genau wie appendPageDOM() in app.js – dieselben Maße,
+   dieselben Inline-Stile. Ein vereinfachter Nachbau misst sonst überall
+   0 px Versatz, obwohl der Fehler dasteht. */
+function bauSeite() {
+  const wrap = E('pages-wrap');
+  wrap.style.transform = 'scale(' + ZOOM + ')';
+
+  const div = document.createElement('div');
+  div.className = 'j-page bg-ruled';
+  div.dataset.pgid = seite.id;
+  div.style.width = PAGE_W + 'px';
+  div.style.minHeight = PAGE_H + 'px';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'j-page-hdr';
+  hdr.innerHTML = '<span class="j-page-num">Seite 1</span>';
+  div.appendChild(hdr);
+
+  const textDiv = document.createElement('div');
+  textDiv.className = 'j-text';
+  textDiv.contentEditable = 'true';
+  textDiv.style.cssText = 'font-size:' + FS + 'px;line-height:' + LH + 'px;padding-top:' + PT + 'px'
+    + ';top:64px;left:72px;right:32px;bottom:24px'
+    + ';white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word';
+  div.appendChild(textDiv);
+
+  const objs = document.createElement('div');
+  objs.className = 'j-objects';
+  div.appendChild(objs);
+
+  wrap.appendChild(div);
+
+  // Wie app.js: jeder Anschlag geht an die Live-Bearbeitung
+  textDiv.addEventListener('input', () => {
+    seite.textContent = textDiv.innerHTML;
+    if (window.Collab) Collab.noteTextChange(seite.id, seite.textContent);
+  });
+
+  return { div, textDiv };
+}
+
+const bau = bauSeite();
+const textDiv = bau.textDiv;
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER RAUM – über den Hauptprozess statt über die Realtime Database
+
+   Dieselbe Schnittstelle wie joinDocRoom() in core/share.js. Die
+   Nachrichten gehen ohne Verzögerung durch: gemessen werden soll, was die
+   APP an Wartezeit einbaut, nicht das Netz.
+   ══════════════════════════════════════════════════════════════════════ */
+const FARBEN = { A: '#c04040', B: '#2a5fa8' };
+let presenceCb = null, opCb = null;
+
+const meineKarte = {
+  uid: WER, name: WER, email: WER.toLowerCase() + '@probe.example',
+  color: FARBEN[WER] || '#2e8a46',
+  pageId: '', offset: -1, lockFrom: -1, lockTo: -1, lockAt: 0, cx: '', at: Date.now()
+};
+
+ipcRenderer.on('praesenz', (_e, liste) => {
+  if (presenceCb) presenceCb(liste.filter(p => p.uid !== meineKarte.uid));
+});
+ipcRenderer.on('op', (_e, op) => { if (opCb) opCb(op); });
+
+window.InkwellShare = {
+  joinDocRoom: async () => ({
+    me: meineKarte,
+    setPage(pageId, offset, lock, anchor) {
+      meineKarte.pageId = pageId;
+      if (Number.isFinite(offset)) meineKarte.offset = offset;
+      meineKarte.lockFrom = lock && Number.isFinite(lock.from) ? lock.from : -1;
+      meineKarte.lockTo = lock && Number.isFinite(lock.to) ? lock.to : -1;
+      if (meineKarte.lockFrom >= 0) meineKarte.lockAt = Date.now();
+      meineKarte.cx = String(anchor || '').slice(0, 64);
+      meineKarte.at = Date.now();
+      ipcRenderer.send('praesenz', { ...meineKarte });
+    },
+    onPresence(cb) { presenceCb = cb; return () => { presenceCb = null; }; },
+    onOwnerAway(cb) { cb(false); return () => {}; },
+    onConnection(cb) { cb(true); return () => {}; },
+    sendOp(op) {
+      ipcRenderer.send('op', { ...op, by: meineKarte.uid, at: Date.now() });
+      return Promise.resolve(true);
+    },
+    onOp(cb) { opCb = cb; return () => { opCb = null; }; },
+    setRoles() {}, leave() {}
+  })
+};
+</script>
+
+<script src="../../src/canvas/text.js"></script>
+<script src="../../src/ui/collab.js"></script>
+
+<script>
+/* ── Handgriffe für den Prüfstand ──────────────────────────────────── */
+
+window.pruefstand = {
+  async beitreten() {
+    await Collab.start('probe-doc', heft, null, true, { isOwner: WER === 'A' });
+    textDiv.focus();
+    return true;
+  },
+
+  /** Text setzen, als hätte jemand ihn getippt (ohne Tastendruck). */
+  setzeText(html, caretStelle) {
+    textDiv.innerHTML = html;
+    seite.textContent = html;
+    textDiv.focus();
+    if (Number.isFinite(caretStelle)) setFlatCaret(textDiv, caretStelle);
+    Collab.noteTextChange(seite.id, html);
+    return flatTextOf(textDiv);
+  },
+
+  /** Die Schreibmarke setzen, wie ein Klick es täte. */
+  markeAuf(stelle) {
+    textDiv.focus();
+    const ok = setFlatCaret(textDiv, stelle);
+    document.dispatchEvent(new Event('selectionchange'));
+    return ok ? flatCaretPos(textDiv) : null;
+  },
+
+  /** Was hier gerade steht. */
+  text() { return flatTextOf(textDiv); },
+  eigeneStelle() { return flatCaretPos(textDiv); },
+  html() { return textDiv.innerHTML; },
+
+  /** Die fremden Marken, wie sie gezeichnet sind – in Seitenmaßen. */
+  fremdeMarken() {
+    return QA('.collab-caret').map(el => ({
+      top: Math.round(parseFloat(el.style.top)),
+      left: Math.round(parseFloat(el.style.left)),
+      hoehe: Math.round(parseFloat(el.style.height)),
+      name: el.textContent
+    }));
+  },
+
+  /** Die Sperrbänder, wie sie gezeichnet sind. */
+  baender() {
+    return QA('.collab-lock').map(el => ({
+      top: Math.round(parseFloat(el.style.top)),
+      hoehe: Math.round(parseFloat(el.style.height))
+    }));
+  },
+
+  /** Auf welcher Zeile des Papiers liegt diese Oberkante? */
+  zeileVon(top) { return (top - 64 - PT) / LH; },
+
+  /** Zeigt, was die Elemente selbst sind – für die Frage nach dem Flackern. */
+  markenElemente() { return QA('.collab-caret'); },
+
+  /* Merkt sich die Elemente, um später zu sehen, ob es dieselben sind.
+     Die MARKEN zählen dabei gesondert: ohne eine einzige davon wäre die
+     Frage „sind es noch dieselben?" gegenstandslos, und die Prüfung ginge
+     durch, obwohl gerade nichts zu sehen ist. */
+  merkeElemente() {
+    const marken = QA('.collab-caret');
+    window.__gemerkt = marken.concat(QA('.collab-lock'));
+    return { marken: marken.length, gesamt: window.__gemerkt.length };
+  },
+  nochDieselben() {
+    const marken = QA('.collab-caret');
+    const jetzt = marken.concat(QA('.collab-lock'));
+    const alt = window.__gemerkt || [];
+    if (!marken.length || !alt.length || alt.length !== jetzt.length) return false;
+    return alt.every((el, i) => el === jetzt[i] && el.isConnected);
+  },
+
+  /** Wo die eigene Marke steht, in Zeile/Spalte des Papiers. */
+  zeileDerEigenenMarke() {
+    const pos = flatCaretPos(textDiv);
+    if (pos === null) return null;
+    const r = caretRectAt(textDiv, pos, flatTextOf(textDiv));
+    if (!r) return null;
+    const box = lineBoxOf(bau.div, textDiv, r, ZOOM);
+    return { stelle: pos, zeile: (box.top - 64 - PT) / LH };
+  }
+};
+</script>
+</body>
+</html>

@@ -526,15 +526,31 @@ function caretRectAt(textDiv, pos, text) {
 function lineBoxOf(pgEl, textDiv, rect, zoom) {
   const lh = parseInt(textDiv.style.lineHeight) || 32;
   const pageRect = pgEl.getBoundingClientRect();
+
   /* Die Mitte war verlässlich, solange der Browser ein Zeichen-Rechteck
      lieferte. Liefert er aber ein 0×0‑Rechteck (leere Zeile, Ende des
      Absatzes), liegt die Mitte auf der Grundlinie der VORHERIGEN Zeile
-     – und das Band sitzt eine ganze Zeile zu hoch.
-     Deshalb: Oberkante nehmen und auf das Raster der Zeilenhöhe runden.
-     So liegt das Band immer genau auf der Zeile, in der die Stelle steht. */
+     – und das Band sitzt eine ganze Zeile zu hoch. Deshalb wird die
+     Oberkante genommen und auf das Zeilenraster gerundet.
+
+     >>> Das Raster fängt am TEXTFELD an, nicht an der Seite <<<
+     Hier stand `Math.round(raw / lh) * lh` – gerundet also auf Vielfache
+     der Zeilenhöhe ab dem oberen Seitenrand. Der Text beginnt aber nicht
+     dort: .j-text sitzt bei top:64 und hat obendrein einen Innenabstand
+     (19 px beim linierten Papier). Die erste Zeile fängt damit bei 83 an,
+     und 83 ist kein Vielfaches von 32 – jede Marke und jedes Band landete
+     13 px daneben, also fast eine halbe Zeile. Gemeldet wurde das als
+     „der Cursor des anderen steht falsch" und „das Sperrband auch".
+
+     Gezählt wird deshalb von der Oberkante der ERSTEN Zeile aus. */
+  const textRect = textDiv.getBoundingClientRect();
+  const cs = (typeof getComputedStyle === 'function') ? getComputedStyle(textDiv) : null;
+  const pad = parseFloat(cs && cs.paddingTop) || parseFloat(textDiv.style.paddingTop) || 0;
+  const start = (textRect.top - pageRect.top) / zoom + pad;
+
   const raw = (rect.top - pageRect.top) / zoom;
-  const snapped = Math.round(raw / lh) * lh;
-  return { top: snapped, height: lh, left: (rect.left - pageRect.left) / zoom };
+  const nr = Math.max(0, Math.round((raw - start) / lh));
+  return { top: start + nr * lh, height: lh, left: (rect.left - pageRect.left) / zoom };
 }
 
 /* ══════════════════════════════════════════════════════════════════════

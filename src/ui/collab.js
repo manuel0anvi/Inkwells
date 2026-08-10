@@ -536,10 +536,54 @@
   function renderCarets() { scheduleCaretsAndLocks(); }
   function renderLocks() { scheduleCaretsAndLocks(); }
 
-  function _renderCaretsNow() {
-    document.querySelectorAll('.collab-caret').forEach(el => el.remove());
-    if (!others.length) return;
+  /* ══════════════════════════════════════════════════════════════════
+     WIEDERVERWENDEN STATT NEU BAUEN
 
+     Hier stand ein `querySelectorAll(...).forEach(el => el.remove())` und
+     danach ein frisches createElement je Person – und das bei jedem Bild,
+     also bis zu sechzigmal in der Sekunde, solange jemand tippt.
+
+     Zwei Folgen, beide gemeldet:
+       · Es FLACKERTE. Ein neues Element hat keinen vorigen Zustand, von
+         dem aus es sich bewegen könnte; die weichen Übergänge in
+         css/layout.css (transition: left/top) liefen deshalb nie, die
+         Marke sprang stattdessen jedes Mal neu ins Bild.
+       · Es kostete unnötig Zeit – jedes Mal Elemente wegwerfen und neu
+         aufbauen, samt Namensschild.
+
+     Deshalb: je Person EIN Element, das bleibt und nur seine Werte
+     bekommt. Weg kommt nur, wer nicht mehr da ist.
+     ══════════════════════════════════════════════════════════════════ */
+  const caretEls = new Map();     // uid -> Element
+  const lockEls = new Map();      // uid#nr -> Element
+
+  /** Holt das gemerkte Element oder baut es – und hängt es an die Seite. */
+  function reuse(store, key, pgEl, bauen) {
+    let el = store.get(key);
+    if (!el || !el.isConnected) {
+      el = bauen();
+      store.set(key, el);
+    }
+    if (el.parentElement !== pgEl) pgEl.appendChild(el);
+    return el;
+  }
+
+  /** Alles wegräumen, was in diesem Durchgang nicht gebraucht wurde. */
+  function aufraeumen(store, gebraucht) {
+    for (const [key, el] of store) {
+      if (gebraucht.has(key)) continue;
+      el.remove();
+      store.delete(key);
+    }
+  }
+
+  function _renderCaretsNow() {
+    if (!others.length) {
+      aufraeumen(caretEls, new Set());
+      return;
+    }
+
+    const gebraucht = new Set();
     const zoom = (typeof getZoom === 'function') ? getZoom() : 1;
 
     /* Nach Seiten gruppiert: der Text einer Seite wird dadurch einmal
@@ -572,22 +616,32 @@
       // Marke wird IN der Seite platziert und dort gilt die Grundgröße.
       const box = lineBoxOf(pgEl, textDiv, rect, zoom);
 
-      const caret = document.createElement('div');
-      caret.className = 'collab-caret';
+      const caret = reuse(caretEls, person.uid, pgEl, () => {
+        const el = document.createElement('div');
+        el.className = 'collab-caret';
+        const label = document.createElement('span');
+        label.className = 'collab-caret-label';
+        el.appendChild(label);
+        return el;
+      });
+      gebraucht.add(person.uid);
+
+      const farbe = person.color || 'var(--gold)';
+      const name = person.name || person.email || '?';
       caret.style.left = box.left + 'px';
       caret.style.top = box.top + 'px';
       caret.style.height = box.height + 'px';
-      caret.style.background = person.color || 'var(--gold)';
+      if (caret.style.background !== farbe) caret.style.background = farbe;
 
-      const label = document.createElement('span');
-      label.className = 'collab-caret-label';
-      label.style.background = person.color || 'var(--gold)';
-      label.textContent = person.name || person.email || '?';
-      caret.appendChild(label);
-
-      pgEl.appendChild(caret);
+      const label = caret.firstElementChild;
+      if (label) {
+        if (label.style.background !== farbe) label.style.background = farbe;
+        if (label.textContent !== name) label.textContent = name;
+      }
       }
     }
+
+    aufraeumen(caretEls, gebraucht);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -776,9 +830,12 @@
   }
 
   function _renderLocksNow() {
-    document.querySelectorAll('.collab-lock').forEach(el => el.remove());
-    if (!others.length) return;
+    if (!others.length) {
+      aufraeumen(lockEls, new Set());
+      return;
+    }
 
+    const gebraucht = new Set();
     const zoom = (typeof getZoom === 'function') ? getZoom() : 1;
     const byPage = new Map();
     for (const person of peopleNow()) {
@@ -805,26 +862,41 @@
         catch (err) { continue; }
         if (!zeilen.length) continue;
 
+        const farbe = person.color || 'var(--gold)';
+        const name = '🔒 ' + (person.name || person.email || '?');
+
         zeilen.forEach((box, i) => {
-          const band = document.createElement('div');
-          band.className = 'collab-lock';
+          const key = person.uid + '#' + i;
+          const band = reuse(lockEls, key, pgEl, () => {
+            const el = document.createElement('div');
+            el.className = 'collab-lock';
+            // Nur das oberste Band trägt den Namen – die darunter gehören
+            // sichtbar dazu, sollen ihn aber nicht wiederholen
+            if (i === 0) {
+              const tag = document.createElement('span');
+              tag.className = 'collab-lock-tag';
+              el.appendChild(tag);
+            }
+            return el;
+          });
+          gebraucht.add(key);
+
           band.style.left = left + 'px';
           band.style.width = width + 'px';
           band.style.top = box.top + 'px';
           band.style.height = box.height + 'px';
-          band.style.setProperty('--lock-color', person.color || 'var(--gold)');
+          band.style.setProperty('--lock-color', farbe);
 
-          if (i === 0) {
-            const tag = document.createElement('span');
-            tag.className = 'collab-lock-tag';
-            tag.style.background = person.color || 'var(--gold)';
-            tag.textContent = '🔒 ' + (person.name || person.email || '?');
-            band.appendChild(tag);
+          const tag = band.firstElementChild;
+          if (tag) {
+            if (tag.style.background !== farbe) tag.style.background = farbe;
+            if (tag.textContent !== name) tag.textContent = name;
           }
-          pgEl.appendChild(band);
         });
       }
     }
+
+    aufraeumen(lockEls, gebraucht);
   }
 
   /* Wann zuletzt getippt wurde, je Seite. Entscheidet, ob die eigene
@@ -1064,8 +1136,22 @@
    * @param {string} anker die Zeichen um sie herum, beim Absender genommen
    * @returns {number} die Stelle, die hier gemeint ist
    */
-  function findeStelle(text, pos, anker) {
-    if (typeof anker !== 'string' || !anker) return pos;
+  /**
+   * Wie findeStelle, sagt aber ausdrücklich, wenn der Anker WEG ist.
+   *
+   * >>> Warum der Unterschied wichtig ist <<<
+   * findeStelle gibt in zwei ganz verschiedenen Fällen dieselbe Zahl
+   * zurück: „der Anker steht genau dort, wo er soll" und „der Anker ist
+   * nirgends zu finden". Für die fremde Marke ist das einerlei – dort
+   * ist die gemeldete Stelle der beste Schätzwert. Für die EIGENE Marke
+   * nicht: verschwindet der Anker, weil die fremde Änderung mitten in
+   * ihn hineingeschrieben hat, ist die alte Zahl gerade NICHT mehr
+   * richtig, und es braucht den Umweg über den Textvergleich.
+   *
+   * @returns {number|null} null, wenn der Anker nicht wiederzufinden ist
+   */
+  function stelleAusAnker(text, pos, anker) {
+    if (typeof anker !== 'string' || !anker) return null;
 
     /* Wie viele Zeichen des Ankers vor der Marke stehen. Das muss nicht
        mitgeschickt werden – es ergibt sich aus der Stelle selbst, weil
@@ -1086,8 +1172,12 @@
       const d = Math.abs(kandidat - pos);
       if (d < abstand) { abstand = d; beste = kandidat; }
     }
-    if (beste !== -1 && abstand <= CTY) return beste;
-    return pos;
+    return (beste !== -1 && abstand <= CTY) ? beste : null;
+  }
+
+  function findeStelle(text, pos, anker) {
+    const gefunden = stelleAusAnker(text, pos, anker);
+    return gefunden === null ? pos : gefunden;
   }
 
   /**
@@ -1331,10 +1421,39 @@
          geändert hat. shiftedPos mit textDelta verschmolz dagegen
          lokale und fremde Änderungen zu einem Block, und die eigene
          Marke sprang zum fremden Text („Cursor beim anderen"). */
-      if (vorher !== null && caret < vorher.length) {
+      /* ══════════════════════════════════════════════════════════════
+         WOHIN DIE EIGENE MARKE GEHÖRT – ZWEI WEGE, IN DIESER REIHENFOLGE
+
+         Hier stand nur der Anker, und davor stand nur der Vergleich.
+         Jeder für sich hat eine Lücke, und beide Lücken sind gemeldet
+         worden.
+
+         1. DER ANKER. Die zwölf Zeichen um die Marke im neuen Text
+            wiederfinden. Das ist die genaueste Auskunft, die es gibt –
+            solange es die Zeichen noch gibt.
+
+            Seine Lücke: er wurde nur gesucht, wenn die Marke NICHT am
+            Ende stand (`caret < vorher.length`). Genau dort steht sie
+            aber meistens, man schreibt ja vorwärts. Die Stelle blieb
+            dann dieselbe ZAHL, während der Text durch die fremde
+            Änderung länger wurde – die Marke stand plötzlich mittendrin,
+            und zwar dort, wo der andere gerade tippt.
+
+         2. DER VERGLEICH (shiftedPos). Er sagt, wie weit sich alles
+            hinter der Änderung verschoben hat.
+
+            Seine Lücke war, dass Eigenes und Fremdes zu EINEM Block
+            verschmolzen – deshalb steht flushPending() weiter oben: das
+            Eigene ist da längst eingetragen, der Unterschied zwischen
+            vorher und nachher ist also genau die fremde Änderung.
+
+         Der Anker gewinnt, wenn er wiederzufinden ist. Schreibt der
+         andere mitten in ihn hinein, gibt es ihn nicht mehr – dann
+         zählt der Vergleich. */
+      if (vorher !== null && vorher !== nachher) {
         try {
-          const anker = ankerAt(vorher, caret);
-          if (anker) ziel = findeStelle(nachher, caret, anker);
+          const ausAnker = stelleAusAnker(nachher, caret, ankerAt(vorher, caret));
+          ziel = (ausAnker !== null) ? ausAnker : shiftedPos(vorher, nachher, caret);
         } catch (e) { /* bleibt caret */ }
       }
       let gesetzt = false;
@@ -2285,15 +2404,35 @@
     opCarets.clear();
 
     document.querySelectorAll('.collab-marker, .collab-caret, .collab-lock').forEach(el => el.remove());
+    // Die Merkzettel der wiederverwendeten Elemente zeigen sonst ins Leere
+    caretEls.clear();
+    lockEls.clear();
     const bar = E('collab-people');
     if (bar) { bar.innerHTML = ''; bar.style.display = 'none'; }
   }
 
   /* ── Meldungen aus dem Editor ─────────────────────────────────────── */
 
-  /** Der Nutzer hat auf einer Seite getippt. */
+  /* ══════════════════════════════════════════════════════════════════
+     DER TAKT IST EINE DROSSEL, KEINE ENTPRELLUNG
+
+     Hier stand ein clearTimeout + setTimeout(300) je Anschlag – also
+     eine ENTPRELLUNG: jeder weitere Buchstabe stellte die Uhr zurück.
+     Wer durchschreibt, tippt aber schneller als alle 300 ms, und damit
+     ging während des Schreibens ÜBERHAUPT NICHTS hinaus. Beim anderen
+     erschien der Text erst, wenn man eine Pause machte – gemeldet als
+     „das Schreiben ist laggy, es dauert, bis etwas kommt". Im Prüfstand
+     (scripts/test-collab-live) kam bei zwei Sekunden Dauertippen kein
+     einziges Zeichen an.
+
+     Richtig ist eine Drossel mit sofortigem ersten Schlag: der erste
+     Anschlag geht gleich raus, alles Weitere höchstens alle 300 ms.
+     Damit sieht der andere das erste Zeichen ohne Verzögerung und
+     danach viermal je Sekunde den neuen Stand.
+     ══════════════════════════════════════════════════════════════════ */
   const flushTimers = new Map();
   const pendingText = new Map();
+  const lastFlush = new Map();      // pageId -> wann zuletzt hinausgegangen
 
   function noteTextChange(pageId, html) {
     /* Bewusst NICHT von `room` abhängig: auch ohne Live-Verbindung soll
@@ -2312,12 +2451,21 @@
     typedAt.set(pageId, Date.now());
     pendingText.set(pageId, html);
 
-    clearTimeout(flushTimers.get(pageId));
-    flushTimers.set(pageId, setTimeout(() => {
+    const seit = Date.now() - (lastFlush.get(pageId) || 0);
+    if (seit >= TEXT_FLUSH_MS) {
       flushPending(pageId);
       // Beim Tippen wandert auch die eigene Schreibmarke
       reportCaret();
-    }, TEXT_FLUSH_MS));
+      return;
+    }
+
+    /* Läuft schon einer, bleibt es dabei – ihn zurückzustellen wäre
+       genau die Entprellung, die nichts mehr durchließ. */
+    if (flushTimers.has(pageId)) return;
+    flushTimers.set(pageId, setTimeout(() => {
+      flushPending(pageId);
+      reportCaret();
+    }, TEXT_FLUSH_MS - seit));
   }
 
   /**
@@ -2337,6 +2485,9 @@
   function flushPending(pageId) {
     const timer = flushTimers.get(pageId);
     if (timer) { clearTimeout(timer); flushTimers.delete(pageId); }
+
+    // Auch ohne Wartendes: der Takt zählt ab jetzt neu
+    lastFlush.set(pageId, Date.now());
 
     if (!pendingText.has(pageId)) return;
     const html = pendingText.get(pageId);

@@ -20,7 +20,8 @@
     "test:sanitize": "electron scripts/test-sanitize",
     "test:lists": "electron scripts/test-lists",
     "test:touch": "electron scripts/test-touch",
-    "test:caret": "electron scripts/test-caret-geometry"
+    "test:caret": "electron scripts/test-caret-geometry",
+    "test:live": "electron scripts/test-collab-live"
   },
   "dependencies": {},
   "devDependencies": {
