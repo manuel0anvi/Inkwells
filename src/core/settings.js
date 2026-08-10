@@ -124,21 +124,31 @@ class SettingsManager {
     }
 
     await this.load();
-    
-    // Set save location if not set yet (first run)
+
+    /* ── Erster Start: Speicherort setzen, aber NICHT fragen ───────────
+       Hier stand ein pickFolder() - ein Dialog des Betriebssystems,
+       mitten im Hochfahren. Solange er offen stand, kam der ganze Ablauf
+       in core/init.js nicht weiter: keine Registry, kein Auto-Speichern,
+       keine Cloud. Und vor allem kein Beenden-Handler, weshalb ein
+       Zumachen in dieser Zeit acht Sekunden lang wie ein Absturz aussah.
+
+       Ein Dialog, auf den das Programm wartet, gehoert nicht in den
+       Start. Genommen wird deshalb sofort der Standardordner
+       (Dokumente\Inkwell), und die Frage kommt danach - siehe
+       frageNachSpeicherort() unten. Wer nichts aussucht, hat trotzdem
+       einen brauchbaren Ort. */
     if (!this.settings.saveLocation) {
       try {
-        const defaultPath = await window.api.getDefaultSavePath();
-        const selectedPath = window.api.pickFolder ? await window.api.pickFolder(defaultPath) : null;
-        this.settings.saveLocation = selectedPath || defaultPath;
+        this.settings.saveLocation = await window.api.getDefaultSavePath();
         this._loadedFromFile = true;
+        this.speicherortIstVorgabe = true;   // die Frage steht noch aus
         await this.save();
-        console.log('[Settings] Set save location:', this.settings.saveLocation);
+        console.log('[Settings] Speicherort vorerst:', this.settings.saveLocation);
       } catch (err) {
         console.error('[Settings] Failed to get default path:', err);
       }
     }
-    
+
     this._initialized = true;
     console.log('[Settings] Initialization complete:', redactSettings(this.settings));
   }
@@ -241,6 +251,42 @@ class SettingsManager {
 }
 
 const Settings = new SettingsManager();
+
+/**
+ * Holt beim ERSTEN Start die Frage nach dem Speicherort nach.
+ *
+ * Aufgerufen erst, wenn alles andere steht (core/init.js). Bis dahin
+ * arbeitet die App bereits mit dem Standardordner - wer den Dialog
+ * wegklickt, verliert also nichts.
+ *
+ * @returns {Promise<boolean>} ob ein anderer Ort gewaehlt wurde
+ */
+async function frageNachSpeicherort() {
+  if (!Settings.speicherortIstVorgabe) return false;
+  Settings.speicherortIstVorgabe = false;      // nur einmal fragen
+
+  if (!window.api || !window.api.pickFolder) return false;
+
+  try {
+    const jetzt = Settings.get('saveLocation');
+    const gewaehlt = await window.api.pickFolder(jetzt);
+    if (!gewaehlt || gewaehlt === jetzt) return false;
+
+    /* Der Ordner wechselt, die Hefte sollen mit. updateAllPaths schreibt
+       die Eintraege um; die Dateien selbst bewegt ui/settings.js beim
+       gewoehnlichen Wechsel des Ortes. Beim ersten Start gibt es noch
+       keine, deshalb genuegt hier der Eintrag. */
+    await Settings.update({ saveLocation: gewaehlt });
+    if (typeof Registry !== 'undefined' && Registry?.updateAllPaths) {
+      await Registry.updateAllPaths(jetzt, gewaehlt);
+    }
+    console.log('[Settings] Speicherort gewaehlt:', gewaehlt);
+    return true;
+  } catch (err) {
+    console.warn('[Settings] Frage nach dem Speicherort uebersprungen:', err?.message || err);
+    return false;
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════════════
    WO MAN EIN HEFT ZULETZT VERLASSEN HAT

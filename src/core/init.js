@@ -24,6 +24,24 @@
   }
   console.log('[Init] window.api is available');
 
+  /* -- ZUERST der Beenden-Handler --------------------------------
+     Er stand bisher ganz am Ende dieses Ablaufs, nach Einstellungen,
+     Registry, Auto-Speichern und Cloud. Das ging gut, solange nichts
+     davon haengen bleibt - beim allerersten Start tut aber genau das
+     etwas: die Ordnerwahl oeffnete einen Dialog des Betriebssystems
+     und wartete, dass jemand ihn beantwortet.
+
+     Bis dahin war der Handler nicht registriert. Wer in dieser Zeit
+     das Fenster zumachte, sah keine Anzeige und musste acht Sekunden
+     auf die Notbremse in main.js warten.
+
+     Er haengt an nichts, was danach kommt: alles, was er anfasst,
+     ist entweder beim Laden der Scripts schon da (AutoSave) oder
+     wird zur Laufzeit geprueft. Also gehoert er nach vorn - er ist
+     die einzige Zusage, die auch dann gelten muss, wenn spaeter
+     etwas schiefgeht. */
+  registriereBeendenHandler();
+
   // Initialize settings
   try {
     await Settings.init();
@@ -146,6 +164,33 @@
     console.error('[Init] ✗ File open handler failed:', err);
   }
 
+
+  /* ── Jetzt erst die Frage nach dem Speicherort ────────────────────
+     Nur beim allerersten Start, und ausdruecklich hier unten: ein
+     Dialog des Betriebssystems haelt alles an, was danach kaeme. Oben
+     im Ablauf hat er deshalb die halbe App aufgehalten - samt dem
+     Beenden-Handler.
+
+     Ohne await: die App ist fertig, sie muss darauf nicht warten. */
+  try {
+    if (typeof frageNachSpeicherort === 'function') {
+      frageNachSpeicherort()
+        .then(gewechselt => { if (gewechselt && typeof renderHomeGrid === 'function') renderHomeGrid(); })
+        .catch(err => console.warn('[Init] Speicherort-Frage:', err?.message || err));
+    }
+  } catch (err) {
+    console.warn('[Init] Speicherort-Frage nicht moeglich:', err?.message || err);
+  }
+
+  console.log('[Init] ✓ All systems initialized successfully');
+})();
+
+
+/**
+ * Was beim Schliessen zu tun ist. Aufgerufen ganz zu Anfang des
+ * Ablaufs oben - die Begruendung steht dort.
+ */
+function registriereBeendenHandler() {
   // Beim Schließen alles Offene speichern.
   // Bewusst NICHT über beforeunload: dort läuft asynchrones Speichern nicht
   // mehr zu Ende, und ein preventDefault dort verhindert in Electron das
@@ -244,9 +289,7 @@
     });
     console.log('[Init] ✓ Quit-Handler registriert');
   }
-
-  console.log('[Init] ✓ All systems initialized successfully');
-})();
+}
 
 // Load all notebooks from registry on startup
 async function loadNotebooksFromRegistry() {
