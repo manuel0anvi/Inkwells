@@ -1321,12 +1321,21 @@ class CloudSyncManager {
               : `„${nbName || nbId}" in den Cloud-Papierkorb verschoben.`);
           }
         } else {
-          // Upload: Heft in die Cloud laden
+          // Hochladen. Auch ein 'restore' landet hier: das Heft lebt
+          // wieder und muss deshalb in die Cloud - nur heisst der Vorgang
+          // fuer den Nutzer eben "wiederhergestellt".
           await this._syncNotebook(nbId);
           this._addSyncHistoryEntry({
-            nbId, nbName, action: 'upload',
+            nbId, nbName,
+            /* Die Art wird UEBERNOMMEN, nicht auf 'upload' festgenagelt.
+               Vorher stand jedes Zurueckholen im Protokoll als gewoehnlicher
+               Upload mit der Begruendung "Fertig" - wer eben ein Heft aus
+               dem Papierkorb geholt hatte, fand davon keine Spur. */
+            action: action === 'restore' ? 'restore' : 'upload',
             status: 'completed',
-            reason: (typeof t === 'function' ? t('syncDoneUpload') : 'Fertig')
+            reason: action === 'restore'
+              ? (typeof t === 'function' ? t('syncDoneRestore') : 'Wiederhergestellt')
+              : (typeof t === 'function' ? t('syncDoneUpload') : 'Fertig')
           });
         }
 

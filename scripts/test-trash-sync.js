@@ -82,6 +82,13 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
       },
       listRemoteNotebookIds: async () => inMainFolder,
       deleteRemoteFile: async () => true,
+      /* Fuer _destroy(): ohne verbundenes Konto gibt es dort nichts zu
+         loeschen. "angemeldet" schaltet den Fall ein, in dem wirklich
+         eine Cloud dranhaengt; "nochInCloud" laesst die Gegenprobe
+         melden, dass die Datei trotz allem noch da ist. */
+      isAuthenticated: () => cloud.angemeldet === true,
+      isConfigured: () => cloud.angemeldet === true,
+      remoteNotebookExists: async () => cloud.nochInCloud === true,
       deleteRemoteNotebookById: async (id) => {
         deletedRemote.push(id);
         return cloud.canDelete !== false;
@@ -100,7 +107,9 @@ function makeTrash(entries, index, inMainFolder = [], cloud = {}) {
       getNotebookFilePath: () => null,
       getNotebookPath: () => null
     },
-    Settings: { get: () => '' },
+    // cloudEnabled steuert, ob _destroy die Cloud ueberhaupt anfasst.
+    // Ohne "angemeldet" bleibt es falsch - genau wie bisher.
+    Settings: { get: (k) => (k === 'cloudEnabled' ? cloud.angemeldet === true : '') },
     S: { notebooks: [] },
     getNb: () => null
   };
@@ -426,6 +435,46 @@ function syncedEntry(id, name) {
     check('Ohne Netz wandert es in die Warteschlange',
       ohneNetz.eingereiht.map(e => [e.id, e.action]), [['nb8', 'trash']]);
     check('Und wird NICHT schon als erledigt vermerkt', ohneNetz.vermerkt, []);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     ENDGUELTIG LOESCHEN IST AUCH ZU SEHEN
+
+     Derselbe blinde Fleck wie beim Verschieben in den Papierkorb: geht
+     die Cloud-Seite sofort durch, wartet nichts mehr - und dann schrieb
+     niemand etwas auf. Im Fenster sah es aus, als sei nichts geschehen,
+     obwohl gerade eine Datei aus der Cloud verschwand.
+     ══════════════════════════════════════════════════════════════════ */
+
+  console.log('\n' + 'Endgueltig loeschen ist auch zu sehen');
+
+  {
+    const w = makeTrash([], { entries: [], exists: true }, [], { angemeldet: true });
+    await w.Trash.moveToTrash({ id: 'nb7', name: 'Alte Notizen', pages: [] });
+    w.vermerkt.length = 0;                 // das Verschieben ist hier nicht das Thema
+
+    await w.Trash.deleteForever('nb7');
+
+    check('Das endgueltige Loeschen steht im Protokoll',
+      w.vermerkt.map(v => [v.nbId, v.action]), [['nb7', 'delete']]);
+    check('Mit dem Namen des Hefts', w.vermerkt[0].nbName, 'Alte Notizen');
+    check('Und der Eintrag ist weg', w.Trash._entries.length, 0);
+  }
+
+  {
+    /* Kommt die Cloud-Seite NICHT durch, bleibt ein Grabstein stehen -
+       und der taucht ueber getPendingCloudActions als wartend auf. Dann
+       darf nichts als erledigt vermerkt werden. */
+    const w = makeTrash([], { entries: [], exists: true }, [],
+      { angemeldet: true, canMove: false, canDelete: false, nochInCloud: true });
+    await w.Trash.moveToTrash({ id: 'nb6', name: 'Reste', pages: [] });
+    w.vermerkt.length = 0;
+
+    await w.Trash.deleteForever('nb6');
+
+    check('Ohne Netz wird nichts als erledigt vermerkt', w.vermerkt, []);
+    check('Stattdessen bleibt es wartend',
+      w.Trash.getPendingCloudActions().map(e => [e.nbId, e.action]), [['nb6', 'delete']]);
   }
 
   if (failed > 0) {

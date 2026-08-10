@@ -84,6 +84,10 @@ function ladeCloudSync() {
   return ctx.CloudSync_;
 }
 
+/* Der urspruengliche _processQueue - fuer die Faelle, in denen die
+   Warteschlange wirklich durchlaufen soll statt nur gezaehlt zu werden. */
+const CloudSyncProto = Object.getPrototypeOf(ladeCloudSync());
+
 /** Ein Exemplar, bei dem das Abarbeiten nur mitgeschrieben wird. */
 function frisch() {
   const cs = ladeCloudSync();
@@ -146,6 +150,51 @@ function frisch() {
     check('Auch ein alter String-Eintrag wird gefunden',
       cs.flushNotebook('nb1'), true);
     check('Und ist danach fällig', cs._isUploadDue('nb1'), true);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WIE EIN VORGANG IM PROTOKOLL HEISST
+
+     Ein Zurueckholen aus dem Papierkorb laeuft technisch als Upload -
+     das Heft lebt wieder und muss in die Cloud. Im Protokoll stand
+     deshalb "Fertig" wie bei jedem anderen Upload, und wer eben ein Heft
+     zurueckgeholt hatte, fand davon keine Spur.
+
+     Die ART wird jetzt uebernommen, nicht auf 'upload' festgenagelt.
+     ══════════════════════════════════════════════════════════════════ */
+
+  console.log('\n' + 'Wie ein Vorgang im Protokoll heisst');
+
+  {
+    const cs = frisch();
+    cs._processQueue = CloudSyncProto._processQueue.bind(cs);   // echt laufen lassen
+    cs._canSync = () => true;
+    cs.isOnline = true;
+    cs._syncNotebook = async () => {};
+    cs.syncQueue = [{ nbId: 'nb1', nbName: 'Tagebuch', action: 'restore', queuedAt: '' }];
+
+    await cs._runQueue();
+
+    const log = cs.getSyncHistory();
+    check('Das Zurueckholen steht im Protokoll', log.length, 1);
+    check('Und zwar als Zurueckholen, nicht als Upload', log[0].action, 'restore');
+    check('Mit der passenden Begruendung', log[0].reason, 'syncDoneRestore');
+    check('Und als erledigt', log[0].status, 'completed');
+  }
+
+  {
+    const cs = frisch();
+    cs._processQueue = CloudSyncProto._processQueue.bind(cs);
+    cs._canSync = () => true;
+    cs.isOnline = true;
+    cs._syncNotebook = async () => {};
+    cs.syncQueue = [{ nbId: 'nb2', nbName: 'Mathe', action: 'upload', queuedAt: '' }];
+
+    await cs._runQueue();
+
+    const log = cs.getSyncHistory();
+    check('Ein gewoehnlicher Upload heisst weiterhin so', log[0].action, 'upload');
+    check('Mit seiner eigenen Begruendung', log[0].reason, 'syncDoneUpload');
   }
 
   if (failed > 0) {

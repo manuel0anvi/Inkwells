@@ -640,6 +640,24 @@ const Trash = {
 
     if (cloudFertig) {
       this._entries = this._entries.filter(e => e.id !== id);
+
+      /* Ins Protokoll, sonst bliebe das endgueltige Loeschen unsichtbar.
+         Derselbe Fall wie beim Verschieben in den Papierkorb: geht die
+         Cloud-Seite sofort durch, wartet nichts mehr - und dann schrieb
+         auch niemand etwas auf. Im Fenster sah es aus, als sei nichts
+         geschehen, obwohl gerade eine Datei aus der Cloud verschwand.
+
+         Schlaegt es fehl, bleibt entry.purged stehen; das taucht ueber
+         getPendingCloudActions() als wartend auf. */
+      if (typeof CloudSync_ !== 'undefined' && CloudSync_
+          && typeof CloudSync_.noteSyncDone === 'function') {
+        CloudSync_.noteSyncDone({
+          nbId: entry.id,
+          nbName: entry.name,
+          action: 'delete',
+          reason: (typeof t === 'function' && t('syncDoneDelete')) || 'Endgültig gelöscht'
+        });
+      }
     } else {
       console.warn('[Trash] Cloud-Datei noch nicht weg, wird nachgeholt:', entry.name);
       entry.purged = true;
