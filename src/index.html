@@ -1106,6 +1106,24 @@
 </div>
 
 
+<!-- WIRD GESCHLOSSEN
+     Zwischen dem Klick auf das Kreuz und dem wirklichen Zumachen liegen
+     mitunter ein paar Sekunden: erst wird oertlich gespeichert, dann
+     gehen geteiltes Dokument, Cloud-Upload und der Live-Raum hinaus
+     (core/init.js). Ohne Rueckmeldung sah das aus, als haenge die App -
+     und wer dann ein zweites Mal klickt oder den Task-Manager holt,
+     bricht genau das Speichern ab, auf das er wartet.
+
+     Liegt UEBER allem und nimmt keine Klicks an: was jetzt laeuft,
+     laesst sich nicht mehr abbrechen. -->
+<div class="quitting" id="quitting">
+  <div class="quitting-box">
+    <div class="auth-spinner"></div>
+    <div class="quitting-title" id="quitting-title" data-i18n="quittingTitle">Wird gesichert …</div>
+    <div class="quitting-hint" id="quitting-hint" data-i18n="quittingHint">Deine Änderungen werden gespeichert, dann schließt Inkwell.</div>
+  </div>
+</div>
+
 <script src="lib/pdf.min.js"></script>
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';

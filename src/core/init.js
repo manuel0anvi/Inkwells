@@ -153,6 +153,21 @@
   // auf die Bestätigung (mit Zeitgrenze, siehe main.js).
   if (window.api.onBeforeQuit) {
     window.api.onBeforeQuit(async () => {
+      /* >>> Zeigen, dass gerade etwas passiert <<<
+         Was jetzt folgt, dauert im schlechten Fall mehrere Sekunden. Ohne
+         Anzeige sieht das Fenster dabei aus wie eingefroren - und wer
+         dann nachhilft (zweiter Klick, Task-Manager), bricht genau das
+         Speichern ab, auf das er wartet.
+
+         Ganz zu Beginn, vor dem ersten await: die Anzeige soll stehen,
+         bevor irgendetwas Zeit kostet. */
+      const schliesst = document.getElementById('quitting');
+      const stand = document.getElementById('quitting-title');
+      const sageStand = (schluessel, rueckfall) => {
+        if (stand) stand.textContent = (typeof t === 'function' && t(schluessel)) || rueckfall;
+      };
+      if (schliesst) schliesst.classList.add('an');
+
       try {
         // 1. Lokal speichern – das hat Vorrang und geht schnell
         if (AutoSave.dirtyNotebooks.size > 0) {
@@ -183,6 +198,10 @@
       } catch (err) {
         console.warn('[Init] Geteiltes Dokument nicht vollständig gesichert:', err);
       }
+
+      try {
+        sageStand('quittingCloud', 'Cloud wird auf den neuesten Stand gebracht …');
+      } catch (e) { /* Anzeige darf das Beenden nie aufhalten */ }
 
       try {
         // 2. Cloud-Upload noch versuchen, aber das Schließen nicht blockieren.
@@ -216,6 +235,10 @@
       } catch (err) {
         console.warn('[Init] Raum nicht sauber verlassen:', err);
       }
+
+      try {
+        sageStand('quittingClosing', 'Fertig — Inkwell schließt.');
+      } catch (e) { /* siehe oben */ }
 
       window.api.confirmQuit();
     });

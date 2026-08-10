@@ -1845,3 +1845,65 @@
   color: var(--hi);
   border-color: var(--sb2);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   WIRD GESCHLOSSEN
+
+   Zwischen dem Klick auf das Kreuz und dem wirklichen Zumachen liegen
+   mitunter ein paar Sekunden - erst wird oertlich gespeichert, dann
+   gehen geteiltes Dokument, Cloud und der Live-Raum hinaus.
+
+   Ohne Rueckmeldung sah das aus, als haenge die App. Und wer dann ein
+   zweites Mal klickt oder zum Task-Manager greift, bricht genau das
+   Speichern ab, auf das er gerade wartet. Deshalb: alles abdunkeln,
+   Kreisel, ein Satz dazu.
+
+   pointer-events bleibt an, aber es gibt nichts zu bedienen - das ist
+   Absicht. Was jetzt laeuft, laesst sich nicht mehr abbrechen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.quitting {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 14, .82);
+  backdrop-filter: blur(3px);
+  -webkit-app-region: no-drag;
+}
+
+.quitting.an { display: flex }
+
+.quitting-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 30px 38px;
+  text-align: center;
+  /* Kommt sanft, damit ein schnelles Schliessen nicht aufblitzt */
+  animation: quitting-auf .18s ease-out both;
+  animation-delay: .12s;
+}
+
+@keyframes quitting-auf {
+  from { opacity: 0; transform: translateY(4px) }
+  to   { opacity: 1; transform: none }
+}
+
+.quitting-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 300;
+  font-style: italic;
+  font-size: 21px;
+  color: var(--hi);
+}
+
+.quitting-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--md);
+  max-width: 300px;
+}

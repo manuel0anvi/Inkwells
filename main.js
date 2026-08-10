@@ -456,29 +456,14 @@ function createWindow() {
     if (allowClose) return;
 
     event.preventDefault();
-
-    try {
-      win.webContents.send('app-before-quit');
-    } catch (err) {
-      console.warn('[Quit] Renderer nicht erreichbar, schließe direkt:', err);
-      forceClose();
-      return;
-    }
-
-    // Antwortet die Oberfläche nicht (hängt/abgestürzt), trotzdem schließen.
-    // Großzügig bemessen: erst wird lokal gespeichert, danach bekommt der
-    // Cloud-Upload noch bis zu 3 Sekunden (siehe core/init.js).
-    clearTimeout(closeFallbackTimer);
-    closeFallbackTimer = setTimeout(() => {
-      console.warn('[Quit] Keine Antwort beim Speichern, schließe nach Zeitablauf');
-      forceClose();
-    }, 8000);
+    bitteSpeichern().then(forceClose);
   });
 }
 
 // Steuert, ob win.on('close') noch einmal abbricht, um speichern zu lassen
 let allowClose = false;
 let closeFallbackTimer = null;
+let speicherFertig = null;   // loest die laufende Bitte auf (siehe unten)
 
 function forceClose() {
   clearTimeout(closeFallbackTimer);
@@ -486,9 +471,60 @@ function forceClose() {
   if (win && !win.isDestroyed()) win.close();
 }
 
-// Die Oberfläche meldet: alles gespeichert, es kann geschlossen werden
+/**
+ * Bittet die Oberfläche, alles Offene zu sichern, und wartet darauf.
+ *
+ * >>> Warum das eine eigene Funktion ist <<<
+ * Es gibt ZWEI Wege aus der App: das Fenster zumachen und „Update
+ * installieren". Der zweite ging bisher an dieser Bitte vorbei – er
+ * setzte allowClose und rief app.quit(), womit der close-Handler sofort
+ * aussteigt. Wer beim Aktualisieren gerade noch getippt hatte, verlor
+ * die letzten Sekunden: automatisch gespeichert wird erst zwei Sekunden
+ * nach der letzten Änderung.
+ *
+ * Jetzt nehmen beide denselben Weg.
+ *
+ * Die Zeitgrenze ist großzügig: erst wird örtlich gespeichert (ohne
+ * Grenze, das hat Vorrang), danach bekommen geteiltes Dokument, Cloud
+ * und der Live-Raum zusammen noch einige Sekunden – siehe core/init.js.
+ *
+ * @returns {Promise<void>} auch dann erfüllt, wenn niemand antwortet
+ */
+function bitteSpeichern(timeoutMs = 8000) {
+  if (!win || win.isDestroyed()) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let erledigt = false;
+    const fertig = (grund) => {
+      if (erledigt) return;
+      erledigt = true;
+      speicherFertig = null;
+      clearTimeout(closeFallbackTimer);
+      if (grund) console.warn('[Quit]', grund);
+      resolve();
+    };
+
+    speicherFertig = () => fertig(null);
+
+    try {
+      win.webContents.send('app-before-quit');
+    } catch (err) {
+      fertig('Renderer nicht erreichbar: ' + err.message);
+      return;
+    }
+
+    // Antwortet die Oberfläche nicht (hängt/abgestürzt), trotzdem weiter
+    closeFallbackTimer = setTimeout(
+      () => fertig('Keine Antwort beim Speichern, weiter nach Zeitablauf'),
+      timeoutMs
+    );
+  });
+}
+
+// Die Oberfläche meldet: alles gespeichert
 ipcMain.on('confirm-quit', () => {
-  forceClose();
+  if (speicherFertig) speicherFertig();
+  else forceClose();     // kam ohne laufende Bitte – dann eben direkt
 });
 
 // IPC handlers for update control
@@ -532,9 +568,19 @@ ipcMain.handle('toggle-download-pause', () => {
   return { ok: true, paused: isDownloadPaused };
 });
 
-ipcMain.handle('install-and-restart', () => {
+ipcMain.handle('install-and-restart', async () => {
   if (!downloadedUpdatePath || !fs.existsSync(downloadedUpdatePath)) return { ok: false, err: 'Update file not found' };
   try {
+    /* >>> Erst sichern, DANN den Installierer starten <<<
+       Hier stand nur allowClose = true und app.quit() – der close-
+       Handler stieg damit sofort aus, ohne die Oberfläche zu fragen. Wer
+       gerade noch getippt hatte, verlor die letzten Sekunden.
+
+       Die Reihenfolge ist ebenfalls wichtig: der Installierer lief
+       vorher ZUERST los. Er ersetzt Dateien im Programmordner, während
+       die App noch schreibt – das ist ein Rennen, das man nicht braucht. */
+    await bitteSpeichern();
+
     spawn(downloadedUpdatePath, ['/S', '/force-run'], { detached: true, stdio: 'ignore' }).unref();
     // Ohne dieses Flag würde der close-Handler das Beenden abbrechen
     allowClose = true;
