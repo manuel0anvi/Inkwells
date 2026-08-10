@@ -497,6 +497,10 @@ function appendPageDOM(page, index) {
     updateUndoRedoUI();
     let guard = 0;
     while (guard < 4 && applyHangingIndentWrap(textDiv)) guard++;
+    /* „1. " oder „- " am Zeilenanfang wird zur Aufzählung – wie in Word.
+       Muss VOR dem Merken von page.textContent laufen, sonst ginge die
+       Umwandlung erst beim nächsten Anschlag an die anderen raus. */
+    if (typeof Lists !== 'undefined') Lists.autoFormat(textDiv);
     if (!isPlainTextEditable(textDiv)) {
       textDiv.querySelectorAll('h1,h2,h3,p.j-title-1,p.j-title-2,p.j-title-3').forEach(h => {
         const txt = h.textContent || '';
@@ -544,7 +548,13 @@ function appendPageDOM(page, index) {
     /* Tab und Enter schreiben weiter unten selbst in den Text, teils ohne
        Umweg über beforeinput (commitPlainTextEdit setzt textContent
        direkt). Ein solcher Schreibzugriff geht auch an contenteditable
-       vorbei – ohne Recht darf er deshalb gar nicht erst anfangen. */
+       vorbei – ohne Recht darf er deshalb gar nicht erst anfangen.
+
+       Die Rücktaste braucht hier nichts: sie geht nur in einer
+       Aufzählung einen eigenen Weg, und der ist unten zweifach
+       verriegelt (die Abfrage auf S.readOnly und noch einmal in
+       core/lists.js). Sonst läuft sie über contenteditable und wird in
+       'beforeinput' abgefangen. */
     if ((e.key === 'Tab' || e.key === 'Enter') && S.readOnly) {
       e.preventDefault();
       return;
@@ -554,6 +564,32 @@ function appendPageDOM(page, index) {
     if ((e.key === 'Tab' || e.key === 'Enter') && lockedHere(page, textDiv, 'insertText')) {
       e.preventDefault();
       return;
+    }
+
+    /* ── In einer Aufzählung gelten andere Regeln (core/lists.js) ──
+       Tab rückt eine Ebene tiefer statt einen Tabulator zu setzen,
+       Enter macht den nächsten Punkt und beendet auf einem leeren die
+       Liste, die Rücktaste am Zeilenanfang nimmt die Einrückung zurück.
+       Alles wie in Word. Trifft nichts davon zu, meldet Lists false und
+       es bleibt beim bisherigen Verhalten. */
+    if (typeof Lists !== 'undefined' && !S.readOnly) {
+      let erledigt = false;
+      if (e.key === 'Tab') erledigt = Lists.handleTab(e.shiftKey);
+      else if (e.key === 'Enter' && !e.shiftKey) erledigt = Lists.handleEnter();
+      else if (e.key === 'Backspace') {
+        /* Erst fragen, ob es hier überhaupt um eine Liste geht: sonst
+           würde die Sperre auch bei ganz gewöhnlichem Löschen ein
+           zweites Mal warnen (das erste Mal in 'beforeinput'). */
+        if (Lists.atListItemStart()) {
+          if (lockedHere(page, textDiv, 'deleteContentBackward')) { e.preventDefault(); return; }
+          erledigt = Lists.handleBackspace();
+        }
+      }
+      if (erledigt) {
+        e.preventDefault();
+        setTimeout(() => checkPageOverflow(textDiv, page), 20);
+        return;
+      }
     }
 
     if (e.key === 'Tab') {
