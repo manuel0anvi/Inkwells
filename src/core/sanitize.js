@@ -57,9 +57,17 @@
     'UL', 'OL', 'LI', 'BLOCKQUOTE', 'SECTION'
   ]);
 
-  /* Nur die Ueberschriften-Klassen. Alles andere waere ohne Wirkung –
-     die Stilbloecke der Seite kennen nur diese drei. */
-  const ERLAUBTE_KLASSEN = /^j-title-[123]$/;
+  /* Nur die Ueberschriften- und die Aufzaehlungsklassen. Alles andere
+     waere ohne Wirkung – die Stilbloecke der Seite kennen nur diese.
+
+     `j-list-…` traegt die Form der Aufzaehlung (core/lists.js): welcher
+     Punkt, welche Nummer. Sie MUSS hier durchkommen, sonst saehe eine
+     Liste aus einem geteilten Heft nach dem Oeffnen anders aus als beim
+     Schreiben – ein style="list-style-type" waere keine Alternative, von
+     einem style bleibt unten allein die Farbe stehen. Das Muster ist
+     bewusst allgemein gehalten, damit eine neue Form nicht an zwei
+     Stellen nachgetragen werden muss. */
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?)$/;
 
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {

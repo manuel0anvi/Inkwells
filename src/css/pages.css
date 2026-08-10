@@ -218,6 +218,124 @@ body.touch-draw .j-canvas {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   AUFZÄHLUNGEN UND NUMMERIERUNGEN
+
+   Der Browser gibt einer Liste von sich aus einen Abstand nach oben
+   und unten (margin: 1em). Auf liniertem Papier ist das der Unterschied
+   zwischen „steht auf der Linie" und „schwebt irgendwo dazwischen":
+   jede Zeile muss genau eine Zeilenhoehe hoch sein, sonst laeuft der
+   ganze Text darunter aus dem Raster. Deshalb margin 0 und ueberall
+   die geerbte Zeilenhoehe.
+
+   Der Einzug steckt im padding-left. Er gilt je Ebene neu, damit eine
+   eingerueckte Liste weiter einrueckt – 32 px entsprechen etwa dem,
+   was Word im ersten Schritt tut.
+
+   Welche Marke gemalt wird, entscheidet die Klasse `j-list-…`
+   (core/lists.js). Ueber eine Klasse und nicht ueber style, weil
+   core/sanitize.js von einem style nur die Farbe stehen laesst – in
+   einem geteilten Heft waere die Form sonst beim naechsten Oeffnen weg.
+   ══════════════════════════════════════════════════════════════════ */
+
+.j-text ul,
+.j-text ol {
+  margin: 0;
+  padding: 0 0 0 32px;
+  line-height: inherit
+}
+
+.j-text li {
+  margin: 0;
+  padding: 0;
+  line-height: inherit
+}
+
+/* Punkte */
+.j-text ul.j-list-disc {
+  list-style-type: disc
+}
+
+.j-text ul.j-list-circle {
+  list-style-type: circle
+}
+
+.j-text ul.j-list-square {
+  list-style-type: square
+}
+
+.j-text ul.j-list-dash {
+  list-style-type: '– '
+}
+
+.j-text ul.j-list-arrow {
+  list-style-type: '➤ '
+}
+
+.j-text ul.j-list-check {
+  list-style-type: '✓ '
+}
+
+/* Nummern */
+.j-text ol.j-list-decimal {
+  list-style-type: decimal
+}
+
+.j-text ol.j-list-lower-alpha {
+  list-style-type: lower-alpha
+}
+
+.j-text ol.j-list-upper-alpha {
+  list-style-type: upper-alpha
+}
+
+.j-text ol.j-list-lower-roman {
+  list-style-type: lower-roman
+}
+
+.j-text ol.j-list-upper-roman {
+  list-style-type: upper-roman
+}
+
+/* „1)" statt „1." – dafuer reicht list-style-type nicht, die Klammer
+   muss ueber den Zaehler selbst kommen. list-style-type bleibt trotzdem
+   gesetzt, damit ohne ::marker-Unterstuetzung wenigstens Zahlen da sind. */
+.j-text ol.j-list-paren {
+  list-style-type: decimal
+}
+
+.j-text ol.j-list-paren>li::marker {
+  content: counter(list-item) ') '
+}
+
+.j-text ol.j-list-alpha-paren {
+  list-style-type: lower-alpha
+}
+
+.j-text ol.j-list-alpha-paren>li::marker {
+  content: counter(list-item, lower-alpha) ') '
+}
+
+/* Wie in Word wechselt die VOREINGESTELLTE Form mit jeder Ebene: aus
+   ● wird ○ und dann ▪, aus 1. wird a. und dann i. Wer eine Form selbst
+   gewaehlt hat, behaelt sie auch tiefer – dann trifft keine dieser
+   Regeln, weil die Klasse eine andere ist. */
+.j-text ul.j-list-disc ul.j-list-disc {
+  list-style-type: circle
+}
+
+.j-text ul.j-list-disc ul.j-list-disc ul.j-list-disc {
+  list-style-type: square
+}
+
+.j-text ol.j-list-decimal ol.j-list-decimal {
+  list-style-type: lower-alpha
+}
+
+.j-text ol.j-list-decimal ol.j-list-decimal ol.j-list-decimal {
+  list-style-type: lower-roman
+}
+
+/* ══════════════════════════════════════════════════════════════════
    DIE STAFFELUNG EINER SEITE
 
    Die Zahlen sind bewusst weit auseinander. Bilder brauchen zwischen
