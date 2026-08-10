@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <!-- Zweite Schicht unter core/sanitize.js. main.js schickt dieselbe
-     Regel zusaetzlich als Kopfzeile mit (UI_CSP). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'">
+     Regel zusaetzlich als Kopfzeile mit (UI_CSP) - beide gelten, und die
+     strengere gewinnt. Was hier neu freigegeben wird, muss deshalb auch
+     dort stehen. Warum apis.google.com dabei ist: ausfuehrlich in main.js
+     ueber UI_CSP. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>Inkwell</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="dns-prefetch" href="https://fonts.googleapis.com">

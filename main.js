@@ -256,8 +256,19 @@ const UI_MIME = {
      · form-action  kein Formular, das Daten nach aussen schickt
 
    Wer connect-src spaeter enger fassen will, muss vorher Anmeldung,
-   Hochladen und ein geteiltes Dokument einmal wirklich durchspielen. */
-const UI_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'";
+   Hochladen und ein geteiltes Dokument einmal wirklich durchspielen.
+
+   >>> Warum apis.google.com dabeisteht <<<
+   Die Microsoft-Anmeldung bei Firebase laeuft ueber signInWithPopup
+   (core/share.js). Firebase nimmt die Antwort aus dem Fenster aber nicht
+   direkt entgegen, sondern ueber einen versteckten Rahmen auf
+   inkwell-53ab9.firebaseapp.com/__/auth/iframe - und diesen Rahmen baut
+   es mit GAPI auf, das es als https://apis.google.com/js/api.js
+   nachlaedt. Ohne die Freigabe kommt in der Konsole eine CSP-Meldung
+   ueber api.js und danach auth/internal-error: der Fehler nennt Google,
+   obwohl es um die Anmeldung bei MICROSOFT geht. Beides wird gebraucht,
+   script-src fuer api.js und frame-src fuer den Rahmen, den es setzt. */
+const UI_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'";
 
 function startUiServer() {
   return new Promise((resolve, reject) => {

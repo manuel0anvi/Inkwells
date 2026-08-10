@@ -144,6 +144,32 @@ for (const direktive of ['script-src', 'frame-src']) {
     laesstDurch(kopf, hostApp), true);
 }
 
+/* ── Und dasselbe fuer die Microsoft-Anmeldung ─────────────────────────
+   Zweiter Weg, der still an der CSP haengenbleibt: die Anmeldung bei
+   Firebase mit einem Microsoft-Konto (signInWithPopup in share.js).
+   Firebase nimmt die Antwort nicht aus dem Fenster entgegen, sondern
+   ueber einen versteckten Rahmen auf …firebaseapp.com/__/auth/iframe -
+   und den baut es mit GAPI auf, nachgeladen von apis.google.com.
+
+   Fehlt die Freigabe, meldet die Konsole einen Verstoss wegen
+   api.js und danach auth/internal-error. Beides nennt GOOGLE, obwohl es
+   um MICROSOFT geht - deshalb steht die Pruefung hier, statt sich beim
+   naechsten Mal wieder erraten zu lassen. */
+console.log('\nDie CSP laesst die Microsoft-Anmeldung durch');
+
+// Nur Seiten, die den Anmeldeschritt wirklich anbieten. Die Lesekopie
+// unter s/ fragt die Kennung nur ab und oeffnet nie ein Fenster.
+const anmeldeSeiten = ['src/index.html', 'website/dashboard/index.html'];
+
+for (const direktive of ['script-src', 'frame-src']) {
+  for (const seite of anmeldeSeiten) {
+    check(seite + ' · ' + direktive + ' laesst GAPI durch',
+      laesstDurch(scriptSrc(seite, direktive), 'apis.google.com'), true);
+  }
+  check('main.js · UI_CSP laesst GAPI durch (' + direktive + ')',
+    laesstDurch(scriptSrcKopfzeile(direktive), 'apis.google.com'), true);
+}
+
 /* ── Und die Gegenprobe ────────────────────────────────────────────────
    Eine Pruefung, die alles durchwinkt, prueft nichts. Ein Host, der
    nicht erlaubt sein soll, muss abgewiesen werden - sonst haette die
