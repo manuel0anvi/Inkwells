@@ -134,6 +134,130 @@
   color: var(--sh)
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   GETEILTER KNOPF  –  Aufzaehlung und Nummerierung
+
+   Links schalten, rechts auswaehlen: dieselbe Aufteilung wie in Word.
+   Beide Haelften sehen aus wie ein Knopf, damit klar ist, dass sie
+   zusammengehoeren – deshalb der aneinandergelegte Rand.
+   ══════════════════════════════════════════════════════════════════ */
+
+.tb-split {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0
+}
+
+.tb-split .tb-split-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0
+}
+
+.tb-split .tb-split-more {
+  padding: 4px 4px;
+  font-size: 10px;
+  line-height: 1;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px
+}
+
+/* Die aktive Form faerbt beide Haelften, sonst sieht es zerrissen aus */
+.tb-split.active .tb-opt {
+  background: var(--sc);
+  border-color: var(--gd);
+  color: var(--gold)
+}
+
+.list-style-pop {
+  position: fixed;
+  z-index: 1300;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  padding: 10px
+}
+
+.list-style-pop-head {
+  color: var(--hi);
+  font-size: 12px;
+  margin-bottom: 8px
+}
+
+.list-style-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 56px);
+  gap: 6px
+}
+
+.list-style-cell {
+  background: var(--sp);
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  padding: 6px 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all .12s
+}
+
+.list-style-cell:hover {
+  border-color: var(--gd)
+}
+
+.list-style-cell.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold)
+}
+
+/* Eine Vorschauzeile: die Marke und ein Strich als Platzhalter fuer Text */
+.lsp-row {
+  display: flex;
+  align-items: center;
+  gap: 4px
+}
+
+.lsp-row>b {
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--hi);
+  min-width: 15px;
+  text-align: right;
+  line-height: 1.1
+}
+
+.lsp-row>i {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--sb2)
+}
+
+.list-style-off {
+  width: 100%;
+  margin-top: 8px;
+  background: transparent;
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  color: var(--md);
+  font-family: 'Crimson Pro', serif;
+  font-size: 12px;
+  padding: 5px;
+  cursor: pointer
+}
+
+.list-style-off:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
 .color-ring {
   width: 26px;
   height: 26px;

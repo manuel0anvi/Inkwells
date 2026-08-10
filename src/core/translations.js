@@ -66,7 +66,27 @@ const TRANSLATIONS = {
     undoTitle: 'Rückgängig (Strg+Z)',
     redoTitle: 'Vor (Strg+Y)',
     insert: 'Einfügen',
-    
+
+    // Aufzählungen (core/lists.js)
+    listBullets: 'Aufzählung',
+    listNumbers: 'Nummerierung',
+    listPickBullet: 'Aufzählungszeichen wählen',
+    listPickNumber: 'Nummernform wählen',
+    listNone: 'Keine',
+    listDisc: 'Punkt',
+    listCircle: 'Ring',
+    listSquare: 'Quadrat',
+    listDash: 'Strich',
+    listArrow: 'Pfeil',
+    listCheck: 'Haken',
+    listDecimal: '1. 2. 3.',
+    listParen: '1) 2) 3)',
+    listLowerAlpha: 'a. b. c.',
+    listAlphaParen: 'a) b) c)',
+    listUpperAlpha: 'A. B. C.',
+    listLowerRoman: 'i. ii. iii.',
+    listUpperRoman: 'I. II. III.',
+
     // Zoom
     zoomIn: 'Vergrößern',
     zoomOut: 'Verkleinern',
@@ -636,7 +656,27 @@ const TRANSLATIONS = {
     undoTitle: 'Undo (Ctrl+Z)',
     redoTitle: 'Redo (Ctrl+Y)',
     insert: 'Insert',
-    
+
+    // Aufzählungen (core/lists.js)
+    listBullets: 'Bullet list',
+    listNumbers: 'Numbered list',
+    listPickBullet: 'Choose a bullet',
+    listPickNumber: 'Choose a numbering',
+    listNone: 'None',
+    listDisc: 'Dot',
+    listCircle: 'Ring',
+    listSquare: 'Square',
+    listDash: 'Dash',
+    listArrow: 'Arrow',
+    listCheck: 'Check',
+    listDecimal: '1. 2. 3.',
+    listParen: '1) 2) 3)',
+    listLowerAlpha: 'a. b. c.',
+    listAlphaParen: 'a) b) c)',
+    listUpperAlpha: 'A. B. C.',
+    listLowerRoman: 'i. ii. iii.',
+    listUpperRoman: 'I. II. III.',
+
     // Zoom
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
@@ -1198,7 +1238,27 @@ const TRANSLATIONS = {
     undoTitle: 'Annulla (Ctrl+Z)',
     redoTitle: 'Ripeti (Ctrl+Y)',
     insert: 'Inserisci',
-    
+
+    // Aufzählungen (core/lists.js)
+    listBullets: 'Elenco puntato',
+    listNumbers: 'Elenco numerato',
+    listPickBullet: 'Scegli il punto',
+    listPickNumber: 'Scegli la numerazione',
+    listNone: 'Nessuno',
+    listDisc: 'Punto',
+    listCircle: 'Cerchio',
+    listSquare: 'Quadrato',
+    listDash: 'Trattino',
+    listArrow: 'Freccia',
+    listCheck: 'Spunta',
+    listDecimal: '1. 2. 3.',
+    listParen: '1) 2) 3)',
+    listLowerAlpha: 'a. b. c.',
+    listAlphaParen: 'a) b) c)',
+    listUpperAlpha: 'A. B. C.',
+    listLowerRoman: 'i. ii. iii.',
+    listUpperRoman: 'I. II. III.',
+
     // Zoom
     zoomIn: 'Ingrandisci',
     zoomOut: 'Riduci',

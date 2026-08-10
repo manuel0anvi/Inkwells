@@ -320,6 +320,7 @@ window.addEventListener('resize', positionTextColorDropdown, { passive: true });
 E('pg-scroll').addEventListener('scroll', () => {
   if (E('txt-color-dropdown').style.display !== 'none') positionTextColorDropdown();
   if (E('custom-color-pop').style.display !== 'none' && _customColorAnchor) positionCustomColorPopover(_customColorAnchor);
+  if (_listPopArt) positionListStylePop(E(_listPopArt === 'ol' ? 'fmt-ol-wrap' : 'fmt-ul-wrap'));
 }, { passive: true });
 
 /* Heading toggles */
@@ -390,6 +391,138 @@ function updateHdrBtns() {
   E('fmt-bold').classList.toggle('active', document.queryCommandState('bold'));
   E('fmt-italic').classList.toggle('active', document.queryCommandState('italic'));
   E('fmt-under').classList.toggle('active', document.queryCommandState('underline'));
+  updateListBtns();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AUFZÄHLUNG UND NUMMERIERUNG
+
+   Zwei geteilte Knöpfe: die breite Hälfte schaltet die zuletzt gewählte
+   Form an und aus, die schmale öffnet die Auswahl aller Formen. Genau so
+   ist es in Word, und genau das erwartet, wer von dort kommt.
+
+   Die Auswahl wird aus Lists.STYLES gebaut (core/lists.js) – die Formen
+   stehen dort an einer Stelle, zusammen mit ihren Klassennamen und der
+   Darstellung in css/pages.css. Eine zweite Liste hier würde beim
+   nächsten Hinzufügen einer Form auseinanderlaufen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let _listPopArt = null;   // 'ul' | 'ol', solange die Auswahl offen ist
+
+function listArtOf(styleId) {
+  return (typeof Lists !== 'undefined' && Lists.styleById(styleId).tag === 'OL') ? 'ol' : 'ul';
+}
+
+function updateListBtns() {
+  if (typeof Lists === 'undefined') return;
+  const aktiv = Lists.activeStyleId();
+  const art = aktiv ? listArtOf(aktiv) : null;
+  E('fmt-ul-wrap').classList.toggle('active', art === 'ul');
+  E('fmt-ol-wrap').classList.toggle('active', art === 'ol');
+}
+
+/* Die Schreibmarke steht im Text, nicht im Knopf. Ein Klick würde sie
+   verlieren, und damit wüsste execCommand nicht mehr, worauf es wirken
+   soll – deshalb überall preventDefault auf mousedown. */
+function listNoBlur(el) {
+  if (el) el.addEventListener('mousedown', e => e.preventDefault());
+}
+
+function buildListStyleGrid(art) {
+  const grid = E('list-style-grid');
+  const aktiv = Lists.activeStyleId();
+  grid.innerHTML = '';
+
+  Lists.STYLES.filter(s => (s.tag === 'OL') === (art === 'ol')).forEach(style => {
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'list-style-cell' + (style.id === aktiv ? ' active' : '');
+    cell.title = (typeof t === 'function' && style.labelKey) ? t(style.labelKey) : style.id;
+
+    style.probe.forEach(marke => {
+      const row = document.createElement('span');
+      row.className = 'lsp-row';
+      const b = document.createElement('b');
+      b.textContent = marke;
+      const i = document.createElement('i');
+      row.appendChild(b);
+      row.appendChild(i);
+      cell.appendChild(row);
+    });
+
+    cell.addEventListener('mousedown', e => e.preventDefault());
+    cell.addEventListener('click', () => {
+      Lists.apply(style.id, true);
+      closeListStylePop();
+      setTimeout(updateHdrBtns, 0);
+    });
+    grid.appendChild(cell);
+  });
+}
+
+function positionListStylePop(anchorEl) {
+  const pop = E('list-style-pop');
+  if (!pop || !anchorEl) return;
+  const r = anchorEl.getBoundingClientRect();
+  pop.style.left = Math.round(r.left + r.width / 2) + 'px';
+  pop.style.top = Math.round(r.bottom + 8) + 'px';
+  pop.style.transform = 'translateX(-50%)';
+
+  // Am rechten Rand nicht aus dem Fenster laufen
+  const box = pop.getBoundingClientRect();
+  const zuViel = box.right - (window.innerWidth - 8);
+  if (zuViel > 0) pop.style.left = Math.round(r.left + r.width / 2 - zuViel) + 'px';
+}
+
+function openListStylePop(art, anchorEl) {
+  if (typeof Lists === 'undefined') return;
+  _listPopArt = art;
+  E('list-style-pop-title').textContent = t(art === 'ol' ? 'listNumbers' : 'listBullets');
+  buildListStyleGrid(art);
+  E('list-style-pop').style.display = 'block';
+  positionListStylePop(anchorEl);
+}
+
+function closeListStylePop() {
+  E('list-style-pop').style.display = 'none';
+  _listPopArt = null;
+}
+
+['fmt-ul', 'fmt-ol', 'fmt-ul-more', 'fmt-ol-more', 'list-style-pop'].forEach(id => listNoBlur(E(id)));
+
+E('fmt-ul').addEventListener('click', () => { Lists.toggle('ul'); setTimeout(updateHdrBtns, 0); });
+E('fmt-ol').addEventListener('click', () => { Lists.toggle('ol'); setTimeout(updateHdrBtns, 0); });
+
+E('fmt-ul-more').addEventListener('click', e => {
+  e.stopPropagation();
+  if (_listPopArt === 'ul') return closeListStylePop();
+  openListStylePop('ul', E('fmt-ul-wrap'));
+});
+E('fmt-ol-more').addEventListener('click', e => {
+  e.stopPropagation();
+  if (_listPopArt === 'ol') return closeListStylePop();
+  openListStylePop('ol', E('fmt-ol-wrap'));
+});
+
+E('list-style-off').addEventListener('click', () => {
+  Lists.remove();
+  closeListStylePop();
+  setTimeout(updateHdrBtns, 0);
+});
+
+document.addEventListener('pointerdown', e => {
+  if (!e.target.closest('#list-style-pop') && !e.target.closest('.tb-split')) closeListStylePop();
+});
+window.addEventListener('resize', () => {
+  if (_listPopArt) positionListStylePop(E(_listPopArt === 'ol' ? 'fmt-ol-wrap' : 'fmt-ul-wrap'));
+}, { passive: true });
+
+/* Die zuletzt gewählte Form überdauert das Schließen der App. Beim Laden
+   der Leiste ist die Einstellungsdatei aber noch nicht gelesen – deshalb
+   einmal jetzt und noch einmal, sobald sie da ist. */
+if (typeof Lists !== 'undefined') {
+  Lists.loadSettings();
+  if (typeof Settings !== 'undefined' && Settings.onChange) Settings.onChange(() => Lists.loadSettings());
 }
 E('fmt-p').addEventListener('mousedown', e => {
   e.preventDefault();
