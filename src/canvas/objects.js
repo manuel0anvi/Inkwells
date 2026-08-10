@@ -236,6 +236,7 @@ function placeObject(objLayer, obj, page) {
   const body = document.createElement('div'); body.className = 'obj-body';
   body.style.pointerEvents = S.mode === 'cursor' ? 'auto' : 'none';
   if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; body.appendChild(img); }
+  else if (obj.kind === 'shape') { body.innerHTML = renderShapeBody(obj); }
   else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
   wrap.appendChild(body);
 
@@ -436,6 +437,11 @@ function placeObject(objLayer, obj, page) {
   barSep();
   barBtn(OBJ_ICONS.copy, objText('objDuplicate', 'Verdoppeln'), duplicate);
   barBtn(OBJ_ICONS.trash, objText('objDelete', 'Löschen'), removeSelf, 'danger');
+
+  // Form-spezifische Knöpfe: Füllung und Linienstärke
+  if (obj.kind === 'shape' && typeof addShapeChrome === 'function') {
+    addShapeChrome(bar, obj, page, objLayer);
+  }
 
   function markLayerButtons() {
     const back = objLayerOf(obj) === 'back';

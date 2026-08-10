@@ -96,6 +96,12 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // sichtbar – und wirkten dadurch wie eine gespeicherte Änderung.
     if (S.readOnly) return;
 
+    // Formen-Werkzeug: aufziehen statt zeichnen
+    if (S.mode === 'shape') {
+      startShapeDraw(e, page, canvas);
+      return;
+    }
+
     // Die hintere Taste am Stift radiert – bei der Maus die rechte
     const isE = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
     if (isE) {
@@ -187,6 +193,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
   });
 
   div.addEventListener('pointermove', e => {
+    // Form aufziehen: die Vorschau folgt dem Zeiger
+    if (S.mode === 'shape' && S._shapeDrawing && e.pointerId === S._drawPointerId) {
+      moveShapeDraw(e);
+      return;
+    }
     // Nur der Zeiger, der den Strich begonnen hat – ein zweiter Finger
     // beim Zoomen darf nicht mitmalen
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
@@ -229,6 +240,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
   }, { passive: false });
 
   div.addEventListener('pointerup', e => {
+    // Form-Aufziehen beenden
+    if (S.mode === 'shape' && S._shapeDrawing) {
+      endShapeDraw(e);
+      return;
+    }
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
     S.isDrawing = false;
     S._drawPointerId = null;
@@ -247,6 +263,14 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
   div.addEventListener('pointercancel', () => {
+    // Form-Aufziehen abbrechen
+    if (S._shapeDrawing) {
+      hidePreview();
+      S._shapeDrawing = false;
+      S._drawPointerId = null;
+      cleanupShapeState();
+      return;
+    }
     stopLineTimer(S._cur);
     S.isDrawing = false; S._cur = null; S._drawPointerId = null;
     clearLiveCanvas();

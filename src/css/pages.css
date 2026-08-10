@@ -361,6 +361,19 @@ body.touch-draw .j-canvas {
   outline: none
 }
 
+/* ── Formen-Vorschau (Aufziehen) ──────────────────────────────────── */
+.shape-preview {
+  pointer-events: none;
+  z-index: 5500
+}
+
+/* Form-SVG im Objektrahmen: füllt die ganze Hülle aus */
+.obj-body > svg {
+  display: block;
+  width: 100%;
+  height: 100%
+}
+
 .j-text h1,
 .j-text p.j-title-1 {
   font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;

@@ -799,7 +799,7 @@ window.addEventListener('pointermove', e => {
 
 /** Malt dieses Werkzeug, statt Text zu setzen? */
 function isDrawMode(mode) {
-  return mode === 'pen1' || mode === 'pen2' || mode === 'hl' || mode === 'eraser';
+  return mode === 'pen1' || mode === 'pen2' || mode === 'hl' || mode === 'eraser' || mode === 'shape';
 }
 
 function switchMode(mode) {
@@ -811,6 +811,7 @@ function switchMode(mode) {
   const isPen = mode === 'pen1' || mode === 'pen2' || mode === 'hl';
   E('pen-opts').style.display = isPen ? 'flex' : 'none';
   E('eraser-opts').style.display = mode === 'eraser' ? 'flex' : 'none';
+  E('shape-opts').style.display = mode === 'shape' ? 'flex' : 'none';
   E('text-opts').style.display = mode === 'cursor' ? 'flex' : 'none';
   updatePenUI();
   applyMode();
@@ -824,4 +825,46 @@ function switchMode(mode) {
    seit dem Entfernen der Knöpfe nicht mehr gibt. */
 
 /* TOOLBAR mode/pen/color/heading controls moved to ui/toolbar.js */
+
+/* ── Formen-Optionen ────────────────────────────────────────────────────
+   Welche Form gezeichnet wird, entscheiden diese Knöpfe. Farbe und
+   Linienstärke teilen sich die Formen mit dem Stift – eigene Farbfelder
+   wären nur eine Wiederholung des Vorhandenen. */
+
+// Form-Typ: Rechteck, Ellipse, Linie, Pfeil
+S.shapeType = 'rect';
+S.shapeFill = 'none';
+S.shapeStroke = '#1a1510';
+S.shapeStrokeWidth = 2;
+
+QA('#shape-opts [data-shape]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    S.shapeType = btn.dataset.shape;
+    QA('#shape-opts [data-shape]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Füllung: keine / Farbe
+E('shape-fill-none')?.addEventListener('click', () => {
+  S.shapeFill = 'none';
+  E('shape-fill-none').classList.add('active');
+  E('shape-fill-solid').classList.remove('active');
+});
+E('shape-fill-solid')?.addEventListener('click', () => {
+  // Nimmt die aktive Stiftfarbe, wenn keine eigene gesetzt ist
+  const pen = S.mode === 'pen1' ? S.pen1 : S.pen2;
+  S.shapeFill = pen ? pen.color : '#e8e0d0';
+  E('shape-fill-solid').classList.add('active');
+  E('shape-fill-none').classList.remove('active');
+});
+
+// Linienstärke
+QA('#shape-sw-row [data-shape-sw]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    S.shapeStrokeWidth = +btn.dataset.shapeSw;
+    QA('#shape-sw-row [data-shape-sw]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
 

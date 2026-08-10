@@ -114,6 +114,18 @@ const TRANSLATIONS = {
     formulaInline: 'Inline',
     formulaBlock: 'Block',
     formulaError: 'Fehler',
+
+    // Formen
+    shapeTool: 'Formen',
+    shapeRect: 'Rechteck',
+    shapeEllipse: 'Ellipse',
+    shapeLine: 'Linie',
+    shapeArrow: 'Pfeil',
+    shapeFillNone: 'Ohne Füllung',
+    shapeFillSolid: 'Mit Füllung',
+    shapeFill: 'Füllung',
+    shapeStroke: 'Linienfarbe',
+
     tableRowAdd: 'Zeile darunter einfügen',
     tableRowDel: 'Zeile löschen',
     tableColAdd: 'Spalte rechts einfügen',
@@ -737,6 +749,18 @@ const TRANSLATIONS = {
     formulaInline: 'Inline',
     formulaBlock: 'Block',
     formulaError: 'Error',
+
+    // Shapes
+    shapeTool: 'Shapes',
+    shapeRect: 'Rectangle',
+    shapeEllipse: 'Ellipse',
+    shapeLine: 'Line',
+    shapeArrow: 'Arrow',
+    shapeFillNone: 'No fill',
+    shapeFillSolid: 'Solid fill',
+    shapeFill: 'Fill',
+    shapeStroke: 'Outline',
+
     tableRowAdd: 'Insert row below',
     tableRowDel: 'Delete row',
     tableColAdd: 'Insert column right',
@@ -1349,6 +1373,18 @@ const TRANSLATIONS = {
     formulaInline: 'In linea',
     formulaBlock: 'Blocco',
     formulaError: 'Errore',
+
+    // Forme
+    shapeTool: 'Forme',
+    shapeRect: 'Rettangolo',
+    shapeEllipse: 'Ellisse',
+    shapeLine: 'Linea',
+    shapeArrow: 'Freccia',
+    shapeFillNone: 'Senza riempimento',
+    shapeFillSolid: 'Con riempimento',
+    shapeFill: 'Riempimento',
+    shapeStroke: 'Contorno',
+
     tableRowAdd: 'Inserisci riga sotto',
     tableRowDel: 'Elimina riga',
     tableColAdd: 'Inserisci colonna a destra',
