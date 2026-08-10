@@ -126,6 +126,10 @@ const TRANSLATIONS = {
     shapeFill: 'Füllung',
     shapeStroke: 'Linienfarbe',
 
+    // Lineal und Geodreieck
+    ruler: 'Lineal',
+    protractor: 'Geodreieck',
+
     tableRowAdd: 'Zeile darunter einfügen',
     tableRowDel: 'Zeile löschen',
     tableColAdd: 'Spalte rechts einfügen',
@@ -761,6 +765,10 @@ const TRANSLATIONS = {
     shapeFill: 'Fill',
     shapeStroke: 'Outline',
 
+    // Ruler and protractor
+    ruler: 'Ruler',
+    protractor: 'Protractor',
+
     tableRowAdd: 'Insert row below',
     tableRowDel: 'Delete row',
     tableColAdd: 'Insert column right',
@@ -1384,6 +1392,10 @@ const TRANSLATIONS = {
     shapeFillSolid: 'Con riempimento',
     shapeFill: 'Riempimento',
     shapeStroke: 'Contorno',
+
+    // Righello e goniometro
+    ruler: 'Righello',
+    protractor: 'Goniometro',
 
     tableRowAdd: 'Inserisci riga sotto',
     tableRowDel: 'Elimina riga',
