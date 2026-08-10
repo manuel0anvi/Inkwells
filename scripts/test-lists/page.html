@@ -1,0 +1,492 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Die echte Darstellung der Seite. Ohne sie waere die Raster-Pruefung
+     unten wertlos: der Browser gaebe einer Liste sonst seine eigenen
+     Abstaende, und genau die will diese Datei ausschliessen.
+
+     base.css muss mit: dort steht der Rundumschlag `* { margin: 0 }`,
+     ohne den schon ein gewoehnlicher Absatz das Raster verliesse. -->
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+<style>
+  /* Nur, was .j-text in der App an Ort und Stelle bekommt (app.js). Der
+     Rest steht in pages.css und wird von dort geholt. */
+  #feld {
+    position: static;
+    width: 600px;
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 17px;
+    line-height: 32px;
+    white-space: pre-wrap;
+    pointer-events: auto
+  }
+</style>
+</head>
+<body>
+<div class="j-text" id="feld" contenteditable="true"></div>
+
+<script src="../../src/canvas/text.js"></script>
+<script src="../../src/core/lists.js"></script>
+<script src="../../src/core/docx.js"></script>
+<script>
+const ZEILE = 32;              // line-height, wie auf liniertem Papier
+const zeilen = [];
+
+function abschnitt(name) { zeilen.push(''); zeilen.push(name); }
+
+function pruefe(was, bedingung, hinweis) {
+  zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
+}
+
+const feld = document.getElementById('feld');
+
+/* ── Werkzeug ────────────────────────────────────────────────────── */
+
+/** Setzt den Inhalt und die Marke an eine Stelle im flachen Text. */
+function stelle(html, pos) {
+  feld.innerHTML = html;
+  feld.focus();
+  setFlatCaret(feld, pos);
+}
+
+/** Reiner Text, so wie ihn eine frisch getippte Seite haelt. */
+function stelleText(text, pos) {
+  feld.textContent = text;
+  feld.focus();
+  setFlatCaret(feld, pos);
+}
+
+/** Eine Auswahl ueber mehrere Zeilen – in flachen Stellen. */
+function waehle(html, von, bis) {
+  feld.innerHTML = html;
+  feld.focus();
+  const a = flatRangeAt(feld, von);
+  const b = flatRangeAt(feld, bis);
+  const r = document.createRange();
+  r.setStart(a.startContainer, a.startOffset);
+  r.setEnd(b.startContainer, b.startOffset);
+  const sel = getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+/**
+ * Wie viele Zeilen umfasst die Auswahl gerade?
+ *
+ * Nicht ueber range.toString(): das haengt die Textknoten aneinander und
+ * kennt keine Blockgrenzen – ueber zwei <li> hinweg kaeme „bc" heraus,
+ * also eine Zeile. Gezaehlt wird deshalb im flachen Text, in dem jede
+ * Zeile auf dem Papier ein \n ist (canvas/text.js).
+ */
+function auswahlZeilen() {
+  const sel = getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return 0;
+  const r = sel.getRangeAt(0);
+  const von = flatPosOfPoint(feld, r.startContainer, r.startOffset);
+  const bis = flatPosOfPoint(feld, r.endContainer, r.endOffset);
+  return flatTextOf(feld).slice(von, bis).split('\n').length;
+}
+
+/** Der Aufbau ohne Leerraum zwischen den Marken – leichter zu vergleichen. */
+function bau() {
+  return feld.innerHTML.replace(/\s+</g, '<').replace(/>\s+/g, '>');
+}
+
+/**
+ * Woraus der Browser die Marke bildet.
+ *
+ * Bei den eingebauten Formen ist das der list-style-type. Bei „1)" und
+ * „a)" steht sie im content von ::marker – und den gibt getComputedStyle
+ * so zurueck, wie er geschrieben wurde: der Zaehler wird erst beim Malen
+ * eingesetzt. Geprueft wird deshalb, dass die Regel ueberhaupt auf
+ * diesem Punkt landet, nicht der fertige Text.
+ */
+function markeVon(li) {
+  const cs = getComputedStyle(li, '::marker');
+  if (cs.content && cs.content !== 'normal' && cs.content !== 'none') return cs.content;
+  return getComputedStyle(li.parentElement).listStyleType;
+}
+
+function marken() {
+  return [...feld.querySelectorAll('li')].map(markeVon);
+}
+
+/** Steht die Marke in einem Aufzaehlungspunkt? */
+function aktuellerPunkt() {
+  const sel = getSelection();
+  if (!sel.rangeCount) return null;
+  const n = sel.getRangeAt(0).startContainer;
+  const el = n.nodeType === 1 ? n : n.parentElement;
+  return el ? el.closest('li') : null;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   1. AN UND AUS
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('An, aus, Form wechseln');
+
+stelle('<p>eins</p><p>zwei</p>', 0);
+Lists.apply('disc', true);
+pruefe('Aus einem Absatz wird ein Punkt',
+  /<ul[^>]*j-list-disc[^>]*><li>eins<\/li><\/ul>/.test(bau()), bau());
+
+Lists.apply('disc', false);          // derselbe Knopf noch einmal
+pruefe('Derselbe Knopf schaltet wieder aus',
+  !feld.querySelector('ul') && feld.textContent.indexOf('eins') === 0, bau());
+
+stelle('<p>eins</p>', 0);
+Lists.apply('disc', true);
+Lists.apply('square', true);
+pruefe('Form wechseln behaelt die Liste',
+  feld.querySelectorAll('ul').length === 1
+  && feld.querySelector('ul').classList.contains('j-list-square')
+  && !feld.querySelector('ul').classList.contains('j-list-disc'), bau());
+
+stelle('<p>eins</p>', 0);
+Lists.apply('disc', true);
+Lists.apply('decimal', true);
+pruefe('Von Punkten auf Nummern wird aus ul ein ol',
+  !feld.querySelector('ul') && !!feld.querySelector('ol')
+  && feld.querySelector('ol').classList.contains('j-list-decimal'), bau());
+
+/* Der haeufigste Fall ueberhaupt: die Seite ist frisch, es wurde nur
+   getippt, und der ganze Inhalt haengt als EIN Textknoten mit echten \n
+   im Feld. Ohne vorheriges Aufteilen macht execCommand daraus einen
+   einzigen Punkt ueber alle Zeilen. */
+stelleText('eins\nzwei\ndrei', 0);
+Lists.apply('disc', true);
+pruefe('Aus reinem Text wird nur DIE Zeile ein Punkt',
+  feld.querySelectorAll('li').length === 1
+  && feld.querySelector('li').textContent === 'eins', bau());
+pruefe('Und die anderen Zeilen bleiben stehen',
+  feld.textContent.includes('zwei') && feld.textContent.includes('drei'), bau());
+
+/* ══════════════════════════════════════════════════════════════════
+   2. EBENEN
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Ebenen');
+
+const DREI = '<ul class="j-list-disc"><li>a</li><li>b</li><li>c</li></ul>';
+
+stelle(DREI, 2);                     // Marke in „b"
+Lists.indent();
+pruefe('Tab schachtelt sauber: <li><ul><li>',
+  /<li>a<ul[^>]*><li>b<\/li><\/ul><\/li>/.test(bau()), bau());
+pruefe('Die eingerueckte Liste erbt die Form',
+  feld.querySelector('li ul').classList.contains('j-list-disc'), bau());
+
+Lists.outdent();
+pruefe('Und zurueck ergibt wieder drei Punkte nebeneinander',
+  feld.querySelectorAll('ul').length === 1
+  && feld.querySelectorAll('li').length === 3
+  && feld.textContent === 'abc', bau());
+
+stelle(DREI, 0);                     // der erste Punkt
+Lists.indent();
+pruefe('Der erste Punkt kann nicht tiefer',
+  !feld.querySelector('li ul'), bau());
+
+/* Ausruecken in der MITTE: was danach kommt, muss unter dem Punkt
+   bleiben, sonst rutschen Zeilen vor ihn. */
+stelle(DREI, 2);
+Lists.outdent();
+pruefe('Ausruecken in der Mitte teilt die Liste',
+  /<ul[^>]*><li>a<\/li><\/ul><p>b<\/p><ul[^>]*><li>c<\/li><\/ul>/.test(bau()), bau());
+
+// Was Chromium frueher gebaut hat: <ul> direkt in <ul>, ohne <li> dazwischen
+stelle('<ul class="j-list-disc"><li>a</li><ul class="j-list-disc"><li>b</li></ul></ul>', 2);
+Lists.outdent();
+pruefe('Auch die alte Verschachtelung laesst sich ausruecken',
+  feld.textContent === 'ab' && !feld.querySelector('ul ul'), bau());
+
+/* „Keine" heisst gar keine Aufzaehlung mehr – auch nicht eine Ebene
+   hoeher. Ein zweites insertUnorderedList wuerde nur ausruecken. */
+stelle('<ul class="j-list-disc"><li>a<ul class="j-list-disc"><li>b'
+  + '<ul class="j-list-disc"><li>tief</li></ul></li></ul></li></ul>', 6);
+Lists.remove();
+pruefe('„Keine" holt auch aus der dritten Ebene ganz heraus',
+  !aktuellerPunkt() && feld.textContent.includes('tief'), bau());
+
+/* Eine Auswahl ueber mehrere Zeilen darf beim Einruecken nicht zu einer
+   Schreibmarke zerfallen – sonst traefe der zweite Tab nur noch eine. */
+waehle('<ul class="j-list-disc"><li>a</li><li>b</li><li>c</li></ul>', 2, 5);
+pruefe('Zwei Zeilen ausgewaehlt', auswahlZeilen() === 2, String(auswahlZeilen()));
+Lists.indent();
+pruefe('Beide ruecken ein',
+  feld.querySelectorAll('li ul li').length === 2, bau());
+pruefe('Und die Auswahl bleibt ueber beiden',
+  auswahlZeilen() === 2, String(auswahlZeilen()));
+
+/* ══════════════════════════════════════════════════════════════════
+   3. TASTEN
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Tab, Enter, Ruecktaste');
+
+stelle(DREI, 2);
+pruefe('Tab in der Liste wird abgefangen', Lists.handleTab(false) === true, 'false');
+pruefe('Shift+Tab ebenso', Lists.handleTab(true) === true, 'false');
+
+stelle('<p>kein Punkt</p>', 0);
+pruefe('Tab ausserhalb bleibt Tabulator', Lists.handleTab(false) === false, 'true');
+pruefe('Enter ausserhalb bleibt Enter', Lists.handleEnter() === false, 'true');
+
+stelle('<ul class="j-list-disc"><li>a</li></ul>', 1);   // hinter „a"
+Lists.handleEnter();
+pruefe('Enter macht den naechsten Punkt',
+  feld.querySelectorAll('li').length === 2, bau());
+
+// Noch einmal Enter auf dem leeren Punkt: raus aus der Liste
+Lists.handleEnter();
+pruefe('Enter auf leerem Punkt beendet die Liste',
+  feld.querySelectorAll('li').length === 1 && !!feld.querySelector('p'), bau());
+
+stelle('<ul class="j-list-disc"><li>a</li><li>b</li></ul>', 2);   // vor „b"
+pruefe('Ruecktaste am Punktanfang wird erkannt', Lists.atListItemStart() === true, 'false');
+Lists.handleBackspace();
+pruefe('Und nimmt den Punkt aus der Liste',
+  feld.querySelectorAll('li').length === 1 && !!feld.querySelector('p'), bau());
+
+stelle('<ul class="j-list-disc"><li>ab</li></ul>', 2);   // hinter „ab"
+pruefe('Mitten im Wort bleibt die Ruecktaste, was sie war',
+  Lists.atListItemStart() === false && Lists.handleBackspace() === false, bau());
+
+/* ══════════════════════════════════════════════════════════════════
+   4. GETIPPTE MARKEN
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('„1. " getippt');
+
+function tippe(text, erwarteterStil) {
+  stelleText(text, text.length);
+  const wurde = Lists.autoFormat(feld);
+  const liste = feld.querySelector('ul,ol');
+  pruefe('„' + text + '" wird ' + erwarteterStil,
+    wurde && liste && liste.classList.contains('j-list-' + erwarteterStil)
+    && feld.textContent === '', bau());
+}
+
+tippe('1. ', 'decimal');
+tippe('1) ', 'paren');
+tippe('- ', 'dash');
+tippe('* ', 'disc');
+tippe('a) ', 'alpha-paren');
+tippe('A. ', 'upper-alpha');
+tippe('i. ', 'lower-roman');
+tippe('I. ', 'upper-roman');
+
+stelleText('z. B. so', 8);
+pruefe('Mitten im Satz geschieht nichts',
+  Lists.autoFormat(feld) === false && !feld.querySelector('ul,ol'), bau());
+
+stelleText('1. schon Text ', 14);
+pruefe('Nur direkt nach der Marke, nicht spaeter',
+  Lists.autoFormat(feld) === false && !feld.querySelector('ul,ol'), bau());
+
+stelle('<ul class="j-list-disc"><li>- </li></ul>', 2);
+pruefe('In einer Liste greift es nicht noch einmal',
+  Lists.autoFormat(feld) === false, bau());
+
+/* ══════════════════════════════════════════════════════════════════
+   5. DAS RASTER  –  der eigentliche Grund fuer diese Datei
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Jede Zeile bleibt eine Zeilenhoehe hoch');
+
+feld.innerHTML = '<p>davor</p><ul class="j-list-disc"><li>a</li><li>b</li>'
+  + '<li>c<ul class="j-list-disc"><li>tief</li></ul></li></ul><p>danach</p>';
+
+/* Ein Punkt mit einer Unterliste ist so hoch wie alles darin – gemessen
+   werden deshalb nur die Punkte ohne Untermieter. */
+const hoehen = [...feld.querySelectorAll('li')]
+  .filter(li => !li.querySelector('ul,ol'))
+  .map(li => Math.round(li.getBoundingClientRect().height));
+pruefe('Punkte sind ' + ZEILE + ' px hoch',
+  hoehen.length === 3 && hoehen.every(h => h === ZEILE), JSON.stringify(hoehen));
+
+/* Sechs Zeilen untereinander, jede genau eine Zeilenhoehe tiefer als die
+   davor. Genau daran haengt, ob der Text auf den Linien des Papiers
+   sitzt – und ob die Sperrbaender der Mitschreiber die richtige Zeile
+   treffen (ui/collab.js rechnet aus derselben Zeilenhoehe). */
+const bloecke = [...feld.querySelectorAll('li,p')];
+const ersteOben = bloecke[0].getBoundingClientRect().top;
+const oben = bloecke.map(el => Math.round(el.getBoundingClientRect().top - ersteOben));
+pruefe('Und sitzen im Abstand von je ' + ZEILE + ' px',
+  JSON.stringify(oben) === JSON.stringify([0, 32, 64, 96, 128, 160]), JSON.stringify(oben));
+
+const letzter = bloecke[bloecke.length - 1].getBoundingClientRect();
+const gesamt = Math.round(letzter.bottom - ersteOben);
+pruefe('Sechs Zeilen sind ' + (6 * ZEILE) + ' px – kein Abstand um die Liste',
+  gesamt === 6 * ZEILE, gesamt + ' px');
+
+abschnitt('Die Marken werden wirklich gemalt');
+
+feld.innerHTML = '<ol class="j-list-decimal"><li>a</li><li>b</li><li>c</li></ol>';
+pruefe('1. 2. 3.', JSON.stringify(marken()) === JSON.stringify(['decimal', 'decimal', 'decimal']),
+  JSON.stringify(marken()));
+
+feld.innerHTML = '<ol class="j-list-paren"><li>a</li><li>b</li></ol>';
+pruefe('1) 2)', marken().every(m => m === 'counter(list-item) ") "'), JSON.stringify(marken()));
+
+feld.innerHTML = '<ol class="j-list-alpha-paren"><li>a</li><li>b</li></ol>';
+pruefe('a) b)', marken().every(m => m === 'counter(list-item, lower-alpha) ") "'),
+  JSON.stringify(marken()));
+
+/* Die Klammer-Form darf nur die Punkte DIESER Liste treffen. Ohne das
+   `>` im Selektor bekaeme eine eingerueckte Liste sie mit, obwohl sie
+   ihre eigene Form hat. */
+feld.innerHTML = '<ol class="j-list-paren"><li>a<ol class="j-list-decimal"><li>b</li></ol></li></ol>';
+pruefe('Und nicht die eingerueckte Liste darunter',
+  markeVon(feld.querySelector('ol ol li')) === 'decimal',
+  markeVon(feld.querySelector('ol ol li')));
+
+feld.innerHTML = '<ul class="j-list-dash"><li>a</li></ul>';
+pruefe('Strich statt Punkt', getComputedStyle(feld.querySelector('ul')).listStyleType === '"– "',
+  getComputedStyle(feld.querySelector('ul')).listStyleType);
+
+feld.innerHTML = '<ul class="j-list-check"><li>a</li></ul>';
+pruefe('Haken', getComputedStyle(feld.querySelector('ul')).listStyleType === '"✓ "',
+  getComputedStyle(feld.querySelector('ul')).listStyleType);
+
+/* Wie in Word wechselt die VOREINGESTELLTE Form mit der Ebene, eine
+   selbst gewaehlte bleibt. */
+feld.innerHTML = '<ul class="j-list-disc"><li>a<ul class="j-list-disc"><li>b'
+  + '<ul class="j-list-disc"><li>c</li></ul></li></ul></li></ul>';
+const tiefen = [...feld.querySelectorAll('ul')].map(u => getComputedStyle(u).listStyleType);
+pruefe('● ○ ▪ je Ebene', JSON.stringify(tiefen) === JSON.stringify(['disc', 'circle', 'square']),
+  JSON.stringify(tiefen));
+
+feld.innerHTML = '<ol class="j-list-decimal"><li>a<ol class="j-list-decimal"><li>b</li></ol></li></ol>';
+const zahlTiefen = [...feld.querySelectorAll('ol')].map(o => getComputedStyle(o).listStyleType);
+pruefe('1. dann a.', JSON.stringify(zahlTiefen) === JSON.stringify(['decimal', 'lower-alpha']),
+  JSON.stringify(zahlTiefen));
+
+feld.innerHTML = '<ul class="j-list-square"><li>a<ul class="j-list-square"><li>b</li></ul></li></ul>';
+const eigen = [...feld.querySelectorAll('ul')].map(u => getComputedStyle(u).listStyleType);
+pruefe('Selbst gewaehlt bleibt auch tiefer',
+  JSON.stringify(eigen) === JSON.stringify(['square', 'square']), JSON.stringify(eigen));
+
+/* ══════════════════════════════════════════════════════════════════
+   6. WAS DIE ZUSAMMENARBEIT DARAUS LIEST
+
+   Die Schreibmarken und Sperrbaender der Mitschreiber rechnen aus dem
+   flachen Text (canvas/text.js): jede Zeile auf dem Papier ist darin
+   ein \n. Zaehlt eine Liste falsch, sitzt die fremde Marke dauerhaft um
+   so viele Zeilen zu hoch.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Der flache Text zaehlt die Punkte als Zeilen');
+
+feld.innerHTML = '<p>davor</p><ul class="j-list-disc"><li>a</li><li>b</li></ul><p>danach</p>';
+pruefe('Vier Zeilen, drei Umbrueche',
+  flatTextOf(feld) === 'davor\na\nb\ndanach', JSON.stringify(flatTextOf(feld)));
+
+feld.innerHTML = '<ul class="j-list-disc"><li>a<ul class="j-list-disc"><li>tief</li></ul></li><li>b</li></ul>';
+pruefe('Auch die eingerueckte Zeile zaehlt mit',
+  flatTextOf(feld) === 'a\ntief\nb', JSON.stringify(flatTextOf(feld)));
+
+feld.innerHTML = '<ul class="j-list-disc"><li>a</li><li><br></li><li>b</li></ul>';
+pruefe('Ein leerer Punkt hat eine eigene Zeile',
+  flatTextOf(feld) === 'a\n\nb', JSON.stringify(flatTextOf(feld)));
+
+feld.innerHTML = '<ul class="j-list-disc"><li>a</li><li>b</li></ul>';
+setFlatCaret(feld, 2);
+pruefe('Und die Marke findet den zweiten Punkt wieder',
+  flatCaretPos(feld) === 2, String(flatCaretPos(feld)));
+
+/* ══════════════════════════════════════════════════════════════════
+   7. DER WORD-EXPORT
+
+   core/docx.js baut die Marke als Text in den Absatz (dort steht auch,
+   warum). Geprueft wird, dass sie an der richtigen Stelle steht, dass
+   die Nummer je Liste neu zaehlt und dass der Einzug mit der Ebene
+   waechst – letzteres ist das, was den Punkt vom Text abhebt.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Word-Export');
+
+/** Die Marken, die in den Absaetzen landen. */
+function absatzMarken(html) {
+  return InkwellDocx.htmlToParagraphs(html)
+    .filter(p => p.indentPx)
+    .map(p => p.runs[0].text);
+}
+
+pruefe('Punkte werden zu ●',
+  JSON.stringify(absatzMarken('<ul class="j-list-disc"><li>a</li><li>b</li></ul>'))
+  === JSON.stringify(['●', '●']),
+  JSON.stringify(absatzMarken('<ul class="j-list-disc"><li>a</li><li>b</li></ul>')));
+
+pruefe('Nummern zaehlen hoch',
+  JSON.stringify(absatzMarken('<ol class="j-list-decimal"><li>a</li><li>b</li><li>c</li></ol>'))
+  === JSON.stringify(['1.', '2.', '3.']),
+  JSON.stringify(absatzMarken('<ol class="j-list-decimal"><li>a</li><li>b</li><li>c</li></ol>')));
+
+pruefe('Buchstaben und Klammern',
+  JSON.stringify(absatzMarken('<ol class="j-list-alpha-paren"><li>a</li><li>b</li></ol>'))
+  === JSON.stringify(['a)', 'b)']),
+  JSON.stringify(absatzMarken('<ol class="j-list-alpha-paren"><li>a</li><li>b</li></ol>')));
+
+pruefe('Roemisch',
+  JSON.stringify(absatzMarken('<ol class="j-list-upper-roman"><li>a</li><li>b</li>'
+    + '<li>c</li><li>d</li></ol>')) === JSON.stringify(['I.', 'II.', 'III.', 'IV.']),
+  JSON.stringify(absatzMarken('<ol class="j-list-upper-roman"><li>a</li><li>b</li>'
+    + '<li>c</li><li>d</li></ol>')));
+
+/* Eine eingerueckte Liste faengt bei 1 an – und die aeussere zaehlt
+   danach weiter, nicht von vorn. */
+const gemischt = InkwellDocx.htmlToParagraphs(
+  '<ol class="j-list-decimal"><li>eins<ol class="j-list-decimal">'
+  + '<li>tief eins</li><li>tief zwei</li></ol></li><li>zwei</li></ol>');
+pruefe('Die eingerueckte Nummerierung faengt neu an',
+  JSON.stringify(gemischt.map(p => p.runs[0].text)) === JSON.stringify(['1.', 'a.', 'b.', '2.']),
+  JSON.stringify(gemischt.map(p => p.runs[0].text)));
+pruefe('Und der Einzug waechst mit der Ebene',
+  JSON.stringify(gemischt.map(p => p.indentPx)) === JSON.stringify([32, 64, 64, 32]),
+  JSON.stringify(gemischt.map(p => p.indentPx)));
+
+const einer = InkwellDocx.htmlToParagraphs('<ul class="j-list-check"><li>fertig</li></ul>')[0];
+pruefe('Zwischen Marke und Text steht ein Tabulator',
+  einer.runs.length === 3 && einer.runs[0].text === '✓'
+  && einer.runs[1].tab === true && einer.runs[2].text === 'fertig',
+  JSON.stringify(einer.runs));
+
+const ohne = InkwellDocx.htmlToParagraphs('<p>gewoehnlich</p>')[0];
+pruefe('Ein gewoehnlicher Absatz bekommt keinen Einzug',
+  !ohne.indentPx && ohne.runs.length === 1, JSON.stringify(ohne));
+
+/* ══════════════════════════════════════════════════════════════════
+   8. NUR LESEN
+
+   In einem geteilten Dokument ohne Bearbeitungsrecht darf kein Knopf
+   etwas ausrichten. Der Riegel in app.js haengt an 'beforeinput' – und
+   das feuert bei einem Umbau von Hand nicht.
+   ══════════════════════════════════════════════════════════════════ */
+
+abschnitt('Ohne Bearbeitungsrecht geschieht nichts');
+
+window.S = { readOnly: true };
+stelle('<p>eins</p>', 0);
+const vorher = bau();
+pruefe('Kein Punkt aus dem Absatz', Lists.apply('disc', true) === false && bau() === vorher, bau());
+
+stelle('<ul class="j-list-disc"><li>a</li><li>b</li></ul>', 2);
+const listeVorher = bau();
+pruefe('Kein Einruecken', Lists.indent() === false && bau() === listeVorher, bau());
+pruefe('Kein Ausruecken', Lists.outdent() === false && bau() === listeVorher, bau());
+pruefe('Kein Entfernen', Lists.remove() === false && bau() === listeVorher, bau());
+pruefe('Enter richtet nichts aus', Lists.handleEnter() === false && bau() === listeVorher, bau());
+pruefe('Tab auch nicht', Lists.handleTab(false) === false && bau() === listeVorher, bau());
+
+delete window.S;
+stelle('<p>eins</p>', 0);
+pruefe('Mit Recht geht es wieder', Lists.apply('disc', true) === true && !!feld.querySelector('ul'), bau());
+
+window.__ergebnis = zeilen.join('\n');
+</script>
+</body>
+</html>

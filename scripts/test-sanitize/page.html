@@ -81,6 +81,23 @@ bleibt('Farbe rgb()',         '<span style="color:rgb(192,64,64)">rot</span>', [
 bleibt('Einrueckung/Leerraum','<p>  zwei Leerzeichen</p>', ['zwei Leerzeichen']);
 bleibt('Verschachtelt',       '<p><b><i>beides</i></b></p>', ['<b>', '<i>', 'beides']);
 
+/* Die Form einer Aufzaehlung haengt an der Klasse (core/lists.js).
+   Faellt sie hier weg, sieht eine Liste aus einem geteilten Heft nach
+   dem Oeffnen anders aus als beim Schreiben. */
+bleibt('Aufzaehlung',         '<ul class="j-list-disc"><li>eins</li></ul>', ['<ul', '<li>', 'j-list-disc', 'eins']);
+bleibt('Strich-Aufzaehlung',  '<ul class="j-list-dash"><li>x</li></ul>', ['j-list-dash']);
+bleibt('Nummerierung',        '<ol class="j-list-decimal"><li>eins</li></ol>', ['<ol', 'j-list-decimal']);
+bleibt('Buchstaben',          '<ol class="j-list-lower-alpha"><li>a</li></ol>', ['j-list-lower-alpha']);
+bleibt('Klammern',            '<ol class="j-list-alpha-paren"><li>a</li></ol>', ['j-list-alpha-paren']);
+bleibt('Roemisch',            '<ol class="j-list-upper-roman"><li>I</li></ol>', ['j-list-upper-roman']);
+bleibt('Verschachtelte Liste','<ul class="j-list-disc"><li>a<ul class="j-list-circle"><li>b</li></ul></li></ul>',
+  ['j-list-disc', 'j-list-circle', 'b']);
+
+const rausFremdeKlasse = sanitizePageHtml('<ul class="j-list-disc boese"><li>x</li></ul>');
+pruefe('Fremde Klasse an der Liste faellt weg',
+  rausFremdeKlasse.includes('j-list-disc') && !rausFremdeKlasse.includes('boese'),
+  JSON.stringify(rausFremdeKlasse));
+
 abschnitt('Text geht nie verloren');
 
 const rausTabelle = sanitizePageHtml('<table><tr><td>Zelle</td></tr></table>');

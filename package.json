@@ -18,6 +18,7 @@
     "test:rules": "firebase emulators:exec --project inkwell-rules-test --only firestore,database \"node scripts/test-rules.js\"",
     "test:objects": "electron scripts/test-object-layers",
     "test:sanitize": "electron scripts/test-sanitize",
+    "test:lists": "electron scripts/test-lists",
     "test:caret": "electron scripts/test-caret-geometry"
   },
   "dependencies": {},
