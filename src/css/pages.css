@@ -235,6 +235,19 @@ body.touch-draw .j-canvas {
    (core/lists.js). Ueber eine Klasse und nicht ueber style, weil
    core/sanitize.js von einem style nur die Farbe stehen laesst – in
    einem geteilten Heft waere die Form sonst beim naechsten Oeffnen weg.
+
+   >>> ACHTUNG: Dieser Block steht ein zweites Mal in
+       website/css/notebook.css <<<
+   Die Website zeigt geteilte Hefte mit einer eigenen Fassung der
+   .j-text-Stile an. Sie wird NICHT von `npm run sync-share` erzeugt –
+   das Skript haelt nur share.js, docx.js und sanitize.js gleich – und
+   website/ steht in .gitignore. Eine Aenderung hier erreicht den anderen
+   Rechner also nur ueber diesen Hinweis.
+
+   Wer hier etwas aendert, muss es dort von Hand nachziehen. Fehlt der
+   Block drueben, sieht eine Liste im Browser voellig anders aus als beim
+   Schreiben: der Browser gibt ihr dann seine eigenen Abstaende, und jede
+   Zeile darunter rutscht aus dem Linienraster.
    ══════════════════════════════════════════════════════════════════ */
 
 .j-text ul,
