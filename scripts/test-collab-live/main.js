@@ -18,6 +18,15 @@
    Gemessen wird in Seitenmaßen (die Zeile des Papiers), denn nur das
    sieht der Nutzer.
 
+   >>> Was dieser Prüfstand NICHT nachstellt <<<
+   Getippt wird über pruefstand.setzeText(), nicht mit echten
+   Tastenanschlägen: von zwei Fenstern kann nur eines den Tastaturfokus
+   haben. Gerufen wird dabei genau das, was der Editor in app.js auch
+   ruft (Collab.noteTextChange) – für Wartezeit, Marke und Band ist das
+   dieselbe Kette. Was hier NICHT mitläuft, ist der Weg über
+   'beforeinput', also das Abweisen einer Eingabe in einer gesperrten
+   Zeile. Wer daran etwas ändert, braucht dafür einen eigenen Weg.
+
    Läuft NICHT in `npm test` – braucht Electron.
    Aufruf:  npm run test:live
    ══════════════════════════════════════════════════════════════════════ */
