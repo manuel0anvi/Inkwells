@@ -8,6 +8,11 @@
    Finger drehen sie dazu (wie ein Lineal, das man auf dem Papier
    zurechtlegt), und das Mausrad dreht sie in festen Schritten.
 
+   Sie rastet ein: der Winkel bei 0°, 90°, 180° und 270°, und die Lage
+   auf den Linien des Papiers, solange sie waagerecht liegt. Wie das
+   ohne Klebenbleiben geht, steht unten bei „Zustand – roh und
+   eingerastet".
+
    >>> Warum sie auf einem eigenen Canvas gemalt werden <<<
    Ein DOM-Element mit vielen kleinen Strichen wäre ein ganzes Heer von
    <div>-Elementen. Ein Canvas malt alle Markierungen in einem Rutsch und
@@ -138,10 +143,120 @@
     }
   }
 
-  /* ── Zustand ──────────────────────────────────────────────────────── */
-  const lineal = { x: 200, y: 300, winkel: 0, an: false, gesetzt: false };
+  /* ══════════════════════════════════════════════════════════════════
+     ZUSTAND – ROH UND EINGERASTET
+
+     Gefuehrt werden zwei Saetze Werte:
+
+       rohX/rohY/rohWinkel   was die Finger gesagt haben
+       x/y/winkel            was daraus wird, nachdem eingerastet wurde
+
+     >>> Warum nicht einfach den eingerasteten Wert weiterfuehren <<<
+     Dann waere jedes Einrasten endgueltig: die naechste Bewegung
+     rechnete auf dem gerundeten Wert weiter, und aus vielen kleinen
+     Drehungen um je zwei Grad wuerde gar keine mehr – das Lineal klebte
+     fest. Mit dem rohen Wert daneben rastet es nur die ANZEIGE ein und
+     springt sofort wieder heraus, sobald der Finger weit genug ist.
+     ══════════════════════════════════════════════════════════════════ */
+  const lineal = {
+    rohX: 200, rohY: 300, rohWinkel: 0,
+    x: 200, y: 300, winkel: 0,
+    an: false, gesetzt: false
+  };
+
+  const WINKEL_TOLERANZ = 6;    // Grad bis zur Viertelmarke
+
+  /* Bildschirmpixel bis zur Papierlinie. Bewusst knapp: es rasten BEIDE
+     Kanten ein, und die liegen 58 px auseinander – bei einem Linien-
+     abstand von 32 px decken zwei grosszuegige Fangbereiche zusammen
+     schon fast die ganze Strecke ab, und das Lineal liesse sich gar
+     nicht mehr zwischen die Linien legen. Mit 8 px bleibt dafuer ein
+     knappes Drittel uebrig. */
+  const LINIEN_TOLERANZ = 8;
+
+  /**
+   * Wo die Linien einer Seite liegen – in Seitenkoordinaten.
+   *
+   * Die Zahlen stehen so in css/pages.css: das liniierte Papier zeichnet
+   * alle 32 px einen Strich, und das Muster faengt bei 83 px an; der
+   * Strich selbst sitzt am unteren Rand der Kachel, also bei 83+31.
+   * Kariert und gepunktet haben ihr eigenes Mass (canvas/text.js
+   * lhForBg). Auf blankem Papier gibt es nichts zum Einrasten.
+   */
+  function linienRaster(pgEl) {
+    if (!pgEl) return null;
+    if (pgEl.classList.contains('bg-ruled')) return { periode: 32, versatz: 114 };
+    if (pgEl.classList.contains('bg-grid')) return { periode: 24, versatz: 75 };
+    if (pgEl.classList.contains('bg-dots')) return { periode: 24, versatz: 75 };
+    return null;
+  }
+
+  /** Die Seite, ueber der die Mitte des Lineals gerade liegt. */
+  function seiteUnterLineal() {
+    const mx = lineal.rohX + linealBreite / 2;
+    const my = lineal.rohY + LINEAL_H / 2;
+    for (const pg of document.querySelectorAll('.j-page')) {
+      const r = pg.getBoundingClientRect();
+      if (mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom) return pg;
+    }
+    return null;
+  }
+
+  /**
+   * Aus den rohen Werten die eingerasteten machen.
+   *
+   * Zwei Dinge rasten ein, und das zweite haengt am ersten:
+   *
+   *   · Der WINKEL bei 0°, 90°, 180°, 270°. Das ist die Haltung, die man
+   *     fast immer will – ein Lineal legt man gerade hin, nicht auf
+   *     87 Grad.
+   *   · Die LAGE auf den Linien des Papiers, aber nur, solange das
+   *     Lineal waagerecht liegt. Schraeg gibt es keine Linie, auf der
+   *     es liegen koennte, und ein Sprung waere dort nur im Weg.
+   *
+   * Eingerastet wird die Kante, die naeher dran ist – oben wie unten
+   * laesst sich zeichnen (canvas/input.js kennt beide).
+   */
+  function rasteEin() {
+    lineal.x = lineal.rohX;
+    lineal.y = lineal.rohY;
+
+    const norm = ((lineal.rohWinkel % 360) + 360) % 360;
+    const viertel = Math.round(norm / 90) * 90;
+    const nahDran = Math.abs(norm - viertel) <= WINKEL_TOLERANZ;
+    lineal.winkel = nahDran ? (viertel % 360) : lineal.rohWinkel;
+
+    // Auf die Papierlinien nur, wenn es waagerecht liegt
+    const waagerecht = nahDran && (lineal.winkel === 0 || lineal.winkel === 180);
+    if (!waagerecht) return;
+
+    const pgEl = seiteUnterLineal();
+    const raster = linienRaster(pgEl);
+    if (!raster) return;
+
+    const r = pgEl.getBoundingClientRect();
+    const hoehe = (typeof getPage === 'function' && pgEl.dataset.pgid
+      && getPage(pgEl.dataset.pgid)?.page?.h) || CFG.PAGE_H;
+    const massstab = r.height / hoehe;
+    if (!(massstab > 0)) return;
+
+    /** Der Abstand dieser Bildschirm-Hoehe zur naechsten Papierlinie. */
+    function abstandZurLinie(sy) {
+      const aufSeite = (sy - r.top) / massstab;
+      const k = Math.round((aufSeite - raster.versatz) / raster.periode);
+      const linie = r.top + (raster.versatz + k * raster.periode) * massstab;
+      return linie - sy;
+    }
+
+    const obenD = abstandZurLinie(lineal.rohY);
+    const untenD = abstandZurLinie(lineal.rohY + LINEAL_H);
+    const naeher = Math.abs(obenD) <= Math.abs(untenD) ? obenD : untenD;
+
+    if (Math.abs(naeher) <= LINIEN_TOLERANZ) lineal.y = lineal.rohY + naeher;
+  }
 
   function aktualisiereLinealPos() {
+    rasteEin();
     ln.canvas.style.left = Math.round(lineal.x) + 'px';
     ln.canvas.style.top = Math.round(lineal.y) + 'px';
     ln.canvas.style.transform = 'rotate(' + (lineal.winkel || 0) + 'deg)';
@@ -210,8 +325,8 @@
       alt.y = e.clientY;
 
       if (zeiger.size < 2) {
-        state.x += dx;
-        state.y += dy;
+        state.rohX += dx;
+        state.rohY += dy;
         aktualisiereFn();
         return;
       }
@@ -225,9 +340,9 @@
         let dw = jetzt.winkel - letzte.winkel;
         if (dw > 180) dw -= 360;
         if (dw < -180) dw += 360;
-        state.winkel = (state.winkel || 0) + dw;
-        state.x += jetzt.mx - letzte.mx;
-        state.y += jetzt.my - letzte.my;
+        state.rohWinkel = (state.rohWinkel || 0) + dw;
+        state.rohX += jetzt.mx - letzte.mx;
+        state.rohY += jetzt.my - letzte.my;
       }
       letzte = jetzt;
       aktualisiereFn();
@@ -254,7 +369,7 @@
       e.preventDefault();
       e.stopPropagation();
       const schritt = e.shiftKey ? 15 : 1;
-      state.winkel = (state.winkel || 0) + (e.deltaY > 0 ? schritt : -schritt);
+      state.rohWinkel = (state.rohWinkel || 0) + (e.deltaY > 0 ? schritt : -schritt);
       aktualisiereFn();
     }, { passive: false });
   }
@@ -291,8 +406,12 @@
    * Zeichenhilfe: es gehört dorthin, wo Farbe und Strichstärke stehen,
    * und ist damit nur zu sehen, wenn wirklich gezeichnet wird.
    */
+  /* Nur noch bei den Stift-Einstellungen. Bei den Formen stand er
+     ebenfalls, solange man sie aufzog – seit sie eingesetzt statt
+     gemalt werden, gibt es dort keinen Strich mehr, an dem ein Lineal
+     helfen könnte. */
   function baueKnoepfe() {
-    const ziele = ['pen-opts', 'shape-opts'].map(id => E(id)).filter(Boolean);
+    const ziele = ['pen-opts'].map(id => E(id)).filter(Boolean);
     if (!ziele.length) return setTimeout(baueKnoepfe, 200);
 
     for (const grp of ziele) {
@@ -319,7 +438,6 @@
   }
 
   function aktualisiereKnopfZustand() {
-    // Es gibt den Knopf zweimal: bei den Stift- und bei den Formen-Optionen
     document.querySelectorAll('.btn-ruler')
       .forEach(b => b.classList.toggle('active', lineal.an));
   }
@@ -332,8 +450,8 @@
       // Beim ersten Mal über der Seite platzieren
       if (!lineal.gesetzt) {
         const m = seitenMitte();
-        lineal.x = m.x - linealBreite / 2;
-        lineal.y = m.y - LINEAL_H / 2;
+        lineal.rohX = m.x - linealBreite / 2;
+        lineal.rohY = m.y - LINEAL_H / 2;
         lineal.gesetzt = true;
       }
       maleLineal();
