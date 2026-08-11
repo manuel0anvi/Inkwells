@@ -214,9 +214,12 @@ body.touch-draw .j-canvas {
    die Spalte sprang zurück. Erst `fixed` macht die gezogene Breite
    verbindlich. Es gilt nur für Tabellen, an denen wirklich gezogen wurde
    (die haben ein <colgroup>); alle anderen wachsen weiter mit dem Inhalt. */
+/* Kein width:100% – die Spaltenbreiten in <colgroup> ergeben die Breite
+   selbst (core/tables.js verteilt sie beim ersten Anfassen). Mit 100 %
+   verteilte der Browser zusätzlich um, und die gezogene Breite stimmte
+   danach nicht mehr mit der angezeigten überein. */
 .j-text table.j-table:has(colgroup) {
-  table-layout: fixed;
-  width: 100%
+  table-layout: fixed
 }
 
 /* Die Greifzone an der Spaltengrenze. Ein paar Pixel breit reichen der
@@ -377,6 +380,32 @@ body.touch-draw .j-canvas {
 /* Die KaTeX-eigene Block-Darstellung innerhalb von .j-formula-block */
 .j-text .j-formula-block .katex-display {
   margin: 0
+}
+
+/* ── Die Formel als Objekt (core/formula.js) ──────────────────────────
+   Größer und kleiner über transform: scale statt über eine gestreckte
+   Schrift – so bleibt sie in jeder Größe scharf. Der Ursprung liegt oben
+   links, damit das Skalieren nicht von der Mitte aus wegläuft. */
+.j-formula-obj {
+  transform-origin: top left;
+  display: inline-block;
+  white-space: nowrap;
+  color: var(--ptx, #1a1510);
+  user-select: none;
+  pointer-events: none
+}
+
+.j-formula-obj .katex-display {
+  margin: 0
+}
+
+.j-formula-obj.fehler {
+  border: 2px dashed #c04040;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 13px;
+  color: #c04040
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1131,6 +1160,25 @@ body.touch-draw .j-canvas {
 .obj-stroke-sw {
   border-radius: 50%
 }
+
+/* Nativer Farbwähler in der Formen-Leiste – als Rainbow-Knopf statt
+   sieben einzelner Farbfelder. Derselbe Aufbau wie in der Werkzeugleiste:
+   ein unsichtbarer input über einem sichtbaren Anzeigefeld. */
+.obj-color-picker {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+  -webkit-appearance: none;
+  appearance: none
+}
+.obj-color-picker::-webkit-color-swatch-wrapper { padding: 0 }
+.obj-color-picker::-webkit-color-swatch { border: none; border-radius: 3px }
+.obj-bar .obj-color-picker::-webkit-color-swatch { border-radius: 3px }
 
 @media (any-pointer: coarse) {
 

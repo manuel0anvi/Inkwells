@@ -369,6 +369,40 @@ app.on('ready', async () => {
       + JSON.stringify(umgebung) + ' → ' + JSON.stringify(umgebung2) + ')',
       umgebung === umgebung2, 'sie ist woandershin gewandert');
 
+    /* ══════════════════════════════════════════════════════════════════
+       EINE TABELLE KOMMT ALS TABELLE AN
+
+       Der gefährlichste Weg für eine Tabelle ist der Abgleich: der Text
+       geht als Zeichenkette durch Yjs und wird beim Empfänger durch
+       core/sanitize.js geschickt. Stünden die Tabellen-Tags dort nicht
+       auf der Liste, käme drüben eine Reihe loser Wörter an – und
+       zurückverwandeln kann das niemand.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Eine Tabelle kommt als Tabelle an');
+
+    await A('pruefstand.setzeTabelle(3, 4)');
+    await warte(900);
+
+    const drueben = await B('pruefstand.tabelle()');
+    notiz('bei B: ' + JSON.stringify(drueben));
+    pruefe('Das Gerüst steht auch drüben (3 Zeilen, 4 Spalten)',
+      !!drueben && drueben.zeilen === 3 && drueben.spalten === 4,
+      'die Tabelle ist unterwegs zerfallen');
+    pruefe('Mit ihrer Klasse und der Kopfzeile',
+      !!drueben && /j-table/.test(drueben.klasse) && drueben.kopfzellen === 4,
+      JSON.stringify(drueben));
+
+    /* Und die Rechnung der Schreibmarken muss weiterhin aufgehen: eine
+       Tabellenzeile ist EINE Zeile im flachen Maß (canvas/text.js zählt
+       <tr> als Block und <td> als inline). Sonst zeigten alle Marken in
+       einem Heft mit Tabelle daneben. */
+    const flach = await B(`pruefstand.text()`);
+    const zeilenImText = flach.split('\n').length;
+    notiz('flacher Text: ' + JSON.stringify(flach) + ' → ' + zeilenImText + ' Zeilen');
+    pruefe('Eine Tabellenzeile ist eine Zeile im flachen Maß',
+      zeilenImText === 4,     // 3 Tabellenzeilen + der Absatz dahinter
+      zeilenImText + ' statt 4');
+
     if (fehlerA.length || fehlerB.length) {
       abschnitt('Fehler aus den Fenstern');
       for (const m of fehlerA.slice(0, 5)) zeilen.push('     A: ' + m);

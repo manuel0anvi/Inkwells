@@ -313,6 +313,9 @@ function placeObject(objLayer, obj, page) {
         if (nw > mind && nh > mind) {
           obj.w = nw; obj.h = nh; obj.x = nx; obj.y = ny;
           wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px'; wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px';
+          // Formel-Inhalt neu rendern – er wird über transform:scale(k) mit
+          // k = w/natW skaliert, nicht über Breitenänderung allein
+          if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
           placeBar();
         }
       };
@@ -762,6 +765,8 @@ function placeObject(objLayer, obj, page) {
       if (nw > mindW && nh > mindH) {
         obj.x -= (nw - obj.w) / 2; obj.y -= (nh - obj.h) / 2; obj.w = nw; obj.h = nh;
         wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px'; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
+        // Formel-Inhalt neu rendern, damit die Skalierung greift
+        if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
         placeBar();
       }
     }

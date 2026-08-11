@@ -151,6 +151,7 @@ window.InkwellShare = {
 </script>
 
 <script src="../../src/canvas/text.js"></script>
+<script src="../../src/core/tables.js"></script>
 <script src="../../src/ui/collab.js"></script>
 
 <script>
@@ -179,6 +180,29 @@ window.pruefstand = {
     const ok = setFlatCaret(textDiv, stelle);
     document.dispatchEvent(new Event('selectionchange'));
     return ok ? flatCaretPos(textDiv) : null;
+  },
+
+  /** Eine Tabelle einsetzen, wie es das Einfügen-Menü täte. */
+  setzeTabelle(zeilen, spalten) {
+    textDiv.focus();
+    setFlatCaret(textDiv, 0);
+    const html = buildTableHtml(zeilen, spalten);
+    textDiv.innerHTML = html + '<p><br></p>';
+    seite.textContent = textDiv.innerHTML;
+    Collab.noteTextChange(seite.id, seite.textContent);
+    return true;
+  },
+
+  /** Wie die Tabelle hier ankommt – Gerüst, nicht nur Text. */
+  tabelle() {
+    const t = textDiv.querySelector('table');
+    if (!t) return null;
+    return {
+      klasse: t.className,
+      zeilen: t.querySelectorAll('tr').length,
+      spalten: t.querySelector('tr') ? t.querySelector('tr').children.length : 0,
+      kopfzellen: t.querySelectorAll('th').length
+    };
   },
 
   /** Was hier gerade steht. */

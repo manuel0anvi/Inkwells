@@ -257,9 +257,12 @@ app.on('ready', async () => {
        jemand. Geprueft wird deshalb ueber die Breiten, die ein
        umgeklappter Laptop wirklich hat, mit und ohne Navigation.
 
-       Die eine Ausnahme steht ausdruecklich da: 700 px MIT offener
-       Navigation lassen keine 510 px fuer die Leiste – das ist ein
-       6,5 Zoll breites Fenster, kein umgeklappter Laptop. */
+       >>> Seit dem Auffangknopf gibt es keine Ausnahme mehr <<<
+       Hier stand 700 px MIT offener Navigation ausdruecklich als
+       „geht nicht" – da bleiben keine 510 px fuer die Leiste. Mit dem
+       Menue in ui/toolbar.js wandert stattdessen so lange eine Gruppe
+       hinein, bis es passt. Deshalb wird jetzt auch dieser Fall
+       geprueft: er ist der eigentliche Beweis, dass der Weg trägt. */
     abschnitt('Die Leiste passt hinein, ohne zu schieben');
     for (const [breite, hoehe, lage] of [[1400, 900, 'quer 1400'], [1200, 800, 'quer 1200'],
                                           [1000, 800, 'quer 1000'], [900, 1300, 'hoch 900'],
@@ -269,14 +272,24 @@ app.on('ready', async () => {
       await new Promise(r => setTimeout(r, 450));
 
       for (const navOffen of [false, true]) {
-        if (breite === 700 && navOffen) continue;   // siehe oben
         await js(`document.getElementById('side-panel').classList.toggle('open', ${navOffen})`);
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 450));
         const m = await js(`(() => { const tb = document.querySelector('.toolbar');
-          return { platz: Math.round(tb.clientWidth), noetig: Math.round(tb.scrollWidth) }; })()`);
+          return { platz: Math.round(tb.clientWidth), noetig: Math.round(tb.scrollWidth),
+                   imMenue: document.getElementById('tb-more-pop').childElementCount,
+                   knopf: getComputedStyle(document.getElementById('btn-tb-more')).display }; })()`);
         pruefe((lage + (navOffen ? ' + Navigation' : '')).padEnd(24)
-          + m.noetig + ' von ' + m.platz + ' px',
+          + m.noetig + ' von ' + m.platz + ' px'
+          + (m.imMenue ? '  (' + m.imMenue + ' im Menü)' : ''),
           m.noetig <= m.platz, 'es stehen ' + (m.noetig - m.platz) + ' px heraus');
+
+        /* Und wenn etwas ausgelagert wurde, muss der Knopf dazu auch da
+           sein – sonst waeren die Gruppen unerreichbar statt bloss
+           weggeraeumt. */
+        if (m.imMenue) {
+          pruefe((lage + (navOffen ? ' + Navigation' : '')).padEnd(24) + 'Knopf „⋯" ist da',
+            m.knopf !== 'none', 'ausgelagert, aber kein Weg hin');
+        }
       }
       await js(`document.getElementById('side-panel').classList.remove('open')`);
     }

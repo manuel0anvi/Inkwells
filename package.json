@@ -23,7 +23,9 @@
     "test:caret": "electron scripts/test-caret-geometry",
     "test:live": "electron scripts/test-collab-live"
   },
-  "dependencies": {},
+  "dependencies": {
+    "katex": "^0.18.4"
+  },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",
     "electron": "^33.0.0",

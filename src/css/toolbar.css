@@ -364,6 +364,12 @@
   pointer-events: none
 }
 
+/* Der Farbwähler-Ring am Stift zeigt einen Regenbogen – so erkennt man
+   ihn auf den ersten Blick als das, was er ist: eine Farbauswahl. */
+#pen-color-ring .color-dot {
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red) !important
+}
+
 .color-ring input[type=color] {
   position: absolute;
   inset: 0;
@@ -371,7 +377,9 @@
   cursor: pointer;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  /* pointer-events: auto, damit ein Klick auf den Ring den nativen
+     Farbwähler öffnet – ohne Umweg über ein Popover. */
+  pointer-events: auto;
 }
 
 .v-div {
@@ -464,19 +472,103 @@
   color: var(--hi)
 }
 
+.custom-color-pop {
+  min-width: 196px
+}
+
+/* ── Vorgefertigte Farben ─────────────────────────────────────────── */
+.custom-color-preset {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin-bottom: 9px
+}
+
+.custom-color-preset-btn {
+  height: 24px;
+  border-radius: 5px;
+  border: 1.5px solid var(--sb2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .1s, border-color .1s
+}
+
+.custom-color-preset-btn:hover {
+  transform: scale(1.08);
+  border-color: var(--gold)
+}
+
+.custom-color-preset-btn.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold)
+}
+
+/* ── Farbkreis und Zahlencode nebeneinander ───────────────────────── */
+.custom-color-row {
+  display: flex;
+  align-items: center;
+  gap: 5px
+}
+
 #custom-color-pop-input {
-  width: 100%;
-  height: 32px;
+  width: 34px;
+  height: 30px;
+  flex-shrink: 0;
   border: 1px solid var(--sb2);
   border-radius: 6px;
   background: var(--sp);
-  cursor: pointer
+  cursor: pointer;
+  padding: 2px
+}
+
+#custom-color-hex {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  background: var(--sp);
+  color: var(--hi);
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 12px;
+  text-transform: lowercase;
+  outline: none
+}
+
+#custom-color-hex:focus {
+  border-color: var(--gold)
+}
+
+.custom-color-copy {
+  width: 28px;
+  height: 30px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  color: var(--md);
+  cursor: pointer;
+  font-size: 13px
+}
+
+.custom-color-copy:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.custom-color-recent-head {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--lo);
+  text-transform: uppercase;
+  letter-spacing: .4px
 }
 
 .custom-color-recent {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 5px;
   align-items: center;
   flex-wrap: wrap
 }

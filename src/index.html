@@ -769,12 +769,28 @@
   </div>
 </div>
 
+<!-- Eigene Farbe. Ein Klick auf den Regenbogen-Ring öffnet das hier –
+     vorher brauchte es einen Druck von einer ganzen Sekunde, und ein
+     kurzer Klick tat sichtbar nichts. Der Zahlencode steht zum Ablesen
+     und Abschreiben daneben. -->
 <div class="custom-color-pop" id="custom-color-pop" style="display:none">
   <div class="custom-color-pop-head">
     <span id="custom-color-pop-title">Eigene Farbe</span>
     <button class="custom-color-pop-close" id="custom-color-pop-close">✕</button>
   </div>
-  <input type="color" id="custom-color-pop-input" value="#1a1510">
+
+  <div class="custom-color-preset" id="custom-color-preset"></div>
+
+  <div class="custom-color-row">
+    <input type="color" id="custom-color-pop-input" value="#1a1510">
+    <input type="text" id="custom-color-hex" spellcheck="false" autocomplete="off"
+           maxlength="7" value="#1a1510" aria-label="Farbcode">
+    <button class="custom-color-copy" id="custom-color-copy"
+            data-i18n-title="copyColor" title="Code kopieren">⧉</button>
+  </div>
+
+  <div class="custom-color-recent-head" id="custom-color-recent-head"
+       data-i18n="recentColors" style="display:none">Zuletzt benutzt</div>
   <div class="custom-color-recent" id="custom-color-recent" style="display:none"></div>
 </div>
 

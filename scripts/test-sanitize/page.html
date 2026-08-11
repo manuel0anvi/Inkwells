@@ -98,11 +98,40 @@ pruefe('Fremde Klasse an der Liste faellt weg',
   rausFremdeKlasse.includes('j-list-disc') && !rausFremdeKlasse.includes('boese'),
   JSON.stringify(rausFremdeKlasse));
 
+/* ══════════════════════════════════════════════════════════════════
+   TABELLEN MUESSEN GANZ DURCHKOMMEN
+
+   Hier stand die Gegenprobe: eine Tabelle galt als fremdes Element und
+   wurde ausgepackt – der Text blieb, das Geruest fiel weg. Seit es
+   Tabellen im Editor gibt (core/tables.js), ist genau das der Fehler:
+   die erste Aenderung, die durch den Abgleich geht, machte aus einer
+   Tabelle eine Reihe loser Woerter, und zurueck geht das nicht.
+   ══════════════════════════════════════════════════════════════════ */
+abschnitt('Tabellen bleiben Tabellen');
+
+const tabelle = sanitizePageHtml(
+  '<table class="j-table"><tbody><tr><th>Kopf</th></tr>'
+  + '<tr><td colspan="2">Zelle</td></tr></tbody></table>');
+pruefe('Das Geruest bleibt stehen',
+  /<table[^>]*>[\s\S]*<tbody>[\s\S]*<tr>[\s\S]*<th>[\s\S]*<td/.test(tabelle),
+  JSON.stringify(tabelle));
+pruefe('Mit seiner Klasse', tabelle.includes('j-table'), JSON.stringify(tabelle));
+pruefe('Und verbundene Zellen bleiben verbunden',
+  tabelle.includes('colspan="2"'), JSON.stringify(tabelle));
+
+const boeseZelle = sanitizePageHtml(
+  '<table><tr><td onclick="alert(1)" colspan="99999"><img src=x onerror=alert(1)>Zelle</td></tr></table>');
+pruefe('Aber ohne Handgriffe daran',
+  !/onclick/i.test(boeseZelle) && !/<img/i.test(boeseZelle) && boeseZelle.includes('Zelle'),
+  JSON.stringify(boeseZelle));
+pruefe('Und ohne unsinnige Spannweite',
+  !boeseZelle.includes('99999'), JSON.stringify(boeseZelle));
+
 abschnitt('Text geht nie verloren');
 
-const rausTabelle = sanitizePageHtml('<table><tr><td>Zelle</td></tr></table>');
+const rausRahmen = sanitizePageHtml('<marquee>Zelle</marquee>');
 pruefe('Verbotenes Element wird ausgepackt, Text bleibt',
-  rausTabelle.includes('Zelle'), JSON.stringify(rausTabelle));
+  rausRahmen.includes('Zelle') && !/marquee/i.test(rausRahmen), JSON.stringify(rausRahmen));
 
 const rausBild = sanitizePageHtml('<p>davor<img src=x onerror=alert(1)>danach</p>');
 pruefe('Text um ein entferntes Bild herum bleibt',

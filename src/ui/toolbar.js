@@ -298,7 +298,7 @@ function updatePenUI() {
   const m = S.mode, pen = m === 'pen1' ? S.pen1 : m === 'pen2' ? S.pen2 : m === 'hl' ? S.hl : null;
   if (!pen) return;
   if (!pen.customColor) pen.customColor = pen.color;
-  E('pen-color-dot').style.background = pen.customColor;
+  // Der Rainbow-Ring bleibt bunt – nicht mehr die aktuelle Farbe zeigen
   E('pen-color-in').value = pen.customColor;
   QA('#pen-sz-row .sz-btn').forEach(b => b.classList.toggle('active', +b.dataset.sz === pen.szIdx));
   let hasNorm = false;
@@ -417,8 +417,8 @@ function openCustomColorPopover(target, anchorEl) {
   const hexFeld = E('custom-color-hex');
   if (hexFeld) hexFeld.value = c;
 
-  baueFarbPresets();
-  markierePresets(c);
+  // Keine Preset-Farben mehr – der native Picker öffnet direkt, der
+  // Nutzer will keine vorgefertigten Felder davor.
 
   pop.style.display = 'block';
   positionCustomColorPopover(anchorEl);
@@ -465,6 +465,7 @@ function syncGlobalCustomColor(color, applyToSelection) {
   if (_customColorTarget === 'text') {
     S.textCustomColor = c;
     S.textColor = c;
+    S._textColorChosen = c;   // sticky: explizit gewählte Farbe bleibt
     E('txt-color-dot').style.background = c;
     E('txt-custom-ring').classList.add('active');
     QA('.pen-sw[data-tcolor]').forEach(sw => sw.classList.remove('active'));
@@ -564,7 +565,23 @@ function bindColorPress(el, onOeffnen) {
   });
 }
 
-bindColorPress(E('pen-color-ring'), anchor => openCustomColorPopover('pen', anchor));
+/* ── Pen-Rainbow-Ring: Ein Klick öffnet den nativen Farbwähler ──────
+   Der Ring trägt jetzt einen Regenbogen und darunter liegt der native
+   input[type=color]. pointer-events:auto (css/toolbar.css) leitet den
+   Klick direkt an ihn durch – kein Popover, kein Zwischenschritt. */
+E('pen-color-in').addEventListener('input', function () {
+  const pen = activePenState();
+  const c = normalizeHexColor(this.value) || '#1a1510';
+  pen.customColor = c;
+  pen.color = c;
+  updatePenUI();
+  if (typeof saveRecentCustomColor === 'function') saveRecentCustomColor(c);
+});
+
+E('pen-color-in').addEventListener('change', function () {
+  const c = normalizeHexColor(this.value);
+  if (c && typeof saveRecentCustomColor === 'function') saveRecentCustomColor(c);
+});
 
 E('custom-color-pop-input').addEventListener('input', function () {
   applyCustomColorValue(this.value, false);
@@ -662,8 +679,10 @@ document.addEventListener('pointerdown', e => {
 QA('.pen-sw[data-tcolor]').forEach(sw => {
   sw.addEventListener('mousedown', e => e.preventDefault());
   sw.addEventListener('click', () => {
-    S.textColor = sw.dataset.tcolor;
-    E('txt-color-dot').style.background = sw.dataset.tcolor;
+    const c = sw.dataset.tcolor;
+    S.textColor = c;
+    S._textColorChosen = c;   // sticky: wer wählt, will in dieser Farbe schreiben
+    E('txt-color-dot').style.background = c;
     // Vor dem Farbbefehl das Textfeld fokussieren – hat der Klick auf
     // den Farbring dem Textfeld den Fokus genommen, weiss execCommand
     // sonst nicht, worauf es wirken soll.
@@ -675,13 +694,48 @@ QA('.pen-sw[data-tcolor]').forEach(sw => {
       const erstes = document.querySelector('.j-text');
       if (erstes) erstes.focus();
     }
-    document.execCommand('foreColor', false, sw.dataset.tcolor);
-    QA('.pen-sw[data-tcolor]').forEach(s => s.classList.toggle('active', s.dataset.tcolor === sw.dataset.tcolor));
+    document.execCommand('foreColor', false, c);
+    QA('.pen-sw[data-tcolor]').forEach(s => s.classList.toggle('active', s.dataset.tcolor === c));
     E('txt-custom-ring').classList.remove('active');
     E('txt-color-dropdown').style.display = 'none';
   });
 });
-bindColorPress(E('txt-custom-ring'), anchor => openCustomColorPopover('text', anchor));
+/* ── Text-Rainbow-Ring: nativer Farbwähler direkt ──────────────────
+   Dasselbe wie beim Stift: Klick auf den Regenbogen-Ring öffnet den
+   nativen Picker. Der input[type=color] wird hier eingesetzt, weil er
+   im HTML nicht stand. */
+(function () {
+  const ring = E('txt-custom-ring');
+  if (!ring) return;
+  // Nativen Picker einbauen, falls noch nicht geschehen
+  let picker = ring.querySelector('input[type=color]');
+  if (!picker) {
+    picker = document.createElement('input');
+    picker.type = 'color';
+    picker.id = 'txt-custom-color-in';
+    picker.style.cssText = 'position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%';
+    ring.style.position = 'relative';
+    ring.appendChild(picker);
+  }
+  picker.addEventListener('input', function () {
+    const c = normalizeHexColor(this.value);
+    if (!c) return;
+    S.textCustomColor = c;
+    S.textColor = c;
+    S._textColorChosen = c;
+    E('txt-color-dot').style.background = c;
+    E('txt-custom-ring').classList.add('active');
+    QA('.pen-sw[data-tcolor]').forEach(sw => sw.classList.remove('active'));
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      document.execCommand('foreColor', false, c);
+    }
+  });
+  picker.addEventListener('change', function () {
+    const c = normalizeHexColor(this.value);
+    if (c && typeof saveRecentCustomColor === 'function') saveRecentCustomColor(c);
+  });
+})();
 E('txt-color-in').addEventListener('input', function () {
   S.textColor = this.value; E('txt-color-dot').style.background = this.value;
   S.textCustomColor = this.value;
@@ -1000,8 +1054,38 @@ document.addEventListener('selectionchange', () => {
   if (document.activeElement?.classList?.contains('j-text') || el?.closest('.j-text')) {
     updateHdrBtns();
     renderSideTree();
+    /* ════════════════════════════════════════════════════════════════
+       STICKY TEXTFARBE
+       Wer eine Farbe gewählt hat, will in dieser Farbe weiterschreiben –
+       egal wohin er danach klickt. Der updateHdrBtns()-Aufruf oben
+       hätte S.textColor mit der Farbe unter der Marke überschrieben;
+       das wird hier rückgängig gemacht. Die Sticky-Farbe gilt, bis der
+       Nutzer eine andere wählt.
+       ════════════════════════════════════════════════════════════════ */
+    if (S._textColorChosen) {
+      S.textColor = S._textColorChosen;
+      E('txt-color-dot').style.background = S._textColorChosen;
+      QA('.pen-sw[data-tcolor]').forEach(s => s.classList.remove('active'));
+      E('txt-custom-ring').classList.add('active');
+    }
   }
 });
+
+/* Sticky-Farbe beim Tippen: vor jedem druckbaren Zeichen die gewählte
+   Farbe erneut zusichern. contenteditable erbt sonst die Farbe der
+   Umgebung – die explizite Wahl ginge verloren. */
+document.addEventListener('keydown', e => {
+  if (!S._textColorChosen) return;
+  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+  const a = document.activeElement;
+  if (!a || !a.classList || !a.classList.contains('j-text')) return;
+  // Nur wenn die Marke in einer ANDEREN Farbe steht, nachfassen –
+  // sonst schreibt es schon in der richtigen
+  const aktFarbe = farbeUnterMarke();
+  if (aktFarbe && aktFarbe !== S._textColorChosen) {
+    document.execCommand('foreColor', false, S._textColorChosen);
+  }
+}, true);
 
 
 

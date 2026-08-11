@@ -330,13 +330,6 @@ function renderShapeBody(obj) {
  *
  * Wird von placeObject() aufgerufen, nachdem die Standard-Leiste gebaut ist.
  */
-/* Die Farben der Füllung. Dieselben wie beim Stift, damit eine gefüllte
-   Form zu dem passt, was daneben gezeichnet wird – plus Weiß, mit dem man
-   Darunterliegendes abdeckt. */
-const SHAPE_FUELLUNGEN = [
-  'none', '#ffffff', '#1a1510', '#2a5fa8', '#c04040', '#2e8a46', '#e8c547'
-];
-
 function addShapeChrome(bar, obj, page, objLayer) {
   const body = () => {
     const wrap = bar.closest('.obj-wrap');
@@ -350,66 +343,97 @@ function addShapeChrome(bar, obj, page, objLayer) {
     updateUndoRedoUI();
   };
 
-  /* ── Füllung ────────────────────────────────────────────────────────
-     Vorher war das ein Umschalter zwischen 'none' und S.shapeFill – und
-     S.shapeFill stand selbst auf 'none'. Der Knopf setzte die Füllung
-     also von „keine" auf „keine": er tat sichtbar nichts, genau wie
-     gemeldet. Jetzt gibt es die Farben zur Wahl. */
-  const fuellWahl = document.createElement('div');
-  fuellWahl.className = 'obj-fill-row';
-
   // Linien und Pfeile haben keine Fläche, die man füllen könnte
   const flaechig = obj.shapeType !== 'line' && obj.shapeType !== 'arrow';
 
+  /* ── Füllung ────────────────────────────────────────────────────────
+     Nur die aktuelle Farbe plus ein Rainbow-Knopf für die freie Wahl.
+     Sieben Farben auf einmal sind zu viel – wer eine bestimmte will,
+     öffnet den nativen Picker. */
   if (flaechig) {
-    for (const farbe of SHAPE_FUELLUNGEN) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'obj-fill-sw' + (farbe === 'none' ? ' keine' : '');
-      if (farbe !== 'none') b.style.background = farbe;
-      b.title = farbe === 'none'
-        ? ((typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung')
-        : farbe;
-      b.setAttribute('aria-label', b.title);
-      b.classList.toggle('active', (obj.fill || 'none') === farbe);
+    const fuellWahl = document.createElement('div');
+    fuellWahl.className = 'obj-fill-row';
+    fuellWahl.style.gap = '4px';
 
-      b.addEventListener('pointerdown', ev => ev.stopPropagation());
-      b.addEventListener('click', ev => {
+    const aktFarbe = obj.fill || 'none';
+
+    // Anzeige der aktuellen Farbe
+    const anzeige = document.createElement('span');
+    anzeige.className = 'obj-fill-sw' + (aktFarbe === 'none' ? ' keine' : '');
+    if (aktFarbe !== 'none') anzeige.style.background = aktFarbe;
+    anzeige.title = aktFarbe === 'none'
+      ? ((typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung')
+      : aktFarbe;
+    fuellWahl.appendChild(anzeige);
+
+    // Nativer Farbwähler
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = aktFarbe === 'none' ? '#ffffff' : aktFarbe;
+    picker.className = 'obj-color-picker';
+    picker.title = (typeof t === 'function' && t('shapeFillColor')) || 'Füllfarbe wählen';
+    picker.addEventListener('pointerdown', ev => ev.stopPropagation());
+    picker.addEventListener('input', ev => {
+      ev.stopPropagation();
+      pushPageHistory(page);
+      obj.fill = picker.value;
+      anzeige.style.background = picker.value;
+      anzeige.classList.remove('keine');
+      neuZeichnen();
+    });
+    fuellWahl.appendChild(picker);
+
+    // Knopf für „ohne Füllung"
+    if (aktFarbe !== 'none') {
+      const keineBtn = document.createElement('button');
+      keineBtn.type = 'button';
+      keineBtn.className = 'obj-fill-sw keine';
+      keineBtn.title = (typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung';
+      keineBtn.addEventListener('pointerdown', ev => ev.stopPropagation());
+      keineBtn.addEventListener('click', ev => {
         ev.stopPropagation();
         pushPageHistory(page);
-        obj.fill = farbe;
-        fuellWahl.querySelectorAll('.obj-fill-sw')
-          .forEach(x => x.classList.toggle('active', x === b));
+        obj.fill = 'none';
+        anzeige.style.background = '';
+        anzeige.classList.add('keine');
         neuZeichnen();
       });
-      fuellWahl.appendChild(b);
+      fuellWahl.appendChild(keineBtn);
     }
+
     bar.appendChild(fuellWahl);
   }
 
   /* ── Linienfarbe ────────────────────────────────────────────────────
-     Bei Linie und Pfeil ist das die einzige Farbe, die es gibt. */
+     Nur die aktuelle Farbe plus ein Rainbow-Knopf. Bei Linie und Pfeil ist
+     das die einzige Farbe, die es gibt. */
   const strichWahl = document.createElement('div');
   strichWahl.className = 'obj-fill-row';
-  for (const farbe of ['#1a1510', '#2a5fa8', '#c04040', '#2e8a46']) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'obj-fill-sw obj-stroke-sw';
-    b.style.background = farbe;
-    b.title = (typeof t === 'function' && t('shapeStroke')) || 'Linienfarbe';
-    b.classList.toggle('active', (obj.stroke || '#1a1510') === farbe);
+  strichWahl.style.gap = '4px';
 
-    b.addEventListener('pointerdown', ev => ev.stopPropagation());
-    b.addEventListener('click', ev => {
-      ev.stopPropagation();
-      pushPageHistory(page);
-      obj.stroke = farbe;
-      strichWahl.querySelectorAll('.obj-stroke-sw')
-        .forEach(x => x.classList.toggle('active', x === b));
-      neuZeichnen();
-    });
-    strichWahl.appendChild(b);
-  }
+  const aktStrich = obj.stroke || '#1a1510';
+
+  const strichAnzeige = document.createElement('span');
+  strichAnzeige.className = 'obj-fill-sw obj-stroke-sw';
+  strichAnzeige.style.background = aktStrich;
+  strichAnzeige.title = (typeof t === 'function' && t('shapeStroke')) || 'Linienfarbe';
+  strichWahl.appendChild(strichAnzeige);
+
+  const strichPicker = document.createElement('input');
+  strichPicker.type = 'color';
+  strichPicker.value = aktStrich;
+  strichPicker.className = 'obj-color-picker';
+  strichPicker.title = (typeof t === 'function' && t('shapeStrokeColor')) || 'Linienfarbe wählen';
+  strichPicker.addEventListener('pointerdown', ev => ev.stopPropagation());
+  strichPicker.addEventListener('input', ev => {
+    ev.stopPropagation();
+    pushPageHistory(page);
+    obj.stroke = strichPicker.value;
+    strichAnzeige.style.background = strichPicker.value;
+    neuZeichnen();
+  });
+  strichWahl.appendChild(strichPicker);
+
   bar.appendChild(strichWahl);
 
   // Linienstärke: drei Knöpfe (1px, 2px, 4px)

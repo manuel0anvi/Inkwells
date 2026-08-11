@@ -67,53 +67,175 @@ function buildFormulaHtml(latex, displayMode) {
   return '<span class="j-formula" data-latex="' + quelle + '">' + html + '</span>';
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE FORMEL IST EIN OBJEKT, KEIN TEXT
+
+   Eine eingesetzte Formel liegt in page.objects[] – wie ein Bild und wie
+   eine Form. Damit gilt für sie alles, was es dort schon gibt:
+   auswählen, verschieben, größer und kleiner ziehen, verdoppeln,
+   löschen, vor oder hinter den Text legen, rückgängig machen.
+
+   >>> Warum nicht mehr im Text <<<
+   Als Text war sie ein Zeichen unter vielen: man konnte sie weder fassen
+   noch bewegen noch in der Größe ändern, und zum Ändern musste man sie
+   genau treffen. Genau so wurde es gemeldet.
+
+   Ältere Hefte tragen ihre Formeln weiterhin im Text (<span class=
+   "j-formula">). Die werden unverändert angezeigt und lassen sich per
+   Doppelklick bearbeiten – bestehende Hefte sollen nicht anders aussehen
+   als vorher.
+   ══════════════════════════════════════════════════════════════════════ */
+
 /**
- * Setzt eine Formel an der Schreibmarke ein.
+ * Wie groß ist diese Formel in ihrer natürlichen Größe?
  *
- * Wird vom Formel-Editor (ui/formula.js) aufgerufen, nachdem der Nutzer
- * den LaTeX-Quelltext bestätigt hat.
+ * Der Mess-Div wird in eine Textzelle der Seite gehängt, nicht in den Body,
+ * damit er dieselbe Schriftgröße und -art vorfindet wie die spätere Formel.
+ * KaTeX richtet seine Matheschrift nach der Umgebung – misst man im Body,
+ * kann die Größe abweichen und der Auswahlrahmen sitzt daneben.
+ */
+function measureFormula(latex, displayMode) {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;'
+    + 'visibility:hidden;white-space:nowrap';
+  probe.innerHTML = renderFormula(latex, displayMode).html || '';
+
+  // In den Seitenkontext hängen, damit KaTeX die richtige Schriftumgebung hat
+  let eltern = null;
+  if (typeof S !== 'undefined' && S.activePgId) {
+    eltern = document.querySelector('[data-pgid="' + CSS.escape(S.activePgId) + '"] .j-text');
+  }
+  if (!eltern) {
+    eltern = document.querySelector('.j-text');
+  }
+  (eltern || document.body).appendChild(probe);
+
+  const r = probe.getBoundingClientRect();
+  const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+  probe.remove();
+  // Auf Seiten-Koordinaten zurückrechnen; ein Mindestmaß, damit eine
+  // leere oder fehlerhafte Formel noch zu fassen ist
+  return {
+    w: Math.max(24, Math.round(r.width / zoom)) || 60,
+    h: Math.max(18, Math.round(r.height / zoom)) || 24
+  };
+}
+
+/**
+ * Das Innere eines Formel-Objekts.
+ *
+ * KaTeX rendert in seiner natürlichen Größe. Größer und kleiner wird die
+ * Formel über transform: scale – so bleibt sie in jeder Größe gestochen,
+ * während eine gestreckte Schrift ausgefranst wäre.
+ */
+function renderFormulaBody(obj) {
+  const { html, fehler } = renderFormula(obj.latex || '', !!obj.display);
+  const natW = obj.natW || obj.w || 60;
+  const k = natW ? (obj.w || natW) / natW : 1;
+
+  if (!html && fehler) {
+    return '<div class="j-formula-obj fehler" style="transform:scale(' + k + ')">'
+      + escapeHtml(obj.latex || '') + '</div>';
+  }
+  return '<div class="j-formula-obj" style="transform:scale(' + k + ')">' + html + '</div>';
+}
+
+/**
+ * Setzt eine Formel als Objekt auf die Seite.
  *
  * @param {string} latex
  * @param {boolean} displayMode
  * @returns {boolean} ob es geklappt hat
  */
 function insertFormula(latex, displayMode) {
-  const textDiv = document.activeElement;
-  if (!textDiv || !textDiv.classList || !textDiv.classList.contains('j-text')) {
-    if (typeof toast === 'function') toast(
-      (typeof t === 'function' && t('formulaNeedsCaret')) || 'Erst in den Text klicken.',
-      true);
-    return false;
-  }
   if (typeof S !== 'undefined' && S.readOnly) {
     if (typeof toast === 'function') toast(
       (typeof t === 'function' && t('sharedNoRight')) || 'Kein Schreibrecht.', true);
     return false;
   }
 
-  const pgEl = textDiv.closest('[data-pgid]');
-  const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
-  if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
-
-  const html = buildFormulaHtml(latex, displayMode);
-
-  if (displayMode) {
-    // Block-Formel: setze einen Absatz mit der Formel ein. Nach der Formel
-    // ein leerer Absatz, sonst kommt man nicht mehr dahinter.
-    document.execCommand('insertHTML', false, html + '<p><br></p>');
-  } else {
-    document.execCommand('insertHTML', false, html);
+  /* Auf welche Seite? Die, in der die Schreibmarke steht – sonst die
+     gerade aktive. Anders als früher braucht es die Marke nicht mehr
+     zwingend: ein Objekt kann überall liegen. */
+  const textDiv = document.activeElement;
+  let pgEl = (textDiv && textDiv.closest) ? textDiv.closest('[data-pgid]') : null;
+  if (!pgEl && S.activePgId) {
+    pgEl = document.querySelector('[data-pgid="' + CSS.escape(S.activePgId) + '"]');
+  }
+  if (!pgEl) {
+    if (typeof toast === 'function') toast(
+      (typeof t === 'function' && t('formulaNeedsCaret')) || 'Erst eine Seite öffnen.', true);
+    return false;
   }
 
-  if (info) {
-    info.page.textContent = textDiv.innerHTML;
-    if (window.Collab && typeof Collab.noteTextChange === 'function') {
-      Collab.noteTextChange(info.page.id, info.page.textContent);
+  const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+  if (!info) return false;
+  if (typeof pushPageHistory === 'function') pushPageHistory(info.page);
+
+  const mass = measureFormula(latex, displayMode);
+
+  /* Wohin? Wenn die Schreibmarke im Text steht, direkt darunter – dort
+     hat der Nutzer hingesehen. Sonst in die Mitte des sichtbaren Teils. */
+  let x = 72, y = 120;
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && textDiv && textDiv.classList
+      && textDiv.classList.contains('j-text')) {
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const pr = pgEl.getBoundingClientRect();
+    if (r.width || r.height) {
+      const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+      x = Math.max(8, (r.left - pr.left) / zoom);
+      y = Math.max(8, (r.bottom - pr.top) / zoom + 4);
     }
-    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   }
+  // Nicht über den Blattrand hinaus
+  const pw = info.page.w || CFG.PAGE_W;
+  const ph = info.page.h || CFG.PAGE_H;
+  x = Math.min(x, Math.max(8, pw - mass.w - 8));
+  y = Math.min(y, Math.max(8, ph - mass.h - 8));
+
+  const obj = {
+    id: uid(),
+    kind: 'formula',
+    latex: String(latex || ''),
+    display: !!displayMode,
+    x, y,
+    w: mass.w, h: mass.h,
+    natW: mass.w, natH: mass.h,
+    rot: 0,
+    layer: 'front'
+  };
+
+  const liste = info.page.objects || (info.page.objects = []);
+  liste.push(obj);
+
+  const objLayer = pgEl.querySelector('.j-objects');
+  if (objLayer && typeof placeObject === 'function') placeObject(objLayer, obj, info.page);
+
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   return true;
+}
+
+/**
+ * Eine Formel neu setzen, nachdem ihr Quelltext geändert wurde.
+ *
+ * Die natürliche Größe wird neu gemessen und die gezogene Größe im
+ * gleichen Verhältnis mitgeführt: wer eine Formel doppelt so groß gezogen
+ * hat, will sie nach dem Ändern auch doppelt so groß.
+ */
+function updateFormulaObject(obj, latex, displayMode) {
+  if (!obj) return;
+  const alterFaktor = obj.natW ? (obj.w || obj.natW) / obj.natW : 1;
+
+  obj.latex = String(latex || '');
+  obj.display = !!displayMode;
+
+  const mass = measureFormula(obj.latex, obj.display);
+  obj.natW = mass.w;
+  obj.natH = mass.h;
+  obj.w = Math.round(mass.w * alterFaktor);
+  obj.h = Math.round(mass.h * alterFaktor);
 }
 
 /**

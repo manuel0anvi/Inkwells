@@ -30,7 +30,10 @@ async function parsePdfToImages(pdfDataUrl) {
 }
 
 /* ── INSERT ── */
-E('btn-insert').addEventListener('click', async () => {
+/* Aufgerufen aus dem Einfügen-Menü (ui/insert.js). Hier hing bis dahin
+   der Knopf selbst; seit es dort auch Tabellen gibt, ist der Knopf ein
+   Menü und dies einer seiner Einträge. */
+async function insertFilesFlow() {
   if (!window.api) { toast(t('electronOnly'), true); return; }
   /* Ohne Schreibrecht gar nicht erst anfangen. Sonst entstünden Seiten nur
      örtlich – und gingen gesammelt hinaus, sobald das Recht zurückkommt
@@ -179,7 +182,8 @@ E('btn-insert').addEventListener('click', async () => {
     E('text-opts').style.display = 'flex';
     toast(addedObjects + ' ' + t('objectsInserted'));
   }
-});
+}
+window.insertFilesFlow = insertFilesFlow;
 
 /* ── SAVE / LOAD / PDF ── */
 function syncAll() { QA('.j-page').forEach(pgEl => { const info = getPage(pgEl.dataset.pgid); if (!info) return; const txt = pgEl.querySelector('.j-text'); if (txt) info.page.textContent = txt.innerHTML; info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[info.page.id] || [])); }); }
