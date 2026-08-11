@@ -126,6 +126,15 @@
     text.textContent = c.text || '';
     karte.appendChild(text);
 
+    // Geändert? Dann soll man es sehen – sonst wirkt der neue Text wie der alte
+    if (c.edited) {
+      const vermerk = document.createElement('span');
+      vermerk.className = 'comment-card-edited';
+      vermerk.textContent = txt('commentEdited', 'bearbeitet');
+      text.appendChild(document.createTextNode(' '));
+      text.appendChild(vermerk);
+    }
+
     if (c.replies && c.replies.length) {
       const antworten = document.createElement('div');
       antworten.className = 'comment-replies';
@@ -137,9 +146,29 @@
         rn.textContent = (r.author && r.author.name) || '';
         const rt = document.createElement('span');
         rt.className = 'comment-reply-text';
-        rt.textContent = r.text || '';
+        rt.textContent = (r.text || '') + (r.edited ? ' ' : '');
         z.appendChild(rn);
         z.appendChild(rt);
+
+        // Auch eine eigene Antwort laesst sich nachbessern
+        if (typeof istMeinKommentar === 'function' && istMeinKommentar(r)) {
+          const stift = document.createElement('button');
+          stift.type = 'button';
+          stift.className = 'comment-reply-edit';
+          stift.textContent = '✎';
+          stift.title = txt('editComment', 'Bearbeiten');
+          stift.addEventListener('mousedown', e => e.preventDefault());
+          stift.addEventListener('click', async e => {
+            e.stopPropagation();
+            const neu = typeof txtModal === 'function'
+              ? await txtModal(txt('editComment', 'Bearbeiten'), r.text || '')
+              : window.prompt(txt('editComment', 'Bearbeiten'), r.text || '');
+            if (neu === null || neu === undefined) return;
+            if (editReply(c.id, r.id, neu)) zeichne();
+          });
+          z.appendChild(stift);
+        }
+
         antworten.appendChild(z);
       }
       karte.appendChild(antworten);
@@ -159,8 +188,16 @@
       c.resolved ? txt('reopenComment', 'Wieder öffnen') : txt('resolveComment', 'Erledigt'),
       () => { toggleCommentResolved(c.id); zeichne(); }));
 
-    // Löschen sieht nur, wem der Kommentar gehört
+    // Bearbeiten und Löschen sieht nur, wem der Kommentar gehört
     if (typeof istMeinKommentar === 'function' && istMeinKommentar(c)) {
+      reihe.appendChild(kleinerKnopf(txt('editComment', 'Bearbeiten'), async () => {
+        const neu = typeof txtModal === 'function'
+          ? await txtModal(txt('editComment', 'Kommentar bearbeiten'), c.text || '')
+          : window.prompt(txt('editComment', 'Kommentar bearbeiten'), c.text || '');
+        if (neu === null || neu === undefined) return;
+        if (editComment(c.id, neu)) zeichne();
+      }));
+
       reihe.appendChild(kleinerKnopf(txt('deleteComment', 'Löschen'), async () => {
         const ok = typeof showConfirm === 'function'
           ? await showConfirm(txt('confirmDeleteComment', 'Kommentar wirklich löschen?'))

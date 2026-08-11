@@ -261,6 +261,23 @@ function placeObject(objLayer, obj, page) {
     return { v: best, sn: best !== val };
   };
 
+  /* ══════════════════════════════════════════════════════════════════
+     LINIE UND PFEIL: GRIFFE AN DEN ENDEN
+
+     Ein Bild fasst man an den Ecken – bei einer Linie ist das falsch. Die
+     Ecken gehoeren zum umschliessenden Rechteck, das man gar nicht sieht;
+     man will den ANFANG und das ENDE bewegen. Genau so wurde es gemeldet.
+
+     Deshalb bekommen Linie und Pfeil zwei runde Griffe statt vier Ecken
+     und keinen Drehgriff: das Drehen steckt schon darin, wenn man ein
+     Ende bewegt.
+     ══════════════════════════════════════════════════════════════════ */
+  const istLinie = obj.kind === 'shape'
+    && (obj.shapeType === 'line' || obj.shapeType === 'arrow');
+
+  if (istLinie) {
+    baueEndGriffe();
+  } else {
   ['tl', 'tr', 'bl', 'br'].forEach(pos => {
     const h = document.createElement('div'); h.className = 'obj-handle ' + pos; chrome.appendChild(h);
     h.addEventListener('pointerdown', e => {
@@ -315,6 +332,98 @@ function placeObject(objLayer, obj, page) {
     const up = (ev) => { rotH.releasePointerCapture(ev.pointerId); rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
     rotH.addEventListener('pointermove', mv); rotH.addEventListener('pointerup', up);
   });
+  }
+
+  /**
+   * Zwei runde Griffe an Anfang und Ende einer Linie.
+   *
+   * Beim Ziehen wird der absolute Punkt gerechnet, daraus das neue
+   * umschliessende Rechteck – und darin liegen beide Enden wieder als
+   * Anteil. So bleibt die Linie das, was sie ist, egal wohin man zieht.
+   */
+  function baueEndGriffe() {
+    const griffe = [];
+
+    function stelleGriffe() {
+      const e = shapeEnden(obj);
+      const punkte = [e.p1, e.p2];
+      griffe.forEach((g, i) => {
+        g.style.left = (punkte[i].x * obj.w) + 'px';
+        g.style.top = (punkte[i].y * obj.h) + 'px';
+      });
+    }
+
+    [0, 1].forEach(nr => {
+      const g = document.createElement('div');
+      g.className = 'obj-handle end';
+      chrome.appendChild(g);
+      griffe.push(g);
+
+      g.addEventListener('pointerdown', e => {
+        e.stopPropagation(); e.preventDefault();
+        g.setPointerCapture(e.pointerId);
+
+        const start = shapeEnden(obj);
+        // Beide Enden in Seiten-Koordinaten
+        const abs = [
+          { x: obj.x + start.p1.x * obj.w, y: obj.y + start.p1.y * obj.h },
+          { x: obj.x + start.p2.x * obj.w, y: obj.y + start.p2.y * obj.h }
+        ];
+        const sx = e.clientX, sy = e.clientY;
+        const fest = abs[1 - nr];      // das andere Ende bleibt liegen
+        const beweglich = { x: abs[nr].x, y: abs[nr].y };
+
+        let _hasMutated = false;
+        const mv = ev => {
+          if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
+
+          let nx = beweglich.x + (ev.clientX - sx) / _zoom;
+          let ny = beweglich.y + (ev.clientY - sy) / _zoom;
+
+          // Mit Umschalt auf 15°-Schritte – fuer waagerecht und senkrecht
+          if (ev.shiftKey) {
+            const dx = nx - fest.x, dy = ny - fest.y;
+            const len = Math.hypot(dx, dy);
+            const schritt = Math.PI / 12;
+            const w = Math.round(Math.atan2(dy, dx) / schritt) * schritt;
+            nx = fest.x + Math.cos(w) * len;
+            ny = fest.y + Math.sin(w) * len;
+          }
+
+          const p = [null, null];
+          p[nr] = { x: nx, y: ny };
+          p[1 - nr] = fest;
+
+          const minX = Math.min(p[0].x, p[1].x), maxX = Math.max(p[0].x, p[1].x);
+          const minY = Math.min(p[0].y, p[1].y), maxY = Math.max(p[0].y, p[1].y);
+          // Ein Rechteck ohne Ausdehnung liesse sich nicht mehr anfassen
+          const bw = Math.max(2, maxX - minX), bh = Math.max(2, maxY - minY);
+
+          obj.x = minX; obj.y = minY; obj.w = bw; obj.h = bh;
+          obj.p1 = { x: (p[0].x - minX) / bw, y: (p[0].y - minY) / bh };
+          obj.p2 = { x: (p[1].x - minX) / bw, y: (p[1].y - minY) / bh };
+
+          wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
+          wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px';
+          body.innerHTML = renderShapeBody(obj);
+          stelleGriffe();
+          placeBar();
+        };
+        const up = ev => {
+          try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
+          g.removeEventListener('pointermove', mv);
+          g.removeEventListener('pointerup', up);
+          if (_hasMutated) noteObjectChanged();
+        };
+        g.addEventListener('pointermove', mv);
+        g.addEventListener('pointerup', up);
+      });
+    });
+
+    stelleGriffe();
+    // Nach dem Auswaehlen sitzen sie sofort richtig
+    wrap._stelleEndGriffe = stelleGriffe;
+  }
 
   /* ── Schwebende Leiste ────────────────────────────────────────────
      Alles, was nicht am Rahmen selbst geschieht, steht hier: drehen,
@@ -462,6 +571,9 @@ function placeObject(objLayer, obj, page) {
     _selObj = wrap;
     wrap.classList.add('selected');
     chrome.style.display = 'block';
+    // Die Endgriffe einer Linie sitzen an den Enden, nicht an den Ecken –
+    // nach einem Verschieben muessen sie neu gestellt werden
+    if (wrap._stelleEndGriffe) wrap._stelleEndGriffe();
     placeBar();
   }
 

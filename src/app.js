@@ -105,6 +105,26 @@ function _applyPageSnapshot(page, snap) {
   if (typeof ensureCommentsFromMarkers === 'function') ensureCommentsFromMarkers(pgEl);
 }
 
+/**
+ * Der HTML-Inhalt eines Textbereichs OHNE die Bedienteile.
+ *
+ * Bisher steht darin nur der Greifstreifen an den Tabellenspalten
+ * (core/tables.js). Er liegt als Kind in der Zelle, damit er sich mit ihr
+ * bewegt – gespeichert werden darf er aber nicht, sonst reist er durch
+ * Yjs zu den anderen und kommt bei jedem Abgleich ein weiteres Mal dazu.
+ *
+ * Kopiert wird der Baum, statt die Streifen kurz herauszunehmen: das
+ * Herausnehmen und Zurückhängen im lebenden Baum verschöbe die
+ * Schreibmarke mitten im Tippen.
+ */
+function ohneGriffe(textDiv) {
+  if (!textDiv) return '';
+  if (!textDiv.querySelector('.j-tbl-griff')) return textDiv.innerHTML;
+  const kopie = textDiv.cloneNode(true);
+  kopie.querySelectorAll('.j-tbl-griff').forEach(g => g.remove());
+  return kopie.innerHTML;
+}
+
 /** Sichert den aktuellen Zustand einer Seite, bevor sie verändert wird. */
 function pushPageHistory(page) {
   if (!page || S._isUndoingOrRedoing) return;
@@ -541,7 +561,10 @@ function appendPageDOM(page, index) {
         if (trimmed !== txt) h.textContent = trimmed;
       });
     }
-    page.textContent = textDiv.innerHTML;
+    /* Die Greifstreifen an den Spalten sind Bedienteil, kein Inhalt
+       (core/tables.js). Sie duerfen den Text nie erreichen – sonst reisen
+       sie durch Yjs mit und wachsen bei jedem Abgleich nach. */
+    page.textContent = ohneGriffe(textDiv);
     // Geteiltes Dokument: die Änderung geht sofort an die anderen
     // (ui/collab.js bremst das auf einen sinnvollen Takt).
     if (window.Collab) Collab.noteTextChange(page.id, page.textContent);
@@ -791,7 +814,7 @@ function checkPageOverflow(textDiv, page) {
   const overflow = [];
   while (textDiv.scrollHeight > availH + lh && textDiv.children.length > 0) { const last = textDiv.lastElementChild; overflow.unshift(last.outerHTML); last.remove(); }
   if (!overflow.length) return;
-  page.textContent = textDiv.innerHTML;
+  page.textContent = ohneGriffe(textDiv);
   if (isNew) { const pgEl = appendPageDOM(nextPage, pages.length); pgEl.style.opacity = '0'; pgEl.style.transform = 'translateY(12px)'; pgEl.style.transition = 'opacity .25s,transform .25s'; requestAnimationFrame(() => requestAnimationFrame(() => { pgEl.style.opacity = '1'; pgEl.style.transform = 'none'; })); }
   const nextPgEl = E('pg-scroll').querySelector('[data-pgid="' + nextPage.id + '"]'); if (!nextPgEl) return;
   const nextTD = nextPgEl.querySelector('.j-text'); if (!nextTD) return;

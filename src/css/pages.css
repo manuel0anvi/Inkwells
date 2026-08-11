@@ -208,6 +208,51 @@ body.touch-draw .j-canvas {
   font-size: inherit
 }
 
+/* >>> Sobald Spaltenbreiten gesetzt sind, gilt fest <<<
+   Bei `table-layout: auto` ist eine Breite an <col> nur ein Vorschlag: der
+   Browser verteilt nach Inhalt und überging das Ziehen fast vollständig –
+   die Spalte sprang zurück. Erst `fixed` macht die gezogene Breite
+   verbindlich. Es gilt nur für Tabellen, an denen wirklich gezogen wurde
+   (die haben ein <colgroup>); alle anderen wachsen weiter mit dem Inhalt. */
+.j-text table.j-table:has(colgroup) {
+  table-layout: fixed;
+  width: 100%
+}
+
+/* Die Greifzone an der Spaltengrenze. Ein paar Pixel breit reichen der
+   Maus, dem Finger nicht – deshalb ein eigener, unsichtbarer Streifen
+   statt eines Zeigerwechsels am Rand (core/tables.js). */
+.j-text table.j-table td,
+.j-text table.j-table th {
+  position: relative
+}
+
+.j-tbl-griff {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 9px;
+  cursor: col-resize;
+  z-index: 3;
+  /* Unsichtbar, aber greifbar. Beim Überfahren zeigt sich die Linie. */
+  background: transparent
+}
+
+.j-tbl-griff:hover,
+.j-tbl-griff.j-zieht {
+  background: linear-gradient(to right,
+      transparent 3px, var(--gold, #c9a227) 3px,
+      var(--gold, #c9a227) 6px, transparent 6px)
+}
+
+@media (any-pointer: coarse) {
+  .j-tbl-griff {
+    right: -7px;
+    width: 15px
+  }
+}
+
 .j-text table.j-table td,
 .j-text table.j-table th {
   /* >>> Warum nicht var(--pl) <<<
@@ -792,6 +837,30 @@ body.touch-draw .j-canvas {
   transform: scale(1.25)
 }
 
+/* Anfang und Ende einer Linie. Sie sitzen NICHT an den Ecken des
+   Rechtecks, sondern dort, wo die Linie wirklich anfängt und aufhört –
+   die Stelle rechnet canvas/objects.js (baueEndGriffe). Deshalb ein
+   eigener Versatz um die halbe Griffgröße statt fester Ecken. */
+.obj-handle.end {
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  cursor: move;
+  background: var(--gold);
+  border-color: #fff
+}
+
+@media (any-pointer: coarse) {
+
+  .obj-handle.end {
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-top: -10px
+  }
+}
+
 .obj-handle.tl {
   top: -6px;
   left: -6px;
@@ -919,6 +988,156 @@ body.touch-draw .j-canvas {
   height: 16px;
   margin: 0 3px;
   background: rgba(255, 255, 255, .12)
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AUSGEWÄHLTER STRICH (canvas/strokeSelect.js)
+
+   Über der Handschrift (1100), aber unter dem Seitenkopf (1300).
+   ══════════════════════════════════════════════════════════════════════ */
+.ink-sel {
+  position: absolute;
+  z-index: 1210;
+  border: 1.5px dashed var(--gold, #c9a227);
+  border-radius: 3px;
+  background: rgba(201, 162, 39, .07);
+  cursor: move;
+  touch-action: none
+}
+
+/* Bei einer geraden Linie zählt die Linie, nicht das Rechteck – der
+   Rahmen tritt zurück und die beiden Endgriffe übernehmen. */
+.ink-sel.gerade {
+  border-style: solid;
+  border-color: rgba(201, 162, 39, .35);
+  background: transparent
+}
+
+.ink-sel-end {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--gold, #c9a227);
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  cursor: move;
+  touch-action: none;
+  transition: transform .1s ease
+}
+
+.ink-sel-end:hover {
+  transform: scale(1.25)
+}
+
+.ink-sel-bar {
+  position: fixed;
+  z-index: 1262;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45)
+}
+
+.ink-sel-btn {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center
+}
+
+.ink-sel-btn svg {
+  width: 100%;
+  height: 100%
+}
+
+.ink-sel-btn:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.ink-sel-btn.danger:hover {
+  background: rgba(198, 40, 40, .2);
+  color: #ff8a80
+}
+
+@media (any-pointer: coarse) {
+
+  .ink-sel-btn {
+    width: 38px;
+    height: 38px
+  }
+
+  .ink-sel-end {
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-top: -10px
+  }
+}
+
+/* ── Füllung und Linienfarbe einer Form ─────────────────────────────
+   Als Farbfelder statt als Umschalter: der Umschalter davor kannte nur
+   „an" und „aus" und schaltete zwischen zweimal „aus" hin und her. */
+.obj-fill-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 3px;
+  border-left: 1px solid rgba(255, 255, 255, .12);
+  margin-left: 3px
+}
+
+.obj-fill-sw {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, .25);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0
+}
+
+.obj-fill-sw:hover {
+  border-color: rgba(255, 255, 255, .6)
+}
+
+.obj-fill-sw.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold)
+}
+
+/* „Ohne Füllung": der durchgestrichene Kreis, wie überall sonst auch */
+.obj-fill-sw.keine {
+  background:
+    linear-gradient(to bottom right,
+      transparent 42%, #d05050 42%, #d05050 58%, transparent 58%),
+    var(--sh2)
+}
+
+/* Die Linienfarbe ist rund – damit man sie nicht mit der Füllung verwechselt */
+.obj-stroke-sw {
+  border-radius: 50%
+}
+
+@media (any-pointer: coarse) {
+
+  .obj-fill-sw {
+    width: 21px;
+    height: 21px
+  }
 }
 
 /* ── Die Knoepfe am Seitenkopf ───────────────────────────────────────
@@ -1150,6 +1369,27 @@ body.touch-draw .j-canvas {
 .comment-reply-text {
   color: var(--hi);
   word-break: break-word
+}
+
+.comment-reply-edit {
+  background: none;
+  border: none;
+  color: var(--lo);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  margin-left: auto;
+  flex-shrink: 0
+}
+
+.comment-reply-edit:hover {
+  color: var(--gold)
+}
+
+.comment-card-edited {
+  font-size: 10px;
+  color: var(--lo);
+  font-style: italic
 }
 
 .comment-card-btns {

@@ -391,7 +391,9 @@ function notiereText(textDiv) {
   const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
   if (!info) return;
 
-  info.page.textContent = textDiv.innerHTML;
+  // Ohne die Greifstreifen – sie sind Bedienteil, nicht Inhalt (app.js)
+  info.page.textContent = typeof ohneGriffe === 'function'
+    ? ohneGriffe(textDiv) : textDiv.innerHTML;
   if (window.Collab) Collab.noteTextChange(info.page.id, info.page.textContent);
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
@@ -459,17 +461,28 @@ function insertTable(zeilen, spalten) {
    kennt. Ausserdem gilt eine col-Breite fuer die ganze Spalte; an der
    Zelle muesste sie in jeder Zeile stehen.
    ══════════════════════════════════════════════════════════════════════ */
-const TBL_GREIF = 5;        // so nah an der Grenze fasst der Zeiger
 const TBL_MIN_SPALTE = 28;  // schmaler wird keine Spalte
 
-let tblZieh = null;         // { table, index, startX, startBreite, gesamt }
+let tblZieh = null;
 
-/** Sorgt dafuer, dass die Tabelle ein <colgroup> mit festen Breiten hat. */
+/**
+ * Sorgt dafuer, dass die Tabelle ein <colgroup> mit festen Breiten hat.
+ *
+ * Erst damit wirkt das Ziehen: eine Tabelle mit <colgroup> schaltet in
+ * css/pages.css auf `table-layout: fixed`. Bei `auto` – dem Ausgangswert –
+ * ist eine Breite an <col> nur ein Vorschlag, den der Browser zugunsten
+ * des Inhalts uebergeht. Genau deshalb sprang die Spalte bisher zurueck.
+ */
 function sichereColgroup(table) {
-  let grp = table.querySelector('colgroup');
-  const spalten = table.querySelector('tr') ? table.querySelector('tr').children.length : 0;
+  const erste = table.querySelector('tr');
+  const spalten = erste ? erste.children.length : 0;
   if (!spalten) return null;
 
+  // Die jetzigen Breiten VOR dem Umschalten messen, sonst springt alles um
+  const istBreiten = [...erste.children].map(z => z.getBoundingClientRect().width);
+  const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+
+  let grp = table.querySelector('colgroup');
   if (!grp) {
     grp = document.createElement('colgroup');
     table.insertBefore(grp, table.firstChild);
@@ -477,94 +490,121 @@ function sichereColgroup(table) {
   while (grp.children.length < spalten) grp.appendChild(document.createElement('col'));
   while (grp.children.length > spalten) grp.lastElementChild.remove();
 
-  /* Beim ersten Mal die jetzigen Breiten festschreiben. Ohne das spraenge
-     die Tabelle beim ersten Ziehen um, weil table-layout:auto vorher alles
-     nach Inhalt verteilt hat. */
-  const erste = table.querySelector('tr');
   [...grp.children].forEach((col, i) => {
     if (col.getAttribute('width')) return;
-    const zelle = erste.children[i];
-    if (zelle) col.setAttribute('width', Math.round(zelle.getBoundingClientRect().width));
+    col.setAttribute('width', Math.max(TBL_MIN_SPALTE, Math.round((istBreiten[i] || 80) / zoom)));
   });
   return grp;
 }
 
-/** An welcher Spaltengrenze steht der Zeiger – oder -1. */
-function grenzeUnter(e) {
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  const zelle = el && el.closest ? el.closest('td, th') : null;
-  if (!zelle || !zelle.closest('.j-text')) return { index: -1 };
+/**
+ * Die Greifstreifen an den Spaltengrenzen setzen.
+ *
+ * >>> Warum eigene Elemente und nicht die Kante messen <<<
+ * Vorher wurde bei jeder Bewegung der Abstand zur Zellkante gerechnet und
+ * ab fuenf Pixeln gegriffen. Fuenf Pixel trifft die Maus knapp und der
+ * Finger gar nicht, und bei jedem Mausweg lief ein elementFromPoint mit.
+ * Ein eigener Streifen ist ein echtes Ziel: breit genug, mit eigenem
+ * Zeiger, und er kostet nichts, solange niemand ihn anfasst.
+ *
+ * Die Streifen stehen NICHT im gespeicherten Text: sie werden hier
+ * angelegt und vor dem Sichern wieder entfernt (siehe notiereText).
+ */
+function setzeGriffe(table) {
+  if (!table || S.readOnly) return;
+  const erste = table.querySelector('tr');
+  if (!erste) return;
 
-  const table = zelle.closest('table.j-table');
-  if (!table) return { index: -1 };
+  // In jede Zelle der ERSTEN Zeile einen Streifen, ausser in die letzte
+  [...erste.children].forEach((zelle, i) => {
+    if (i >= erste.children.length - 1) return;
+    if (zelle.querySelector(':scope > .j-tbl-griff')) return;
 
-  const r = zelle.getBoundingClientRect();
-  const spalte = [...zelle.parentNode.children].indexOf(zelle);
-
-  // Rechte Kante dieser Zelle
-  if (Math.abs(e.clientX - r.right) <= TBL_GREIF) return { table, index: spalte };
-  // Linke Kante = rechte Kante der Spalte davor
-  if (Math.abs(e.clientX - r.left) <= TBL_GREIF && spalte > 0) return { table, index: spalte - 1 };
-  return { index: -1 };
+    const griff = document.createElement('span');
+    griff.className = 'j-tbl-griff';
+    griff.contentEditable = 'false';
+    griff.dataset.spalte = String(i);
+    zelle.appendChild(griff);
+  });
 }
 
-document.addEventListener('pointermove', e => {
-  if (tblZieh) {
-    e.preventDefault();
-    const grp = tblZieh.grp;
-    const col = grp.children[tblZieh.index];
-    if (!col) return;
-    /* In Seiten-Koordinaten rechnen: der Zoom ist ein CSS-transform, ein
-       Pixel auf dem Schirm ist also nicht ein Pixel auf dem Papier. */
-    const dx = (e.clientX - tblZieh.startX) / (tblZieh.zoom || 1);
-    const neu = Math.max(TBL_MIN_SPALTE, Math.round(tblZieh.startBreite + dx));
-    col.setAttribute('width', neu);
-    return;
-  }
+/** Alle Greifstreifen aus einem Baum nehmen – vor dem Sichern. */
+function entferneGriffe(wurzel) {
+  if (!wurzel || !wurzel.querySelectorAll) return;
+  wurzel.querySelectorAll('.j-tbl-griff').forEach(g => g.remove());
+}
 
-  if (S.mode !== 'cursor' || S.readOnly) return;
-  const treffer = grenzeUnter(e);
-  const textDiv = e.target && e.target.closest ? e.target.closest('.j-text') : null;
-  if (textDiv) textDiv.style.cursor = treffer.index >= 0 ? 'col-resize' : '';
-}, { passive: false });
+/* Die Streifen kommen und gehen mit der Schreibmarke: nur die Tabelle,
+   in der man gerade steht, zeigt sie. */
+function aktualisiereGriffe(cell) {
+  document.querySelectorAll('.j-tbl-griff').forEach(g => {
+    if (!cell || g.closest('table') !== cell.closest('table')) g.remove();
+  });
+  if (cell) setzeGriffe(cell.closest('table.j-table'));
+}
 
 document.addEventListener('pointerdown', e => {
-  if (S.mode !== 'cursor' || S.readOnly) return;
-  const treffer = grenzeUnter(e);
-  if (treffer.index < 0) return;
+  const griff = e.target.closest && e.target.closest('.j-tbl-griff');
+  if (!griff || S.readOnly) return;
 
-  const grp = sichereColgroup(treffer.table);
+  const table = griff.closest('table.j-table');
+  const grp = sichereColgroup(table);
   if (!grp) return;
-  const col = grp.children[treffer.index];
+  const index = +griff.dataset.spalte;
+  const col = grp.children[index];
+  const nachbar = grp.children[index + 1];
   if (!col) return;
 
   e.preventDefault();
   e.stopPropagation();
+  try { griff.setPointerCapture(e.pointerId); } catch (err) { }
+  griff.classList.add('j-zieht');
 
-  const textDiv = treffer.table.closest('.j-text');
+  const textDiv = table.closest('.j-text');
   const pgEl = textDiv && textDiv.closest('[data-pgid]');
   const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
   if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
 
   tblZieh = {
-    table: treffer.table,
-    grp,
-    index: treffer.index,
+    table, grp, griff, index, col, nachbar,
     startX: e.clientX,
     startBreite: parseFloat(col.getAttribute('width')) || 100,
+    nachbarBreite: nachbar ? (parseFloat(nachbar.getAttribute('width')) || 100) : 0,
     zoom: typeof getZoom === 'function' ? getZoom() : 1,
     textDiv
   };
-  treffer.table.classList.add('j-tbl-resizing');
 }, true);
 
-document.addEventListener('pointerup', () => {
+document.addEventListener('pointermove', e => {
   if (!tblZieh) return;
-  tblZieh.table.classList.remove('j-tbl-resizing');
+  e.preventDefault();
+
+  /* In Seiten-Koordinaten rechnen: der Zoom ist ein CSS-transform, ein
+     Pixel auf dem Schirm ist also nicht ein Pixel auf dem Papier. */
+  let dx = (e.clientX - tblZieh.startX) / (tblZieh.zoom || 1);
+
+  // Was die eine Spalte gewinnt, verliert die daneben – sonst wuechse die
+  // Tabelle ueber den Blattrand hinaus
+  if (tblZieh.nachbar) {
+    dx = Math.max(TBL_MIN_SPALTE - tblZieh.startBreite,
+         Math.min(tblZieh.nachbarBreite - TBL_MIN_SPALTE, dx));
+    tblZieh.nachbar.setAttribute('width', Math.round(tblZieh.nachbarBreite - dx));
+  } else {
+    dx = Math.max(TBL_MIN_SPALTE - tblZieh.startBreite, dx);
+  }
+  tblZieh.col.setAttribute('width', Math.round(tblZieh.startBreite + dx));
+}, { passive: false });
+
+function beendeZiehen() {
+  if (!tblZieh) return;
+  tblZieh.griff.classList.remove('j-zieht');
   notiereText(tblZieh.textDiv);
   if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   tblZieh = null;
-});
+}
+
+document.addEventListener('pointerup', beendeZiehen);
+document.addEventListener('pointercancel', beendeZiehen);
 
 /* Die Leiste folgt der Schreibmarke. Über selectionchange und nicht über
    einen Klick: die Marke wandert auch mit den Pfeiltasten und mit Tab. */
@@ -572,6 +612,8 @@ document.addEventListener('selectionchange', () => {
   const cell = currentCell();
   if (cell) positionTableBar(cell);
   else versteckeTableBar();
+  // Die Greifstreifen zeigt nur die Tabelle, in der die Marke steht
+  if (!tblZieh) aktualisiereGriffe(cell);
 });
 
 // Beim Rollen und Zoomen zieht sie mit

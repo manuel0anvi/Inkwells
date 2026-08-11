@@ -180,6 +180,54 @@ function toggleCommentResolved(commentId) {
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
 }
 
+/**
+ * Den Text eines Kommentars ändern.
+ *
+ * Nur der Verfasser – dieselbe Regel wie beim Löschen. Der Zeitpunkt der
+ * Änderung wird mitgeschrieben, damit die Karte „bearbeitet" zeigen kann;
+ * ohne das sähe eine stillschweigend geänderte Anmerkung aus wie die
+ * ursprüngliche.
+ */
+function editComment(commentId, text) {
+  const nb = typeof getNb === 'function' ? getNb() : null;
+  if (!nb || !nb.comments) return false;
+
+  const c = nb.comments.find(x => String(x.id) === String(commentId));
+  if (!c) return false;
+  if (!istMeinKommentar(c)) {
+    if (typeof toast === 'function') {
+      toast((typeof t === 'function' && t('commentNotMine')) || 'Das ist nicht dein Kommentar.', true);
+    }
+    return false;
+  }
+
+  const neu = String(text || '').trim();
+  if (!neu || neu === c.text) return false;
+
+  c.text = neu;
+  c.edited = Date.now();
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  return true;
+}
+
+/** Eine eigene Antwort ändern. */
+function editReply(commentId, replyId, text) {
+  const nb = typeof getNb === 'function' ? getNb() : null;
+  if (!nb || !nb.comments) return false;
+
+  const c = nb.comments.find(x => String(x.id) === String(commentId));
+  const r = c && (c.replies || []).find(x => String(x.id) === String(replyId));
+  if (!r || !istMeinKommentar(r)) return false;
+
+  const neu = String(text || '').trim();
+  if (!neu || neu === r.text) return false;
+
+  r.text = neu;
+  r.edited = Date.now();
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  return true;
+}
+
 /** Auf einen Kommentar antworten. */
 function replyToComment(commentId, text) {
   const nb = typeof getNb === 'function' ? getNb() : null;

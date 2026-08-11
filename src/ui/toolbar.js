@@ -907,6 +907,9 @@ function isDrawMode(mode) {
 
 function switchMode(mode) {
   S.mode = mode;
+  // Ein ausgewaehlter Strich gehoert zum Zeiger; mit dem Stift in der Hand
+  // waere seine Huelle nur im Weg (canvas/strokeSelect.js)
+  if (mode !== 'cursor' && typeof window.deselectStroke === 'function') window.deselectStroke();
   /* Nur die Werkzeug-Knoepfe. Ohne den Zusatz [data-mode] loeschte jeder
      Werkzeugwechsel auch die Markierung am Finger-Schalter – der hat
      keinen Modus, sein dataset.mode ist undefined und passt nie. */
@@ -948,19 +951,11 @@ QA('#shape-opts [data-shape]').forEach(btn => {
   });
 });
 
-// Füllung: keine / Farbe
-E('shape-fill-none')?.addEventListener('click', () => {
-  S.shapeFill = 'none';
-  E('shape-fill-none').classList.add('active');
-  E('shape-fill-solid').classList.remove('active');
-});
-E('shape-fill-solid')?.addEventListener('click', () => {
-  // Nimmt die aktive Stiftfarbe, wenn keine eigene gesetzt ist
-  const pen = S.mode === 'pen1' ? S.pen1 : S.pen2;
-  S.shapeFill = pen ? pen.color : '#e8e0d0';
-  E('shape-fill-solid').classList.add('active');
-  E('shape-fill-none').classList.remove('active');
-});
+/* Die Füllung wird an der AUSGEWÄHLTEN Form eingestellt, nicht am
+   Werkzeug (canvas/shapes.js, addShapeChrome). Die beiden Knöpfe, die
+   hier standen, schalteten S.shapeFill zwischen 'none' und 'none' um und
+   taten damit sichtbar gar nichts. Neue Formen entstehen ohne Füllung –
+   das ist der Fall, den man beim Zeichnen fast immer will. */
 
 // Linienstärke
 QA('#shape-sw-row [data-shape-sw]').forEach(btn => {

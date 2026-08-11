@@ -1,20 +1,26 @@
 'use strict';
 
 /* ══════════════════════════════════════════════════════════════════════
-   DAS EINFÜGEN-MENÜ
+   EINFÜGEN: DREI KNÖPFE
 
-   Aus einem Knopf, der sofort den Dateidialog aufmachte, ist ein kleines
-   Menü geworden. Der Grund ist nicht Ordnungsliebe: mit Tabelle, Formel
-   und Kommentar kämen sonst drei weitere Knöpfe in eine Leiste, die im
-   Hochformat ohnehin schon knapp ist.
+   Medien, Tabelle, Formel stehen einzeln in der Leiste.
 
-   Das Raster für die Tabelle ist das aus Word: darüberfahren wählt die
-   Größe, ein Klick setzt sie. Sechs mal sechs reichen für alles, was auf
-   ein A4-Blatt gehört – wer mehr braucht, nimmt „Benutzerdefiniert".
+   >>> Warum kein Sammelknopf mehr <<<
+   Es gab einen: ein „+", das ein Menü mit denselben drei Einträgen
+   öffnete. Damit war nicht mehr zu sehen, dass es die drei überhaupt gibt
+   – man musste den Knopf erst aufmachen, um es zu erfahren. Und für die
+   Formel, die man am häufigsten braucht, waren es zwei Klicks statt einem.
+   Passt die Leiste nicht mehr, blättern die Pfeile (ui/toolbar.js); das
+   ist der Weg, auf dem knapper Platz hier gelöst wird.
+
+   Ein Menü bleibt: das Raster der Tabelle. Es ist das aus Word –
+   darüberfahren wählt die Größe, ein Klick setzt sie. Sechs mal sechs
+   reichen für alles, was auf ein A4-Blatt gehört; wer mehr braucht, nimmt
+   „Benutzerdefiniert".
    ══════════════════════════════════════════════════════════════════════ */
 
 (function () {
-  const btn = E('btn-insert');
+  const btn = E('btn-table');
   const pop = E('insert-pop');
   const raster = E('tbl-grid');
   const anzeige = E('tbl-grid-label');
@@ -99,18 +105,29 @@
     insertTable(+m[1], +m[2]);
   });
 
-  /* ── Formel ───────────────────────────────────────────────────── */
-  E('ins-formula')?.addEventListener('click', () => {
-    schliessen();
-    stelleWiederher();
-    if (typeof openFormulaEditor === 'function') openFormulaEditor('', false, null);
-  });
+  /* ── Formel und Medien: eigene Knöpfe, kein Umweg über ein Menü ────
+     merkeStelle läuft in pointerdown, also BEVOR der Fokus zum Knopf
+     wandert – im click wäre die Schreibmarke schon weg (derselbe Grund
+     wie beim Tabellen-Knopf unten). */
+  const btnFormel = E('btn-formula');
+  if (btnFormel) {
+    btnFormel.addEventListener('pointerdown', merkeStelle);
+    btnFormel.addEventListener('click', () => {
+      schliessen();
+      stelleWiederher();
+      if (typeof openFormulaEditor === 'function') openFormulaEditor('', false, null);
+    });
+  }
 
-  /* ── Datei, Bild, PDF – der bisherige Weg ───────────────────────── */
-  E('ins-file')?.addEventListener('click', () => {
-    schliessen();
-    if (typeof window.insertFilesFlow === 'function') window.insertFilesFlow();
-  });
+  const btnMedien = E('btn-media');
+  if (btnMedien) {
+    btnMedien.addEventListener('pointerdown', merkeStelle);
+    btnMedien.addEventListener('click', () => {
+      schliessen();
+      stelleWiederher();
+      if (typeof window.insertFilesFlow === 'function') window.insertFilesFlow();
+    });
+  }
 
   /* ── Öffnen und Schließen ───────────────────────────────────────── */
   function offen() { return pop.style.display === 'flex'; }
@@ -123,7 +140,7 @@
   }
 
   function draussen(e) {
-    if (e.target.closest('#insert-pop, #btn-insert')) return;
+    if (e.target.closest('#insert-pop, #btn-table')) return;
     schliessen();
   }
 

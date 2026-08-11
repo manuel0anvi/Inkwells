@@ -39,10 +39,40 @@ const SHAPE_DEFAULTS = {
  * viewBox ist 0 0 w h; die Form füllt sie aus (mit etwas Rand für den
  * Strich, der sonst an den Rändern abgeschnitten würde).
  */
-function buildShapeSvg(type, w, h, fill, stroke, strokeWidth) {
+/* ══════════════════════════════════════════════════════════════════════
+   WOHIN EINE LINIE ZEIGT
+
+   Die Enden liegen als Anteile 0…1 im umschliessenden Rechteck: p1 ist
+   der Anfang, p2 das Ende.
+
+   >>> Warum nicht einfach die Diagonale <<<
+   Genau das war es vorher: von unten links nach oben rechts, fest
+   verdrahtet. Eine Linie nach unten rechts war damit nicht zu zeichnen –
+   sie kam immer verkehrt heraus. Und zum Verlaengern musste man am
+   Rahmen ziehen wie an einem Bild, statt am Ende der Linie selbst.
+
+   Fehlen die Werte (Formen aus aelteren Heften), gilt weiter die alte
+   Diagonale – so sieht dort nichts anders aus als vorher. */
+function shapeEnden(obj) {
+  const p1 = obj && obj.p1;
+  const p2 = obj && obj.p2;
+  if (p1 && p2 && typeof p1.x === 'number' && typeof p2.x === 'number') {
+    return { p1, p2 };
+  }
+  return { p1: { x: 0, y: 1 }, p2: { x: 1, y: 0 } };
+}
+
+function buildShapeSvg(type, w, h, fill, stroke, strokeWidth, obj) {
   const pad = strokeWidth / 2;
-  const pw = w, ph = h;
+  const pw = Math.max(1, w), ph = Math.max(1, h);
   const inner = 'x="' + pad + '" y="' + pad + '" width="' + Math.max(0, pw - pad * 2) + '" height="' + Math.max(0, ph - pad * 2) + '"';
+
+  /* Die Enden auf das Rechteck abbilden, aber innerhalb des Randes
+     bleiben – ein dicker Strich wuerde sonst an den Kanten beschnitten. */
+  const enden = shapeEnden(obj);
+  const auf = (a, ganz) => pad + a * Math.max(0, ganz - pad * 2);
+  const x1 = auf(enden.p1.x, pw), y1 = auf(enden.p1.y, ph);
+  const x2 = auf(enden.p2.x, pw), y2 = auf(enden.p2.y, ph);
 
   let form = '';
   switch (type) {
@@ -52,21 +82,22 @@ function buildShapeSvg(type, w, h, fill, stroke, strokeWidth) {
     case 'ellipse':
       form = '<rect ' + inner + ' fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + strokeWidth + '" rx="50%"/>';
       break;
-    case 'line': {
-      const x1 = pad, y1 = ph - pad, x2 = pw - pad, y2 = pad;
+    case 'line':
       form = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + stroke + '" stroke-width="' + strokeWidth + '" stroke-linecap="round"/>';
       break;
-    }
     case 'arrow': {
-      const x1 = pad, y1 = ph - pad, x2 = pw - pad, y2 = pad;
-      const markerId = 'arrowhead-' + (stroke.replace(/[^a-zA-Z0-9]/g, ''));
-      form = '<defs><marker id="' + markerId + '" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + stroke + '"/></marker></defs>'
+      /* Die Kennung muss je Form eindeutig sein: zwei Pfeile derselben
+         Farbe auf einer Seite teilten sich sonst eine Markierung, und die
+         zweite verschwand, sobald die erste geloescht wurde. */
+      const markerId = 'ah-' + (stroke.replace(/[^a-zA-Z0-9]/g, ''))
+        + '-' + String((obj && obj.id) || '0').replace(/[^a-zA-Z0-9]/g, '');
+      form = '<defs><marker id="' + markerId + '" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><polygon points="0 0, 8 3, 0 6" fill="' + stroke + '"/></marker></defs>'
         + '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + stroke + '" stroke-width="' + strokeWidth + '" stroke-linecap="round" marker-end="url(#' + markerId + ')"/>';
       break;
     }
   }
 
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + pw + ' ' + ph + '" width="' + pw + '" height="' + ph + '" style="display:block">' + form + '</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + pw + ' ' + ph + '" width="' + pw + '" height="' + ph + '" style="display:block;overflow:visible">' + form + '</svg>';
 }
 
 /* ── Vorschau während des Aufziehens ────────────────────────────────── */
@@ -79,7 +110,7 @@ function ensurePreview() {
   // Die Vorschau liegt im Seiten-Element, damit sie beim Zoomen mitgeht
 }
 
-function showPreview(pageEl, x, y, w, h, type) {
+function showPreview(pageEl, x, y, w, h, type, enden) {
   ensurePreview();
   if (_shapePreview.parentElement !== pageEl) pageEl.appendChild(_shapePreview);
 
@@ -97,7 +128,8 @@ function showPreview(pageEl, x, y, w, h, type) {
     _shapePreview.style.borderRadius = '0';
     _shapePreview.style.border = 'none';
     _shapePreview.style.background = 'transparent';
-    _shapePreview.innerHTML = buildShapeSvg(type, w, h, 'none', '#666', 2);
+    // Mit den echten Enden, damit die Vorschau zeigt, was entsteht
+    _shapePreview.innerHTML = buildShapeSvg(type, w, h, 'none', '#666', 2, enden);
   } else {
     _shapePreview.style.borderRadius = '2px';
     _shapePreview.style.border = '2px dashed #666';
@@ -158,8 +190,14 @@ function moveShapeDraw(e) {
   if (!pageEl) return;
 
   if (type === 'line' || type === 'arrow') {
-    // Bei Linien ist das Rechteck die Bounding-Box
-    showPreview(pageEl, x, y, Math.max(w, 1), Math.max(h, 1), type);
+    // Bei Linien ist das Rechteck die Bounding-Box; die Richtung steckt
+    // in den Anteilen p1/p2 (siehe shapeEnden)
+    const bw = Math.max(w, 1), bh = Math.max(h, 1);
+    const enden = {
+      p1: { x: (_shapeStart.x - x) / bw, y: (_shapeStart.y - y) / bh },
+      p2: { x: (cur.x - x) / bw, y: (cur.y - y) / bh }
+    };
+    showPreview(pageEl, x, y, bw, bh, type, enden);
   } else {
     const minSize = 2;
     showPreview(pageEl, x, y, Math.max(w, minSize), Math.max(h, minSize), type);
@@ -213,6 +251,16 @@ function endShapeDraw(e) {
     strokeWidth: S.shapeStrokeWidth || SHAPE_DEFAULTS.strokeWidth,
     layer: 'front'
   };
+
+  /* Bei Linie und Pfeil zaehlt die RICHTUNG, in die gezogen wurde, nicht
+     nur das umschliessende Rechteck. Vorher lief jede Linie von unten
+     links nach oben rechts – eine nach unten rechts gezogene kam
+     spiegelverkehrt heraus. */
+  if (type === 'line' || type === 'arrow') {
+    const bw = obj.w, bh = obj.h;
+    obj.p1 = { x: bw ? (_shapeStart.x - x) / bw : 0, y: bh ? (_shapeStart.y - y) / bh : 0 };
+    obj.p2 = { x: bw ? (cur.x - x) / bw : 1, y: bh ? (cur.y - y) / bh : 1 };
+  }
 
   const list = _shapePage.objects || (_shapePage.objects = []);
   list.push(obj);
@@ -271,7 +319,7 @@ function renderShapeBody(obj) {
   const stroke = obj.stroke || '#1a1510';
   const strokeWidth = obj.strokeWidth || 2;
 
-  return buildShapeSvg(type, w, h, fill, stroke, strokeWidth);
+  return buildShapeSvg(type, w, h, fill, stroke, strokeWidth, obj);
 }
 
 /* ── Form-spezifisches Chrome (Farbe, Linienstärke) ─────────────────── */
@@ -282,29 +330,87 @@ function renderShapeBody(obj) {
  *
  * Wird von placeObject() aufgerufen, nachdem die Standard-Leiste gebaut ist.
  */
-function addShapeChrome(bar, obj, page, objLayer) {
-  // Füllfarbe umschalten: none ↔ current
-  const btnFill = document.createElement('button');
-  btnFill.type = 'button';
-  btnFill.className = 'obj-bar-btn';
-  btnFill.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="currentColor" opacity=".5"/><path d="M7 2v6l2-2 2 2V2" fill="currentColor"/></svg>';
-  btnFill.title = (typeof t === 'function' && t('shapeFill')) || 'Füllung';
-  btnFill.setAttribute('aria-label', btnFill.title);
-  btnFill.classList.toggle('active', obj.fill !== 'none');
+/* Die Farben der Füllung. Dieselben wie beim Stift, damit eine gefüllte
+   Form zu dem passt, was daneben gezeichnet wird – plus Weiß, mit dem man
+   Darunterliegendes abdeckt. */
+const SHAPE_FUELLUNGEN = [
+  'none', '#ffffff', '#1a1510', '#2a5fa8', '#c04040', '#2e8a46', '#e8c547'
+];
 
-  btnFill.addEventListener('click', ev => {
-    ev.stopPropagation();
-    pushPageHistory(page);
-    obj.fill = obj.fill === 'none' ? (S.shapeFill || '#e8e0d0') : 'none';
-    btnFill.classList.toggle('active', obj.fill !== 'none');
-    // SVG im Body neu bauen
-    const body = bar.closest('.obj-wrap').querySelector('.obj-body');
-    if (body) body.innerHTML = renderShapeBody(obj);
+function addShapeChrome(bar, obj, page, objLayer) {
+  const body = () => {
+    const wrap = bar.closest('.obj-wrap');
+    return wrap ? wrap.querySelector('.obj-body') : null;
+  };
+
+  const neuZeichnen = () => {
+    const b = body();
+    if (b) b.innerHTML = renderShapeBody(obj);
     if (typeof noteObjectChanged === 'function') noteObjectChanged();
     updateUndoRedoUI();
-  });
+  };
 
-  bar.appendChild(btnFill);
+  /* ── Füllung ────────────────────────────────────────────────────────
+     Vorher war das ein Umschalter zwischen 'none' und S.shapeFill – und
+     S.shapeFill stand selbst auf 'none'. Der Knopf setzte die Füllung
+     also von „keine" auf „keine": er tat sichtbar nichts, genau wie
+     gemeldet. Jetzt gibt es die Farben zur Wahl. */
+  const fuellWahl = document.createElement('div');
+  fuellWahl.className = 'obj-fill-row';
+
+  // Linien und Pfeile haben keine Fläche, die man füllen könnte
+  const flaechig = obj.shapeType !== 'line' && obj.shapeType !== 'arrow';
+
+  if (flaechig) {
+    for (const farbe of SHAPE_FUELLUNGEN) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'obj-fill-sw' + (farbe === 'none' ? ' keine' : '');
+      if (farbe !== 'none') b.style.background = farbe;
+      b.title = farbe === 'none'
+        ? ((typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung')
+        : farbe;
+      b.setAttribute('aria-label', b.title);
+      b.classList.toggle('active', (obj.fill || 'none') === farbe);
+
+      b.addEventListener('pointerdown', ev => ev.stopPropagation());
+      b.addEventListener('click', ev => {
+        ev.stopPropagation();
+        pushPageHistory(page);
+        obj.fill = farbe;
+        fuellWahl.querySelectorAll('.obj-fill-sw')
+          .forEach(x => x.classList.toggle('active', x === b));
+        neuZeichnen();
+      });
+      fuellWahl.appendChild(b);
+    }
+    bar.appendChild(fuellWahl);
+  }
+
+  /* ── Linienfarbe ────────────────────────────────────────────────────
+     Bei Linie und Pfeil ist das die einzige Farbe, die es gibt. */
+  const strichWahl = document.createElement('div');
+  strichWahl.className = 'obj-fill-row';
+  for (const farbe of ['#1a1510', '#2a5fa8', '#c04040', '#2e8a46']) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'obj-fill-sw obj-stroke-sw';
+    b.style.background = farbe;
+    b.title = (typeof t === 'function' && t('shapeStroke')) || 'Linienfarbe';
+    b.classList.toggle('active', (obj.stroke || '#1a1510') === farbe);
+
+    b.addEventListener('pointerdown', ev => ev.stopPropagation());
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      pushPageHistory(page);
+      obj.stroke = farbe;
+      strichWahl.querySelectorAll('.obj-stroke-sw')
+        .forEach(x => x.classList.toggle('active', x === b));
+      neuZeichnen();
+    });
+    strichWahl.appendChild(b);
+  }
+  bar.appendChild(strichWahl);
 
   // Linienstärke: drei Knöpfe (1px, 2px, 4px)
   [1, 2, 4].forEach(sw => {
@@ -326,10 +432,7 @@ function addShapeChrome(bar, obj, page, objLayer) {
           b.classList.toggle('active', b.title === sw + 'px');
         }
       });
-      const body = bar.closest('.obj-wrap').querySelector('.obj-body');
-      if (body) body.innerHTML = renderShapeBody(obj);
-      if (typeof noteObjectChanged === 'function') noteObjectChanged();
-      updateUndoRedoUI();
+      neuZeichnen();
     });
 
     bar.appendChild(btn);

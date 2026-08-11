@@ -268,13 +268,10 @@
             <button class="tb-opt" data-shape="arrow" data-i18n-title="shapeArrow" title="Pfeil">
               <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><line x1="1.5" y1="10.5" x2="10.5" y2="1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><polygon points="10.5,1.5 12.5,3.5 9.5,3" fill="currentColor"/></svg>
             </button>
-            <div class="v-div"></div>
-            <button class="tb-opt" id="shape-fill-none" data-i18n-title="shapeFillNone" title="Ohne Füllung">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><line x1="2" y1="2" x2="11" y2="11" stroke="currentColor" stroke-width="1"/></svg>
-            </button>
-            <button class="tb-opt active" id="shape-fill-solid" data-i18n-title="shapeFillSolid" title="Mit Füllung">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="2" fill="currentColor" opacity=".6" stroke="currentColor" stroke-width="1.2"/></svg>
-            </button>
+            <!-- Die zwei Füllungs-Knöpfe standen hier und taten nichts:
+                 sie schalteten S.shapeFill zwischen 'none' und 'none' um.
+                 Die Füllung gehört ohnehin an die AUSGEWÄHLTE Form, nicht
+                 an das Werkzeug – dort steht sie jetzt (canvas/shapes.js). -->
             <div class="v-div"></div>
             <div class="sz-row" id="shape-sw-row">
               <button class="sz-btn active" data-shape-sw="1"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></button>
@@ -336,15 +333,24 @@
           </div>
 
           <div class="tb-sep"></div>
-          <!-- Einfügen: Bild, PDF, Datei – und die Tabelle mit ihrem
-               Raster (ui/insert.js). Ein Knopf statt vier, damit die
-               Leiste im Hochformat nicht überläuft. -->
+          <!-- Drei Knöpfe statt eines „+": Medien, Tabelle, Formel.
+               Ein Sammelknopf verbarg, was es überhaupt gibt – man musste
+               ihn erst öffnen, um zu sehen, dass er drei Dinge kann.
+               Passt die Leiste nicht, blättern die Pfeile (ui/toolbar.js). -->
           <div class="tb-grp">
-            <button class="tb-opt" id="btn-insert" data-i18n-title="insert" title="Einfügen">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-                <path d="M8 3v10M3 8h10"/>
+            <button class="tb-opt" id="btn-media" data-i18n-title="insertFile" title="Bild, PDF oder Datei">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.2-9.2a3.67 3.67 0 0 1 5.18 5.18l-9.2 9.2a1.83 1.83 0 0 1-2.6-2.6l8.5-8.48"/>
               </svg>
             </button>
+            <button class="tb-opt" id="btn-table" data-i18n-title="insertTable" title="Tabelle">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+                <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.3"/>
+                <path d="M1.6 6.2h12.8M1.6 9.8h12.8M5.9 2.6v10.8M10.1 2.6v10.8"/>
+              </svg>
+            </button>
+            <button class="tb-opt" id="btn-formula" data-i18n-title="insertFormula" title="Formel"
+                    style="font-family:'DM Mono',monospace;font-size:14px">𝑓</button>
           </div>
         </div>
 
@@ -781,16 +787,6 @@
      dazugekommen sind die Tabelle und, wenn es sie gibt, Formel und
      Kommentar (ui/insert.js). -->
 <div class="insert-pop" id="insert-pop" style="display:none">
-  <button class="insert-item" id="ins-file">
-    <span class="insert-icon">🖼</span>
-    <span data-i18n="insertFile">Bild, PDF oder Datei …</span>
-  </button>
-
-  <button class="insert-item" id="ins-formula">
-    <span class="insert-icon" style="font-family:'DM Mono',monospace;font-size:14px">𝑓</span>
-    <span data-i18n="insertFormula">Formel …</span>
-  </button>
-
   <div class="insert-head" data-i18n="insertTable">Tabelle</div>
   <!-- Das Raster wie in Word: darueberfahren waehlt die Groesse, ein
        Klick setzt sie. Die Zellen baut ui/insert.js. -->
@@ -1336,6 +1332,7 @@
 <script src="canvas/drawing.js"></script>
 <script src="canvas/shapes.js"></script>
 <script src="canvas/input.js"></script>
+<script src="canvas/strokeSelect.js"></script>
   <script src="canvas/objects.js"></script>
   <script src="canvas/text.js"></script>
   
