@@ -4,8 +4,9 @@
    LINEAL
 
    Eine durchsichtige Zeichenhilfe, die über der Seite liegt und nicht
-   gespeichert wird. Lässt sich mit einem Finger oder der Maus
-   verschieben; das Mausrad dreht sie.
+   gespeichert wird. Ein Finger oder die Maus verschieben sie, zwei
+   Finger drehen sie dazu (wie ein Lineal, das man auf dem Papier
+   zurechtlegt), und das Mausrad dreht sie in festen Schritten.
 
    >>> Warum sie auf einem eigenen Canvas gemalt werden <<<
    Ein DOM-Element mit vielen kleinen Strichen wäre ein ganzes Heer von
@@ -146,44 +147,107 @@
     ln.canvas.style.transform = 'rotate(' + (lineal.winkel || 0) + 'deg)';
   }
 
-  /**
-   * Einfache Bewegung: Ziehen mit einem Zeiger, Drehen mit dem Mausrad.
-   *
-   * Der Zeiger wird auf dem Canvas gefangen, damit die Seite darunter
-   * nicht scrollt oder zeichnet, während das Lineal geschoben wird.
-   */
+  /* ══════════════════════════════════════════════════════════════════
+     SCHIEBEN UND DREHEN
+
+     Ein Finger schiebt. Zwei Finger schieben UND drehen – so, wie man
+     ein echtes Lineal auf dem Papier zurechtlegt: die Hand dreht sich,
+     das Lineal dreht sich mit.
+
+     >>> Warum es das brauchte <<<
+     Gedreht wurde bisher allein mit dem Mausrad. Auf einem Tablet gibt
+     es keines. Das Lineal liess sich dort also verschieben, aber nie
+     schraeg stellen – und schraege Striche sind der halbe Zweck.
+
+     >>> Woher der Winkel kommt <<<
+     Aus der Linie zwischen den beiden Fingern: wie weit sie sich seit
+     dem letzten Ereignis gedreht hat, so weit dreht sich das Lineal.
+     Gerechnet wird jedes Mal die AENDERUNG und nicht der Winkel
+     zwischen Anfang und Jetzt – damit stimmt es auch dann noch, wenn
+     ein dritter Finger dazukommt oder einer zwischendurch abhebt.
+
+     Gedreht wird um die Mitte des Lineals; das macht der CSS-Transform
+     von selbst (kein transform-origin gesetzt). Dazu wandert es um das,
+     was die Mitte zwischen den Fingern zuruecklegt. Beides zusammen
+     ergibt die Bewegung, die man erwartet.
+     ══════════════════════════════════════════════════════════════════ */
   function einfacheBewegung(canvasEl, state, aktualisiereFn) {
-    let aktive = null; // { id, lx, ly }
+    /* Alle Finger, die gerade auf dem Lineal liegen. Eine Map, weil die
+       Reihenfolge zaehlt: die zwei aeltesten fuehren die Geste. */
+    const zeiger = new Map();   // pointerId -> { x, y }
+    let letzte = null;          // { winkel, mx, my } der letzten Messung
+
+    /** Winkel und Mitte der beiden fuehrenden Finger. */
+    function messe() {
+      const beide = [...zeiger.values()].slice(0, 2);
+      if (beide.length < 2) return null;
+      const [a, b] = beide;
+      return {
+        winkel: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI,
+        mx: (a.x + b.x) / 2,
+        my: (a.y + b.y) / 2
+      };
+    }
 
     canvasEl.addEventListener('pointerdown', e => {
-      if (aktive) return;
       e.preventDefault();
       e.stopPropagation();
-      canvasEl.setPointerCapture(e.pointerId);
-      aktive = { id: e.pointerId, lx: e.clientX, ly: e.clientY };
+      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { }
+      zeiger.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // Der zweite Finger setzt die Geste neu auf, statt sie fortzusetzen
+      letzte = messe();
     });
 
     canvasEl.addEventListener('pointermove', e => {
-      if (!aktive || aktive.id !== e.pointerId) return;
+      const alt = zeiger.get(e.pointerId);
+      if (!alt) return;
       e.preventDefault();
       e.stopPropagation();
-      const dx = e.clientX - aktive.lx;
-      const dy = e.clientY - aktive.ly;
-      state.x += dx;
-      state.y += dy;
-      aktive.lx = e.clientX;
-      aktive.ly = e.clientY;
+
+      const dx = e.clientX - alt.x;
+      const dy = e.clientY - alt.y;
+      alt.x = e.clientX;
+      alt.y = e.clientY;
+
+      if (zeiger.size < 2) {
+        state.x += dx;
+        state.y += dy;
+        aktualisiereFn();
+        return;
+      }
+
+      const jetzt = messe();
+      if (!jetzt) return;
+      if (letzte) {
+        /* Ueber ±180° hinaus springt atan2 auf die andere Seite. Ohne
+           das Zurechtruecken machte das Lineal an dieser Stelle einen
+           halben Umlauf. */
+        let dw = jetzt.winkel - letzte.winkel;
+        if (dw > 180) dw -= 360;
+        if (dw < -180) dw += 360;
+        state.winkel = (state.winkel || 0) + dw;
+        state.x += jetzt.mx - letzte.mx;
+        state.y += jetzt.my - letzte.my;
+      }
+      letzte = jetzt;
       aktualisiereFn();
     });
 
     const beenden = e => {
-      if (!aktive || aktive.id !== e.pointerId) return;
-      try { canvasEl.releasePointerCapture(e.pointerId); } catch (err) {}
-      aktive = null;
+      if (!zeiger.has(e.pointerId)) return;
+      try { canvasEl.releasePointerCapture(e.pointerId); } catch (err) { }
+      zeiger.delete(e.pointerId);
+      /* Bleibt einer liegen, faengt fuer ihn eine neue Messung an –
+         sonst schoebe der Sprung von zwei auf einen Finger das Lineal
+         um die halbe Fingerdistanz. */
+      letzte = messe();
     };
     canvasEl.addEventListener('pointerup', beenden);
     canvasEl.addEventListener('pointercancel', beenden);
-    canvasEl.addEventListener('lostpointercapture', () => { aktive = null; });
+    canvasEl.addEventListener('lostpointercapture', e => {
+      zeiger.delete(e.pointerId);
+      letzte = messe();
+    });
 
     // Mausrad dreht: ohne Shift 1°-Schritte, mit Shift 15°-Schritte
     canvasEl.addEventListener('wheel', e => {
