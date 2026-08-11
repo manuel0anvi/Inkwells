@@ -13,6 +13,10 @@
    ohne Klebenbleiben geht, steht unten bei „Zustand – roh und
    eingerastet".
 
+   Und sie bleibt auf dem Blatt: über den Rand hinaus – nach oben wie
+   zur Seite – lässt sie sich nicht schieben. Eine Zeichenhilfe neben
+   dem Papier hilft bei keinem Strich (haltAufDemBlatt).
+
    >>> Warum sie auf einem eigenen Canvas gemalt werden <<<
    Ein DOM-Element mit vielen kleinen Strichen wäre ein ganzes Heer von
    <div>-Elementen. Ein Canvas malt alle Markierungen in einem Rutsch und
@@ -248,14 +252,67 @@
    * Eingerastet wird die Kante, die naeher dran ist – oben wie unten
    * laesst sich zeichnen (canvas/input.js kennt beide).
    */
-  function rasteEin() {
-    lineal.x = lineal.rohX;
-    lineal.y = lineal.rohY;
+  /**
+   * Haelt das Lineal auf dem Blatt.
+   *
+   * >>> Warum das noetig ist <<<
+   * Es liegt fest am Fenster und wusste vom Papier nichts: schieben
+   * liess es sich beliebig weit hinaus, nach oben ueber den Blattrand
+   * und seitlich neben die Seite. Dort ist es zu nichts mehr nuetze –
+   * eine Zeichenhilfe neben dem Papier hilft bei keinem Strich.
+   *
+   * >>> Warum die MITTE und der gedrehte Umriss <<<
+   * Gerechnet wird mit dem Platz, den das Lineal GEDREHT einnimmt, und
+   * begrenzt wird sein Mittelpunkt. Wuerde stattdessen das ungedrehte
+   * Rechteck begrenzt, saesse ein senkrecht gestelltes Lineal fuer
+   * immer in der Blattmitte fest: gedreht wird um den Mittelpunkt, und
+   * das Rechteck ist dann so breit wie das Blatt.
+   *
+   * Begrenzt werden die ROHEN Werte, nicht die angezeigten. Sonst liefe
+   * der rohe Wert beim Weiterschieben davon, und beim Zurueckziehen
+   * ruehrte sich das Lineal erst wieder, wenn er den Rand eingeholt hat.
+   */
+  function haltAufDemBlatt() {
+    const seiten = document.querySelectorAll('.j-page');
+    if (!seiten.length) return;
 
+    const erste = seiten[0].getBoundingClientRect();
+    const letzte = seiten[seiten.length - 1].getBoundingClientRect();
+
+    const rad = (lineal.winkel || 0) * Math.PI / 180;
+    const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
+    const breit = linealBreite * c + LINEAL_H * s;
+    const hoch = linealBreite * s + LINEAL_H * c;
+
+    let mx = lineal.rohX + linealBreite / 2;
+    let my = lineal.rohY + LINEAL_H / 2;
+
+    /* Ist das Lineal breiter als das Blatt – waagerecht ist es genau so
+       breit –, gibt es keinen Spielraum. Dann sitzt es buendig, statt
+       zwischen zwei widersprechenden Grenzen zu zappeln. */
+    const halt = (wert, von, bis) => bis >= von
+      ? Math.max(von, Math.min(bis, wert))
+      : (von + bis) / 2;
+
+    mx = halt(mx, erste.left + breit / 2, erste.right - breit / 2);
+    my = halt(my, erste.top + hoch / 2, letzte.bottom - hoch / 2);
+
+    lineal.rohX = mx - linealBreite / 2;
+    lineal.rohY = my - LINEAL_H / 2;
+  }
+
+  function rasteEin() {
+    /* Erst der Winkel: der Umriss haengt daran, und der Umriss
+       entscheidet, wie weit das Lineal aufs Blatt passt. */
     const norm = ((lineal.rohWinkel % 360) + 360) % 360;
     const viertel = Math.round(norm / 90) * 90;
     const nahDran = Math.abs(norm - viertel) <= WINKEL_TOLERANZ;
     lineal.winkel = nahDran ? (viertel % 360) : lineal.rohWinkel;
+
+    haltAufDemBlatt();
+
+    lineal.x = lineal.rohX;
+    lineal.y = lineal.rohY;
 
     // Auf die Papierlinien nur, wenn es waagerecht liegt
     const waagerecht = nahDran && (lineal.winkel === 0 || lineal.winkel === 180);
@@ -282,8 +339,15 @@
     const obenD = abstandZurLinie(lineal.rohY);
     const untenD = abstandZurLinie(lineal.rohY + LINEAL_H);
     const naeher = Math.abs(obenD) <= Math.abs(untenD) ? obenD : untenD;
+    if (Math.abs(naeher) > LINIEN_TOLERANZ) return;
 
-    if (Math.abs(naeher) <= LINIEN_TOLERANZ) lineal.y = lineal.rohY + naeher;
+    /* Das Einrasten darf nicht ueber den Blattrand hinaus ziehen. Am
+       obersten und untersten Rand liegt die naechste Linie schon
+       ausserhalb – gemessen ragte das Lineal dort acht Pixel hinaus,
+       genau die Fangweite. Passt es nicht, bleibt es, wo es ist. */
+    const ziel = lineal.rohY + naeher;
+    if (ziel < r.top || ziel + LINEAL_H > r.bottom) return;
+    lineal.y = ziel;
   }
 
   function aktualisiereLinealPos() {
