@@ -201,12 +201,25 @@
   btnReihe.appendChild(abbrechenBtn);
   btnReihe.appendChild(einfuegenBtn);
 
+  /* ── Überschrift und Schließkreuz in EINER Zeile ──────────────────
+     Beide hingen einzeln im Modal und standen deshalb untereinander:
+     das ✕ saß unter der Überschrift statt oben rechts, wo man es
+     sucht und wo es in jedem anderen Fenster steht.
+
+     Nicht .modal-head: die Klasse bringt eigenen Rand und eigenen
+     Innenabstand mit und ist für Fenster gedacht, die selbst keinen
+     haben (.settings-modal, padding 0). Hier hat das Modal seinen
+     Innenabstand – es fehlt nur die Zeile. */
+  const kopf = document.createElement('div');
+  kopf.className = 'formula-head';
+  kopf.appendChild(titel);
+  kopf.appendChild(schliessenBtn);
+
   overlay.innerHTML = '';
   const modal = document.createElement('div');
   modal.className = 'modal modal-nb';
   modal.style.maxWidth = '580px';
-  modal.appendChild(titel);
-  modal.appendChild(schliessenBtn);
+  modal.appendChild(kopf);
   modal.appendChild(palette);
   modal.appendChild(label((typeof t === 'function' && t('formulaLatexLabel')) || 'Formel'));
   modal.appendChild(latexFeld);

@@ -986,6 +986,30 @@
   border-radius: 14px;
 }
 
+/* ── Der Kopf des Formel-Fensters (ui/formula.js) ─────────────────────
+   Überschrift links, ✕ oben rechts. Ein eigener Kopf und nicht
+   .modal-head: die Klasse darunter bringt Innenabstand und Trennlinie
+   mit und gehört zu Fenstern, die selbst keinen Abstand haben. Das
+   Formel-Fenster hat einen – ihm fehlte nur die Zeile.
+
+   Die negativen Ränder ziehen das ✕ in die Ecke des Innenabstands, denn
+   „oben rechts" heißt oben rechts und nicht 26 Pixel daneben. */
+.formula-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px
+}
+
+.formula-head h3 {
+  flex: 1;
+  min-width: 0
+}
+
+.formula-head .modal-close-x {
+  margin: -8px -12px 0 0;
+  flex-shrink: 0
+}
+
 .modal-head {
   display: flex;
   align-items: center;
