@@ -295,6 +295,10 @@ function showHome() {
   applyReadOnlyChrome(false, null);
   renderHomeGrid();
   if (typeof window.refreshSharedTab === 'function') window.refreshSharedTab();
+  /* Der Sync-Knopf haengt an der Ansicht: ohne Anmeldung steht er nur
+     im geoeffneten Heft (ui/syncPanel.js). Ohne diesen Anstoss bliebe
+     er, bis der Taktgeber ihn zufaellig auffrischt. */
+  if (typeof window.updateSaveStatus === 'function') window.updateSaveStatus();
 }
 
 function showJournal(nb) {
@@ -303,6 +307,7 @@ function showJournal(nb) {
   E('btn-home').style.display = 'flex';
   E('app-logo').style.display = 'none';
   setTitleBar(nb.name, nb.color);
+  if (typeof window.updateSaveStatus === 'function') window.updateSaveStatus();
 }
 
 /**

@@ -361,11 +361,34 @@
     const angemeldet = !!(window.CloudSync_ && CloudSync_.isAuthenticated
       && CloudSync_.isAuthenticated());
 
-    if (huelle) huelle.style.display = 'flex';
+    /* ── Wann er ueberhaupt dasteht ───────────────────────────────────
+       Angemeldet immer: die Cloud laeuft weiter, auch waehrend man in
+       der Uebersicht steht.
+
+       Abgemeldet nur im geoeffneten Heft. Dann sagt er, ob das Getippte
+       auf der Platte liegt – und das gibt es nur, wenn ueberhaupt
+       jemand tippt. In der Uebersicht stuende sonst ein gruener Haken
+       fuer nichts. */
+    const imHeft = !!(E('view-journal') && E('view-journal').style.display !== 'none');
+    if (huelle) huelle.style.display = (angemeldet || imHeft) ? 'flex' : 'none';
+    if (!angemeldet && !imHeft) {
+      if (overlay.style.display !== 'none') close();
+      return;
+    }
+
+    /* ── Der Pfeil gehoert zur Cloud ──────────────────────────────────
+       Er oeffnet das Fenster mit dem Verlauf und dem, was noch aussteht.
+       Ohne Anmeldung gibt es beides nicht; ein Pfeil, der ein leeres
+       Fenster aufmacht, verspricht etwas, das dahinter nicht steht.
+       Uebrig bleibt dann der Speicher-Knopf, und der braucht seine
+       runde Ecke zurueck (css/titlebar.css). */
+    if (mehrBtn) mehrBtn.style.display = angemeldet ? '' : 'none';
+
     /* Die Zustandsklasse traegt die HUELLE, damit sich beide Haelften
        faerben – der Knopf und der Pfeil (css/titlebar.css). */
     const traeger = huelle || btn;
     traeger.classList.remove('ist-gesichert', 'ist-offen', 'laeuft', 'nicht-gespeichert');
+    traeger.classList.toggle('ohne-pfeil', !angemeldet);
 
     const zustand = typeof window.saveState === 'function' ? window.saveState() : 'saved';
     const offen = angemeldet ? offeneVorgaenge().length : 0;

@@ -245,6 +245,12 @@
   border-bottom-right-radius: 0
 }
 
+/* Ohne Anmeldung gibt es den Pfeil nicht (ui/syncPanel.js) – dann ist
+   der Knopf wieder ein ganzer und bekommt seine rechte Ecke zurueck. */
+.tbar-sync.ohne-pfeil .sync-tun {
+  border-radius: 6px
+}
+
 .tbar-sync .sync-mehr {
   width: 16px;
   border-top-left-radius: 0;
