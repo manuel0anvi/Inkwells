@@ -142,7 +142,25 @@
   left: 0;
   z-index: 1100;
   display: block;
-  touch-action: pan-y
+  touch-action: pan-y;
+
+  /* ══ IM SEITENKOPF STEHT NIE EIN STRICH ══════════════════════════
+     Der Kopf (56 px + 2 px Linie) liegt ueber der Zeichenflaeche, dort
+     laesst sich also nicht ANFANGEN. Wer aber weiter unten ansetzt und
+     nach oben zieht, zog den Strich mitten durch Seitenzahl und Datum:
+     der Kopf hat keinen eigenen Hintergrund, er ist nur Text auf dem
+     Papier. Gemeldet wurde genau das.
+
+     Abgeschnitten statt die Punkte zu beschneiden: ein beschnittener
+     Punkt schoebe den Strich waagerecht an der Kante entlang, und das
+     sieht schlechter aus als ein sauberer Schnitt. Der Strich selbst
+     bleibt vollstaendig gespeichert – wer die Seite spaeter tiefer
+     schiebt, hat ihn wieder.
+
+     Dieselbe Grenze gilt beim Export (core/importExport.js,
+     core/docx.js) und fuer Bilder und Formen (canvas/objects.js);
+     die Zahl steht in CFG.HDR (core/state.js). */
+  clip-path: inset(58px 0 0 0)
 }
 
 /* Zeichnet der Finger, darf der Browser die Seite nicht gleichzeitig

@@ -257,6 +257,14 @@ function renderInkToDataUrl(page, scale = 2) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
+  /* Im Seitenkopf steht nie ein Strich – dieselbe Grenze wie auf dem
+     Bildschirm (css/pages.css, .j-canvas) und im Word-Export
+     (core/docx.js, drawInk). Ohne das laege im Ausdruck ein Strich
+     quer ueber Seitenzahl und Datum. */
+  ctx.beginPath();
+  ctx.rect(0, CFG.HDR, w, h - CFG.HDR);
+  ctx.clip();
+
   let i = 0;
   while (i < strokes.length) {
     const s = strokes[i];

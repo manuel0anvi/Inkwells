@@ -310,6 +310,8 @@ function placeObject(objLayer, obj, page) {
         // Eine Formel darf kleiner werden als ein Bild – sie ist oft nur
         // ein paar Zeichen breit und waere sonst nicht zu verkleinern
         const mind = obj.kind === 'formula' ? 12 : 20;
+        // Auch beim Ziehen an der Oberkante bleibt der Seitenkopf frei
+        if (ny < CFG.HDR) { nh -= (CFG.HDR - ny); ny = CFG.HDR; }
         if (nw > mind && nh > mind) {
           obj.w = nw; obj.h = nh; obj.x = nx; obj.y = ny;
           wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px'; wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px';
@@ -648,6 +650,13 @@ function placeObject(objLayer, obj, page) {
 
       let sYT = getSnaps(ny, ys), sYB = getSnaps(ny + obj.h, ys), sYC = getSnaps(ny + obj.h / 2, cys);
       if (sYT.sn) { ny = sYT.v; showSnap('h', ny); } else if (sYB.sn) { ny = sYB.v - obj.h; showSnap('h', sYB.v); } else if (sYC.sn) { ny = sYC.v - obj.h / 2; showSnap('h', sYC.v); }
+
+      /* Nicht in den Seitenkopf hinauf. Dort stehen Seitenzahl, Datum
+         und die zwei Knoepfe – ein Bild darueber deckte sie zu, und weil
+         es vor dem Text liegt, war der Kopf danach nicht mehr zu
+         treffen. Dieselbe Grenze schneidet die Striche ab
+         (css/pages.css, .j-canvas). */
+      ny = Math.max(CFG.HDR, ny);
 
       obj.x = nx; obj.y = ny; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
       placeBar();

@@ -148,9 +148,11 @@ function formenPlatz(page, pageEl, w, h) {
   const versatz = (_formenVersatz % VERSATZ_RUNDE) * VERSATZ_SCHRITT;
   _formenVersatz++;
 
+  /* Unterhalb des Seitenkopfes – dort gehoert nie etwas hin
+     (core/state.js, CFG.HDR). */
   return {
     x: Math.max(8, Math.min(pw - w - 8, pw / 2 - w / 2 + versatz)),
-    y: Math.max(8, Math.min(ph - h - 8, my - h / 2 + versatz))
+    y: Math.max(CFG.HDR, Math.min(ph - h - 8, my - h / 2 + versatz))
   };
 }
 

@@ -1,6 +1,19 @@
 'use strict';
 
-const CFG = { PAGE_W: 794, PAGE_H: 1123, SCROLL_THRESH: 180, DPR: Math.min(window.devicePixelRatio || 1, 3) };
+/* ── HDR: der Seitenkopf ──────────────────────────────────────────────
+   56 px hoch plus 2 px Trennlinie (css/pages.css, .j-page-hdr). Dort
+   stehen Seitenzahl, Datum und die zwei Knoepfe – und sonst NICHTS.
+
+   Angefangen zu zeichnen wird dort ohnehin nicht (der Kopf liegt ueber
+   der Zeichenflaeche). Wer aber weiter unten ansetzt und nach oben
+   zieht, malte bisher mitten durch den Kopf hindurch: der hat keinen
+   eigenen Hintergrund, der Strich schien einfach darueberzuliegen.
+   Dasselbe galt fuer ein Bild oder eine Form, die man hinaufschob.
+
+   Die Zahl steht deshalb hier und nicht dreimal verstreut. Wer sie
+   aendert, muss sie auch in css/pages.css aendern – dort steht die
+   Hoehe des Kopfes selbst. */
+const CFG = { PAGE_W: 794, PAGE_H: 1123, HDR: 58, SCROLL_THRESH: 180, DPR: Math.min(window.devicePixelRatio || 1, 3) };
 
 const BG_TYPES = [{ id: 'ruled', label: 'Liniert' }, { id: 'grid', label: 'Kariert' }, { id: 'dots', label: 'Gepunktet' }, { id: 'blank', label: 'Weiß' }, { id: 'craft', label: 'Craft' }];
 const BG_STYLE = { ruled: 'background:var(--paper);background-image:repeating-linear-gradient(to bottom,transparent,transparent 7px,#d4cdc0 7px,#d4cdc0 8px)', grid: 'background:var(--paper);background-image:repeating-linear-gradient(to bottom,transparent,transparent 7px,#d4cdc0 7px,#d4cdc0 8px),repeating-linear-gradient(to right,transparent,transparent 7px,#d4cdc0 7px,#d4cdc0 8px)', dots: 'background:var(--paper);background-image:radial-gradient(circle,#b0a898 1px,transparent 1px);background-size:8px 8px;background-position:4px 4px', blank: 'background:#fff', craft: 'background:#f0e8d5' };

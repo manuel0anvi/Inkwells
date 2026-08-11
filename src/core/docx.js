@@ -348,8 +348,27 @@
     return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h };
   }
 
+  /* Der Seitenkopf: 56 px hoch plus 2 px Linie. Die Zahl steht in der App
+     in CFG.HDR (core/state.js); diese Datei laeuft aber auch auf der
+     Website, wo es kein CFG gibt – deshalb hier noch einmal. Wer sie
+     aendert, muss beide Stellen anfassen. */
+  const KOPF_H = 58;
+
   function drawInk(ctx, strokes, w, h, scale) {
     const list = (strokes || []).map(normalizeStroke);
+
+    /* Im Seitenkopf steht nie ein Strich. Auf dem Bildschirm schneidet
+       das css/pages.css ab (.j-canvas); hier muss es der Kontext tun,
+       sonst laege im Word-Export ein Strich quer ueber Seitenzahl und
+       Datum.
+
+       In SEITENMASSEN, nicht in Bildpunkten: renderPageImage hat den
+       Kontext schon skaliert (ctx.scale), und alles darin rechnet
+       deshalb in den Massen der Seite. */
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, KOPF_H, w, h - KOPF_H);
+    ctx.clip();
 
     let i = 0;
     while (i < list.length) {
@@ -391,6 +410,9 @@
         i++;
       }
     }
+
+    // Der Beschnitt gilt nur fuer die Striche – danach wird noch gemalt
+    ctx.restore();
   }
 
   /**
