@@ -13,9 +13,9 @@
    ohne Klebenbleiben geht, steht unten bei „Zustand – roh und
    eingerastet".
 
-   Und sie bleibt auf dem Blatt: über den Rand hinaus – nach oben wie
-   zur Seite – lässt sie sich nicht schieben. Eine Zeichenhilfe neben
-   dem Papier hilft bei keinem Strich (haltAufDemBlatt).
+   Und sie bleibt im Blick: hinter die Navigation, unter die
+   Werkzeugleiste oder hinter die Rollleiste lässt sie sich nicht
+   schieben (haltImSichtfeld).
 
    >>> Warum sie auf einem eigenen Canvas gemalt werden <<<
    Ein DOM-Element mit vielen kleinen Strichen wäre ein ganzes Heer von
@@ -253,31 +253,44 @@
    * laesst sich zeichnen (canvas/input.js kennt beide).
    */
   /**
-   * Haelt das Lineal auf dem Blatt.
+   * Haelt das Lineal im sichtbaren Schreibbereich.
    *
    * >>> Warum das noetig ist <<<
-   * Es liegt fest am Fenster und wusste vom Papier nichts: schieben
-   * liess es sich beliebig weit hinaus, nach oben ueber den Blattrand
-   * und seitlich neben die Seite. Dort ist es zu nichts mehr nuetze –
-   * eine Zeichenhilfe neben dem Papier hilft bei keinem Strich.
+   * Es liegt fest am Fenster und wusste von nichts: schieben liess es
+   * sich beliebig weit hinaus, nach oben unter die Werkzeugleiste und
+   * seitlich hinter die Navigation. Dort ist es zu nichts mehr nuetze.
+   *
+   * >>> Warum nicht das BLATT die Grenze ist <<<
+   * Das war der erste Versuch, und er faellt beim Vergroessern
+   * auseinander: ab etwa 130 % ist das Blatt breiter und hoeher als der
+   * Ausschnitt, in dem es steht. „Auf dem Blatt" hiess dann „irgendwo
+   * ausserhalb des Fensters" – das Lineal liess sich hinausschieben und
+   * war wieder weg. Genau so wurde es gemeldet.
+   *
+   * Massgeblich ist deshalb der Ausschnitt selbst (#pg-scroll): links
+   * hoert er an der Navigation auf, oben an der Werkzeugleiste, unten am
+   * Fensterrand. Rechts wird die Rollleiste abgezogen – sie gehoert zum
+   * Ausschnitt, ist aber kein Platz, auf dem man zeichnet.
    *
    * >>> Warum die MITTE und der gedrehte Umriss <<<
    * Gerechnet wird mit dem Platz, den das Lineal GEDREHT einnimmt, und
    * begrenzt wird sein Mittelpunkt. Wuerde stattdessen das ungedrehte
    * Rechteck begrenzt, saesse ein senkrecht gestelltes Lineal fuer
-   * immer in der Blattmitte fest: gedreht wird um den Mittelpunkt, und
-   * das Rechteck ist dann so breit wie das Blatt.
+   * immer in der Mitte fest: gedreht wird um den Mittelpunkt, und das
+   * Rechteck ist waagerecht so breit wie die Seite.
    *
    * Begrenzt werden die ROHEN Werte, nicht die angezeigten. Sonst liefe
    * der rohe Wert beim Weiterschieben davon, und beim Zurueckziehen
    * ruehrte sich das Lineal erst wieder, wenn er den Rand eingeholt hat.
    */
-  function haltAufDemBlatt() {
-    const seiten = document.querySelectorAll('.j-page');
-    if (!seiten.length) return;
+  function haltImSichtfeld() {
+    const feld = E('pg-scroll');
+    if (!feld) return;
+    const r = feld.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return;
 
-    const erste = seiten[0].getBoundingClientRect();
-    const letzte = seiten[seiten.length - 1].getBoundingClientRect();
+    // Die Rollleiste gehoert zum Ausschnitt, aber nicht zur Zeichenflaeche
+    const rollleiste = Math.max(0, feld.offsetWidth - feld.clientWidth);
 
     const rad = (lineal.winkel || 0) * Math.PI / 180;
     const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
@@ -287,15 +300,31 @@
     let mx = lineal.rohX + linealBreite / 2;
     let my = lineal.rohY + LINEAL_H / 2;
 
-    /* Ist das Lineal breiter als das Blatt – waagerecht ist es genau so
-       breit –, gibt es keinen Spielraum. Dann sitzt es buendig, statt
-       zwischen zwei widersprechenden Grenzen zu zappeln. */
-    const halt = (wert, von, bis) => bis >= von
-      ? Math.max(von, Math.min(bis, wert))
-      : (von + bis) / 2;
+    /**
+     * Haelt die Mitte so, dass das Lineal im Ausschnitt bleibt.
+     *
+     * >>> Der Fall, in dem es gar nicht hineinpasst <<<
+     * Senkrecht gestellt ist es so lang wie die Seite breit ist – auf
+     * einem Laptop laenger als der Ausschnitt hoch, und beim
+     * Vergroessern gilt dasselbe in der Waagerechten. Es dann in die
+     * Mitte zu zwingen hiesse: es laesst sich ueberhaupt nicht mehr
+     * verschieben. Stattdessen darf es hinausragen, solange ein
+     * greifbares Stueck zu sehen bleibt.
+     *
+     * @param wert  die Mitte
+     * @param v0,v1 die Raender des Ausschnitts
+     * @param b     der Platz, den das Lineal auf dieser Achse einnimmt
+     */
+    const SICHTBAR_MIN = 80;
+    const halt = (wert, v0, v1, b) => {
+      const von = v0 + b / 2, bis = v1 - b / 2;
+      if (bis >= von) return Math.max(von, Math.min(bis, wert));
+      return Math.max(v0 + SICHTBAR_MIN - b / 2,
+             Math.min(v1 - SICHTBAR_MIN + b / 2, wert));
+    };
 
-    mx = halt(mx, erste.left + breit / 2, erste.right - breit / 2);
-    my = halt(my, erste.top + hoch / 2, letzte.bottom - hoch / 2);
+    mx = halt(mx, r.left, r.right - rollleiste, breit);
+    my = halt(my, r.top, r.bottom, hoch);
 
     lineal.rohX = mx - linealBreite / 2;
     lineal.rohY = my - LINEAL_H / 2;
@@ -309,7 +338,7 @@
     const nahDran = Math.abs(norm - viertel) <= WINKEL_TOLERANZ;
     lineal.winkel = nahDran ? (viertel % 360) : lineal.rohWinkel;
 
-    haltAufDemBlatt();
+    haltImSichtfeld();
 
     lineal.x = lineal.rohX;
     lineal.y = lineal.rohY;
@@ -341,12 +370,16 @@
     const naeher = Math.abs(obenD) <= Math.abs(untenD) ? obenD : untenD;
     if (Math.abs(naeher) > LINIEN_TOLERANZ) return;
 
-    /* Das Einrasten darf nicht ueber den Blattrand hinaus ziehen. Am
-       obersten und untersten Rand liegt die naechste Linie schon
-       ausserhalb – gemessen ragte das Lineal dort acht Pixel hinaus,
+    /* Das Einrasten darf nicht aus dem Sichtfeld hinaus ziehen. Am
+       oberen und unteren Rand liegt die naechste Papierlinie schon
+       ausserhalb – gemessen zog es das Lineal dort acht Pixel hinaus,
        genau die Fangweite. Passt es nicht, bleibt es, wo es ist. */
     const ziel = lineal.rohY + naeher;
-    if (ziel < r.top || ziel + LINEAL_H > r.bottom) return;
+    const feld = E('pg-scroll');
+    if (feld) {
+      const fr = feld.getBoundingClientRect();
+      if (ziel < fr.top || ziel + LINEAL_H > fr.bottom) return;
+    }
     lineal.y = ziel;
   }
 
