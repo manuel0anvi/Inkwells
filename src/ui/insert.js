@@ -217,7 +217,7 @@
     }
 
     const ZIELE = {
-      shape: () => { if (typeof switchMode === 'function') switchMode('shape'); },
+      shape: () => druecke(E('btn-shape')),
       table: () => druecke(E('btn-table')),
       media: () => druecke(E('btn-media')),
       formula: () => druecke(E('btn-formula'))

@@ -223,13 +223,89 @@
    der aendert sich von selbst.
    ─────────────────────────────────────────────────────────────────── */
 
-#btn-sync svg { transition: stroke .18s ease-out }
-#btn-sync.ist-gesichert svg { stroke: var(--sync-ok) }
-#btn-sync.ist-offen svg { stroke: var(--sync-wait) }
+/* ── Der geteilte Knopf ───────────────────────────────────────────────
+   Links die breite Haelfte, die handelt (speichern und hochladen),
+   rechts der schmale Pfeil, der das Fenster oeffnet. Sie sitzen ohne
+   Luft nebeneinander und teilen sich den Aussenabstand, damit sie als
+   EIN Knopf gelesen werden und nicht als zwei. */
+.tbar-sync {
+  display: flex;
+  align-items: center;
+  margin-left: 6px;
+  margin-right: 4px
+}
+
+.tbar-sync .titlebar-settings-btn {
+  margin-left: 0;
+  margin-right: 0
+}
+
+.tbar-sync .sync-tun {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0
+}
+
+.tbar-sync .sync-mehr {
+  width: 16px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 10px;
+  line-height: 1;
+  opacity: .75
+}
+
+.tbar-sync .sync-mehr:hover {
+  opacity: 1
+}
+
+/* Das Zeichen fuer „ohne Anmeldung": dasselbe, das der Speicher-Knopf in
+   der Werkzeugleiste getragen hat. Haken heisst gesichert, Punkt heisst
+   noch nicht. */
+.sync-zeichen-platte {
+  font-size: 15px;
+  line-height: 1
+}
+
+/* ── Die Zustaende ────────────────────────────────────────────────────
+   Gruen: gesichert. Orange: noch nicht einmal auf der Platte – das ist
+   die Haelfte, die ein Absturz kostet, und deshalb die auffaelligste
+   Farbe. Blau: auf der Platte, aber noch nicht oben.
+
+   >>> Warum die Klasse an der HUELLE haengt und nicht am Knopf <<<
+   Weil sich beide Haelften faerben muessen: der Knopf und der Pfeil
+   daneben. Ein zweifarbiger Knopf saehe aus wie zwei, und die Farbe
+   gilt fuer den Zustand, nicht fuer eine Haelfte. Vom Knopf aus kaeme
+   man an den Pfeil nur ueber :has() an der Huelle – ein Umweg ueber
+   drei Ecken, wo eine Klasse an der Huelle beides direkt trifft. */
+/* >>> Die Farbe steht EINMAL da, nicht dreimal je Haelfte <<<
+   Der Zustand setzt --zustand an der Huelle; Zeichen, Haken und Pfeil
+   lesen es. Vorher stand je Zustand ein Regelpaar da – eines fuer das
+   Zeichen, eines fuer den Pfeil –, und wer eine Haelfte dazunimmt,
+   muss an drei Stellen daran denken. */
+.tbar-sync {
+  --zustand: var(--gd)
+}
+
+.tbar-sync.ist-gesichert { --zustand: var(--sync-ok) }
+.tbar-sync.ist-offen { --zustand: var(--sync-wait) }
+.tbar-sync.nicht-gespeichert { --zustand: var(--sync-warn) }
+.tbar-sync.laeuft { --zustand: var(--sync-wait) }
+
+.tbar-sync .sync-tun svg {
+  stroke: var(--zustand);
+  transition: stroke .18s ease-out
+}
+
+.tbar-sync .sync-zeichen-platte,
+.tbar-sync .sync-mehr {
+  color: var(--zustand)
+}
 
 /* Waehrend etwas laeuft, dreht sich das Zeichen langsam - dann sieht man,
    dass gerade wirklich etwas passiert, statt nur "es steht etwas aus". */
-#btn-sync.laeuft svg { stroke: var(--sync-wait); animation: sync-dreht 1.6s linear infinite }
+.tbar-sync.laeuft .sync-tun svg {
+  animation: sync-dreht 1.6s linear infinite
+}
 
 @keyframes sync-dreht {
   from { transform: rotate(0deg) }

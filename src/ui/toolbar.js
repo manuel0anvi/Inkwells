@@ -1123,7 +1123,10 @@ window.addEventListener('pointermove', e => {
 
 /** Malt dieses Werkzeug, statt Text zu setzen? */
 function isDrawMode(mode) {
-  return mode === 'pen1' || mode === 'pen2' || mode === 'hl' || mode === 'eraser' || mode === 'shape';
+  /* 'shape' stand hier, solange Formen aufgezogen wurden. Sie werden
+     jetzt eingesetzt wie eine Tabelle (canvas/shapes.js) – einen
+     Formen-Modus gibt es nicht mehr. */
+  return mode === 'pen1' || mode === 'pen2' || mode === 'hl' || mode === 'eraser';
 }
 
 function switchMode(mode) {
@@ -1139,10 +1142,11 @@ function switchMode(mode) {
   E('pen-opts').style.display = isPen ? 'flex' : 'none';
   E('eraser-opts').style.display = mode === 'eraser' ? 'flex' : 'none';
   E('text-opts').style.display = mode === 'cursor' ? 'flex' : 'none';
-  /* Die Formen-Einstellungen sitzen in einem eigenen Fenster (#shape-pop)
-     und nicht mehr in der Leiste. Es geht mit dem Werkzeug auf und mit
-     jedem anderen wieder zu. */
-  if (typeof setzeFormenFenster === 'function') setzeFormenFenster(mode === 'shape');
+  /* Das Formen-Fenster hing hier am Werkzeugwechsel, solange die Formen
+     ein Werkzeug waren. Es hängt jetzt an seinem eigenen Knopf beim
+     Einfügen. Zumachen gehört trotzdem hierher: es liegt über der
+     Seite, und wer zum Stift greift, will darauf zeichnen. */
+  if (typeof setzeFormenFenster === 'function') setzeFormenFenster(false);
   updatePenUI();
   applyMode();
   updateUndoRedoUI();
@@ -1159,15 +1163,17 @@ function switchMode(mode) {
 /* ══════════════════════════════════════════════════════════════════════
    DAS FORMEN-FENSTER
 
-   Die Einstellungen der Formen – welche Form, wie dick, das Lineal –
-   standen offen in der Leiste und nahmen dort eine ganze Gruppe ein.
-   Sie zeigten aber nur etwas, solange das Formen-Werkzeug gewählt war;
-   die übrige Zeit war das eine leere Zone, die trotzdem Platz kostete.
+   Der Formen-Knopf steht beim Einfügen, neben der Tabelle, und öffnet
+   dieses Fenster – genau wie der Tabellen-Knopf sein Raster öffnet. Ein
+   Druck auf eine Form setzt sie auf die Seite (canvas/shapes.js), und
+   man bleibt dabei, wo man war: im Text oder beim Stift.
 
-   Jetzt hängen sie an einem Fenster am Formen-Knopf, genau wie das
-   Raster am Tabellen-Knopf. Der Inhalt ist unverändert (#shape-opts in
-   index.html) – nur sein Ort ist ein anderer, damit greifen alle
-   bestehenden Handgriffe weiter, auch der Lineal-Knopf aus ui/ruler.js.
+   >>> Was hier vorher stand <<<
+   Zuerst lagen die Einstellungen offen in der Leiste und kosteten dort
+   dauerhaft eine Gruppe, obwohl sie nur beim Formen-Werkzeug etwas
+   zeigten. Dann hingen sie an eben diesem Werkzeug. Das Werkzeug selbst
+   war der eigentliche Fehler: eine Form ist nichts, was man malt,
+   sondern etwas, das man einsetzt.
 
    >>> Wo es aufgeht <<<
    Am Formen-Knopf. Im Hochformat gibt es den nicht (dort sammelt „+"
@@ -1177,15 +1183,12 @@ function switchMode(mode) {
    ══════════════════════════════════════════════════════════════════════ */
 (function () {
   const pop = E('shape-pop');
+  const knopf = E('btn-shape');
   if (!pop) return;
 
   /** Der Knopf, unter dem das Fenster hängt – je nach Ausrichtung. */
   function anker() {
-    const kandidaten = [
-      document.querySelector('.tb-mode[data-mode="shape"]'),
-      E('btn-insert-all'),
-      E('toolbar')
-    ];
+    const kandidaten = [knopf, E('btn-insert-all'), E('toolbar')];
     return kandidaten.find(el => el && el.offsetParent !== null) || null;
   }
 
@@ -1199,21 +1202,19 @@ function switchMode(mode) {
   }
 
   function draussen(e) {
-    if (e.target.closest('#shape-pop, .tb-mode[data-mode="shape"], #btn-insert-all')) return;
+    if (e.target.closest('#shape-pop, #btn-shape, #btn-insert-all')) return;
     setzeFormenFenster(false);
   }
 
-  /* Global, weil switchMode() es bei jedem Werkzeugwechsel ruft.
+  /* Global, weil switchMode() es bei jedem Werkzeugwechsel zumacht.
 
      Der Hörer aufs Draußen-Klicken wird erst im nächsten Durchlauf
      gesetzt: derselbe Druck, der das Fenster öffnet, würde es sonst
-     sofort wieder schließen. Die Abfrage davor prüft, ob das Fenster
-     dann überhaupt noch offen ist – ein zweiter Druck auf den
-     Formen-Knopf schließt es in derselben Runde wieder, und ohne die
-     Abfrage bliebe ein Hörer ohne Fenster stehen. */
+     sofort wieder schließen. */
   window.setzeFormenFenster = function (an) {
     document.removeEventListener('pointerdown', draussen, true);
     pop.style.display = an ? 'flex' : 'none';
+    if (knopf) knopf.classList.toggle('active', !!an);
     if (!an) return;
     stelle();
     setTimeout(() => {
@@ -1225,48 +1226,37 @@ function switchMode(mode) {
 
   window.formenFensterOffen = () => pop.style.display === 'flex';
 
-  /* ── Noch einmal derselbe Knopf schließt wieder ──────────────────
-     Sonst ginge das Fenster nur zu, indem man ein anderes Werkzeug
-     nimmt – und stünde bis dahin über der Seite.
-
-     >>> Warum es dafür ZWEI Hörer braucht <<<
-     Ganz oben in dieser Datei hängt schon ein click-Hörer, der
-     switchMode() ruft, und der öffnet das Fenster bei jedem Klick neu.
-     In der Auffangphase (capture) läuft er noch nicht – dort ist also
-     abzulesen, wie der Zustand VOR dem Klick war. Gehandelt wird
-     danach, in der Blasenphase, wenn switchMode() durch ist.
-     Ein einzelner Hörer könnte nur eines von beidem. */
-  const formenKnopf = document.querySelector('.tb-mode[data-mode="shape"]');
-  if (formenKnopf) {
-    let warSchonOffen = false;
-    formenKnopf.addEventListener('pointerdown', () => {
-      warSchonOffen = S.mode === 'shape' && window.formenFensterOffen();
-    }, true);
-    formenKnopf.addEventListener('click', () => {
-      if (warSchonOffen) setzeFormenFenster(false);
-    });
-  }
+  /* Auf- und zumachen am eigenen Knopf. In pointerdown und nicht in
+     click, damit das Fenster ohne Verzögerung dasteht – dieselbe Stelle,
+     an der auch der Tabellen-Knopf sein Raster öffnet (ui/insert.js). */
+  knopf?.addEventListener('pointerdown', () => {
+    setzeFormenFenster(!window.formenFensterOffen());
+  });
 
   window.addEventListener('resize', () => { if (window.formenFensterOffen()) stelle(); },
     { passive: true });
 })();
 
 /* ── Formen-Optionen ────────────────────────────────────────────────────
-   Welche Form gezeichnet wird, entscheiden diese Knöpfe. Farbe und
-   Linienstärke teilen sich die Formen mit dem Stift – eigene Farbfelder
-   wären nur eine Wiederholung des Vorhandenen. */
+   Die vier Knöpfe SETZEN eine Form ein – sie wählen kein Werkzeug mehr
+   aus. Deshalb bleibt auch keiner davon markiert: es gibt nichts, was
+   danach noch gälte, so wie im Tabellen-Raster auch keine Größe
+   markiert bleibt.
 
-// Form-Typ: Rechteck, Ellipse, Linie, Pfeil
-S.shapeType = 'rect';
+   Die Linienstärke daneben ist dagegen eine Einstellung: sie gilt für
+   die nächste Form. Farbe und Füllung stellt man an der ausgewählten
+   Form ein (canvas/shapes.js, addShapeChrome). */
+
 S.shapeFill = 'none';
 S.shapeStroke = '#1a1510';
 S.shapeStrokeWidth = 2;
 
 QA('#shape-opts [data-shape]').forEach(btn => {
   btn.addEventListener('click', () => {
-    S.shapeType = btn.dataset.shape;
-    QA('#shape-opts [data-shape]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    /* Erst zumachen, dann einsetzen: das Fenster liegt über der Seite,
+       und die neue Form soll sofort zu sehen sein. */
+    if (typeof setzeFormenFenster === 'function') setzeFormenFenster(false);
+    if (typeof insertShape === 'function') insertShape(btn.dataset.shape);
   });
 });
 

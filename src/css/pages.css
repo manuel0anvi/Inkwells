@@ -269,6 +269,15 @@ body.touch-draw .j-canvas {
   width: 9px;
   cursor: col-resize;
   z-index: 3;
+  /* >>> Der Streifen gehoert dem Finger ────────────────────────────
+     .j-text traegt touch-action: pan-y, damit sich ueber dem Text
+     scrollen laesst. Genau das nahm dem Ziehen aber den Finger weg: der
+     Browser machte aus der Bewegung ein Scrollen und brach den Zug mit
+     pointercancel ab. Mit der Maus ging es, mit dem Finger nie – und
+     eine Tabelle bedient man auf einem Tablet nun einmal mit dem
+     Finger. Auf dem Streifen selbst gibt es nichts zu scrollen, also
+     kostet none hier auch nichts. */
+  touch-action: none;
   /* Unsichtbar, aber greifbar. Beim Überfahren zeigt sich die Linie. */
   background: transparent
 }
@@ -292,6 +301,10 @@ body.touch-draw .j-canvas {
   height: 9px;
   cursor: row-resize;
   z-index: 3;
+  /* Wie beim senkrechten Streifen – und hier noch wichtiger: gezogen
+     wird nach oben und unten, also genau in die Richtung, in die
+     .j-text sonst scrollt. */
+  touch-action: none;
   background: transparent
 }
 

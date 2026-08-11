@@ -30,6 +30,10 @@
   --sync-ok: #4a9d63;
   --sync-ok-bg: rgba(74, 157, 99, .16);
   --sync-wait: #5b8fd4;
+  /* Noch nicht auf der Platte. Dieselbe Farbe, die der Speicher-Knopf in
+     der Werkzeugleiste dafuer hatte – sie ist auffaelliger als das Blau,
+     weil das die Haelfte ist, die ein Absturz wirklich kostet. */
+  --sync-warn: #c87a2a;
   --sync-wait-bg: rgba(91, 143, 212, .16);
   --sync-bad: #cc5b56;
   --sync-bad-bg: rgba(204, 91, 86, .16)

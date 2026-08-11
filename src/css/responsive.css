@@ -521,10 +521,10 @@ body.touch-input .nb-card-edit-btn {
     display: block
   }
 
+  #btn-shape,
   #btn-media,
   #btn-table,
-  #btn-formula,
-  .tb-mode[data-mode="shape"] {
+  #btn-formula {
     display: none
   }
 }

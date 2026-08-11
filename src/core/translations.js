@@ -606,6 +606,8 @@ const TRANSLATIONS = {
        darunter sagen, was genau. */
     syncWindowTitle: 'Synchronisation',
     syncWindowOpen: 'Synchronisation',
+    // Die breite Hälfte des geteilten Knopfs in der Titelleiste
+    syncSaveAndUpload: 'Speichern und synchronisieren',
     syncStateAllDone: 'Alles gesichert',
     syncStateAllDoneAt: 'Alles gesichert · zuletzt {time}',
     syncStateWorking: 'Wird hochgeladen …',
@@ -1285,6 +1287,7 @@ const TRANSLATIONS = {
 
     syncWindowTitle: 'Sync',
     syncWindowOpen: 'Sync',
+    syncSaveAndUpload: 'Save and sync',
     syncStateAllDone: 'Everything saved',
     syncStateAllDoneAt: 'Everything saved · last {time}',
     syncStateWorking: 'Uploading …',
@@ -1960,6 +1963,7 @@ const TRANSLATIONS = {
 
     syncWindowTitle: 'Sincronizzazione',
     syncWindowOpen: 'Sincronizzazione',
+    syncSaveAndUpload: 'Salva e sincronizza',
     syncStateAllDone: 'Tutto salvato',
     syncStateAllDoneAt: 'Tutto salvato · ultimo {time}',
     syncStateWorking: 'Caricamento in corso …',

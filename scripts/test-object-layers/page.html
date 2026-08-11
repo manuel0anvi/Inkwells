@@ -36,6 +36,8 @@ function E(id) { return document.getElementById(id); }
 window.markCurrentNotebookDirty = () => {};
 </script>
 <script src="../../src/canvas/objects.js"></script>
+<!-- Formen sind Objekte: dieselbe Datei legt sie an und malt sie -->
+<script src="../../src/canvas/shapes.js"></script>
 <script>
 const out = [];
 window.onerror = (msg, src, line) => {
@@ -153,6 +155,50 @@ check('Auswahl ueber den Text hinweg', wrapOf(a).classList.contains('selected'),
 barBtns(a)[BTN.vorText].click();
 check('A ist wieder vorne', [zOf(a), a.layer], ['2001', 'front']);
 check('B blieb hinten', [zOf(b), b.layer], ['100', 'back']);
+
+/* ══════════════════════════════════════════════════════════════════
+   9. FORMEN WERDEN EINGESETZT, NICHT AUFGEZOGEN
+
+   Eine Form ist ein Objekt wie ein Bild – sie entsteht nur anders:
+   ein Druck im Formen-Fenster legt sie hin (canvas/shapes.js,
+   insertShape). Geprueft wird, dass dabei wirklich etwas entsteht,
+   dass es auf der Seite liegt und nicht daneben, und dass zwei
+   nacheinander nicht uebereinander landen – sonst saehe die zweite
+   aus, als waere sie nie gekommen.
+   ══════════════════════════════════════════════════════════════════ */
+CFG = { PAGE_W: 794, PAGE_H: 1123 };
+S.activePgId = 'p1';
+window.getPage = (id) => id === 'p1' ? { page } : null;
+
+const vorher = page.objects.length;
+check('Rechteck einsetzen meldet Erfolg', insertShape('rect'), true);
+check('Und liegt in der Objektliste', page.objects.length, vorher + 1);
+
+const form = page.objects[page.objects.length - 1];
+check('Es ist eine Form', [form.kind, form.shapeType], ['shape', 'rect']);
+check('Sie liegt ganz auf der Seite',
+  form.x >= 0 && form.y >= 0
+  && form.x + form.w <= CFG.PAGE_W && form.y + form.h <= CFG.PAGE_H, true);
+check('Und ist gross genug zum Anfassen', form.w > 100 && form.h > 60, true);
+check('Sie steht auch wirklich auf der Seite', !!wrapOf(form), true);
+
+insertShape('ellipse');
+const zweite = page.objects[page.objects.length - 1];
+check('Die zweite liegt nicht auf der ersten',
+  zweite.x !== form.x || zweite.y !== form.y, true);
+
+insertShape('arrow');
+const pfeil = page.objects[page.objects.length - 1];
+check('Ein Pfeil bekommt seine Enden',
+  [!!pfeil.p1, !!pfeil.p2], [true, true]);
+
+/* Ohne Bearbeitungsrecht darf gar nichts entstehen – derselbe Riegel
+   wie ueberall sonst. */
+const stand = page.objects.length;
+S.readOnly = true;
+check('Ohne Recht wird nichts eingesetzt', insertShape('rect'), false);
+check('Und die Liste bleibt, wie sie war', page.objects.length, stand);
+S.readOnly = false;
 
 window.__ergebnis = out.join('\n');
 </script>

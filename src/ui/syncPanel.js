@@ -38,6 +38,10 @@
   const btn = E('btn-sync');
   if (!overlay || !btn) return;
 
+  const huelle = E('tbar-sync');
+  const mehrBtn = E('btn-sync-more');
+  const svgZeichen = btn.querySelector('.sync-zeichen-cloud');
+  const platteZeichen = E('sync-zeichen-platte');
   const stateBox = E('sync-state');
   const localBox = E('sync-local');
   const saveNowBtn = E('sync-save-now-btn');
@@ -357,21 +361,40 @@
     const angemeldet = !!(window.CloudSync_ && CloudSync_.isAuthenticated
       && CloudSync_.isAuthenticated());
 
-    btn.style.display = 'flex';
-    btn.classList.remove('ist-gesichert', 'ist-offen', 'laeuft');
+    if (huelle) huelle.style.display = 'flex';
+    /* Die Zustandsklasse traegt die HUELLE, damit sich beide Haelften
+       faerben – der Knopf und der Pfeil (css/titlebar.css). */
+    const traeger = huelle || btn;
+    traeger.classList.remove('ist-gesichert', 'ist-offen', 'laeuft', 'nicht-gespeichert');
 
     const zustand = typeof window.saveState === 'function' ? window.saveState() : 'saved';
     const offen = angemeldet ? offeneVorgaenge().length : 0;
 
+    /* ── Welches Zeichen ──────────────────────────────────────────────
+       Angemeldet die Kreispfeile, sonst der Haken bzw. der Punkt vom
+       alten Speicher-Knopf. Ohne Anmeldung gibt es nichts abzugleichen –
+       ein Zeichen dafuer waere ein Versprechen, das keiner einloest. */
+    if (svgZeichen) svgZeichen.style.display = angemeldet ? '' : 'none';
+    if (platteZeichen) {
+      platteZeichen.style.display = angemeldet ? 'none' : '';
+      platteZeichen.textContent = zustand === 'saved' ? '✓' : '●';
+    }
+
+    /* Auch die Beschriftung: ohne Anmeldung wird nur gespeichert. */
+    btn.title = angemeldet
+      ? (t('syncSaveAndUpload') || 'Speichern und synchronisieren')
+      : (t('saveNow') || 'Speichern');
+
+    /* ── Welche Farbe ─────────────────────────────────────────────────
+       Die Reihenfolge ist nicht beliebig: noch nicht auf der Platte
+       sticht alles, das ist die Haelfte, die ein Absturz kostet. */
     if (zustand === 'unsaved') {
-      btn.classList.add('ist-offen');
-      btn.title = t('unsaved') || 'Nicht gespeichert';
+      traeger.classList.add('nicht-gespeichert');
       return;
     }
 
     if (angemeldet && window.CloudSync_ && CloudSync_.syncing) {
-      btn.classList.add('laeuft');
-      btn.title = t('syncStateWorking') || 'Wird hochgeladen …';
+      traeger.classList.add('laeuft');
       return;
     }
 
@@ -379,16 +402,15 @@
        genauso. Warum es wartet, sagt der Streifen im Fenster – dafür ist
        am Knopf kein Platz, und zwei Blautöne wären keine Auskunft,
        sondern ein Rätsel. */
-    if (offen) {
-      btn.classList.add('ist-offen');
-      btn.title = (t('syncStateWaiting') || '{n} Änderung(en) warten').replace('{n}', offen);
-      return;
-    }
+    traeger.classList.add(offen ? 'ist-offen' : 'ist-gesichert');
 
-    btn.classList.add('ist-gesichert');
-    btn.title = angemeldet
-      ? (t('syncStateAllDone') || 'Alles gesichert')
-      : (t('syncLocalDone') || 'Auf diesem Gerät gespeichert.');
+    /* Der Pfeil sagt, was im Fenster steht – die Zahl gehoert an ihn und
+       nicht an die Haelfte, die speichert. */
+    if (mehrBtn) {
+      mehrBtn.title = offen
+        ? (t('syncStateWaiting') || '{n} Änderung(en) warten').replace('{n}', offen)
+        : (t('syncWindowOpen') || 'Synchronisation');
+    }
   }
 
   /* ── Öffnen und Schließen ─────────────────────────────────────────── */
@@ -403,7 +425,52 @@
     overlay.style.display = 'none';
   }
 
-  btn.addEventListener('click', open);
+  /* ══════════════════════════════════════════════════════════════════
+     DER DRUCK AUF DEN KNOPF TUT ETWAS
+
+     Vorher oeffnete er nur das Fenster. Wer auf einen Knopf drueckt, an
+     dem „nicht gespeichert" steht, will aber speichern – und nicht
+     lesen, dass etwas aussteht. Also: erst auf die Platte, dann, wenn
+     angemeldet, die Warteschlange leeren.
+
+     Beides ohne Anmeldung sinnvoll: dann ist die Platte das Ziel und
+     nicht die halbe Strecke.
+
+     Das Fenster oeffnet der Pfeil daneben.
+     ══════════════════════════════════════════════════════════════════ */
+  let laeuftGerade = false;
+
+  async function speichernUndAbgleichen() {
+    if (laeuftGerade) return;          // Doppelklick soll nicht zweimal laufen
+    laeuftGerade = true;
+    (huelle || btn).classList.add('laeuft');
+    try {
+      /* Auch wenn nichts ausstehend erscheint: syncAll() im Speichern
+         holt den Stand aus dem Editor ins Datenmodell, und erst danach
+         weiss ueberhaupt jemand, ob es etwas gab. */
+      if (typeof window.saveNowWithFeedback === 'function') {
+        await window.saveNowWithFeedback();
+      }
+
+      const angemeldet = !!(window.CloudSync_ && CloudSync_.isAuthenticated
+        && CloudSync_.isAuthenticated());
+      if (angemeldet && typeof CloudSync_.flushPending === 'function') {
+        await CloudSync_.flushPending();
+      }
+    } catch (err) {
+      console.error('[Sync] Speichern und Abgleichen fehlgeschlagen:', err);
+    } finally {
+      laeuftGerade = false;
+      refreshButton();
+      render();
+    }
+  }
+
+  btn.addEventListener('click', speichernUndAbgleichen);
+  mehrBtn?.addEventListener('click', () => {
+    if (overlay.style.display !== 'none') { close(); return; }
+    open();
+  });
   E('sync-close')?.addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
@@ -479,7 +546,11 @@
   }, 5000);
 
   document.addEventListener('inkwell-identity-changed', refreshButton);
+  /* Der Sprachwechsel setzt die Beschriftungen aus data-i18n-title neu –
+     und ueberschreibt damit die, die refreshButton je nach Zustand
+     gesetzt hat. Deshalb hier noch einmal hinterher. */
   window.addEventListener('language-changed', () => {
+    refreshButton();
     if (overlay.style.display !== 'none') render();
   });
 

@@ -7,23 +7,17 @@
    Pfeil. Anders als Striche sind Formen Objekte in page.objects[] und
    lassen sich nachträglich verschieben, skalieren und drehen.
 
-   Die Bedienung ist Aufziehen: Drücken, ziehen, loslassen. Während des
-   Ziehens zeigt eine Vorschau den Umriss; beim Loslassen entsteht das
-   Objekt.
+   Die Bedienung ist Einsetzen, nicht Aufziehen: ein Druck im
+   Formen-Fenster legt die Form auf die Seite, danach zieht man sie
+   zurecht. Warum das so ist, steht unten bei „Eine Form einsetzen".
 
    >>> Warum Formen und nicht Striche mit Form-Erkennung <<<
    Ein Strich wird nach dem Zeichnen erkannt und durch eine Form ersetzt
    (wie in GoodNotes). Das ist die zweite Wahl: der Nutzer hat dann einen
    Augenblick lang das Falsche gesehen und muss darauf vertrauen, dass
-   gleich das Richtige daraus wird. Beim Aufziehen sieht er von Anfang an
-   die Form – und er kann sie korrigieren, bevor er loslässt.
+   gleich das Richtige daraus wird. Eine eingesetzte Form ist von Anfang
+   an die Form, die gemeint war.
    ══════════════════════════════════════════════════════════════════════ */
-
-/* ── Zustand während des Aufziehens ─────────────────────────────────── */
-let _shapeStart = null;       // { x, y } – Seitenkoordinaten
-let _shapePreview = null;     // das Vorschau-Element
-let _shapePage = null;        // die Seite, auf der gezeichnet wird
-let _shapeCanvas = null;      // der Leinwand-Knoten (für pointer-Events)
 
 /* ── Standardwerte ──────────────────────────────────────────────────── */
 const SHAPE_DEFAULTS = {
@@ -100,151 +94,101 @@ function buildShapeSvg(type, w, h, fill, stroke, strokeWidth, obj) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + pw + ' ' + ph + '" width="' + pw + '" height="' + ph + '" style="display:block;overflow:visible">' + form + '</svg>';
 }
 
-/* ── Vorschau während des Aufziehens ────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════
+   EINE FORM EINSETZEN
 
-function ensurePreview() {
-  if (_shapePreview) return;
-  _shapePreview = document.createElement('div');
-  _shapePreview.className = 'shape-preview';
-  _shapePreview.style.cssText = 'position:absolute;pointer-events:none;z-index:5500;border:2px dashed #666;background:rgba(0,0,0,0.05);display:none';
-  // Die Vorschau liegt im Seiten-Element, damit sie beim Zoomen mitgeht
-}
+   >>> Hier stand das Aufziehen, und warum es weg ist <<<
+   Formen waren ein WERKZEUG wie der Stift: Werkzeug wählen, auf der
+   Seite drücken, ziehen, loslassen. Das kostete den Modus – wer eine
+   Form wollte, verließ dafür den Text, und wer danach weiterschreiben
+   wollte, musste daran denken, den Cursor zurückzuholen. Gemeldet wurde
+   genau das: die Formen sollen sein wie die Tabelle.
 
-function showPreview(pageEl, x, y, w, h, type, enden) {
-  ensurePreview();
-  if (_shapePreview.parentElement !== pageEl) pageEl.appendChild(_shapePreview);
+   Und eine Tabelle zieht man nicht auf, man setzt sie ein. Genauso hier:
+   ein Druck im Formen-Fenster legt die Form auf die Seite, in einer
+   brauchbaren Größe und dort, wo man gerade hinsieht. Danach ist sie ein
+   gewöhnliches Objekt – verschieben, in der Größe ziehen, drehen,
+   färben, alles wie beim Bild und alles auch mit dem Finger
+   (canvas/objects.js).
 
-  _shapePreview.style.display = 'block';
-  _shapePreview.style.left = x + 'px';
-  _shapePreview.style.top = y + 'px';
-  _shapePreview.style.width = w + 'px';
-  _shapePreview.style.height = h + 'px';
+   Der Weg ist damit kürzer als vorher: ein Druck statt Werkzeugwechsel,
+   Aufziehen und Zurückwechseln.
+   ══════════════════════════════════════════════════════════════════════ */
 
-  if (type === 'ellipse') {
-    _shapePreview.style.borderRadius = '50%';
-    _shapePreview.style.border = '2px dashed #666';
-    _shapePreview.innerHTML = '';
-  } else if (type === 'line' || type === 'arrow') {
-    _shapePreview.style.borderRadius = '0';
-    _shapePreview.style.border = 'none';
-    _shapePreview.style.background = 'transparent';
-    // Mit den echten Enden, damit die Vorschau zeigt, was entsteht
-    _shapePreview.innerHTML = buildShapeSvg(type, w, h, 'none', '#666', 2, enden);
-  } else {
-    _shapePreview.style.borderRadius = '2px';
-    _shapePreview.style.border = '2px dashed #666';
-    _shapePreview.style.background = 'rgba(0,0,0,0.05)';
-    _shapePreview.innerHTML = '';
-  }
-}
-
-function hidePreview() {
-  if (_shapePreview) {
-    _shapePreview.style.display = 'none';
-    if (_shapePreview.parentElement) _shapePreview.remove();
-    _shapePreview = null;
-  }
-}
-
-/* ── Aufziehen ──────────────────────────────────────────────────────── */
+/* Aufeinanderfolgende Formen versetzt hinlegen, wie Word es mit
+   eingefügten Objekten tut – sonst liegt die zweite genau auf der ersten
+   und es sieht aus, als wäre nichts geschehen. */
+let _formenVersatz = 0;
+const VERSATZ_SCHRITT = 18;
+const VERSATZ_RUNDE = 5;
 
 /**
- * Form-Aufziehen beginnen.
+ * Die Stelle auf der Seite, an der eine neue Form landen soll.
  *
- * Wird von input.js aus handleDrawStart aufgerufen, wenn S.mode === 'shape'.
+ * Nicht die Seitenmitte: von einer A4-Seite ist auf einem Laptop die
+ * Hälfte gar nicht zu sehen, und die Form entstünde außerhalb des
+ * Blickfelds. Genommen wird die Mitte des SICHTBAREN Stücks.
  */
-function startShapeDraw(e, page, canvas) {
-  if (S.readOnly) return;
+function formenPlatz(page, pageEl, w, h) {
+  const pw = page.w || CFG.PAGE_W, ph = page.h || CFG.PAGE_H;
+  let my = ph / 2;
 
-  _shapeStart = coordsFromEvent(e, canvas);
-  _shapePage = page;
-  _shapeCanvas = canvas;
-
-  S._shapeDrawing = true;
-  S._drawPointerId = e.pointerId;
-  e.preventDefault();
-  try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* nicht schlimm */ }
-
-  const textDiv = canvas.parentElement.querySelector('.j-text');
-  if (textDiv) {
-    textDiv.style.pointerEvents = 'none';
-    textDiv.dataset.ph = '';
+  const sc = E('pg-scroll');
+  if (pageEl && sc) {
+    const pr = pageEl.getBoundingClientRect();
+    const sr = sc.getBoundingClientRect();
+    const massstab = pr.height / ph;
+    if (massstab > 0) {
+      const oben = Math.max(pr.top, sr.top);
+      const unten = Math.min(pr.bottom, sr.bottom);
+      if (unten > oben) my = ((oben + unten) / 2 - pr.top) / massstab;
+    }
   }
-  setActivePg(page.id);
+
+  const versatz = (_formenVersatz % VERSATZ_RUNDE) * VERSATZ_SCHRITT;
+  _formenVersatz++;
+
+  return {
+    x: Math.max(8, Math.min(pw - w - 8, pw / 2 - w / 2 + versatz)),
+    y: Math.max(8, Math.min(ph - h - 8, my - h / 2 + versatz))
+  };
 }
 
-function moveShapeDraw(e) {
-  if (!_shapeStart || !_shapePage) return;
-  e.preventDefault();
-
-  const cur = coordsFromEvent(e, _shapeCanvas);
-  const type = S.shapeType || 'rect';
-
-  // Rechteck aus Start und aktueller Mausposition
-  const x = Math.min(_shapeStart.x, cur.x);
-  const y = Math.min(_shapeStart.y, cur.y);
-  const w = Math.abs(cur.x - _shapeStart.x);
-  const h = Math.abs(cur.y - _shapeStart.y);
-
-  const pageEl = document.querySelector('[data-pgid="' + _shapePage.id + '"]');
-  if (!pageEl) return;
-
-  if (type === 'line' || type === 'arrow') {
-    // Bei Linien ist das Rechteck die Bounding-Box; die Richtung steckt
-    // in den Anteilen p1/p2 (siehe shapeEnden)
-    const bw = Math.max(w, 1), bh = Math.max(h, 1);
-    const enden = {
-      p1: { x: (_shapeStart.x - x) / bw, y: (_shapeStart.y - y) / bh },
-      p2: { x: (cur.x - x) / bw, y: (cur.y - y) / bh }
-    };
-    showPreview(pageEl, x, y, bw, bh, type, enden);
-  } else {
-    const minSize = 2;
-    showPreview(pageEl, x, y, Math.max(w, minSize), Math.max(h, minSize), type);
-  }
-}
-
-function endShapeDraw(e) {
-  S._shapeDrawing = false;
-  S._drawPointerId = null;
-
-  if (!_shapeStart || !_shapePage || !_shapeCanvas) {
-    hidePreview();
-    _shapeStart = null;
-    _shapePage = null;
-    _shapeCanvas = null;
-    return;
+/**
+ * Setzt eine Form auf die gerade offene Seite.
+ *
+ * @param {string} type rect | ellipse | line | arrow
+ * @returns {boolean} ob es geklappt hat
+ */
+function insertShape(type) {
+  if (S.readOnly) {
+    if (typeof toast === 'function') toast(t('sharedNoRight'), true);
+    return false;
   }
 
-  hidePreview();
+  const info = typeof getPage === 'function' ? getPage(S.activePgId) : null;
+  if (!info || !info.page) return false;
+  const page = info.page;
+  const pageEl = document.querySelector('[data-pgid="' + page.id + '"]');
 
-  const cur = coordsFromEvent(e, _shapeCanvas);
-  const type = S.shapeType || 'rect';
+  /* Eine Größe, mit der man etwas anfangen kann: gut ein Viertel der
+     Seitenbreite. Zu klein und man sucht die Griffe, zu groß und man
+     zieht sie als Erstes wieder zusammen. */
+  const pw = page.w || CFG.PAGE_W;
+  const w = Math.round(pw * 0.26);
+  const h = (type === 'line' || type === 'arrow') ? Math.round(w * 0.5) : Math.round(w * 0.68);
 
-  let x = Math.min(_shapeStart.x, cur.x);
-  let y = Math.min(_shapeStart.y, cur.y);
-  let w = Math.abs(cur.x - _shapeStart.x);
-  let h = Math.abs(cur.y - _shapeStart.y);
+  pushPageHistory(page);
 
-  // Keine unsichtbar kleinen Formen
-  const MIN = 8;
-  if (type === 'line' || type === 'arrow') {
-    if (w < MIN && h < MIN) { cleanupShapeState(); return; }
-  } else {
-    if (w < MIN || h < MIN) { cleanupShapeState(); return; }
-  }
-
-  // Zustand vor dem Erstellen sichern
-  pushPageHistory(_shapePage);
-
+  const stelle = formenPlatz(page, pageEl, w, h);
   const obj = {
     id: uid(),
     kind: 'shape',
     shapeType: type,
-    x: x,
-    y: y,
-    w: Math.max(w, MIN),
-    h: Math.max(h, MIN),
+    x: stelle.x,
+    y: stelle.y,
+    w: w,
+    h: h,
     rot: 0,
     fill: S.shapeFill || SHAPE_DEFAULTS.fill,
     stroke: S.shapeStroke || SHAPE_DEFAULTS.stroke,
@@ -252,56 +196,27 @@ function endShapeDraw(e) {
     layer: 'front'
   };
 
-  /* Bei Linie und Pfeil zaehlt die RICHTUNG, in die gezogen wurde, nicht
-     nur das umschliessende Rechteck. Vorher lief jede Linie von unten
-     links nach oben rechts – eine nach unten rechts gezogene kam
-     spiegelverkehrt heraus. */
+  /* Linie und Pfeil zeigen von unten links nach oben rechts – dieselbe
+     Voreinstellung, die shapeEnden() für Formen aus alten Heften
+     annimmt. Wer sie anders haben will, zieht an den Enden. */
   if (type === 'line' || type === 'arrow') {
-    const bw = obj.w, bh = obj.h;
-    obj.p1 = { x: bw ? (_shapeStart.x - x) / bw : 0, y: bh ? (_shapeStart.y - y) / bh : 0 };
-    obj.p2 = { x: bw ? (cur.x - x) / bw : 1, y: bh ? (cur.y - y) / bh : 1 };
+    obj.p1 = { x: 0, y: 1 };
+    obj.p2 = { x: 1, y: 0 };
   }
 
-  const list = _shapePage.objects || (_shapePage.objects = []);
-  list.push(obj);
+  (page.objects || (page.objects = [])).push(obj);
 
-  // Objekt auf der Seite platzieren
-  const pageEl = document.querySelector('[data-pgid="' + _shapePage.id + '"]');
   if (pageEl) {
     const objLayer = pageEl.querySelector('.j-objects');
-    if (objLayer && typeof placeObject === 'function') {
-      placeObject(objLayer, obj, _shapePage);
-    }
+    if (objLayer && typeof placeObject === 'function') placeObject(objLayer, obj, page);
   }
 
-  updateUndoRedoUI();
+  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-
-  cleanupShapeState();
+  return true;
 }
 
-function cleanupShapeState() {
-  _shapeStart = null;
-  _shapePage = null;
-  _shapeCanvas = null;
-}
-
-/**
- * Zeiger-Koordinaten in Seiten-Koordinaten umrechnen.
- * Dasselbe wie coords() in input.js, hier wiederholt, damit shapes.js
- * unabhängig bleibt.
- */
-function coordsFromEvent(e, canvas) {
-  const r = canvas.getBoundingClientRect();
-  const pw = _shapePage ? (_shapePage.w || CFG.PAGE_W) : CFG.PAGE_W;
-  const ph = _shapePage ? (_shapePage.h || CFG.PAGE_H) : CFG.PAGE_H;
-  const scaleX = pw / r.width;
-  const scaleY = ph / r.height;
-  return {
-    x: (e.clientX - r.left) * scaleX,
-    y: (e.clientY - r.top) * scaleY
-  };
-}
+window.insertShape = insertShape;
 
 /* ── Form-Objekt rendern (für placeObject) ──────────────────────────── */
 
