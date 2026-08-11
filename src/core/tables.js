@@ -230,12 +230,79 @@ function handleTableKey(e) {
    Bild (canvas/objects.js): ein Element, das mitwandert, keine
    Werkzeugleiste am Fensterrand. */
 const TBL_ICONS = {
+  pfeilHoch: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4.5 6.5 8 3l3.5 3.5"/></svg>',
+  pfeilRunter: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M11.5 9.5 8 13l-3.5-3.5"/></svg>',
   zeilePlus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="2" y="3" width="12" height="4" rx="1"/><path d="M8 10v4M6 12h4"/></svg>',
   zeileMinus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="2" y="3" width="12" height="4" rx="1"/><path d="M6 12h4"/></svg>',
   spaltePlus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="2" width="4" height="12" rx="1"/><path d="M12 6v4M10 8h4"/></svg>',
   spalteMinus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="2" width="4" height="12" rx="1"/><path d="M10 8h4"/></svg>',
   weg: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2.6 4.2h10.8M6.4 4.2V2.9h3.2v1.3M3.9 4.2 4.5 13a.9.9 0 0 0 .9.8h5.2a.9.9 0 0 0 .9-.8l.6-8.8"/></svg>'
 };
+
+/**
+ * Verschiebt eine Tabelle im Text um eine Zeile nach oben oder unten.
+ *
+ * Eine Tabelle ist HTML im contenteditable und kein freies Objekt – sie
+ * lässt sich nicht mit der Maus über die Seite ziehen wie ein Bild. Was
+ * in Word der Mausgriff ist, sind hier die beiden Pfeil-Knöpfe: ▲ schiebt
+ * sie vor den vorigen Blockabsatz, ▼ hinter den nächsten.
+ *
+ * @param {{table: HTMLTableElement}} pos  Ergebnis von cellPos()
+ * @param {number} richtung  -1 für hoch, 1 für runter
+ */
+function tabelleBewegen(pos, richtung) {
+  const table = pos.table;
+  if (!table || !table.isConnected) return;
+
+  const eltern = table.parentNode;
+  if (!eltern) return;
+
+  // Alle Block-Elemente im selben Textbereich
+  const bloecke = [...eltern.children].filter(k =>
+    /^(P|H[1-6]|DIV|TABLE|UL|OL|BLOCKQUOTE)$/i.test(k.tagName));
+
+  const ich = bloecke.indexOf(table);
+  if (ich < 0) return;
+
+  // Die Tabelle + der leere Folgeabsatz, den insertTable anhängt – beide
+  // sollen mitwandern, sonst bleibt eine leere Zeile zurück.
+  const mitnehmer = [table];
+  const naechster = table.nextElementSibling;
+  if (naechster && naechster.tagName === 'P' && !naechster.textContent.trim()) {
+    mitnehmer.push(naechster);
+  }
+
+  if (richtung < 0) {
+    // Nach oben: vor den vorigen Block
+    if (ich === 0) {
+      if (typeof toast === 'function') toast(
+        (typeof t === 'function' && t('tableAtTop')) || 'Tabelle steht am Anfang – höher geht nicht.', true);
+      return;
+    }
+    bloecke[ich - 1].before(...mitnehmer);
+  } else {
+    // Nach unten: nach dem nächsten Block
+    if (ich >= bloecke.length - 1) {
+      if (typeof toast === 'function') toast(
+        (typeof t === 'function' && t('tableAtBottom')) || 'Tabelle steht am Ende – tiefer geht nicht.', true);
+      return;
+    }
+    // Hinter den nächsten Block – aber NACH dessen Folge-P
+    const ziel = bloecke[ich + 1];
+    let danach = ziel.nextElementSibling;
+    while (danach && danach.tagName === 'P' && !danach.textContent.trim()) {
+      danach = danach.nextElementSibling;
+    }
+    if (danach) danach.before(...mitnehmer);
+    else eltern.append(...mitnehmer);
+  }
+
+  // Schreibmarke in der ersten Zelle der verschobenen Tabelle halten
+  setTimeout(() => {
+    const ersteZelle = table.querySelector('th, td');
+    if (ersteZelle) focusCell(ersteZelle);
+  }, 10);
+}
 
 let tblBar = null;
 
@@ -310,6 +377,131 @@ function tableBar() {
   const meldung = (key, ersatz) => {
     if (typeof toast === 'function') toast(txt(key, ersatz), true);
   };
+
+  /* ── Tabelle im Text verschieben ▲▼ ─────────────────────────────────
+     Mit diesen beiden Knöpfen wandert die Tabelle zeilenweise auf und ab –
+     wie in Word, wo man sie mit der Maus packt. Hier im Browser ist eine
+     Tabelle HTML im contenteditable und kein freies Objekt; also
+     verschieben die Pfeile sie im Textfluss vor oder hinter den nächsten
+     Absatz. */
+
+  knopf(TBL_ICONS.pfeilHoch, txt('tableMoveUp', 'Tabelle nach oben'),
+    mitZelle(pos => tabelleBewegen(pos, -1)));
+  knopf(TBL_ICONS.pfeilRunter, txt('tableMoveDown', 'Tabelle nach unten'),
+    mitZelle(pos => tabelleBewegen(pos, 1)));
+
+  /* Ziehgriff (⠿): Tabelle an eine andere Stelle im Text ziehen.
+     Gedrückt halten und loslassen – da, wo die Marke hingesetzt würde. */
+  (() => {
+    const griff = document.createElement('span');
+    griff.className = 'j-table-griff';
+    griff.textContent = '⠿';
+    griff.title = txt('tableDrag', 'Tabelle verschieben');
+    griff.setAttribute('aria-label', griff.title);
+    griff.addEventListener('mousedown', e => e.preventDefault());
+    griff.style.cursor = 'grab';
+    tblBar.appendChild(griff);
+
+    let _zug = null;
+
+    griff.addEventListener('pointerdown', e => {
+      if (S.readOnly) return;
+      const cell = tblBar._zelle;
+      if (!cell || !cell.isConnected) return;
+      const pos = cellPos(cell);
+      const table = pos.table;
+      if (!table) return;
+
+      e.preventDefault(); e.stopPropagation();
+      try { griff.setPointerCapture(e.pointerId); } catch (err) { }
+
+      // Tabelle + Folgeabsatz aus dem Baum nehmen
+      const eltern = table.parentNode;
+      const naechster = table.nextElementSibling;
+      const beide = [table];
+      if (naechster && naechster.tagName === 'P') beide.push(naechster);
+
+      const textDiv = table.closest('.j-text');
+      const pgEl = textDiv && textDiv.closest('[data-pgid]');
+      const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
+      if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
+
+      // Halbdurchsichtiges Abbild, das dem Zeiger folgt
+      const abbild = document.createElement('div');
+      abbild.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;opacity:.55;'
+        + 'background:#faf7f0;border:2px dashed #8a8078;border-radius:4px;'
+        + 'padding:8px 12px;font-size:13px;color:#5a5148;';
+      abbild.textContent = '⠿ ' + (txt('tableDrag', 'Tabelle verschieben'));
+      document.body.appendChild(abbild);
+
+      beide.forEach(el => el.style.display = 'none');
+      griff.style.cursor = 'grabbing';
+
+      _zug = { table, beide, eltern, abbild, textDiv, info };
+
+      const zieh = ev => {
+        abbild.style.left = (ev.clientX + 12) + 'px';
+        abbild.style.top = (ev.clientY - 20) + 'px';
+      };
+      const los = ev => {
+        griff.removeEventListener('pointermove', zieh);
+        griff.removeEventListener('pointerup', los);
+        griff.removeEventListener('pointercancel', los);
+        try { griff.releasePointerCapture(ev.pointerId); } catch (err) { }
+        abbild.remove();
+        griff.style.cursor = 'grab';
+
+        if (!_zug) return;
+        const { table: tbl, beide: bd, eltern: elt, textDiv: td, info: inf } = _zug;
+        _zug = null;
+
+        // Einfügeposition über die Maus
+        let ziel = null;
+        if (document.caretRangeFromPoint) {
+          const cr = document.caretRangeFromPoint(ev.clientX, ev.clientY);
+          if (cr && td.contains(cr.startContainer)) ziel = cr;
+        }
+        if (!ziel) {
+          // Ans Ende des Textes, wenn nichts getroffen wurde
+          bd.forEach(el => { el.style.display = ''; });
+          elt.appendChild(tbl);
+          if (bd.length > 1 && bd[1] !== tbl) elt.appendChild(bd[1]);
+        } else {
+          // Tabelle + Begleiter vor dem gefundenen Block einsetzen
+          let block = ziel.startContainer;
+          if (block.nodeType === Node.TEXT_NODE) block = block.parentNode;
+          // Nächsten Block finden (p, h1-h3, table, etc.)
+          while (block && block !== td && !/^(P|H[1-6]|DIV|TABLE|UL|OL|BLOCKQUOTE)$/i.test(block.tagName)) {
+            block = block.parentNode;
+          }
+          bd.forEach(el => { el.style.display = ''; });
+          if (block && block !== td && block !== tbl) {
+            block.before(...bd);
+          } else {
+            elt.appendChild(tbl);
+            if (bd.length > 1 && bd[1] !== tbl) elt.appendChild(bd[1]);
+          }
+        }
+
+        notiereText(td);
+        if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+        if (inf && _zug === null) { /* pushPageHistory wurde oben schon gerufen */ }
+
+        // Leiste neu setzen
+        setTimeout(() => {
+          if (tbl.isConnected) {
+            const ersteZelle = tbl.querySelector('th, td');
+            if (ersteZelle) positionTableBar(ersteZelle);
+          } else {
+            versteckeTableBar();
+          }
+        }, 20);
+      };
+      griff.addEventListener('pointermove', zieh);
+      griff.addEventListener('pointerup', los);
+      griff.addEventListener('pointercancel', los);
+    });
+  })();
 
   knopf(TBL_ICONS.zeilePlus, txt('tableRowAdd', 'Zeile darunter'),
     mitZelle(pos => {
@@ -478,11 +670,12 @@ function sichereColgroup(table) {
   const spalten = erste ? erste.children.length : 0;
   if (!spalten) return null;
 
-  // Die jetzigen Breiten VOR dem Umschalten messen, sonst springt alles um
-  const istBreiten = [...erste.children].map(z => z.getBoundingClientRect().width);
   const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+  // Die jetzigen Verhältnisse VOR dem Umschalten messen
+  const istBreiten = [...erste.children].map(z => z.getBoundingClientRect().width / zoom);
 
   let grp = table.querySelector('colgroup');
+  const frisch = !grp;
   if (!grp) {
     grp = document.createElement('colgroup');
     table.insertBefore(grp, table.firstChild);
@@ -490,10 +683,28 @@ function sichereColgroup(table) {
   while (grp.children.length < spalten) grp.appendChild(document.createElement('col'));
   while (grp.children.length > spalten) grp.lastElementChild.remove();
 
-  [...grp.children].forEach((col, i) => {
-    if (col.getAttribute('width')) return;
-    col.setAttribute('width', Math.max(TBL_MIN_SPALTE, Math.round((istBreiten[i] || 80) / zoom)));
-  });
+  if (frisch) {
+    /* >>> Warum die gemessenen Breiten nicht genügen <<<
+       Eine leere Tabelle ist nur so breit wie ihr Inhalt – bei leeren
+       Zellen also 28 px je Spalte, das Mindestmaß. Schriebe man das als
+       feste Breite fest, hätte beim ersten Ziehen KEIN Nachbar etwas
+       abzugeben (er stünde selbst schon am Mindestmaß), und die Spalte
+       bewegte sich um keinen Pixel. Genau das war der Fall.
+
+       Deshalb wird beim ersten Anfassen auf die volle Breite des
+       Textbereichs verteilt – unter Beibehaltung der Verhältnisse, die
+       der Inhalt bisher ergeben hat. */
+    const textDiv = table.closest('.j-text');
+    const platz = textDiv
+      ? Math.max(120, textDiv.getBoundingClientRect().width / zoom - 4)
+      : 640;
+    const summe = istBreiten.reduce((a, b) => a + b, 0);
+
+    [...grp.children].forEach((col, i) => {
+      const anteil = summe > 0 ? (istBreiten[i] / summe) : (1 / spalten);
+      col.setAttribute('width', Math.max(TBL_MIN_SPALTE, Math.round(platz * anteil)));
+    });
+  }
   return grp;
 }
 

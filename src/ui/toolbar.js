@@ -311,8 +311,6 @@ function updatePenUI() {
 }
 let _customColorTarget = null;
 let _customColorAnchor = null;
-let _colorPressTimer = null;
-let _colorLongPressed = false;
 const _recentCustomColors = [];
 const RECENT_CUSTOM_COLORS_MAX = 5;
 
@@ -364,11 +362,14 @@ function renderRecentCustomColors() {
   const wrap = E('custom-color-recent');
   if (!wrap) return;
   const colors = _recentCustomColors.slice(0, RECENT_CUSTOM_COLORS_MAX);
+  const kopf = E('custom-color-recent-head');
   wrap.innerHTML = '';
   if (!colors.length) {
     wrap.style.display = 'none';
+    if (kopf) kopf.style.display = 'none';
     return;
   }
+  if (kopf) kopf.style.display = '';
   colors.forEach(color => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -400,32 +401,131 @@ function openCustomColorPopover(target, anchorEl) {
 
   const pop = E('custom-color-pop');
   const input = E('custom-color-pop-input');
-  E('custom-color-pop-title').textContent = target === 'text' ? 'Textfarbe' : 'Eigene Stiftfarbe';
-  input.value = currentCustomColor() || (target === 'text' ? (S.textCustomColor || S.textColor) : (activePenState().customColor || activePenState().color));
-  if (_recentCustomColors.length === 0 && input.value) saveRecentCustomColor(input.value);
+  const txt = (k, e) => (typeof t === 'function' && t(k)) || e;
+  E('custom-color-pop-title').textContent = target === 'text'
+    ? txt('textColor', 'Textfarbe') : txt('penColor', 'Stiftfarbe');
+
+  /* Die Farbe der Stelle, an der die Marke steht – nicht irgendeine
+     zuletzt benutzte. Beim Text steht sie im Dokument selbst
+     (queryCommandValue), sonst im Werkzeug. */
+  const start = target === 'text'
+    ? (farbeUnterMarke() || S.textCustomColor || S.textColor)
+    : (activePenState().customColor || activePenState().color);
+
+  const c = normalizeHexColor(start) || '#1a1510';
+  input.value = c;
+  const hexFeld = E('custom-color-hex');
+  if (hexFeld) hexFeld.value = c;
+
+  baueFarbPresets();
+  markierePresets(c);
+
   pop.style.display = 'block';
   positionCustomColorPopover(anchorEl);
   renderRecentCustomColors();
 }
 
+/**
+ * Welche Textfarbe gilt an der Schreibmarke?
+ *
+ * Wie in Word: der Knopf zeigt, womit man gerade schreibt, nicht das
+ * zuletzt Gewählte. queryCommandValue liefert rgb(…), das muss noch in
+ * die Schreibweise mit dem Doppelkreuz umgerechnet werden.
+ */
+function farbeUnterMarke() {
+  const a = document.activeElement;
+  if (!a || !a.classList || !a.classList.contains('j-text')) return null;
+  let wert = '';
+  try { wert = document.queryCommandValue('foreColor') || ''; } catch (e) { return null; }
+
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(wert);
+  if (m) {
+    const hex = n => ('0' + (+n).toString(16)).slice(-2);
+    return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+  }
+  return normalizeHexColor(wert);
+}
+
+/**
+ * Setzt die gewählte Farbe – NUR dort, wo sie hingehört.
+ *
+ * >>> Warum nicht mehr überall zugleich <<<
+ * Vorher schrieb diese Stelle die Farbe in Stift 1, Stift 2, den Marker
+ * UND den Text, egal wofür sie gewählt worden war. Wer eine Textfarbe
+ * einstellte, hatte danach auch einen andersfarbigen Stift und einen
+ * andersfarbigen Marker. Jetzt gilt sie für das, was gefragt war.
+ *
+ * @param {string} color
+ * @param {boolean} applyToSelection ob der markierte Text eingefärbt wird
+ */
 function syncGlobalCustomColor(color, applyToSelection) {
   const c = normalizeHexColor(color);
   if (!c) return;
-  S.pen1.customColor = c; S.pen1.color = c;
-  S.pen2.customColor = c; S.pen2.color = c;
-  S.hl.customColor = c; S.hl.color = c;
-  S.textCustomColor = c; S.textColor = c;
-  E('txt-color-dot').style.background = c;
-  E('txt-custom-ring').classList.add('active');
-  QA('.pen-sw[data-pcolor]').forEach(sw => sw.classList.remove('active'));
-  QA('.pen-sw[data-tcolor]').forEach(sw => sw.classList.remove('active'));
+
+  if (_customColorTarget === 'text') {
+    S.textCustomColor = c;
+    S.textColor = c;
+    E('txt-color-dot').style.background = c;
+    E('txt-custom-ring').classList.add('active');
+    QA('.pen-sw[data-tcolor]').forEach(sw => sw.classList.remove('active'));
+  } else {
+    const stift = activePenState();
+    stift.customColor = c;
+    stift.color = c;
+    QA('.pen-sw[data-pcolor]').forEach(sw => sw.classList.remove('active'));
+  }
+
+  // Den Zahlencode nachziehen, egal woher die Änderung kam
+  const hexFeld = E('custom-color-hex');
+  if (hexFeld && document.activeElement !== hexFeld) hexFeld.value = c;
+  const wahl = E('custom-color-pop-input');
+  if (wahl && wahl.value !== c) wahl.value = c;
+  markierePresets(c);
+
   if (applyToSelection && _savedTextRange) {
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(_savedTextRange);
   }
-  if (applyToSelection) document.execCommand('foreColor', false, c);
+  if (applyToSelection && _customColorTarget === 'text') {
+    document.execCommand('foreColor', false, c);
+  }
   updatePenUI();
+}
+
+/* ── Vorgefertigte Farben im Auswahlfenster ──────────────────────────
+   Damit man nicht für jedes Schwarz erst im Farbkreis suchen muss. */
+const FARB_PRESETS = [
+  '#1a1510', '#5a5148', '#8a8078', '#ffffff',
+  '#c04040', '#e07020', '#e8c547', '#2e8a46',
+  '#2a5fa8', '#5b3fa0', '#c0509a', '#7a4a28'
+];
+
+function markierePresets(c) {
+  const wrap = E('custom-color-preset');
+  if (!wrap) return;
+  wrap.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.farbe === c));
+}
+
+function baueFarbPresets() {
+  const wrap = E('custom-color-preset');
+  if (!wrap || wrap.children.length) return;
+  for (const farbe of FARB_PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'custom-color-preset-btn';
+    b.style.background = farbe;
+    b.dataset.farbe = farbe;
+    b.title = farbe;
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      E('custom-color-pop-input').value = farbe;
+      applyCustomColorValue(farbe, true);
+    });
+    wrap.appendChild(b);
+  }
 }
 
 function applyCustomColorValue(color, commitHistory) {
@@ -438,46 +538,33 @@ function applyCustomColorValue(color, commitHistory) {
   }
 }
 
-function applyPenCustomColor() {
-  const c = currentCustomColor() || activePenState().customColor || activePenState().color;
-  syncGlobalCustomColor(c, false);
-}
+/* applyPenCustomColor und applyTextCustomColor sind entfallen: sie waren
+   die „kurzer Druck"-Hälfte des langen Drucks und setzten nur noch einmal
+   dieselbe Farbe. Der Ring öffnet jetzt die Auswahl (bindColorPress). */
 
-function applyTextCustomColor() {
-  const c = currentCustomColor() || S.textCustomColor || S.textColor;
-  syncGlobalCustomColor(c, true);
-  E('txt-color-dropdown').style.display = 'none';
-}
-
-function bindShortLongColorPress(el, onShort, onLong) {
+/**
+ * Der Regenbogen-Ring öffnet die Farbwahl. Ein Klick, sonst nichts.
+ *
+ * >>> Warum der lange Druck weg ist <<<
+ * Er dauerte eine ganze Sekunde und war nirgends angeschrieben. Ein
+ * kurzer Klick setzte stattdessen die zuletzt gewählte Farbe noch einmal
+ * – also meistens dieselbe, und damit sichtbar gar nichts. Genau so wurde
+ * es gemeldet: „wenn man drückt passiert nichts".
+ *
+ * @param {HTMLElement} el
+ * @param {Function} onOeffnen  bekommt das Element als Anker
+ */
+function bindColorPress(el, onOeffnen) {
+  if (!el) return;
+  // Die Schreibmarke darf beim Klick nicht aus dem Text fallen
   el.addEventListener('mousedown', e => e.preventDefault());
-  el.addEventListener('pointerdown', e => {
+  el.addEventListener('click', e => {
     e.stopPropagation();
-    try { el.setPointerCapture(e.pointerId); } catch(err){}
-    _colorLongPressed = false;
-    clearTimeout(_colorPressTimer);
-    _colorPressTimer = setTimeout(() => {
-      _colorLongPressed = true;
-      onLong(el);
-    }, 1000); // 1 sekunde
-  });
-  const finish = e => {
-    e.stopPropagation();
-    try { el.releasePointerCapture(e.pointerId); } catch(err){}
-    clearTimeout(_colorPressTimer);
-    if (!_colorLongPressed) {
-      _colorLongPressed = true; // prevent double firing
-      onShort();
-    }
-  };
-  el.addEventListener('pointerup', finish);
-  el.addEventListener('pointercancel', e => {
-    try { el.releasePointerCapture(e.pointerId); } catch(err){}
-    clearTimeout(_colorPressTimer);
+    onOeffnen(el);
   });
 }
 
-bindShortLongColorPress(E('pen-color-ring'), applyPenCustomColor, anchor => openCustomColorPopover('pen', anchor));
+bindColorPress(E('pen-color-ring'), anchor => openCustomColorPopover('pen', anchor));
 
 E('custom-color-pop-input').addEventListener('input', function () {
   applyCustomColorValue(this.value, false);
@@ -486,6 +573,53 @@ E('custom-color-pop-input').addEventListener('input', function () {
 E('custom-color-pop-input').addEventListener('change', function () {
   applyCustomColorValue(this.value, true);
 });
+
+/* ── Der Zahlencode ───────────────────────────────────────────────────
+   Zum Ablesen, Abschreiben und Eintippen. Wer eine Farbe aus einem
+   anderen Programm übernehmen will, kommt sonst gar nicht an sie heran. */
+const hexFeld = E('custom-color-hex');
+if (hexFeld) {
+  hexFeld.addEventListener('mousedown', e => e.stopPropagation());
+  hexFeld.addEventListener('click', function (e) { e.stopPropagation(); this.select(); });
+  hexFeld.addEventListener('input', function () {
+    let v = this.value.trim();
+    if (v && v[0] !== '#') v = '#' + v;
+    // Kurzform #abc genauso annehmen wie #aabbcc
+    const kurz = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(v);
+    if (kurz) v = '#' + kurz[1] + kurz[1] + kurz[2] + kurz[2] + kurz[3] + kurz[3];
+    const c = normalizeHexColor(v);
+    if (!c) return;                       // beim Tippen noch unvollständig
+    E('custom-color-pop-input').value = c;
+    applyCustomColorValue(c, false);
+  });
+  hexFeld.addEventListener('change', function () {
+    const c = normalizeHexColor(this.value);
+    if (c) applyCustomColorValue(c, true);
+    else this.value = E('custom-color-pop-input').value;   // Unsinn zurücksetzen
+  });
+  hexFeld.addEventListener('keydown', e => {
+    e.stopPropagation();                  // keine Tastenkürzel beim Tippen
+    if (e.key === 'Enter') { e.preventDefault(); hexFeld.blur(); }
+  });
+}
+
+const kopierKnopf = E('custom-color-copy');
+if (kopierKnopf) {
+  kopierKnopf.addEventListener('mousedown', e => e.preventDefault());
+  kopierKnopf.addEventListener('click', async e => {
+    e.stopPropagation();
+    const c = E('custom-color-hex').value;
+    try {
+      await navigator.clipboard.writeText(c);
+      if (typeof toast === 'function') {
+        toast(((typeof t === 'function' && t('colorCopied')) || 'Farbcode kopiert') + ': ' + c);
+      }
+    } catch (err) {
+      // Ohne Zwischenablage wenigstens markieren, dann geht Strg+C
+      E('custom-color-hex').select();
+    }
+  });
+}
 
 E('custom-color-pop-close').addEventListener('click', e => {
   e.stopPropagation();
@@ -530,13 +664,24 @@ QA('.pen-sw[data-tcolor]').forEach(sw => {
   sw.addEventListener('click', () => {
     S.textColor = sw.dataset.tcolor;
     E('txt-color-dot').style.background = sw.dataset.tcolor;
+    // Vor dem Farbbefehl das Textfeld fokussieren – hat der Klick auf
+    // den Farbring dem Textfeld den Fokus genommen, weiss execCommand
+    // sonst nicht, worauf es wirken soll.
+    const textFeld = document.activeElement &&
+      document.activeElement.classList &&
+      document.activeElement.classList.contains('j-text') ? document.activeElement
+      : document.querySelector('.j-text:focus');
+    if (!textFeld) {
+      const erstes = document.querySelector('.j-text');
+      if (erstes) erstes.focus();
+    }
     document.execCommand('foreColor', false, sw.dataset.tcolor);
     QA('.pen-sw[data-tcolor]').forEach(s => s.classList.toggle('active', s.dataset.tcolor === sw.dataset.tcolor));
     E('txt-custom-ring').classList.remove('active');
     E('txt-color-dropdown').style.display = 'none';
   });
 });
-bindShortLongColorPress(E('txt-custom-ring'), applyTextCustomColor, anchor => openCustomColorPopover('text', anchor));
+bindColorPress(E('txt-custom-ring'), anchor => openCustomColorPopover('text', anchor));
 E('txt-color-in').addEventListener('input', function () {
   S.textColor = this.value; E('txt-color-dot').style.background = this.value;
   S.textCustomColor = this.value;
@@ -620,6 +765,18 @@ function updateHdrBtns() {
   // nur um zu sehen, in welchem Format man schreibt
   const lbl = E('fmt-style-lbl');
   if (lbl) lbl.textContent = level ? ('H' + level) : '¶';
+
+  /* Der Farbpunkt zeigt die Farbe an der Schreibmarke – wie in Word. Er
+     stand vorher auf dem zuletzt GEWÄHLTEN Wert und log damit, sobald man
+     in andersfarbigen Text klickte. */
+  const farbe = farbeUnterMarke();
+  if (farbe) {
+    S.textColor = farbe;
+    const punkt = E('txt-color-dot');
+    if (punkt) punkt.style.background = farbe;
+    QA('.pen-sw[data-tcolor]').forEach(s =>
+      s.classList.toggle('active', s.dataset.tcolor === farbe));
+  }
   E('fmt-bold').classList.toggle('active', document.queryCommandState('bold'));
   E('fmt-italic').classList.toggle('active', document.queryCommandState('italic'));
   E('fmt-under').classList.toggle('active', document.queryCommandState('underline'));

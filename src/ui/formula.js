@@ -220,7 +220,8 @@
   document.body.appendChild(overlay);
 
   /* ── Zustand ────────────────────────────────────────────────────── */
-  let _editSpan = null;       // null = neue Formel, sonst die zu bearbeitende
+  let _editSpan = null;       // eine Formel im TEXT (ältere Hefte)
+  let _editObj = null;        // ein Formel-OBJEKT { obj, page, neuZeichnen }
   let _savedRange = null;     // Schreibmarke vor dem Öffnen
   let _vorschauTimer = 0;
 
@@ -371,6 +372,7 @@
   function schliessen() {
     overlay.style.display = 'none';
     _editSpan = null;
+    _editObj = null;
     _savedRange = null;
   }
 
@@ -378,6 +380,20 @@
     const latex = fertigesLatex().trim();
     if (!latex) { schliessen(); return; }
     const displayMode = radioBlock.checked;
+
+    /* Ein Formel-OBJEKT wird an Ort und Stelle geändert – es liegt in
+       page.objects[] und nicht im Text, also gibt es hier nichts
+       einzusetzen (core/formula.js). */
+    if (_editObj) {
+      const { obj, page, neuZeichnen } = _editObj;
+      if (typeof pushPageHistory === 'function') pushPageHistory(page);
+      if (typeof updateFormulaObject === 'function') updateFormulaObject(obj, latex, displayMode);
+      if (typeof neuZeichnen === 'function') neuZeichnen();
+      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+      schliessen();
+      return;
+    }
 
     if (_editSpan) {
       // Bestehende Formel ersetzen
@@ -429,8 +445,9 @@
    * @param {boolean} [displayMode=false]
    * @param {HTMLSpanElement} [editSpan=null]  zu bearbeitende Formel
    */
-  function openFormulaEditor(latex, displayMode, editSpan) {
+  function openFormulaEditor(latex, displayMode, editSpan, editObj) {
     _editSpan = editSpan || null;
+    _editObj = editObj || null;
     merkeStelle();
     latexFeld.value = latex || '';
 
@@ -441,7 +458,7 @@
 
     radioInline.checked = !displayMode;
     radioBlock.checked = !!displayMode;
-    titel.textContent = _editSpan
+    titel.textContent = (_editSpan || _editObj)
       ? ((typeof t === 'function' && t('formulaEdit')) || 'Formel bearbeiten')
       : ((typeof t === 'function' && t('formulaEditor')) || 'Formel');
 

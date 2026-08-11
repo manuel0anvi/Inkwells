@@ -402,6 +402,13 @@
     if (!sel || !sel.rangeCount || sel.isCollapsed) return versteckeWahlKnopf();
 
     const range = sel.getRangeAt(0);
+
+    // Leere Auswahl nach Löschung: der Browser meldet manchmal eine
+    // nicht-kollabierte Auswahl, die aber keinen Text enthält – etwa
+    // wenn ein leeres <span> oder <br> übrig bleibt. Ohne diese Prüfung
+    // bliebe der Kommentar-Knopf nach dem Löschen stehen.
+    if (!range.toString().trim()) return versteckeWahlKnopf();
+
     let knoten = range.commonAncestorContainer;
     if (knoten.nodeType === Node.TEXT_NODE) knoten = knoten.parentNode;
     const textDiv = knoten && knoten.closest ? knoten.closest('.j-text') : null;
@@ -431,6 +438,34 @@
     clearTimeout(_wahlTimer);
     _wahlTimer = setTimeout(pruefeAuswahl, 180);
   });
+
+  /* >>> Auch beim Tippen und Löschen nachsehen <<<
+     Wird markierter Text gelöscht, ist die Auswahl weg – aber Chromium
+     meldet dafür kein selectionchange. Der Knopf blieb also stehen und
+     zeigte auf eine Stelle, die es nicht mehr gab. Genau so gemeldet.
+     Ohne Wartezeit: hier ist die Auswahl bereits fort, es gibt nichts
+     abzuwarten. */
+  document.addEventListener('input', e => {
+    if (!e.target || !e.target.closest || !e.target.closest('.j-text')) return;
+    clearTimeout(_wahlTimer);
+    // Erst verstecken, dann neu prüfen: nach einer Löschung ist die
+    // alte Auswahl nicht mehr gültig, und der Knopf muss sofort weg,
+    // nicht erst nach der Wartezeit.
+    versteckeWahlKnopf();
+    _wahlTimer = setTimeout(pruefeAuswahl, 200);
+  }, true);
+
+  /* Und wenn der Textbereich den Fokus verliert – etwa weil jemand ein
+     Werkzeug wählt – hat ein Kommentar-Knopf dort nichts mehr zu suchen. */
+  document.addEventListener('focusout', e => {
+    if (!e.target || !e.target.classList || !e.target.classList.contains('j-text')) return;
+    setTimeout(() => {
+      const a = document.activeElement;
+      // Der Klick auf den Knopf selbst darf ihn nicht wegnehmen
+      if (a === wahlKnopf || (a && a.closest && a.closest('#comment-add-pop'))) return;
+      if (!a || !a.classList || !a.classList.contains('j-text')) versteckeWahlKnopf();
+    }, 120);
+  }, true);
 
   wahlKnopf.addEventListener('mousedown', e => e.preventDefault());
 

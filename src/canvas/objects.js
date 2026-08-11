@@ -237,6 +237,7 @@ function placeObject(objLayer, obj, page) {
   body.style.pointerEvents = S.mode === 'cursor' ? 'auto' : 'none';
   if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; body.appendChild(img); }
   else if (obj.kind === 'shape') { body.innerHTML = renderShapeBody(obj); }
+  else if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
   else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
   wrap.appendChild(body);
 
@@ -306,7 +307,10 @@ function placeObject(objLayer, obj, page) {
         if (pos === 'bl') { nx = ox + (ow - nw); }
         if (pos === 'tr') { ny = oy + (oh - nh); }
         if (pos === 'tl') { nx = ox + (ow - nw); ny = oy + (oh - nh); }
-        if (nw > 20 && nh > 20) {
+        // Eine Formel darf kleiner werden als ein Bild – sie ist oft nur
+        // ein paar Zeichen breit und waere sonst nicht zu verkleinern
+        const mind = obj.kind === 'formula' ? 12 : 20;
+        if (nw > mind && nh > mind) {
           obj.w = nw; obj.h = nh; obj.x = nx; obj.y = ny;
           wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px'; wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px';
           placeBar();
@@ -552,6 +556,27 @@ function placeObject(objLayer, obj, page) {
     addShapeChrome(bar, obj, page, objLayer);
   }
 
+  /* Formel: ein Stift, der den Editor wieder aufmacht. Doppelklick tut es
+     auch (siehe unten), aber ein sichtbarer Knopf sagt, dass es geht. */
+  if (obj.kind === 'formula') {
+    const bearbeiten = () => {
+      if (typeof openFormulaEditor !== 'function') return;
+      openFormulaEditor(obj.latex || '', !!obj.display, null, {
+        obj, page,
+        neuZeichnen: () => {
+          wrap.style.width = obj.w + 'px';
+          wrap.style.height = obj.h + 'px';
+          body.innerHTML = renderFormulaBody(obj);
+          placeBar();
+        }
+      });
+    };
+    barBtn('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2 13.8 4.7 5.6 12.9 2.4 13.6 3.1 10.4z"/></svg>',
+      objText('formulaEdit', 'Formel bearbeiten'), bearbeiten);
+    // Doppelklick auf die Formel selbst öffnet ihn ebenfalls
+    body.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); bearbeiten(); });
+  }
+
   function markLayerButtons() {
     const back = objLayerOf(obj) === 'back';
     btnBack.classList.toggle('active', back);
@@ -714,21 +739,27 @@ function placeObject(objLayer, obj, page) {
   wrap._beginObjInteraction = beginInteraction;
 
   let pinchStartDist = 0, pinchStartW = 0, pinchStartH = 0;
+  let _pinchHasMutated = false;
   body.addEventListener('touchstart', e => {
     if (e.touches.length === 2 && S.mode === 'cursor') {
       e.stopPropagation(); e.preventDefault();
       pinchStartDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
       pinchStartW = obj.w; pinchStartH = obj.h;
+      _pinchHasMutated = false;
       select();
     }
   }, { passive: false });
   body.addEventListener('touchmove', e => {
     if (e.touches.length === 2 && pinchStartDist > 0 && S.mode === 'cursor') {
       e.stopPropagation(); e.preventDefault();
+      if (!_pinchHasMutated) { _pinchHasMutated = true; pushPageHistory(page); }
       const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
       const scale = dist / pinchStartDist;
       let nw = pinchStartW * scale, nh = pinchStartH * scale;
-      if (nw > 40 && nh > 30) {
+      // Formeln dürfen kleiner werden als Bilder (Mindestmaß 12 statt 40×30)
+      const mindW = obj.kind === 'formula' ? 12 : 20;
+      const mindH = obj.kind === 'formula' ? 12 : 20;
+      if (nw > mindW && nh > mindH) {
         obj.x -= (nw - obj.w) / 2; obj.y -= (nh - obj.h) / 2; obj.w = nw; obj.h = nh;
         wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px'; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
         placeBar();
@@ -736,7 +767,7 @@ function placeObject(objLayer, obj, page) {
     }
   }, { passive: false });
   body.addEventListener('touchend', e => {
-    if (e.touches.length < 2 && pinchStartDist > 0) { pinchStartDist = 0; noteObjectChanged(); }
+    if (e.touches.length < 2 && pinchStartDist > 0) { pinchStartDist = 0; if (_pinchHasMutated) noteObjectChanged(); }
   }, { passive: true });
 
   objLayer.appendChild(wrap);
