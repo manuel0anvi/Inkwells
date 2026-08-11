@@ -176,25 +176,10 @@ function showPageTransferDialog(fromNb, targets, preselected = []) {
   });
 }
 
-// Returns 'save', 'leave', or null (cancelled)
-function showSaveConfirm(msg) {
-  E('save-confirm-msg').textContent = msg;
-  E('ov-save-confirm').style.display = 'flex';
-  return new Promise(res => {
-    const save = () => { E('ov-save-confirm').style.display = 'none'; res('save'); off(); };
-    const leave = () => { E('ov-save-confirm').style.display = 'none'; res('leave'); off(); };
-    const cancel = () => { E('ov-save-confirm').style.display = 'none'; res(null); off(); };
-    const kd = e => { if (e.key === 'Escape') cancel(); };
-    function off() { 
-      E('save-confirm-save').onclick = null; 
-      E('save-confirm-leave').onclick = null; 
-      document.removeEventListener('keydown', kd); 
-    }
-    E('save-confirm-save').onclick = save; 
-    E('save-confirm-leave').onclick = leave;
-    document.addEventListener('keydown', kd);
-  });
-}
+/* showSaveConfirm ist entfallen – die Frage „speichern oder verwerfen?"
+   gibt es nicht mehr. Gestellt wurde sie nur, solange sich das
+   automatische Speichern abschalten liess (core/autoSave.js); ohne den
+   Schalter ist auf dem Weg zur Uebersicht ohnehin alles gesichert. */
 
 function showInsertChoice() {
   E('ov-insert-choice').style.display = 'flex';

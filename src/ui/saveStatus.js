@@ -1,12 +1,37 @@
 'use strict';
 
-// Save Status Indicator
-(function() {
-  const saveStatusBtn = E('save-status');
-  const saveIcon = E('save-icon');
-  const saveText = E('save-text');
+/* ══════════════════════════════════════════════════════════════════════
+   IST MEINE ARBEIT SICHER?
 
-  let currentState = 'saved';
+   Diese Datei kennt die Antwort, zeigt sie aber nicht mehr selbst an.
+
+   >>> Was hier frueher stand <<<
+   Ein eigener Knopf in der Werkzeugleiste („Gespeichert" mit Punkt), der
+   den oertlichen Stand anzeigte und auf Druck von Hand speicherte.
+   Daneben, in der Titelleiste, ein zweiter Knopf fuer den Cloud-Stand.
+   Zwei Anzeigen fuer dieselbe Frage – und die Antworten widersprachen
+   sich regelmaessig, weil sie verschiedene Halbstrecken meinten.
+
+   Seit automatisch gespeichert wird und sich das nicht mehr abschalten
+   laesst (core/autoSave.js), war am Speicher-Knopf ausserdem nichts mehr
+   zu druecken: er tat von sich aus, was er anbot. Uebrig blieb die
+   AUSKUNFT, und die gehoert an eine Stelle.
+
+   Sie steht jetzt am Sync-Knopf in der Titelleiste (ui/syncPanel.js).
+   Der ist auch auf der Startseite da, wo es gar keine Werkzeugleiste
+   gibt, und faellt beim Abmelden nicht weg: ohne Cloud ist „oertlich
+   gespeichert" das Ziel und nicht die halbe Strecke.
+
+   Hier bleiben die zwei Fragen, aus denen sich die Antwort ergibt –
+   ui/syncPanel.js ruft sie fuer den Knopf und fuer das Fenster ab.
+   ══════════════════════════════════════════════════════════════════════ */
+
+(function () {
+
+  /** Wartet dieses Heft noch darauf, ueberhaupt auf die Platte zu kommen? */
+  function istUngesichert(nbId) {
+    return !!nbId && typeof AutoSave !== 'undefined' && AutoSave.isDirty(nbId);
+  }
 
   /* ── Wartet dieses Heft noch auf die Cloud? ───────────────────────
      Nur wenn die Cloud-Sicherung überhaupt eingeschaltet ist. Wer nicht
@@ -20,7 +45,7 @@
      danach ist die Warteschlange zwar gefüllt, aber ein Neustart
      dazwischen hat sie schon einmal überlebt.
      ─────────────────────────────────────────────────────────────── */
-  function waitingForCloud(nbId) {
+  function wartetAufCloud(nbId) {
     if (!nbId) return false;
     if (typeof CloudSync_ === 'undefined' || !CloudSync_) return false;
     if (!Settings.get('cloudEnabled') || !CloudSync_.isAuthenticated()) return false;
@@ -42,107 +67,50 @@
     return Date.parse(nb.updatedAt || 0) > Date.parse(nb.syncedAt);
   }
 
-  // Update save status display
-  function updateSaveStatus() {
-    if (!saveStatusBtn) return;
-
-    // Remove all state classes
-    saveStatusBtn.classList.remove('saved', 'unsaved', 'error', 'local-only');
-
-    let displayState = 'saved';
-    let icon = '✓';
-    let text = t('saved');
-    let title = t('saved');
-
-    const isDirty = S.activeNbId && AutoSave.isDirty(S.activeNbId);
-
-    if (isDirty) {
-      displayState = 'unsaved';
-      icon = '●';
-      text = t('unsaved');
-      title = t('unsaved');
-    } else if (waitingForCloud(S.activeNbId)) {
-      displayState = 'local-only';
-      icon = '●';
-      text = t('savedLocalOnly');
-      title = t('savedLocalOnlyHint');
-    }
-
-    saveStatusBtn.classList.add(displayState);
-    saveIcon.textContent = icon;
-    saveText.textContent = text;
-    saveStatusBtn.title = title;
+  /**
+   * Der Zustand des GEOEFFNETEN Hefts, in einem Wort.
+   *
+   * 'unsaved'    – noch nicht auf der Platte (hoechstens zwei Sekunden)
+   * 'local-only' – auf der Platte, aber noch nicht in der Cloud
+   * 'saved'      – so weit gesichert, wie es hier gehen kann
+   */
+  function saveState() {
+    const nbId = (typeof S !== 'undefined' && S) ? S.activeNbId : null;
+    if (istUngesichert(nbId)) return 'unsaved';
+    if (wartetAufCloud(nbId)) return 'local-only';
+    return 'saved';
   }
 
-  // Manual save on click
-  saveStatusBtn.addEventListener('click', async () => {
-    console.log('[SaveStatus] Manual save clicked');
-    console.log('[SaveStatus] Active notebook ID:', S.activeNbId);
-    console.log('[SaveStatus] Is dirty:', AutoSave.isDirty(S.activeNbId));
-    console.log('[SaveStatus] All notebooks:', S.notebooks ? S.notebooks.length : 0);
-    
-    if (!S.activeNbId) {
-      console.error('[SaveStatus] No active notebook!');
-      toast(t('noActiveNotebook'), true);
-      return;
-    }
-    
+  /* Von Hand speichern gibt es weiterhin – nur nicht mehr als Knopf in
+     der Leiste, sondern im Sync-Fenster und ueber das Tastenkuerzel. */
+  async function saveNowWithFeedback() {
+    if (!S.activeNbId) { toast(t('noActiveNotebook'), true); return false; }
     const nb = getNb(S.activeNbId);
-    if (!nb) {
-      console.error('[SaveStatus] Notebook not found!', S.activeNbId);
-      toast(t('notebookNotFound'), true);
-      return;
-    }
-    
-    console.log('[SaveStatus] Found notebook:', nb.name);
-    console.log('[SaveStatus] Save location:', Settings.get('saveLocation'));
-    
+    if (!nb) { toast(t('notebookNotFound'), true); return false; }
+
     try {
       const result = await AutoSave.saveNow(S.activeNbId);
-      console.log('[SaveStatus] Save result:', result);
-      
-      if (result.success) {
+      if (result && result.success) {
         toast(t('notebookSaved'));
-        updateSaveStatus();
-      } else {
-        toast(t('saveError') + ': ' + result.error, true);
+        if (window.updateSaveStatus) window.updateSaveStatus();
+        return true;
       }
+      toast(t('saveError') + ': ' + (result && result.error), true);
+      return false;
     } catch (err) {
-      console.error('[SaveStatus] Manual save exception:', err);
+      console.error('[SaveStatus] Speichern von Hand fehlgeschlagen:', err);
       toast(t('saveError'), true);
+      return false;
     }
-  });
-
-  // Listen to auto-save state changes
-  AutoSave.onChange((state) => {
-    updateSaveStatus();
-  });
-
-  // Listen to settings changes
-  Settings.onChange(() => {
-    updateSaveStatus();
-  });
-
-  // Der Weg von „örtlich gesichert" nach „auch oben" geht an AutoSave
-  // vorbei – ohne diesen Hörer bliebe der blaue Punkt stehen, bis das
-  // nächste Mal etwas getippt wird.
-  if (window.CloudSync_ && typeof CloudSync_.onChange === 'function') {
-    CloudSync_.onChange(() => updateSaveStatus());
   }
 
-  // Update on active notebook change
-  const originalOpenNb = window.openNotebook;
-  if (originalOpenNb) {
-    window.openNotebook = function(...args) {
-      const result = originalOpenNb.apply(this, args);
-      updateSaveStatus();
-      return result;
-    };
-  }
+  window.saveState = saveState;
+  window.waitingForCloud = wartetAufCloud;
+  window.saveNowWithFeedback = saveNowWithFeedback;
 
-  // Initial update
-  updateSaveStatus();
-
-  // Export for use in other modules
-  window.updateSaveStatus = updateSaveStatus;
+  /* Der Name bleibt: core/integration.js und ui/sharedDocs.js rufen ihn
+     nach jeder Aenderung. Er zeigt jetzt auf den Sync-Knopf, der die
+     Auskunft uebernommen hat. ui/syncPanel.js haengt sich hier ein –
+     bis dahin ist es ein Platzhalter, der nichts tut. */
+  if (!window.updateSaveStatus) window.updateSaveStatus = function () { };
 })();

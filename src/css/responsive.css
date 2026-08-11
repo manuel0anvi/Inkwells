@@ -358,8 +358,90 @@ body.touch-input .nb-card-edit-btn {
   }
 }
 
-/* ── Stufe 2 (alt) ist entfallen – die Paginierung (▶/◀) fängt den
-   Überlauf jetzt auf, statt einzelne Knöpfe ganz auszublenden. ──── */
+/* ══════════════════════════════════════════════════════════════════════
+   STUFE 2 – ENGER STELLEN, STATT ETWAS WEGZUNEHMEN
+
+   >>> Warum es diese Stufe wieder gibt <<<
+   Der Zoom (−, Prozentwert, +) ist seit dieser Fassung unentbehrlich: er
+   trägt kein data-tb-more mehr und wird nie weggeblättert. Damit fehlt
+   der Paginierung ein Kandidat, und die drei Knöpfe wollen ihren Platz
+   auch dann, wenn es eng wird.
+
+   Genommen wird er dort, wo er nichts kostet: am Abstand. Ein Knopf mit
+   4 px Luft an den Seiten statt 8 ist genauso gut zu treffen – die
+   Fläche schrumpft nur um den Zwischenraum, nicht um das Ziel. Zwanzig
+   Knöpfe mal 6 px sind 120 px, und genau die entscheiden.
+
+   Die frühere Stufe 2 blendete stattdessen einzelne Knöpfe ganz aus;
+   die ist zu Recht entfallen (die Pfeile ▶/◀ fangen den Rest auf).
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Weg „Navigation offen" – sie nimmt rund 230 px weg, die Schwelle
+   liegt entsprechend höher. */
+@media (max-width:1380px) {
+
+  .journal-layout:has(#side-panel.open) .tb-opt,
+  .journal-layout:has(#side-panel.open) .tb-mode {
+    padding: 4px 4px
+  }
+
+  .journal-layout:has(#side-panel.open) .tb-sep {
+    margin: 0 2px
+  }
+
+  .journal-layout:has(#side-panel.open) .tb-zoom-val {
+    min-width: 38px
+  }
+}
+
+/* Weg „schmales Fenster" */
+@media (max-width:1150px) {
+
+  .tb-opt,
+  .tb-mode {
+    padding: 4px 4px
+  }
+
+  .tb-sep {
+    margin: 0 2px
+  }
+
+  .tb-zoom-val {
+    min-width: 38px
+  }
+}
+
+/* Ab hier zählt jeder Pixel. Der Prozentwert bleibt lesbar – er ist die
+   einzige Stelle, an der der Zoom überhaupt abzulesen ist. */
+@media (max-width:820px) {
+
+  .tb-opt,
+  .tb-mode {
+    padding: 4px 2px
+  }
+
+  .tb-zoom-val {
+    min-width: 34px;
+    font-size: 9px
+  }
+
+  .tb-zoom-btn {
+    min-width: 18px
+  }
+}
+
+/* Mit dem Finger gilt sonst min-width: 36px (ganz oben) und der engere
+   Abstand liefe ins Leere. 32 px trifft der Finger noch zuverlässig –
+   dieselbe Zahl, die dort schon für die offene Navigation gilt. */
+@media (any-pointer: coarse) and (max-width:1150px) {
+
+  .tb-mode,
+  .tb-opt,
+  .sz-btn {
+    min-width: 32px;
+    min-height: 32px
+  }
+}
 
 @media (max-width:900px) {
 
@@ -395,11 +477,6 @@ body.touch-input .nb-card-edit-btn {
     justify-content: flex-end
   }
 
-  /* Hide save text in vertical/portrait mode – das Icon bleibt,
-     nur die Beschriftung weicht, um Platz zu sparen. */
-  .save-text {
-    display: none !important;
-  }
 
   /* Ab hier übernimmt die Paginierung (▶/◀). Keine Knöpfe werden mehr
      gezielt ausgeblendet – sie sind über ▶ erreichbar, statt ganz zu
@@ -414,6 +491,40 @@ body.touch-input .nb-card-edit-btn {
   }
 
   .tb-mode span {
+    display: none
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   IM HOCHFORMAT EIN „+" STATT VIER KNÖPFEN
+
+   Quer stehen Formen, Medien, Tabelle und Formel einzeln in der Leiste,
+   und das ist die bessere Anordnung: man sieht, was es überhaupt gibt,
+   und braucht einen Klick statt zwei. Im Hochformat gibt es diesen Platz
+   nicht – sechs Werkzeuge, sieben Textformate und vier Einfüge-Knöpfe in
+   einer Zeile, die nur noch die halbe Breite hat.
+
+   >>> Warum nach der AUSRICHTUNG und nicht nach der Breite <<<
+   Gemeint ist der umgeklappte Laptop und das hochkant gehaltene Tablet.
+   Ein schmal gezogenes Fenster im Querformat ist ein anderer Fall: dort
+   fängt die Paginierung (▶/◀) den Überlauf auf, und wer das Fenster
+   breiter zieht, hat seine Knöpfe sofort zurück. Eine Breitenschwelle
+   würde beides vermischen.
+
+   Die vier Einzelknöpfe verschwinden dabei nicht aus der Bedienung – das
+   Menü steuert GENAU sie an (ui/insert.js), es gibt sie also weiterhin
+   nur einmal.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (orientation: portrait) {
+
+  .tb-insert-all {
+    display: block
+  }
+
+  #btn-media,
+  #btn-table,
+  #btn-formula,
+  .tb-mode[data-mode="shape"] {
     display: none
   }
 }

@@ -15,47 +15,25 @@ E('btn-home').addEventListener('click', async () => {
     }
   }
 
-  // Check if there are unsaved changes
-  const hasUnsavedChanges = S.activeNbId && AutoSave.isDirty(S.activeNbId);
-  const autoSaveEnabled = Settings.get('autoSaveEnabled');
-  
-  if (hasUnsavedChanges) {
-    if (autoSaveEnabled) {
-      // Auto-save is on, save and immediately leave
-      console.log('[Navigation] Auto-saving and leaving...');
-      try {
-        await AutoSave.saveNow(S.activeNbId);
-        toast(t('notebookSaved'));
-      } catch (err) {
-        console.error('[Navigation] Auto-save failed:', err);
-        toast(t('saveError'), true);
-      }
-      showHome();
-    } else {
-      // Auto-save is off, show save confirm dialog
-      const result = await showSaveConfirm(t('unsavedChanges'));
-      
-      if (result === 'save') {
-        // Save and leave
-        try {
-          await AutoSave.saveNow(S.activeNbId);
-          toast(t('notebookSaved'));
-        } catch (err) {
-          console.error('[Navigation] Save failed:', err);
-          toast(t('saveError'), true);
-        }
-        showHome();
-      } else if (result === 'leave') {
-        // Leave without saving
-        AutoSave.markClean(S.activeNbId); // Clear dirty flag
-        showHome();
-      }
-      // If result is null (cancelled), do nothing
+  /* Offenes zuerst sichern, dann gehen.
+
+     >>> Warum hier nichts mehr gefragt wird <<<
+     Es gab einen zweiten Zweig für den Fall, dass das automatische
+     Speichern ausgeschaltet war: ein Fenster mit „Speichern / Verwerfen
+     / Abbrechen". Den Schalter gibt es nicht mehr (core/autoSave.js) –
+     und mit ihm entfällt die Frage. Auf dem Weg zur Übersicht ist eh
+     schon alles gespeichert; das hier fängt nur die letzten zwei
+     Sekunden ab, in denen der Takt noch nicht gelaufen ist. */
+  if (S.activeNbId && AutoSave.isDirty(S.activeNbId)) {
+    try {
+      await AutoSave.saveNow(S.activeNbId);
+      toast(t('notebookSaved'));
+    } catch (err) {
+      console.error('[Navigation] Auto-saving before leaving failed:', err);
+      toast(t('saveError'), true);
     }
-  } else {
-    // No unsaved changes, just go home
-    showHome();
   }
+  showHome();
 });
 // Speichern und Formatierungszeichen laufen jetzt über die änderbaren
 // Kürzel (core/shortcuts.js). Hier bleibt nur Esc – das ist überall das

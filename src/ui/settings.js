@@ -11,7 +11,6 @@
   const saveLocationDisplay = E('save-location-display');
   const btnPickSaveLocation = E('btn-pick-save-location');
   
-  const autosaveEnabled = E('autosave-enabled');
   const settingsVersion = E('settings-version');
   // Cloud UI elements
   const cloudEnabledChk = E('cloud-enabled');
@@ -187,7 +186,6 @@
     
     languageSelect.value = settings.language || 'de';
     saveLocationDisplay.value = settings.saveLocation || '';
-    autosaveEnabled.checked = settings.autoSaveEnabled;
 
     if (cloudEnabledChk) cloudEnabledChk.checked = !!settings.cloudEnabled;
     if (cloudConfigRow) cloudConfigRow.style.display = settings.cloudEnabled ? 'flex' : 'none';
@@ -228,8 +226,7 @@
   async function saveSettingsFromUI() {
     const updates = {
       language: languageSelect.value,
-      saveLocation: saveLocationDisplay.value || null,
-      autoSaveEnabled: autosaveEnabled.checked
+      saveLocation: saveLocationDisplay.value || null
     };
     
     // Cloud settings

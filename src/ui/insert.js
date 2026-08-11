@@ -144,10 +144,24 @@
     schliessen();
   }
 
+  /* ── Woran das Raster haengt ────────────────────────────────────────
+     Gewoehnlich am Tabellen-Knopf. Im Hochformat gibt es den nicht: dort
+     sammelt „+" die vier Einfuege-Werkzeuge (css/responsive.css), und
+     der Tabellen-Knopf steht auf display:none. Sein Rechteck ist dann
+     0×0 an der Stelle 0,0 – das Raster sass in der linken oberen Ecke
+     des Fensters. Deshalb der Rueckfall auf den Knopf, der wirklich zu
+     sehen ist. */
+  function ankerKnopf() {
+    if (btn.offsetParent !== null) return btn;
+    const sammel = E('btn-insert-all');
+    if (sammel && sammel.offsetParent !== null) return sammel;
+    return E('toolbar') || btn;
+  }
+
   btn.addEventListener('pointerdown', () => {
     if (offen()) { schliessen(); return; }
     merkeStelle();
-    const r = btn.getBoundingClientRect();
+    const r = ankerKnopf().getBoundingClientRect();
     pop.style.display = 'flex';
     const breite = pop.offsetWidth || 220;
     pop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - breite - 8, r.left))) + 'px';
@@ -155,4 +169,83 @@
     btn.classList.add('active');
     setTimeout(() => document.addEventListener('pointerdown', draussen, true), 0);
   });
+
+  /* ══════════════════════════════════════════════════════════════════
+     DAS SAMMELMENUE IM HOCHFORMAT
+
+     Quer bleibt es bei vier einzelnen Knoepfen – dort ist Platz, und
+     man sieht, was es gibt. Im Hochformat ist die Leiste dafuer zu
+     schmal; dann traegt ein „+" die vier, und css/responsive.css
+     blendet die Einzelknoepfe weg.
+
+     >>> Warum das Menue die KNOEPFE drueckt und nicht selbst handelt <<<
+     Jeder der vier bringt eigenes Beiwerk mit: der Tabellen-Knopf sein
+     Raster, der Formen-Knopf sein Einstellungsfenster, Medien und
+     Formel das Merken der Schreibmarke. Das hier noch einmal
+     nachzubauen hiesse, dieselbe Sache an zwei Stellen zu pflegen –
+     und die zweite laeuft irgendwann der ersten hinterher. Ein
+     .click() auf den echten Knopf hat all das schon.
+     ══════════════════════════════════════════════════════════════════ */
+  (function sammelMenue() {
+    const sammelKnopf = E('btn-insert-all');
+    const sammelPop = E('insert-all-pop');
+    if (!sammelKnopf || !sammelPop) return;
+
+    const sammelOffen = () => sammelPop.style.display === 'flex';
+
+    function sammelZu() {
+      sammelPop.style.display = 'none';
+      sammelKnopf.classList.remove('active');
+      document.removeEventListener('pointerdown', sammelDraussen, true);
+    }
+
+    function sammelDraussen(e) {
+      if (e.target.closest('#insert-all-pop, #btn-insert-all')) return;
+      sammelZu();
+    }
+
+    /* Der angesteuerte Knopf ist im Hochformat auf display:none. Ein
+       .click() darauf wirkt trotzdem – der Handgriff haengt am Element,
+       nicht an seiner Sichtbarkeit. Nur POINTER-Ereignisse bekaeme er
+       nicht mehr, und genau die brauchen #btn-table und #btn-media, um
+       ihr Fenster zu oeffnen bzw. die Schreibmarke zu merken. Deshalb
+       wird beides geschickt: erst pointerdown, dann click. */
+    function druecke(el) {
+      if (!el) return;
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      el.click();
+    }
+
+    const ZIELE = {
+      shape: () => { if (typeof switchMode === 'function') switchMode('shape'); },
+      table: () => druecke(E('btn-table')),
+      media: () => druecke(E('btn-media')),
+      formula: () => druecke(E('btn-formula'))
+    };
+
+    /* Die Schreibmarke muss die Oeffnung ueberleben – derselbe Grund wie
+       oben beim Tabellen-Knopf, nur eine Ebene frueher. */
+    sammelKnopf.addEventListener('pointerdown', () => {
+      if (sammelOffen()) { sammelZu(); return; }
+      merkeStelle();
+      const r = sammelKnopf.getBoundingClientRect();
+      sammelPop.style.display = 'flex';
+      const b = sammelPop.offsetWidth || 200;
+      sammelPop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - b - 8, r.left))) + 'px';
+      sammelPop.style.top = Math.round(r.bottom + 6) + 'px';
+      sammelKnopf.classList.add('active');
+      setTimeout(() => document.addEventListener('pointerdown', sammelDraussen, true), 0);
+    });
+
+    sammelPop.addEventListener('click', e => {
+      const eintrag = e.target.closest('[data-einfuegen]');
+      if (!eintrag) return;
+      sammelZu();
+      /* Erst die Marke zurueck, dann den Knopf druecken: #btn-media und
+         #btn-formula setzen sie beim Einfuegen voraus. Der Tabellen- und
+         der Formen-Knopf merken sie sich selbst noch einmal. */
+      stelleWiederher();
+      ZIELE[eintrag.dataset.einfuegen]?.();
+    });
+  })();
 })();

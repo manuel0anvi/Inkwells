@@ -255,31 +255,11 @@
             </div>
           </div>
 
-          <div class="tb-grp" id="shape-opts" style="display:none">
-            <button class="tb-opt active" data-shape="rect" data-i18n-title="shapeRect" title="Rechteck">
-              <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><rect x="1" y="1" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
-            </button>
-            <button class="tb-opt" data-shape="ellipse" data-i18n-title="shapeEllipse" title="Ellipse">
-              <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><ellipse cx="7" cy="6" rx="5.5" ry="4.5" stroke="currentColor" stroke-width="1.3"/></svg>
-            </button>
-            <button class="tb-opt" data-shape="line" data-i18n-title="shapeLine" title="Linie">
-              <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><line x1="1.5" y1="10.5" x2="12.5" y2="1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-            </button>
-            <button class="tb-opt" data-shape="arrow" data-i18n-title="shapeArrow" title="Pfeil">
-              <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><line x1="1.5" y1="10.5" x2="10.5" y2="1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><polygon points="10.5,1.5 12.5,3.5 9.5,3" fill="currentColor"/></svg>
-            </button>
-            <!-- Die zwei Füllungs-Knöpfe standen hier und taten nichts:
-                 sie schalteten S.shapeFill zwischen 'none' und 'none' um.
-                 Die Füllung gehört ohnehin an die AUSGEWÄHLTE Form, nicht
-                 an das Werkzeug – dort steht sie jetzt (canvas/shapes.js). -->
-            <div class="v-div"></div>
-            <div class="sz-row" id="shape-sw-row">
-              <button class="sz-btn active" data-shape-sw="1"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></button>
-              <button class="sz-btn" data-shape-sw="2"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-              <button class="sz-btn" data-shape-sw="4"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></button>
-            </div>
-          </div>
-
+          <!-- Die Formen-Einstellungen stehen nicht mehr hier, sondern in
+               einem eigenen Fenster am Formen-Knopf (#shape-pop, weiter
+               unten) – genau wie das Raster am Tabellen-Knopf. In der
+               Leiste nahmen sie eine ganze Gruppe ein, die nur bei
+               gewaehltem Formen-Werkzeug ueberhaupt etwas zeigte. -->
           <div class="tb-grp" id="text-opts">
             <!-- EIN Knopf fuer das Absatzformat. Vorher standen ¶, H1, H2
                  und H3 einzeln nebeneinander – vier Knoepfe fuer eine
@@ -336,8 +316,21 @@
           <!-- Drei Knöpfe statt eines „+": Medien, Tabelle, Formel.
                Ein Sammelknopf verbarg, was es überhaupt gibt – man musste
                ihn erst öffnen, um zu sehen, dass er drei Dinge kann.
-               Passt die Leiste nicht, blättern die Pfeile (ui/toolbar.js). -->
+               Passt die Leiste nicht, blättern die Pfeile (ui/toolbar.js).
+
+               >>> Im Hochformat doch das „+" <<<
+               Dort ist die Leiste so schmal, dass zwischen Werkzeugen und
+               Textformaten fuer drei Einfuege-Knoepfe und die Formen kein
+               Platz mehr bleibt. Nur dann – und nur dort – uebernimmt
+               #btn-insert-all die vier; css/responsive.css entscheidet
+               das ueber die Ausrichtung, nicht ueber die Fensterbreite. -->
           <div class="tb-grp">
+            <button class="tb-opt tb-insert-all" id="btn-insert-all"
+                    data-i18n-title="insertMenu" title="Einfügen">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </button>
             <button class="tb-opt" id="btn-media" data-i18n-title="insertFile" title="Bild, PDF oder Datei">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.2-9.2a3.67 3.67 0 0 1 5.18 5.18l-9.2 9.2a1.83 1.83 0 0 1-2.6-2.6l8.5-8.48"/>
@@ -355,13 +348,11 @@
         </div>
 
         <div class="tb-zone tb-right">
-          <div class="tb-sep"></div>
-          <div class="tb-grp" data-tb-more="1">
-            <button class="tb-opt save-status" id="save-status" data-i18n-title="saveNow" title="Speichern">
-              <span class="save-icon" id="save-icon">○</span>
-              <span class="save-text" id="save-text" data-i18n="saved">Gespeichert</span>
-            </button>
-          </div>
+          <!-- Der Speicher-Knopf stand hier. Er ist im Sync-Knopf der
+               Titelleiste aufgegangen (ui/syncPanel.js): zwei Anzeigen
+               für dieselbe Frage – „ist meine Arbeit sicher?" – waren
+               eine zu viel, und seit immer automatisch gespeichert wird,
+               war an ihm ohnehin nichts mehr zu drücken. -->
           <div class="tb-sep"></div>
           <!-- Freigeben und Exportieren direkt aus dem geöffneten Heft.
                Vorher ging beides nur über das Kontextmenü auf der Startseite. -->
@@ -381,11 +372,22 @@
             </button>
           </div>
           <div class="tb-sep"></div>
-          <!-- EIN Zoom-Knopf. Die Auswahl mit −, + und Einpassen gab es
-               schon (#zoom-pop), sie sprang nur im Hochformat an; quer
-               standen daneben noch einmal − und + und nahmen Platz weg. -->
-          <div class="tb-grp" data-tb-more="3">
-            <button class="tb-opt" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom" style="font-family:'DM Mono',monospace;font-size:10px;min-width:44px">100%</button>
+          <!-- ── DER ZOOM BLEIBT IMMER STEHEN ──────────────────────────
+               Hier stand nur der Prozentwert; − und + lagen in einer
+               Auswahl darunter (#zoom-pop), die erst aufging, wenn man
+               den Wert antippte. Groesser und kleiner sind aber das,
+               was man am Zoom ueberhaupt tut – dafuer zwei Klicks zu
+               verlangen, war ein Umweg um nichts.
+
+               Die Gruppe traegt deshalb KEIN data-tb-more mehr: sie ist
+               unentbehrlich und wird nie weggeblaettert (ui/toolbar.js).
+               Den Platz dafuer holt sich die Leiste, indem alle Knoepfe
+               ab einer gewissen Enge schmaler werden – die Stufen dazu
+               stehen in css/responsive.css. -->
+          <div class="tb-grp tb-zoom">
+            <button class="tb-opt tb-zoom-btn" id="btn-zoom-out" data-i18n-title="zoomOut" title="Verkleinern">−</button>
+            <button class="tb-opt tb-zoom-val" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom">100%</button>
+            <button class="tb-opt tb-zoom-btn" id="btn-zoom-in" data-i18n-title="zoomIn" title="Vergrößern">+</button>
           </div>
 
           <!-- Pfeil-Navigation: Wenn die Leiste zu schmal ist, blättert
@@ -616,6 +618,22 @@
            Blick. Seine Farbe kommt aus der Klasse (ok/warten/offline). -->
       <div id="sync-state" class="sync-state"></div>
 
+      <!-- ── Auf diesem Geraet ──────────────────────────────────────
+           Die halbe Strecke, die es vor der Cloud gibt: liegt die
+           Arbeit ueberhaupt schon auf der Platte? Frueher stand das in
+           der Werkzeugleiste, in einem eigenen Knopf – zwei Anzeigen
+           fuer dieselbe Frage. Hier gehoert es hin, denn hier steht
+           auch die andere Haelfte.
+
+           Fuer wen nicht angemeldet ist, ist dieser Abschnitt die
+           ganze Auskunft; die Cloud-Listen darunter bleiben dann leer. -->
+      <div>
+        <div class="sync-section-label" data-i18n="syncLocalHeader">Auf diesem Gerät</div>
+        <div id="sync-local" class="sync-state"></div>
+        <button id="sync-save-now-btn" class="sync-quiet-btn" style="display:none"
+                data-i18n="saveNow">Jetzt speichern</button>
+      </div>
+
       <!-- Ausstehend -->
       <div id="sync-pending-section" style="display:none;">
         <div class="sync-section-label" data-i18n="syncPendingHeader">Ausstehend</div>
@@ -668,16 +686,10 @@
   </div>
 </div>
 
-<!-- SAVE CONFIRM DIALOG (for leaving without saving) -->
-<div class="overlay" id="ov-save-confirm" style="display:none">
-  <div class="modal confirm-modal">
-    <p class="confirm-msg" id="save-confirm-msg"></p>
-    <div class="modal-btns" style="gap: 10px;">
-      <button id="save-confirm-leave" class="danger-btn" data-i18n="leave">Verlassen</button>
-      <button id="save-confirm-save" class="ok-btn" data-i18n="saveAndLeave">Speichern & Verlassen</button>
-    </div>
-  </div>
-</div>
+<!-- Das Fenster „Speichern & Verlassen / Verlassen" stand hier. Es kam
+     nur zum Vorschein, wenn das automatische Speichern ausgeschaltet
+     war – und das lässt sich nicht mehr ausschalten (core/autoSave.js).
+     „Verlassen" hieß darin: die letzten Minuten wegwerfen. -->
 
 <!-- INSERT CHOICE DIALOG -->
 <div class="overlay" id="ov-insert-choice" style="display:none">
@@ -814,6 +826,79 @@
   </button>
 </div>
 
+<!-- ── DIE FORMEN-EINSTELLUNGEN ─────────────────────────────────────
+     Ein eigenes Fenster am Formen-Knopf, so wie das Raster am
+     Tabellen-Knopf. Vorher stand alles offen in der Leiste und nahm
+     dort dauerhaft Breite weg, obwohl es nur bei gewaehltem
+     Formen-Werkzeug ueberhaupt etwas anzeigte.
+
+     Die Knoepfe darin sind DIESELBEN wie vorher, mit denselben
+     Kennungen – ui/toolbar.js und ui/ruler.js greifen weiter ueber
+     #shape-opts und #shape-sw-row darauf zu. -->
+<div class="tool-pop" id="shape-pop" style="display:none">
+  <div class="tb-grp" id="shape-opts">
+    <button class="tb-opt active" data-shape="rect" data-i18n-title="shapeRect" title="Rechteck">
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><rect x="1" y="1" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+    </button>
+    <button class="tb-opt" data-shape="ellipse" data-i18n-title="shapeEllipse" title="Ellipse">
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><ellipse cx="7" cy="6" rx="5.5" ry="4.5" stroke="currentColor" stroke-width="1.3"/></svg>
+    </button>
+    <button class="tb-opt" data-shape="line" data-i18n-title="shapeLine" title="Linie">
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><line x1="1.5" y1="10.5" x2="12.5" y2="1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    </button>
+    <button class="tb-opt" data-shape="arrow" data-i18n-title="shapeArrow" title="Pfeil">
+      <svg width="14" height="12" viewBox="0 0 14 12" fill="none"><line x1="1.5" y1="10.5" x2="10.5" y2="1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><polygon points="10.5,1.5 12.5,3.5 9.5,3" fill="currentColor"/></svg>
+    </button>
+    <!-- Die zwei Füllungs-Knöpfe standen hier und taten nichts:
+         sie schalteten S.shapeFill zwischen 'none' und 'none' um.
+         Die Füllung gehört ohnehin an die AUSGEWÄHLTE Form, nicht
+         an das Werkzeug – dort steht sie jetzt (canvas/shapes.js). -->
+    <div class="v-div"></div>
+    <div class="sz-row" id="shape-sw-row">
+      <button class="sz-btn active" data-shape-sw="1"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></button>
+      <button class="sz-btn" data-shape-sw="2"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <button class="sz-btn" data-shape-sw="4"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EINFUEGEN IM HOCHFORMAT ──────────────────────────────────────
+     Quer stehen Formen, Medien, Tabelle und Formel einzeln da; das ist
+     die bessere Anordnung, weil man sieht, was es gibt. Im Hochformat
+     ist die Leiste dafuer zu schmal – dort fasst dieses Fenster die
+     vier zusammen, und css/responsive.css blendet die Einzelknoepfe
+     weg. Angesteuert werden aus dem Menue heraus GENAU die Knoepfe in
+     der Leiste (ui/insert.js): so gibt es die Handgriffe nur einmal. -->
+<div class="insert-pop insert-all-pop" id="insert-all-pop" style="display:none">
+  <button class="insert-item" data-einfuegen="shape">
+    <span class="insert-icon">
+      <svg width="15" height="15" viewBox="0 0 13 13" fill="none"><rect x="2" y="3" width="9" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/><circle cx="6.5" cy="6.5" r="3.8" stroke="currentColor" stroke-width="1.2"/></svg>
+    </span>
+    <span data-i18n="shapeTool">Formen</span>
+  </button>
+  <button class="insert-item" data-einfuegen="table">
+    <span class="insert-icon">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+        <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.3"/>
+        <path d="M1.6 6.2h12.8M1.6 9.8h12.8M5.9 2.6v10.8M10.1 2.6v10.8"/>
+      </svg>
+    </span>
+    <span data-i18n="insertTable">Tabelle</span>
+  </button>
+  <button class="insert-item" data-einfuegen="media">
+    <span class="insert-icon">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.2-9.2a3.67 3.67 0 0 1 5.18 5.18l-9.2 9.2a1.83 1.83 0 0 1-2.6-2.6l8.5-8.48"/>
+      </svg>
+    </span>
+    <span data-i18n="insertFile">Bild, PDF oder Datei</span>
+  </button>
+  <button class="insert-item" data-einfuegen="formula">
+    <span class="insert-icon" style="font-family:'DM Mono',monospace;font-size:15px">𝑓</span>
+    <span data-i18n="insertFormula">Formel</span>
+  </button>
+</div>
+
 <!-- Absatzformat. Die Knoepfe behalten ihre alten Kennungen, damit die
      Handgriffe in ui/toolbar.js unveraendert weitergelten. -->
 <div class="style-pop" id="style-pop" style="display:none">
@@ -831,14 +916,11 @@
   </button>
 </div>
 
-<!-- Groesser und kleiner im Hochformat. Dort ist die Leiste zu schmal
-     fuer − und +, und der Prozentwert allein konnte nichts (app.js). -->
-<div class="zoom-pop" id="zoom-pop" style="display:none">
-  <button class="zoom-pop-btn" id="zoom-pop-out" data-i18n-title="zoomOut" title="Verkleinern">－</button>
-  <span class="zoom-pop-val" id="zoom-pop-val">100%</span>
-  <button class="zoom-pop-btn" id="zoom-pop-in" data-i18n-title="zoomIn" title="Vergrößern">＋</button>
-  <button class="zoom-pop-fit" id="zoom-pop-fit" data-i18n="zoomFit">Einpassen</button>
-</div>
+<!-- Die Zoom-Auswahl (#zoom-pop) ist entfallen. Sie war der Ersatz
+     dafuer, dass − und + im Hochformat weggeblendet wurden; seit beide
+     immer in der Leiste stehen, oeffnete sie ein Fenster, das dasselbe
+     noch einmal anbot. Der Prozentwert setzt jetzt wieder direkt
+     zurueck – im Hochformat heisst das „einpassen" (core/zoom.js). -->
 
 <!-- Die Auswahl aller Listenformen: Punkte und Nummern untereinander in
      EINEM Fenster, damit es dafuer nur einen Knopf braucht. Die Zellen
@@ -889,19 +971,21 @@
         </div>
       </div>
 
-      <!-- Auto-Save -->
+      <!-- Auto-Save
+           Der Schalter dafür ist weg, und mit ihm die Frage. Erst fiel
+           das Speicherintervall, weil es ohne Wirkung war (gespeichert
+           wurde ohnehin immer zwei Sekunden nach der letzten Änderung);
+           jetzt der Schalter selbst.
+
+           >>> Warum es dafür keine Wahl mehr gibt <<<
+           Ein Heft ist kein Dokument, das man verwirft – es ist ein
+           Notizbuch, in das man schreibt. „Nicht speichern" heißt dort
+           „die letzten Minuten wegwerfen", und das will niemand
+           absichtlich. Wer es doch anschaltete und es vergaß, verlor
+           beim nächsten Absturz seine Arbeit; der Schalter konnte also
+           nur schaden. -->
       <div class="settings-group">
         <label class="settings-label" data-i18n="autoSave">Auto-Speichern</label>
-        <div class="settings-row">
-          <label class="toggle-switch">
-            <input type="checkbox" id="autosave-enabled">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label" data-i18n="autoSave">Automatisch speichern</span>
-        </div>
-        <!-- Das Speicherintervall stand hier und war ohne Wirkung:
-             gespeichert wurde ohnehin immer kurz nach der letzten
-             Änderung, gleich was eingestellt war. Siehe core/autoSave.js. -->
         <p class="settings-hint" data-i18n="autoSaveHint">Gespeichert wird kurz nachdem du aufhörst zu schreiben.</p>
       </div>
       <!-- Cloud Sync (Moved to Profile Menu) -->
@@ -1319,6 +1403,9 @@
 <script src="core/cloudSync.js"></script>
 <script src="core/importExport.js"></script>
 <script src="ui/auth.js"></script>
+<!-- Die Auskunft „ist meine Arbeit sicher?". Muss VOR syncPanel.js
+     stehen: dessen Knopf fragt sie beim Aufbau ab. -->
+<script src="ui/saveStatus.js"></script>
 <!-- Das Sync-Fenster. Nach auth.js, weil es CloudSync_ und die
      Anmeldung braucht, um seinen Knopf zu zeigen. -->
 <script src="ui/syncPanel.js"></script>
@@ -1336,7 +1423,6 @@
 <script src="ui/toolbar.js"></script>
 <script src="ui/insert.js"></script>
 <script src="ui/settings.js"></script>
-<script src="ui/saveStatus.js"></script>
   <script src="ui/contextMenu.js"></script>
   <script src="ui/titlebar.js"></script>
   

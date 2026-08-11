@@ -155,8 +155,10 @@ class AutoSaveEngine {
    *   Anlauf nach einem Fehlschlag
    */
   _scheduleDebouncedSave(nbId, delay = AUTOSAVE_DELAY_MS) {
-    if (!Settings.get('autoSaveEnabled')) return;
-
+    /* Hier stand eine Abfrage auf die Einstellung autoSaveEnabled. Die
+       gibt es nicht mehr: automatisch gespeichert wird immer. Ein Heft
+       ist kein Dokument, das man verwirft – der Schalter konnte nur
+       Arbeit kosten, nie welche sparen. */
     const expectedVersion = this._changeVersions.get(nbId) || 0;
 
     const timer = this._debounceTimers.get(nbId);

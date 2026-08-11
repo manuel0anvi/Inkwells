@@ -103,7 +103,6 @@
   try {
     AutoSave.init();
     console.log('[Init] ✓ Auto-save initialized');
-    console.log('[Init] Auto-save enabled:', Settings.get('autoSaveEnabled'));
   } catch (err) {
     console.error('[Init] ✗ Auto-save init failed:', err);
   }

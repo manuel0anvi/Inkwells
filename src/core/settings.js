@@ -4,7 +4,9 @@ const SETTINGS_FILE = 'journal-settings.json';
 
 const DEFAULT_SETTINGS = {
   saveLocation: null, // null means user needs to set it
-  autoSaveEnabled: true,
+  /* autoSaveEnabled ist entfallen – automatisch gespeichert wird
+     immer. Ein alter Wert in der Datei stoert nicht: er wird
+     nirgends mehr gelesen (core/autoSave.js). */
   language: 'en', // de, en, it
   /* ── Zeichnet der Finger, oder bewegt er die Seite? ────────────────
      Der Finger ZEICHNET, sobald ein Zeichenwerkzeug gewählt ist. Zum

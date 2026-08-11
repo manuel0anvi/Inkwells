@@ -39,6 +39,8 @@
   if (!overlay || !btn) return;
 
   const stateBox = E('sync-state');
+  const localBox = E('sync-local');
+  const saveNowBtn = E('sync-save-now-btn');
   const pendingSection = E('sync-pending-section');
   const pendingList = E('sync-pending-list');
   const recentList = E('sync-recent-list');
@@ -251,10 +253,45 @@
       + '</div>';
   }
 
+  /* ── Auf diesem Geraet ──────────────────────────────────────────────
+     Die halbe Strecke vor der Cloud. Der Zustand kommt aus
+     ui/saveStatus.js, damit ihn Knopf und Fenster aus derselben Quelle
+     lesen und nicht auseinanderlaufen koennen. */
+  function zeichneOertlich() {
+    if (!localBox) return;
+    const zustand = typeof window.saveState === 'function' ? window.saveState() : 'saved';
+    const offenesHeft = typeof S !== 'undefined' && S && S.activeNbId;
+
+    let klasse, zeichen, text;
+    if (!offenesHeft) {
+      klasse = 'ok';
+      zeichen = svg(SVG_HAKEN);
+      text = t('syncLocalNoDoc') || 'Kein Heft geöffnet.';
+    } else if (zustand === 'unsaved') {
+      klasse = 'warten';
+      zeichen = svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>');
+      text = t('syncLocalPending') || 'Wird gleich gespeichert …';
+    } else {
+      klasse = 'ok';
+      zeichen = svg(SVG_HAKEN);
+      text = t('syncLocalDone') || 'Auf diesem Gerät gespeichert.';
+    }
+
+    localBox.className = 'sync-state ' + klasse;
+    localBox.innerHTML = '<span class="sync-state-icon">' + zeichen + '</span>'
+      + '<span>' + escHtml(text) + '</span>';
+
+    /* Der Knopf ist die Abkuerzung fuer Ungeduldige, so wie „Alle jetzt
+       hochladen" darunter. Er erscheint nur, wenn es wirklich etwas zu
+       tun gibt – sonst waere er eine Aufforderung ohne Anlass. */
+    if (saveNowBtn) saveNowBtn.style.display = (offenesHeft && zustand === 'unsaved') ? 'block' : 'none';
+  }
+
   /** Baut das Fenster neu auf. Tut nichts, solange es zu ist. */
   function render() {
     if (overlay.style.display === 'none') return;
 
+    zeichneOertlich();
     const offen = offeneVorgaenge();
     zeichneStreifen(offen);
 
@@ -296,39 +333,62 @@
   /* ── Knopf und Zähler in der Titelleiste ──────────────────────────── */
 
   /**
-   * Der Knopf gehört nur dorthin, wo er etwas zu sagen hat: bei
-   * bestehender Anmeldung. Wer nicht angemeldet ist, hat keine Cloud –
-   * ein Knopf, der dann „nichts ausstehend" meldet, wäre irreführend.
+   * Der eine Knopf für „ist meine Arbeit sicher?".
+   *
+   * >>> Warum er jetzt IMMER da ist <<<
+   * Er erschien nur bei bestehender Anmeldung – die Begründung war, ein
+   * Knopf ohne Cloud könne nichts melden. Das stimmte nicht: ohne Cloud
+   * gibt es sehr wohl etwas zu melden, nämlich ob die Arbeit auf der
+   * Platte liegt. Diese Auskunft stand in einem ZWEITEN Knopf in der
+   * Werkzeugleiste, und zwei Anzeigen für dieselbe Frage widersprachen
+   * sich regelmäßig, weil jede nur ihre halbe Strecke kannte. Es gibt
+   * jetzt eine, und die kennt beide Hälften (ui/saveStatus.js).
+   *
+   * >>> Die Reihenfolge der Fälle <<<
+   * Noch nicht auf der Platte sticht alles: das ist die Hälfte, die
+   * einem Absturz zum Opfer fällt. Danach kommt, was gerade hochgeht,
+   * dann was auf die Cloud wartet, und zuletzt der Normalfall.
+   *
+   * Der Zustand steckt in der FARBE, nicht in einer Zahl daneben. Grün
+   * heißt gesichert, blau heißt „da ist noch etwas" – und weil es von
+   * selbst weitergeht, ist das eine Auskunft und keine Aufforderung.
    */
   function refreshButton() {
     const angemeldet = !!(window.CloudSync_ && CloudSync_.isAuthenticated
       && CloudSync_.isAuthenticated());
 
-    btn.style.display = angemeldet ? 'flex' : 'none';
+    btn.style.display = 'flex';
     btn.classList.remove('ist-gesichert', 'ist-offen', 'laeuft');
-    if (!angemeldet) {
-      // Ein offenes Fenster gehört zu, wenn die Anmeldung wegfällt
-      if (overlay.style.display !== 'none') overlay.style.display = 'none';
+
+    const zustand = typeof window.saveState === 'function' ? window.saveState() : 'saved';
+    const offen = angemeldet ? offeneVorgaenge().length : 0;
+
+    if (zustand === 'unsaved') {
+      btn.classList.add('ist-offen');
+      btn.title = t('unsaved') || 'Nicht gespeichert';
       return;
     }
 
-    /* Der Zustand steckt in der FARBE, nicht in einer Zahl daneben.
+    if (angemeldet && window.CloudSync_ && CloudSync_.syncing) {
+      btn.classList.add('laeuft');
+      btn.title = t('syncStateWorking') || 'Wird hochgeladen …';
+      return;
+    }
 
-       Gruen: alles ist oben. Blau: da wartet noch etwas – und weil es von
-       selbst hochgeht, ist das keine Aufforderung, sondern eine Auskunft.
-       Waehrend wirklich etwas laeuft, dreht sich das Zeichen dazu.
+    /* Ohne Netz bleibt es blau: „nicht alles ist oben" stimmt dann ja
+       genauso. Warum es wartet, sagt der Streifen im Fenster – dafür ist
+       am Knopf kein Platz, und zwei Blautöne wären keine Auskunft,
+       sondern ein Rätsel. */
+    if (offen) {
+      btn.classList.add('ist-offen');
+      btn.title = (t('syncStateWaiting') || '{n} Änderung(en) warten').replace('{n}', offen);
+      return;
+    }
 
-       Ohne Netz bleibt es ebenfalls blau: "nicht alles ist oben" stimmt
-       dann ja genauso. Warum es wartet, sagt der Streifen im Fenster –
-       dafuer ist am Knopf kein Platz, und zwei Blautoene waeren keine
-       Auskunft, sondern ein Raetsel. */
-    const offen = offeneVorgaenge().length;
-    if (window.CloudSync_ && CloudSync_.syncing) btn.classList.add('laeuft');
-    else btn.classList.add(offen ? 'ist-offen' : 'ist-gesichert');
-
-    btn.title = offen
-      ? (t('syncStateWaiting') || '{n} Änderung(en) warten').replace('{n}', offen)
-      : (t('syncStateAllDone') || 'Alles gesichert');
+    btn.classList.add('ist-gesichert');
+    btn.title = angemeldet
+      ? (t('syncStateAllDone') || 'Alles gesichert')
+      : (t('syncLocalDone') || 'Auf diesem Gerät gespeichert.');
   }
 
   /* ── Öffnen und Schließen ─────────────────────────────────────────── */
@@ -363,6 +423,22 @@
     render();
     refreshButton();
   });
+
+  /* Von Hand speichern – der Rest des alten Speicher-Knopfs. Gebraucht
+     wird er selten (nach zwei Sekunden geschieht es ohnehin), aber wer
+     gleich den Rechner zuklappt, will nicht zaehlen muessen. */
+  saveNowBtn?.addEventListener('click', async () => {
+    if (typeof window.saveNowWithFeedback === 'function') await window.saveNowWithFeedback();
+    render();
+    refreshButton();
+  });
+
+  /* Der oertliche Stand aendert sich bei jedem Anschlag – ohne diesen
+     Hoerer bliebe der Knopf orange stehen, bis zufaellig die Cloud etwas
+     meldet. */
+  if (typeof AutoSave !== 'undefined' && AutoSave && typeof AutoSave.onChange === 'function') {
+    AutoSave.onChange(() => { refreshButton(); render(); });
+  }
 
   E('sync-clear-log-btn')?.addEventListener('click', async () => {
     if (typeof showConfirm === 'function') {
@@ -411,4 +487,9 @@
 
   // Für ui/auth.js und die Tastenkürzel
   window.openSyncPanel = open;
+
+  /* Der Name kommt aus der Zeit des Speicher-Knopfs; core/integration.js
+     und ui/sharedDocs.js rufen ihn nach jeder Aenderung. Er zeigt jetzt
+     hierher – der Knopf hat die Auskunft uebernommen. */
+  window.updateSaveStatus = function () { refreshButton(); render(); };
 })();

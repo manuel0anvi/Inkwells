@@ -675,6 +675,44 @@
   padding: 6px 10px 2px
 }
 
+/* Das Sammelmenue im Hochformat traegt Zeichen mit Beschriftung und
+   braucht deshalb kein Raster darunter – nur etwas mehr Breite. */
+.insert-all-pop {
+  min-width: 190px
+}
+
+/* Der Sammelknopf gilt nur im Hochformat; quer steht jedes der vier
+   Werkzeuge fuer sich (css/responsive.css schaltet um). */
+.tb-insert-all {
+  display: none
+}
+
+/* ── Die Formen-Einstellungen als Fenster ────────────────────────────
+   Derselbe Rahmen wie beim Einfuegen-Menue, aber der Inhalt ist eine
+   Reihe Knoepfe und keine Liste – deshalb waagerecht. Die Knoepfe
+   darin sind unveraendert die aus der Leiste (.tb-opt, .sz-btn), damit
+   Aussehen und Handgriffe dieselben bleiben. */
+.tool-pop {
+  position: fixed;
+  z-index: 1300;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  padding: 6px
+}
+
+/* Im Fenster ist Platz – hier duerfen die Knoepfe ihre volle Groesse
+   behalten, auch wenn die Enge-Stufen sie in der Leiste zusammen-
+   schieben (css/responsive.css). */
+.tool-pop .tb-opt,
+.tool-pop .sz-btn {
+  padding: 5px 8px
+}
+
 /* Das Raster wie in Word: darueberfahren waehlt, ein Klick setzt. */
 .tbl-grid {
   display: grid;
@@ -717,64 +755,26 @@
   }
 }
 
-/* ── Groesser und kleiner im Hochformat ───────────────────────────────
-   Oeffnet sich am Prozentwert, sobald − und + fuer die schmale Leiste
-   weichen mussten (css/responsive.css, Stufe 2). Die Knoepfe sind
-   bewusst fingergross: im Hochformat gibt es hier nur Finger. */
-.zoom-pop {
-  position: fixed;
-  z-index: 1300;
-  display: none;
-  align-items: center;
-  gap: 6px;
-  background: var(--sc);
-  border: 1px solid var(--sb2);
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
-  padding: 6px
-}
+/* ── Der Zoom in der Leiste ───────────────────────────────────────────
+   −, Prozentwert, + – und zwar immer, in jeder Fensterbreite. Die
+   Auswahl, die es hier frueher gab (.zoom-pop), ist damit hinfaellig.
 
-.zoom-pop-btn {
-  width: 40px;
-  height: 40px;
-  background: transparent;
-  border: 1px solid var(--sb2);
-  border-radius: 8px;
-  color: var(--hi);
-  font-size: 17px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center
-}
-
-.zoom-pop-btn:active {
-  background: var(--sh2)
-}
-
-.zoom-pop-val {
+   Die Groessen stehen hier und nicht als style am Knopf, damit die
+   Enge-Stufen in css/responsive.css sie ueberhaupt kleiner setzen
+   koennen – ein Inline-Stil schlaegt jedes Stylesheet. */
+.tb-zoom-btn {
+  min-width: 22px;
+  text-align: center;
   font-family: 'DM Mono', 'Consolas', monospace;
-  font-size: 12px;
-  color: var(--hi);
-  min-width: 46px;
+  font-size: 13px;
+  line-height: 1
+}
+
+.tb-zoom-val {
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 10px;
+  min-width: 44px;
   text-align: center
-}
-
-.zoom-pop-fit {
-  height: 40px;
-  padding: 0 12px;
-  background: transparent;
-  border: 1px solid var(--sb2);
-  border-radius: 8px;
-  color: var(--md);
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap
-}
-
-.zoom-pop-fit:active {
-  background: var(--sh2);
-  color: var(--hi)
 }
 
 .sz-row {
@@ -900,63 +900,6 @@
   letter-spacing: .5px
 }
 
-/* Save Status Indicator */
-.save-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px !important;
-  cursor: pointer;
-  border: 1px solid var(--sb2);
-  border-radius: 6px;
-  transition: all .15s;
-  min-width: 28px;
-  justify-content: center;
-}
-
-.save-status:hover {
-  background: var(--sh2);
-  border-color: var(--gd);
-}
-
-.save-icon {
-  font-size: 16px;
-  line-height: 1;
-}
-
-/* >>> Nur zu sehen, wenn es etwas zu sagen gibt <<<
-   „Gespeichert" stand dauerhaft in der Leiste und nahm Platz weg, obwohl
-   es der Normalfall ist – das gruene Zeichen sagt dasselbe. Beim Speichern
-   und bei einem Fehler kommt der Text zurueck. */
-.save-text {
-  font-size: 11px;
-  font-family: 'Crimson Pro', serif;
-  display: none;
-}
-
-.save-status.unsaved .save-text,
-.save-status.error .save-text,
-.save-status.local-only .save-text {
-  display: inline;
-}
-
-/* Save status states */
-.save-status.saved .save-icon {
-  color: #2e8a46; /* Green */
-}
-
-.save-status.unsaved .save-icon {
-  color: #c87a2a; /* Orange */
-}
-
-/* Örtlich gesichert, aber noch nicht in der Cloud. Ohne eigene Farbe stand
-   hier das grüne Häkchen, obwohl das zweite Gerät noch nichts davon weiß –
-   genau das soll man sehen können. */
-.save-status.local-only .save-icon {
-  color: #3d7bd6; /* Blau */
-}
-
-.save-status.error .save-icon {
-  color: #c04040; /* Red */
-}
+/* Der Speicher-Knopf und seine Zustände sind entfallen – die Auskunft
+   gibt jetzt der Sync-Knopf in der Titelleiste (css/titlebar.css). */
 

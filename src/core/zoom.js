@@ -107,9 +107,6 @@ function _applyZoom() {
   const prozent = Math.round((z / BASE_ZOOM) * 100) + '%';
   const lbl = E('btn-zoom-reset');
   if (lbl) lbl.textContent = prozent;
-  // Dieselbe Zahl noch einmal in der Auswahl im Hochformat (app.js)
-  const popLbl = E('zoom-pop-val');
-  if (popLbl) popLbl.textContent = prozent;
   if (z <= 1.21 && typeof window.resetPan === 'function') window.resetPan();
   rerenderCanvasesForZoom();
   updateAddPageBtnVisibility();

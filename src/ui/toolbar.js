@@ -24,14 +24,16 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 (function () {
   const btn = E('btn-touch-draw');
 
-  const hatFinger = (navigator.maxTouchPoints || 0) > 0
+  /* Ob es hier ueberhaupt einen Finger gibt. Steht am window, weil
+     updateTouchDrawUI() weiter unten es ebenfalls braucht – und das
+     laeuft bei jedem Werkzeugwechsel, nicht nur einmal beim Aufbau. */
+  window.hatFingerGeraet = (navigator.maxTouchPoints || 0) > 0
     || window.matchMedia('(pointer: coarse)').matches;
 
   S.touchDraw = !(typeof Settings !== 'undefined' && Settings.get && Settings.get('touchDrawOff'));
   updateTouchDrawUI();
 
-  if (!btn || !hatFinger) return;
-  btn.style.display = '';
+  if (!btn || !window.hatFingerGeraet) return;
 
   btn.addEventListener('click', () => {
     S.touchDraw = !S.touchDraw;
@@ -279,7 +281,20 @@ function touchDrawActive() {
  */
 function updateTouchDrawUI() {
   const btn = E('btn-touch-draw');
-  if (btn) btn.classList.toggle('active', !!S.touchDraw);
+  if (btn) {
+    btn.classList.toggle('active', !!S.touchDraw);
+
+    /* >>> In der Zeigerstellung hat er nichts zu sagen <<<
+       Der Schalter entscheidet, ob der Finger ZEICHNET statt zu
+       scrollen – und gezeichnet wird nur mit einem Zeichenwerkzeug
+       (touchDrawActive prueft dasselbe). Mit dem Cursor in der Hand
+       stand hier also ein Knopf, der auf nichts wirkte; gemeldet
+       wurde genau das. Er kommt zurueck, sobald ein Stift, der
+       Marker, der Radierer oder die Formen gewaehlt sind. */
+    const zeigt = !!window.hatFingerGeraet
+      && typeof isDrawMode === 'function' && isDrawMode(S.mode);
+    btn.style.display = zeigt ? '' : 'none';
+  }
   document.body.classList.toggle('touch-draw', touchDrawActive());
 }
 
@@ -1123,8 +1138,11 @@ function switchMode(mode) {
   const isPen = mode === 'pen1' || mode === 'pen2' || mode === 'hl';
   E('pen-opts').style.display = isPen ? 'flex' : 'none';
   E('eraser-opts').style.display = mode === 'eraser' ? 'flex' : 'none';
-  E('shape-opts').style.display = mode === 'shape' ? 'flex' : 'none';
   E('text-opts').style.display = mode === 'cursor' ? 'flex' : 'none';
+  /* Die Formen-Einstellungen sitzen in einem eigenen Fenster (#shape-pop)
+     und nicht mehr in der Leiste. Es geht mit dem Werkzeug auf und mit
+     jedem anderen wieder zu. */
+  if (typeof setzeFormenFenster === 'function') setzeFormenFenster(mode === 'shape');
   updatePenUI();
   applyMode();
   updateUndoRedoUI();
@@ -1137,6 +1155,101 @@ function switchMode(mode) {
    seit dem Entfernen der Knöpfe nicht mehr gibt. */
 
 /* TOOLBAR mode/pen/color/heading controls moved to ui/toolbar.js */
+
+/* ══════════════════════════════════════════════════════════════════════
+   DAS FORMEN-FENSTER
+
+   Die Einstellungen der Formen – welche Form, wie dick, das Lineal –
+   standen offen in der Leiste und nahmen dort eine ganze Gruppe ein.
+   Sie zeigten aber nur etwas, solange das Formen-Werkzeug gewählt war;
+   die übrige Zeit war das eine leere Zone, die trotzdem Platz kostete.
+
+   Jetzt hängen sie an einem Fenster am Formen-Knopf, genau wie das
+   Raster am Tabellen-Knopf. Der Inhalt ist unverändert (#shape-opts in
+   index.html) – nur sein Ort ist ein anderer, damit greifen alle
+   bestehenden Handgriffe weiter, auch der Lineal-Knopf aus ui/ruler.js.
+
+   >>> Wo es aufgeht <<<
+   Am Formen-Knopf. Im Hochformat gibt es den nicht (dort sammelt „+"
+   die Einfüge-Werkzeuge, css/responsive.css) – dann am „+", und wenn
+   auch das nicht sichtbar ist, an der Leiste selbst. So steht es nie
+   irgendwo im Nichts.
+   ══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const pop = E('shape-pop');
+  if (!pop) return;
+
+  /** Der Knopf, unter dem das Fenster hängt – je nach Ausrichtung. */
+  function anker() {
+    const kandidaten = [
+      document.querySelector('.tb-mode[data-mode="shape"]'),
+      E('btn-insert-all'),
+      E('toolbar')
+    ];
+    return kandidaten.find(el => el && el.offsetParent !== null) || null;
+  }
+
+  function stelle() {
+    const a = anker();
+    if (!a) return;
+    const r = a.getBoundingClientRect();
+    const b = pop.offsetWidth || 260;
+    pop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - b - 8, r.left))) + 'px';
+    pop.style.top = Math.round(r.bottom + 6) + 'px';
+  }
+
+  function draussen(e) {
+    if (e.target.closest('#shape-pop, .tb-mode[data-mode="shape"], #btn-insert-all')) return;
+    setzeFormenFenster(false);
+  }
+
+  /* Global, weil switchMode() es bei jedem Werkzeugwechsel ruft.
+
+     Der Hörer aufs Draußen-Klicken wird erst im nächsten Durchlauf
+     gesetzt: derselbe Druck, der das Fenster öffnet, würde es sonst
+     sofort wieder schließen. Die Abfrage davor prüft, ob das Fenster
+     dann überhaupt noch offen ist – ein zweiter Druck auf den
+     Formen-Knopf schließt es in derselben Runde wieder, und ohne die
+     Abfrage bliebe ein Hörer ohne Fenster stehen. */
+  window.setzeFormenFenster = function (an) {
+    document.removeEventListener('pointerdown', draussen, true);
+    pop.style.display = an ? 'flex' : 'none';
+    if (!an) return;
+    stelle();
+    setTimeout(() => {
+      if (window.formenFensterOffen()) {
+        document.addEventListener('pointerdown', draussen, true);
+      }
+    }, 0);
+  };
+
+  window.formenFensterOffen = () => pop.style.display === 'flex';
+
+  /* ── Noch einmal derselbe Knopf schließt wieder ──────────────────
+     Sonst ginge das Fenster nur zu, indem man ein anderes Werkzeug
+     nimmt – und stünde bis dahin über der Seite.
+
+     >>> Warum es dafür ZWEI Hörer braucht <<<
+     Ganz oben in dieser Datei hängt schon ein click-Hörer, der
+     switchMode() ruft, und der öffnet das Fenster bei jedem Klick neu.
+     In der Auffangphase (capture) läuft er noch nicht – dort ist also
+     abzulesen, wie der Zustand VOR dem Klick war. Gehandelt wird
+     danach, in der Blasenphase, wenn switchMode() durch ist.
+     Ein einzelner Hörer könnte nur eines von beidem. */
+  const formenKnopf = document.querySelector('.tb-mode[data-mode="shape"]');
+  if (formenKnopf) {
+    let warSchonOffen = false;
+    formenKnopf.addEventListener('pointerdown', () => {
+      warSchonOffen = S.mode === 'shape' && window.formenFensterOffen();
+    }, true);
+    formenKnopf.addEventListener('click', () => {
+      if (warSchonOffen) setzeFormenFenster(false);
+    });
+  }
+
+  window.addEventListener('resize', () => { if (window.formenFensterOffen()) stelle(); },
+    { passive: true });
+})();
 
 /* ── Formen-Optionen ────────────────────────────────────────────────────
    Welche Form gezeichnet wird, entscheiden diese Knöpfe. Farbe und

@@ -291,7 +291,6 @@
 /* Werkzeugleiste im Nur-Lese-Modus: nur Zoom und Export bleiben nutzbar */
 body.read-only .toolbar .tb-zone.tb-left,
 body.read-only .toolbar .tb-zone.tb-center,
-body.read-only .toolbar #save-status,
 body.read-only .toolbar #btn-doc-share,
 body.read-only #add-page-btn-wrap {
   opacity: .35;

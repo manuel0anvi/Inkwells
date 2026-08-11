@@ -108,6 +108,8 @@ const TRANSLATIONS = {
     tbNext: 'Mehr',
 
     // Einfügen und Tabellen
+    // Der Sammelknopf im Hochformat (css/responsive.css)
+    insertMenu: 'Einfügen',
     insertFile: 'Bild, PDF oder Datei …',
     insertFormula: 'Formel …',
     insertTable: 'Tabelle',
@@ -572,6 +574,11 @@ const TRANSLATIONS = {
     // Sync-Status-Anzeige im Konto
     syncPanelShow: 'Synchronisation anzeigen',
     syncPanelTitle: 'Sync-Status',
+    // Der örtliche Stand im Sync-Fenster (ui/syncPanel.js)
+    syncLocalHeader: 'Auf diesem Gerät',
+    syncLocalDone: 'Auf diesem Gerät gespeichert.',
+    syncLocalPending: 'Wird gleich gespeichert …',
+    syncLocalNoDoc: 'Kein Heft geöffnet.',
     syncPendingHeader: 'Ausstehend',
     syncRecentHeader: 'Zuletzt synchronisiert',
     syncRecentEmpty: 'Keine Einträge',
@@ -789,6 +796,7 @@ const TRANSLATIONS = {
     tbPrev: 'Back',
     tbNext: 'More',
 
+    insertMenu: 'Insert',
     insertFile: 'Image, PDF or file …',
     insertFormula: 'Formula …',
     insertTable: 'Table',
@@ -1249,6 +1257,10 @@ const TRANSLATIONS = {
     // Sync status panel in account
     syncPanelShow: 'Show sync status',
     syncPanelTitle: 'Sync Status',
+    syncLocalHeader: 'On this device',
+    syncLocalDone: 'Saved on this device.',
+    syncLocalPending: 'Saving in a moment …',
+    syncLocalNoDoc: 'No notebook open.',
     syncPendingHeader: 'Pending',
     syncRecentHeader: 'Recently synced',
     syncRecentEmpty: 'No entries',
@@ -1459,6 +1471,7 @@ const TRANSLATIONS = {
     tbPrev: 'Indietro',
     tbNext: 'Avanti',
 
+    insertMenu: 'Inserisci',
     insertFile: 'Immagine, PDF o file …',
     insertTable: 'Tabella',
     insertTableCustom: 'Personalizzata …',
@@ -1919,6 +1932,10 @@ const TRANSLATIONS = {
     // Pannello stato sync nell'account
     syncPanelShow: 'Mostra sincronizzazione',
     syncPanelTitle: 'Stato sync',
+    syncLocalHeader: 'Su questo dispositivo',
+    syncLocalDone: 'Salvato su questo dispositivo.',
+    syncLocalPending: 'Verrà salvato tra poco …',
+    syncLocalNoDoc: 'Nessun quaderno aperto.',
     syncPendingHeader: 'In attesa',
     syncRecentHeader: 'Sincronizzati di recente',
     syncRecentEmpty: 'Nessuna voce',
