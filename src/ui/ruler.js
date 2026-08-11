@@ -48,12 +48,43 @@
     return (CFG.PAGE_W || 794) / 210 * z;
   }
 
-  /* Seiten-Mitte in Bildschirm-Koordinaten – da erscheint das Lineal. */
+  /* ══════════════════════════════════════════════════════════════════
+     WO DAS LINEAL ERSCHEINT
+
+     >>> Warum nicht mehr über #pages-wrap <<<
+     Gemessen wurde der Seiten-Umschlag: seine Oberkante plus 180 px.
+     Der Umschlag hält aber ALLE Seiten des Hefts und scrollt mit – auf
+     Seite drei liegt seine Oberkante zweitausend Pixel über dem
+     Fenster, und dort landete dann auch das Lineal. Der Knopf sah
+     eingeschaltet aus, zu sehen war nichts. Genau so wurde es gemeldet.
+
+     Gemessen wird jetzt der Ausschnitt, der wirklich zu sehen ist
+     (#pg-scroll). Der bleibt stehen, egal wie weit man geblättert hat.
+     ══════════════════════════════════════════════════════════════════ */
   function seitenMitte() {
-    const wrap = E('pages-wrap');
-    if (!wrap) return { x: 200, y: 300 };
-    const r = wrap.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + 180 };
+    const feld = E('pg-scroll') || E('pages-wrap');
+    if (!feld) return { x: 200, y: 300 };
+    const r = feld.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + Math.min(180, r.height / 3) };
+  }
+
+  /**
+   * Holt das Lineal ins Fenster zurück.
+   *
+   * Nötig, weil seine Lage über das Ausschalten hinaus gemerkt wird: wer
+   * es oben hinlegt, weit blättert und es dort wieder einschaltet, hätte
+   * es sonst außerhalb des Bildes – und wüsste nicht, wohin damit.
+   *
+   * Ein Stück darf über den Rand hinausragen; das Lineal ist so breit
+   * wie die Seite, und es ganz hineinzuzwingen hieße, es bei jedem
+   * Einschalten zu verschieben.
+   */
+  function holeInsBild() {
+    const luft = 60;
+    const maxX = window.innerWidth - luft;
+    const minX = luft - linealBreite;
+    lineal.rohX = Math.max(minX, Math.min(maxX, lineal.rohX));
+    lineal.rohY = Math.max(8, Math.min(window.innerHeight - LINEAL_H - 8, lineal.rohY));
   }
 
   /* ── Canvas anlegen ───────────────────────────────────────────────── */
@@ -454,6 +485,8 @@
         lineal.rohY = m.y - LINEAL_H / 2;
         lineal.gesetzt = true;
       }
+      // Und jedes Mal sicherstellen, dass es auch zu sehen ist
+      holeInsBild();
       maleLineal();
       ln.canvas.style.display = 'block';
       aktualisiereLinealPos();
