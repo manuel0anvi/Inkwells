@@ -591,8 +591,11 @@ body.read-only #add-page-btn-wrap {
   line-height: 1
 }
 
+/* Mit der Maus: beim Überfahren der Karte.
+   Mit Stift oder Finger gibt es kein Überfahren – dort sind sie immer da
+   (body.touch-input und die Hochformat-Regel in responsive.css). */
 .nb-card:hover .nb-card-edit-btn {
-  /* Nur beim Scrollen oder im Tablet-Modus sichtbar, nicht bei bloßem Hover */
+  opacity: 1
 }
 
 /* Beim Scrollen kurz einblenden – das body.scrolling setzt homeGrid.js */

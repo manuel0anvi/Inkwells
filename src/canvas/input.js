@@ -83,18 +83,35 @@ function attachInput(canvas, textDiv, objLayer, page) {
     return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY, p: e.pressure > 0 ? e.pressure : 0.5 };
   }
 
+  /* ── Am Lineal einrasten ─────────────────────────────────────────────
+     Ein echtes Lineal lässt den Stift nicht los, nur weil die Hand einen
+     Millimeter abrutscht – es ist eine Kante, an der er anliegt. Genau das
+     fehlte: gemessen wurde bei jeder Bewegung neu, und einen Pixel neben
+     der Schwelle zeichnete es wieder frei.
+
+     Deshalb zwei Schwellen statt einer:
+       · FASSEN – so nah muss man kommen, damit es überhaupt greift
+       · LOSLASSEN – so weit muss man weg, damit es wieder freigibt
+     Dazwischen bleibt der Strich an der Kante, auch wenn die Hand wandert.
+     Das ist dieselbe Hysterese, die auch ein Schalter braucht, damit er
+     nicht flattert. */
+  const RULER_FASSEN = 14;      // CSS-Pixel
+  const RULER_LOSLASSEN = 48;   // CSS-Pixel
+
   /**
    * Punkt an der Lineal-Kante einrasten lassen.
    *
-   * @param {{x:number,y:number}} pt   Punkt in Seiten-Koordinaten
-   * @param {{x:number,y:number,winkel:number,w:number,h:number,hPad:number}} rs
+   * @param {{x:number,y:number,p:number}} pt  Punkt in Seiten-Koordinaten
+   * @param {{x:number,y:number,winkel:number,w:number,h:number}} rs
    *        Lineal-Zustand in Bildschirm-Koordinaten (von getRulerState)
    * @param {HTMLCanvasElement} canvas
-   * @param {object} page  { w, h }
-   * @returns {null|{x:number,y:number,p:number}}  eingerasteter Punkt oder null
+   * @param {object} page   { w, h }
+   * @param {boolean} klebt ob der Strich gerade schon an der Kante liegt
+   * @returns {null|{x:number,y:number,p:number}} eingerasteter Punkt oder null
    */
-  function snapToRuler(pt, rs, canvas, page) {
+  function snapToRuler(pt, rs, canvas, page, klebt) {
     const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
     const scaleX = (page.w || CFG.PAGE_W) / r.width;
     const scaleY = (page.h || CFG.PAGE_H) / r.height;
 
@@ -108,44 +125,56 @@ function attachInput(canvas, textDiv, objLayer, page) {
     const cx = rs.x + rs.w / 2;   // Lineal-Mitte (Bildschirm)
     const cy = rs.y + rs.h / 2;
 
-    // Zwei Punkte auf einer Kante um den Mittelpunkt drehen
+    // Zwei Punkte einer Kante um den Mittelpunkt drehen
     function kante(sx1, sy1, sx2, sy2) {
-      // Relativ zum Mittelpunkt
       const rx1 = sx1 - cx, ry1 = sy1 - cy;
       const rx2 = sx2 - cx, ry2 = sy2 - cy;
-      // Drehen
       const dx1 = rx1 * cos - ry1 * sin;
       const dy1 = rx1 * sin + ry1 * cos;
       const dx2 = rx2 * cos - ry2 * sin;
       const dy2 = rx2 * sin + ry2 * cos;
-      // Zurück zu Bildschirm, dann zu Seite
       return { a: toPage(cx + dx1, cy + dy1), b: toPage(cx + dx2, cy + dy2) };
     }
 
-    const schwell = 8 * scaleX; // ~8 CSS-Pixel in Seiten-Koordinaten
+    const schwell = (klebt ? RULER_LOSLASSEN : RULER_FASSEN) * scaleX;
 
-    // Nähe zur oberen und unteren Kante prüfen
     const kanten = [
-      kante(rs.x, rs.y, rs.x + rs.w, rs.y),                          // oben
-      kante(rs.x, rs.y + rs.h, rs.x + rs.w, rs.y + rs.h)             // unten
+      kante(rs.x, rs.y, rs.x + rs.w, rs.y),                 // obere Kante
+      kante(rs.x, rs.y + rs.h, rs.x + rs.w, rs.y + rs.h)    // untere Kante
     ];
+
+    let beste = null, besteDist = Infinity;
 
     for (const k of kanten) {
       const dx = k.b.x - k.a.x, dy = k.b.y - k.a.y;
       const len2 = dx * dx + dy * dy;
       if (len2 < 0.001) continue;
-      // Projektion von pt auf die Kantenlinie
-      let t = ((pt.x - k.a.x) * dx + (pt.y - k.a.y) * dy) / len2;
-      t = Math.max(0, Math.min(1, t));
+
+      /* KEINE Klammerung auf die Strecke: die Kante wirkt als unendliche
+         Gerade. Sonst hörte das Einrasten am Ende des Lineals auf und die
+         Punkte stauten sich an der Ecke – ein Strich über das Lineal
+         hinaus knickte dort ab. */
+      const t = ((pt.x - k.a.x) * dx + (pt.y - k.a.y) * dy) / len2;
       const projX = k.a.x + t * dx;
       const projY = k.a.y + t * dy;
       const dist = Math.hypot(pt.x - projX, pt.y - projY);
-      if (dist < schwell) {
-        return { x: projX, y: projY, p: pt.p };
+
+      if (dist < schwell && dist < besteDist) {
+        besteDist = dist;
+        beste = { x: projX, y: projY, p: pt.p };
       }
     }
 
-    return null;
+    return beste;
+  }
+
+  /** Einen Punkt am Lineal ausrichten und den Klebe-Zustand fortschreiben. */
+  function amLinealAusrichten(c, canvas, page) {
+    const rs = window.getRulerState && window.getRulerState();
+    if (!rs) { S._rulerKlebt = false; return c; }
+    const s = snapToRuler(c, rs, canvas, page, S._rulerKlebt);
+    S._rulerKlebt = !!s;
+    return s || c;
   }
 
   /**
@@ -180,7 +209,12 @@ function attachInput(canvas, textDiv, objLayer, page) {
     textDiv.style.pointerEvents = 'none';
     textDiv.dataset.ph = '';
     setActivePg(page.id);
-    const c = coords(e); S.isDrawing = true;
+    /* Auch der ERSTE Punkt gehört ans Lineal. Ohne das setzte der Strich
+       daneben an, und bei einer festgestellten Geraden hing die ganze
+       Linie an diesem schiefen Anfang. */
+    S._rulerKlebt = false;
+    const c = amLinealAusrichten(coords(e), canvas, page);
+    S.isDrawing = true;
     // Zustand vor dem Strich sichern – ein Strich ist ein Rückgängig-Schritt
     pushPageHistory(page);
     if (S.mode !== 'eraser' || S.eraser.type === 'pixel') {
@@ -266,10 +300,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // Nur der Zeiger, der den Strich begonnen hat – ein zweiter Finger
     // beim Zoomen darf nicht mitmalen
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
-    e.preventDefault(); let c = coords(e);
+    e.preventDefault();
     // An der Lineal-Kante einrasten (siehe ui/ruler.js)
-    const rs = window.getRulerState?.();
-    if (rs) { const s = snapToRuler(c, rs, canvas, page); if (s) c = s; }
+    const c = amLinealAusrichten(coords(e), canvas, page);
     const ctx = canvas.getContext('2d');
     if (S.mode === 'eraser' && S.eraser.type === 'stroke') {
       strokeErase(c, page, canvas);
@@ -317,6 +350,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
     S.isDrawing = false;
     S._drawPointerId = null;
+    S._rulerKlebt = false;    // der nächste Strich fängt frei an
     stopLineTimer(S._cur);
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
@@ -342,6 +376,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
     stopLineTimer(S._cur);
     S.isDrawing = false; S._cur = null; S._drawPointerId = null;
+    S._rulerKlebt = false;
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
   });

@@ -9,6 +9,8 @@ function applyTextLayoutForBg(textDiv, bgId) {
   if (!textDiv) return;
   const lh = lhForBg(bgId);
   textDiv.style.lineHeight = lh + 'px';
+  // Muss mitziehen: die Tabellenzellen haengen daran (css/pages.css)
+  textDiv.style.setProperty('--lh', lh + 'px');
   textDiv.style.paddingTop = ptForBg(bgId) + 'px';
   textDiv.style.right = rightPadForBg(bgId) + 'px';
 }

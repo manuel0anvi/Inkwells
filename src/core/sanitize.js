@@ -76,7 +76,7 @@
      einem style bleibt unten allein die Farbe stehen. Das Muster ist
      bewusst allgemein gehalten, damit eine neue Form nicht an zwei
      Stellen nachgetragen werden muss. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?|comment-marker|resolved|no-data)$/;
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?|comment-mark|resolved)$/;
 
   /* KaTeX erzeugt beim Rendern eine Vielzahl innerer Elemente mit eigenen
      Klassen. Sie alle aufzuzählen wäre brüchig – jede neue KaTeX-Version
@@ -91,6 +91,12 @@
      eingefügt aus Word kommt so etwas regelmäßig. */
   const ZELLEN_ATTRIBUTE = new Set(['colspan', 'rowspan']);
   const istSpanne = (wert) => /^[1-9]\d{0,1}$/.test(String(wert).trim());
+
+  /* Die gezogene Spaltenbreite (core/tables.js). Sie steht an <col> und
+     nicht als style an der Zelle, denn von einem style bleibt unten allein
+     die Farbe stehen – die Breite waere beim ersten Abgleich weg.
+     Erlaubt ist eine nackte Zahl, nichts weiter. */
+  const istBreite = (wert) => /^[1-9]\d{0,3}$/.test(String(wert).trim());
 
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {
@@ -134,16 +140,20 @@
       if (ZELLEN_ATTRIBUTE.has(name) && (el.tagName === 'TD' || el.tagName === 'TH')
           && istSpanne(wert)) continue;
 
+      // Gezogene Spaltenbreite, siehe istBreite
+      if (name === 'width' && el.tagName === 'COL' && istBreite(wert)) continue;
+
       // data-latex auf Formel-Spans: der LaTeX-Quelltext, aus dem KaTeX rendert.
       // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.
       if (name === 'data-latex' && el.tagName === 'SPAN'
           && el.classList.contains('j-formula')) continue;
 
-      // data-cid auf Kommentar-Marken: die Kennung des Kommentars, zu dem die
-      // Marke gehört. Ohne sie ginge die Verknüpfung zwischen Marke und Karte
-      // nach dem ersten Abgleich verloren.
+      /* data-cid an der kommentierten Stelle: die Kennung des Kommentars,
+         zu dem sie gehört. Ohne sie ginge die Verknüpfung zwischen Text und
+         Karte nach dem ersten Abgleich verloren – die Markierung bliebe
+         stehen, wüsste aber nicht mehr, wovon sie handelt. */
       if (name === 'data-cid' && el.tagName === 'SPAN'
-          && el.classList.contains('j-comment-marker')) continue;
+          && el.classList.contains('j-comment-mark')) continue;
 
       /* Alles Uebrige faellt weg: on*-Handler, src, href, srcset, formaction,
          data-*, xlink:href … Eine Liste des Verbotenen waere immer

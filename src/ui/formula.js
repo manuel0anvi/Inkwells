@@ -11,10 +11,17 @@
      · aus dem Einfügen-Menü (neue Formel)
      · per Doppelklick auf eine bestehende Formel (core/formula.js)
 
-   >>> Warum ein Textfeld und kein grafischer Editor <<<
-   Ein grafischer Formel-Editor (wie in Word) ist ein eigenes Programm.
-   Die Tastatur ist für LaTeX schneller, und wer kein LaTeX kann, findet
-   im Netz für jede Formel die passende Zeichenkette.
+   >>> Drei Wege zur selben Formel <<<
+   „Man muss in dieser speziellen Schreibweise schreiben, das kann nicht
+   jeder" – deshalb gibt es jetzt drei:
+
+     1. Die Zeichen-Palette: anklicken, fertig. Wer nichts weiß, kommt
+        hier durch.
+     2. Normale Schreibweise: 1/2, sqrt(x), x^2, pi. Wird beim Tippen
+        nach LaTeX übersetzt (core/formula.js, normalToLatex).
+     3. LaTeX selbst – für die, die es können. Vorhandene \befehle rührt
+        die Übersetzung nicht an, die drei Wege stehen sich also nicht
+        im Weg.
    ══════════════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -46,6 +53,104 @@
   latexFeld.spellcheck = false;
   latexFeld.autocomplete = 'off';
   latexFeld.placeholder = 'z. B. \\frac{1}{\\sqrt{2\\pi}} e^{-\\frac{x^2}{2}}';
+
+  /* ── Die Zeichen-Palette ──────────────────────────────────────────────
+     Ein senkrechter Strich in der Vorlage sagt, wohin die Schreibmarke
+     danach soll. Ist gerade etwas ausgewählt, wandert die Auswahl an
+     diese Stelle – wer „x" markiert und auf die Wurzel drückt, bekommt
+     die Wurzel aus x. */
+  const B = String.fromCharCode(92);   // Rückstrich, ohne Escape-Salat
+  const PALETTE = [
+    {
+      schluessel: 'formulaGrpBasic', ersatz: 'Grundlagen', zeichen: [
+        [B + 'frac{|}{ }', B + 'frac{a}{b}'],
+        [B + 'sqrt{|}', B + 'sqrt{x}'],
+        [B + 'sqrt[3]{|}', B + 'sqrt[3]{x}'],
+        ['^{|}', 'x^{n}'],
+        ['_{|}', 'x_{n}'],
+        [B + 'left(|' + B + 'right)', '(' + B + ';)'],
+        [B + 'cdot ', B + 'cdot'],
+        [B + 'div ', B + 'div'],
+        [B + 'pm ', B + 'pm']
+      ]
+    },
+    {
+      schluessel: 'formulaGrpCompare', ersatz: 'Vergleich', zeichen: [
+        [B + 'leq ', B + 'leq'], [B + 'geq ', B + 'geq'], [B + 'neq ', B + 'neq'],
+        [B + 'approx ', B + 'approx'], [B + 'equiv ', B + 'equiv'],
+        [B + 'to ', B + 'to'], [B + 'Rightarrow ', B + 'Rightarrow'],
+        [B + 'Leftrightarrow ', B + 'Leftrightarrow'], [B + 'propto ', B + 'propto']
+      ]
+    },
+    {
+      schluessel: 'formulaGrpGreek', ersatz: 'Griechisch', zeichen: [
+        [B + 'alpha ', B + 'alpha'], [B + 'beta ', B + 'beta'], [B + 'gamma ', B + 'gamma'],
+        [B + 'delta ', B + 'delta'], [B + 'theta ', B + 'theta'], [B + 'lambda ', B + 'lambda'],
+        [B + 'mu ', B + 'mu'], [B + 'pi ', B + 'pi'], [B + 'rho ', B + 'rho'],
+        [B + 'sigma ', B + 'sigma'], [B + 'phi ', B + 'phi'], [B + 'omega ', B + 'omega'],
+        [B + 'Delta ', B + 'Delta'], [B + 'Sigma ', B + 'Sigma'], [B + 'Omega ', B + 'Omega']
+      ]
+    },
+    {
+      schluessel: 'formulaGrpCalc', ersatz: 'Analysis', zeichen: [
+        [B + 'int_{|}^{ } ', B + 'int_a^b'],
+        [B + 'sum_{|}^{ } ', B + 'sum_i^n'],
+        [B + 'prod_{|}^{ } ', B + 'prod_i^n'],
+        [B + 'lim_{|} ', B + 'lim_x'],
+        [B + 'frac{d}{dx}|', B + 'frac{d}{dx}'],
+        [B + 'partial ', B + 'partial'],
+        [B + 'nabla ', B + 'nabla'],
+        [B + 'infty ', B + 'infty']
+      ]
+    },
+    {
+      schluessel: 'formulaGrpSets', ersatz: 'Mengen', zeichen: [
+        [B + 'in ', B + 'in'], [B + 'notin ', B + 'notin'], [B + 'subset ', B + 'subset'],
+        [B + 'cup ', B + 'cup'], [B + 'cap ', B + 'cap'], [B + 'emptyset ', B + 'emptyset'],
+        [B + 'forall ', B + 'forall'], [B + 'exists ', B + 'exists'],
+        [B + 'mathbb{R}', B + 'mathbb{R}'], [B + 'mathbb{N}', B + 'mathbb{N}']
+      ]
+    },
+    {
+      schluessel: 'formulaGrpMore', ersatz: 'Mehr', zeichen: [
+        [B + 'vec{|}', B + 'vec{v}'], [B + 'hat{|}', B + 'hat{x}'], [B + 'bar{|}', B + 'bar{x}'],
+        [B + 'begin{pmatrix} | & ' + B + B + ' & ' + B + 'end{pmatrix}',
+         B + 'begin{pmatrix}a&b' + B + B + 'c&d' + B + 'end{pmatrix}'],
+        [B + 'begin{cases} | ' + B + B + ' ' + B + 'end{cases}',
+         B + 'begin{cases}a' + B + B + 'b' + B + 'end{cases}'],
+        [B + 'text{|}', B + 'text{abc}'],
+        ['^' + B + 'circ ', '^' + B + 'circ']
+      ]
+    }
+  ];
+
+  const palette = document.createElement('div');
+  palette.className = 'formula-palette';
+
+  const paletteReiter = document.createElement('div');
+  paletteReiter.className = 'formula-palette-tabs';
+
+  const paletteFeld = document.createElement('div');
+  paletteFeld.className = 'formula-palette-grid';
+
+  palette.appendChild(paletteReiter);
+  palette.appendChild(paletteFeld);
+
+  /* ── Normale Schreibweise ─────────────────────────────────────────── */
+  const einfachZeile = document.createElement('label');
+  einfachZeile.className = 'formula-simple-row';
+  const einfachHaken = document.createElement('input');
+  einfachHaken.type = 'checkbox';
+  einfachHaken.id = 'formula-simple';
+  einfachHaken.checked = true;
+  const einfachText = document.createElement('span');
+  einfachZeile.appendChild(einfachHaken);
+  einfachZeile.appendChild(einfachText);
+
+  // Zeigt, was aus der normalen Schreibweise geworden ist
+  const uebersetztZeile = document.createElement('div');
+  uebersetztZeile.className = 'formula-translated';
+  uebersetztZeile.style.display = 'none';
 
   const vorschau = document.createElement('div');
   vorschau.id = 'formula-preview';
@@ -99,11 +204,14 @@
   overlay.innerHTML = '';
   const modal = document.createElement('div');
   modal.className = 'modal modal-nb';
-  modal.style.maxWidth = '520px';
+  modal.style.maxWidth = '580px';
   modal.appendChild(titel);
   modal.appendChild(schliessenBtn);
-  modal.appendChild(label((typeof t === 'function' && t('formulaLatexLabel')) || 'LaTeX'));
+  modal.appendChild(palette);
+  modal.appendChild(label((typeof t === 'function' && t('formulaLatexLabel')) || 'Formel'));
   modal.appendChild(latexFeld);
+  modal.appendChild(einfachZeile);
+  modal.appendChild(uebersetztZeile);
   modal.appendChild(displayRow);
   modal.appendChild(vorschauLabel);
   modal.appendChild(vorschau);
@@ -116,10 +224,31 @@
   let _savedRange = null;     // Schreibmarke vor dem Öffnen
   let _vorschauTimer = 0;
 
+  /* ── Was am Ende eingesetzt wird ──────────────────────────────────────
+     Mit Haken durch die Übersetzung, ohne Haken wörtlich. Beides läuft
+     durch dieselbe Stelle, damit Vorschau und Ergebnis nie auseinander
+     gehen können. */
+  function fertigesLatex() {
+    const roh = latexFeld.value;
+    if (!einfachHaken.checked) return roh;
+    return (typeof window.normalToLatex === 'function')
+      ? window.normalToLatex(roh) : roh;
+  }
+
   /* ── Vorschau ────────────────────────────────────────────────────── */
   function aktualisiereVorschau() {
-    const latex = latexFeld.value;
+    const roh = latexFeld.value;
+    const latex = fertigesLatex();
     const displayMode = radioBlock.checked;
+
+    // Nur zeigen, wenn die Übersetzung wirklich etwas geändert hat
+    if (latex && latex !== roh.trim()) {
+      uebersetztZeile.textContent = latex;
+      uebersetztZeile.style.display = '';
+    } else {
+      uebersetztZeile.style.display = 'none';
+    }
+
     if (!latex.trim()) { vorschau.innerHTML = ''; return; }
 
     const { html, fehler } = window.renderFormula(latex, displayMode);
@@ -139,6 +268,71 @@
 
   radioInline.addEventListener('change', aktualisiereVorschau);
   radioBlock.addEventListener('change', aktualisiereVorschau);
+  einfachHaken.addEventListener('change', aktualisiereVorschau);
+
+  /* ── Palette: einsetzen an der Schreibmarke ───────────────────────────
+     setRangeText löst KEIN input-Ereignis aus, die Vorschau muss also von
+     Hand nachgezogen werden. */
+  function einsetzenAnMarke(vorlage) {
+    const stelle = vorlage.indexOf('|');
+    const text = stelle >= 0 ? vorlage.replace('|', '') : vorlage;
+
+    const a = latexFeld.selectionStart;
+    const b = latexFeld.selectionEnd;
+    const auswahl = latexFeld.value.slice(a, b);
+
+    let einzusetzen = text;
+    let neuePos;
+
+    if (auswahl && stelle >= 0) {
+      // Markiertes wandert in die Lücke: „x" + Wurzel = Wurzel aus x
+      einzusetzen = text.slice(0, stelle) + auswahl + text.slice(stelle);
+      neuePos = a + stelle + auswahl.length;
+    } else {
+      neuePos = a + (stelle >= 0 ? stelle : text.length);
+    }
+
+    latexFeld.setRangeText(einzusetzen, a, b, 'end');
+    latexFeld.selectionStart = latexFeld.selectionEnd = neuePos;
+    latexFeld.focus();
+    aktualisiereVorschau();
+  }
+
+  /* ── Palette aufbauen ────────────────────────────────────────────── */
+  let _paletteGruppe = 0;
+
+  function zeigeGruppe(nr) {
+    _paletteGruppe = nr;
+    [...paletteReiter.children].forEach((b, i) => b.classList.toggle('active', i === nr));
+
+    paletteFeld.innerHTML = '';
+    for (const [vorlage, anzeige] of PALETTE[nr].zeichen) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'formula-sym';
+      // Das Zeichen selbst als Bild: verständlicher als sein Quelltext
+      const gerendert = window.renderFormula(anzeige, false);
+      b.innerHTML = gerendert.html || anzeige;
+      b.title = vorlage.replace('|', '');
+      // Der Klick darf dem Textfeld nicht den Fokus nehmen
+      b.addEventListener('mousedown', e => e.preventDefault());
+      b.addEventListener('click', () => einsetzenAnMarke(vorlage));
+      paletteFeld.appendChild(b);
+    }
+  }
+
+  function baueReiter() {
+    paletteReiter.innerHTML = '';
+    PALETTE.forEach((grp, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'formula-palette-tab' + (i === 0 ? ' active' : '');
+      b.textContent = (typeof t === 'function' && t(grp.schluessel)) || grp.ersatz;
+      b.addEventListener('mousedown', e => e.preventDefault());
+      b.addEventListener('click', () => zeigeGruppe(i));
+      paletteReiter.appendChild(b);
+    });
+  }
 
   /* ── Tastatur ───────────────────────────────────────────────────── */
   latexFeld.addEventListener('keydown', e => {
@@ -181,7 +375,7 @@
   }
 
   function einfuegen() {
-    const latex = latexFeld.value.trim();
+    const latex = fertigesLatex().trim();
     if (!latex) { schliessen(); return; }
     const displayMode = radioBlock.checked;
 
@@ -239,11 +433,23 @@
     _editSpan = editSpan || null;
     merkeStelle();
     latexFeld.value = latex || '';
+
+    /* Beim Bearbeiten einer bestehenden Formel steht dort fertiges LaTeX.
+       Würde die Übersetzung darüberlaufen, machte sie aus einem gewollten
+       a/b ein \frac – deshalb ist der Haken dann von vornherein aus. */
+    einfachHaken.checked = !latex;
+
     radioInline.checked = !displayMode;
     radioBlock.checked = !!displayMode;
     titel.textContent = _editSpan
       ? ((typeof t === 'function' && t('formulaEdit')) || 'Formel bearbeiten')
       : ((typeof t === 'function' && t('formulaEditor')) || 'Formel');
+
+    einfachText.textContent = ' ' + ((typeof t === 'function' && t('formulaSimpleMode'))
+      || 'Normale Schreibweise übersetzen (1/2, sqrt(x), x^2, pi)');
+    baueReiter();
+    zeigeGruppe(_paletteGruppe);
+
     overlay.style.display = 'flex';
     latexFeld.focus();
     aktualisiereVorschau();

@@ -140,6 +140,114 @@ function escapeHtmlAttr(s) {
     .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   NORMALE SCHREIBWEISE → LaTeX
+
+   „Man muss in dieser speziellen Schreibweise schreiben, das kann nicht
+   jeder" – stimmt. Deshalb versteht der Editor jetzt auch das, was man
+   in einen Taschenrechner tippen würde:
+
+     1/2        →  \frac{1}{2}
+     sqrt(x+1)  →  \sqrt{x+1}
+     x^10       →  x^{10}
+     pi r^2     →  \pi r^{2}
+     a <= b     →  a \leq b
+
+   >>> Warum vorhandenes LaTeX unangetastet bleibt <<<
+   Wer LaTeX kann, soll weiter LaTeX schreiben dürfen. Deshalb werden im
+   ersten Schritt alle \befehle aus dem Text genommen und durch
+   Platzhalter ersetzt; sie kommen am Ende unverändert zurück. Ein
+   \frac{1}{2} wird also nicht noch einmal angefasst, und ein 1/2 INNEN
+   in einem \sqrt{} wird trotzdem übersetzt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Wörter, die für sich stehen. Nur ganze Wörter – ein „pi" in „pilz"
+   bleibt, was es ist. */
+const FORMEL_WOERTER = {
+  pi: '\\pi', tau: '\\tau', phi: '\\phi', theta: '\\theta', lambda: '\\lambda',
+  alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta',
+  epsilon: '\\epsilon', mu: '\\mu', nu: '\\nu', rho: '\\rho', sigma: '\\sigma',
+  omega: '\\omega', Delta: '\\Delta', Sigma: '\\Sigma', Omega: '\\Omega',
+  Phi: '\\Phi', Lambda: '\\Lambda', Gamma: '\\Gamma',
+  inf: '\\infty', infinity: '\\infty', infty: '\\infty',
+  int: '\\int', sum: '\\sum', prod: '\\prod', lim: '\\lim',
+  sin: '\\sin', cos: '\\cos', tan: '\\tan', log: '\\log', ln: '\\ln',
+  exp: '\\exp', min: '\\min', max: '\\max',
+  deg: '^\\circ', grad: '^\\circ'
+};
+
+/**
+ * Übersetzt normale Schreibweise nach LaTeX.
+ *
+ * @param {string} quelle  was der Nutzer getippt hat
+ * @returns {string}       gültiges LaTeX
+ */
+function normalToLatex(quelle) {
+  let s = String(quelle == null ? '' : quelle);
+  if (!s) return '';
+
+  /* 1. Vorhandenes LaTeX aus dem Weg räumen. \x01 kommt in keinem
+        vernünftigen Formeltext vor und übersteht die Schritte darunter,
+        weil keine der Regeln Steuerzeichen anfasst. */
+  const bewahrt = [];
+  s = s.replace(/\\[a-zA-Z]+|\\./g, treffer => {
+    bewahrt.push(treffer);
+    return '\x01' + (bewahrt.length - 1) + '\x01';
+  });
+
+  // 2. Zeichenpaare, die eindeutig sind
+  s = s.replace(/<=/g, ' \\leq ')
+       .replace(/>=/g, ' \\geq ')
+       .replace(/!=/g, ' \\neq ')
+       .replace(/\+-/g, ' \\pm ')
+       .replace(/->/g, ' \\to ')
+       .replace(/\*/g, ' \\cdot ');
+
+  /* 3. Funktionen mit Klammern. Von innen nach außen, damit auch
+        sqrt(sqrt(x)) durchkommt – deshalb die Schleife. */
+  for (let runde = 0; runde < 4; runde++) {
+    const vorher = s;
+    s = s.replace(/\bsqrt\s*\(([^()]*)\)/g, '\\sqrt{$1}');
+    s = s.replace(/\babs\s*\(([^()]*)\)/g, '\\left|$1\\right|');
+    if (s === vorher) break;
+  }
+
+  /* 4. Ganze Wörter. NICHT über \b abgegrenzt: für einen regulären
+        Ausdruck ist der Unterstrich ein Wortzeichen, „int_0" hätte damit
+        keine Grenze nach „int" und wäre nie erkannt worden – gerade die
+        Integrale mit Grenzen also nicht. */
+  s = s.replace(/(?<![A-Za-z])[a-zA-Z]{2,}(?![A-Za-z])/g, wort =>
+    Object.prototype.hasOwnProperty.call(FORMEL_WOERTER, wort)
+      ? FORMEL_WOERTER[wort] + ' '
+      : wort);
+
+  /* 5. Brüche. Ein Operand ist entweder eine Klammer oder eine Folge aus
+        Buchstaben, Ziffern und Punkten – auch ein bereits übersetzter
+        Platzhalter zählt dazu, damit \pi/2 funktioniert.
+        Mehrfach, damit a/b/c von links nach rechts zusammenfällt. */
+  const OPERAND = '(?:\\([^()]*\\)|\\{[^{}]*\\}|[A-Za-z0-9.\\x01]+)';
+  const bruch = new RegExp('(' + OPERAND + ')\\s*/\\s*(' + OPERAND + ')');
+  for (let runde = 0; runde < 8 && bruch.test(s); runde++) {
+    s = s.replace(bruch, (m, a, b) => {
+      const schale = w => w.replace(/^\((.*)\)$/s, '$1');
+      return '\\frac{' + schale(a) + '}{' + schale(b) + '}';
+    });
+  }
+
+  /* 6. Hoch- und Tiefstellung. Erst die Klammerform e^(-x^2), dann alles
+        mit mehr als einem Zeichen: x^2 kann LaTeX selbst, x^10 wäre ohne
+        Klammern „x hoch 1, dann 0". */
+  s = s.replace(/\^\s*\(([^()]*)\)/g, '^{$1}');
+  s = s.replace(/_\s*\(([^()]*)\)/g, '_{$1}');
+  s = s.replace(/\^\s*([A-Za-z0-9.]{2,})/g, '^{$1}');
+  s = s.replace(/_\s*([A-Za-z0-9.]{2,})/g, '_{$1}');
+
+  // 7. Platzhalter zurück
+  s = s.replace(/\x01(\d+)\x01/g, (m, i) => bewahrt[+i] || '');
+
+  return s.replace(/\s{2,}/g, ' ').trim();
+}
+
 /* ── Formeln im Text finden und durch Doppelklick editierbar machen ── */
 
 /**

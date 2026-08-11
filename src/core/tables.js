@@ -105,15 +105,29 @@ function addRow(table, nachZeile) {
     // Leer, ohne <br> – die Begründung steht in buildTableHtml
     neu.appendChild(document.createElement('td'));
   }
-  muster.parentNode.insertBefore(neu, muster.nextSibling);
+
+  /* Eine Datenzeile gehört nicht in den <thead>. Bei einer aus Word
+     eingefügten Tabelle steht die Musterzeile dort, und die neue Zeile
+     wäre sonst als Kopfzeile erschienen. */
+  const eltern = muster.parentNode;
+  if (eltern && eltern.tagName === 'THEAD') {
+    let koerper = table.querySelector('tbody');
+    if (!koerper) {
+      koerper = document.createElement('tbody');
+      eltern.after(koerper);
+    }
+    koerper.insertBefore(neu, koerper.firstChild);
+  } else {
+    eltern.insertBefore(neu, muster.nextSibling);
+  }
   return neu;
 }
 
 /** Eine Spalte rechts neben der angegebenen – oder ganz hinten. */
 function addColumn(table, nachIndex) {
   const zeilen = [...table.querySelectorAll('tr')];
-  if (!zeilen.length) return;
-  if (zeilen[0].children.length >= TBL_MAX) return;
+  if (!zeilen.length) return false;
+  if (zeilen[0].children.length >= TBL_MAX) return false;
 
   for (const zeile of zeilen) {
     const kopf = zeile.parentNode && zeile.parentNode.tagName === 'THEAD';
@@ -124,6 +138,16 @@ function addColumn(table, nachIndex) {
     if (bezug) zeile.insertBefore(zelle, bezug.nextSibling);
     else zeile.appendChild(zelle);
   }
+
+  // Feste Breiten mitziehen, sonst rutschen sie um eine Spalte
+  const grp = table.querySelector('colgroup');
+  if (grp) {
+    const col = document.createElement('col');
+    const bezug = (nachIndex >= 0) ? grp.children[nachIndex] : null;
+    if (bezug) grp.insertBefore(col, bezug.nextSibling);
+    else grp.appendChild(col);
+  }
+  return true;
 }
 
 /** Die Zeile weg – die letzte nicht, sonst bliebe eine leere Tabelle. */
@@ -236,30 +260,88 @@ function tableBar() {
     return b;
   };
 
+  /**
+   * Führt einen Handgriff an der Tabelle aus und räumt danach auf.
+   *
+   * >>> Warum der Textbereich VORHER gemerkt wird <<<
+   * „Tabelle löschen" nahm die Tabelle aus dem Baum und rief danach
+   * notiereTabelle(pos.table) – das sucht sich seinen Textbereich über
+   * table.closest('.j-text'), und an einer herausgelösten Tabelle ist der
+   * null. Die Löschung wurde also NIE gespeichert: nach dem Neuladen war
+   * die Tabelle wieder da.
+   *
+   * >>> Und warum danach auf isConnected geprüft wird <<<
+   * Anschließend lief positionTableBar(cell) auf derselben herausgelösten
+   * Zelle. cell.closest('table') findet die abgehängte Tabelle noch, also
+   * galt sie als vorhanden, und getBoundingClientRect() liefert lauter
+   * Nullen – die Leiste sprang auf 8/6 und klebte in der Ecke fest.
+   * Genau so wurde es gemeldet.
+   */
   const mitZelle = (fn) => () => {
     const cell = tblBar._zelle;
-    if (!cell || !cell.isConnected) return;
+    if (!cell || !cell.isConnected) { versteckeTableBar(); return; }
+    if (S.readOnly) {
+      if (typeof toast === 'function') toast(t('sharedNoRight'), true);
+      return;
+    }
+
     const pos = cellPos(cell);
+    if (!pos.table) { versteckeTableBar(); return; }
+
+    // Vor dem Eingriff merken – danach kann die Tabelle weg sein
+    const textDiv = pos.table.closest('.j-text');
+    if (typeof pushPageHistory === 'function') {
+      const pgEl = textDiv && textDiv.closest('[data-pgid]');
+      const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
+      if (info) pushPageHistory(info.page);
+    }
+
     fn(pos, cell);
-    notiereTabelle(pos.table);
-    positionTableBar(cell);
+
+    notiereText(textDiv);
+    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+
+    // Nur nachführen, wenn Zelle UND Tabelle noch im Baum hängen
+    if (cell.isConnected && pos.table.isConnected) positionTableBar(cell);
+    else versteckeTableBar();
   };
 
   const txt = (key, ersatz) => (typeof t === 'function' && t(key)) || ersatz;
+  const meldung = (key, ersatz) => {
+    if (typeof toast === 'function') toast(txt(key, ersatz), true);
+  };
 
   knopf(TBL_ICONS.zeilePlus, txt('tableRowAdd', 'Zeile darunter'),
-    mitZelle(pos => addRow(pos.table, pos.zeile)));
+    mitZelle(pos => {
+      const neu = addRow(pos.table, pos.zeile);
+      // Ohne Rückmeldung wirkt ein stiller Anschlag wie ein kaputter Knopf
+      if (!neu) return meldung('tableMaxRows', 'Mehr Zeilen passen nicht auf die Seite.');
+      focusCell(neu.children[pos.spalte] || neu.children[0]);
+    }));
   knopf(TBL_ICONS.zeileMinus, txt('tableRowDel', 'Zeile löschen'),
-    mitZelle((pos, cell) => {
+    mitZelle((pos) => {
       const nachbar = pos.zeile.nextElementSibling || pos.zeile.previousElementSibling;
-      if (removeRow(pos.table, pos.zeile) && nachbar) focusCell(nachbar.children[pos.spalte] || nachbar.children[0]);
+      if (!removeRow(pos.table, pos.zeile)) return meldung('tableLastRow', 'Die letzte Zeile bleibt.');
+      if (nachbar) {
+        const ziel = nachbar.children[pos.spalte] || nachbar.children[0];
+        focusCell(ziel);
+        tblBar._zelle = ziel;
+      }
     }));
   knopf(TBL_ICONS.spaltePlus, txt('tableColAdd', 'Spalte rechts'),
-    mitZelle(pos => addColumn(pos.table, pos.spalte)));
+    mitZelle(pos => {
+      if (!addColumn(pos.table, pos.spalte)) return meldung('tableMaxCols', 'Mehr Spalten passen nicht auf die Seite.');
+      const ziel = pos.zeile.children[pos.spalte + 1];
+      if (ziel) { focusCell(ziel); tblBar._zelle = ziel; }
+    }));
   knopf(TBL_ICONS.spalteMinus, txt('tableColDel', 'Spalte löschen'),
-    mitZelle(pos => removeColumn(pos.table, pos.spalte)));
+    mitZelle(pos => {
+      if (!removeColumn(pos.table, pos.spalte)) return meldung('tableLastCol', 'Die letzte Spalte bleibt.');
+      const ziel = pos.zeile.children[Math.min(pos.spalte, pos.zeile.children.length - 1)];
+      if (ziel) { focusCell(ziel); tblBar._zelle = ziel; }
+    }));
   knopf(TBL_ICONS.weg, txt('tableDelete', 'Tabelle löschen'),
-    mitZelle(pos => { pos.table.remove(); versteckeTableBar(); }));
+    mitZelle(pos => { pos.table.remove(); }));
 
   document.body.appendChild(tblBar);
   return tblBar;
@@ -268,17 +350,26 @@ function tableBar() {
 function positionTableBar(cell) {
   const bar = tableBar();
   const table = cell && cell.closest('table');
-  if (!table) { versteckeTableBar(); return; }
+  /* isConnected und nicht nur „gibt es eine Tabelle": eine herausgelöste
+     Tabelle findet closest() noch, und ihr getBoundingClientRect() ist
+     lauter Null – die Leiste landete dann in der linken oberen Ecke des
+     Fensters und blieb dort kleben. */
+  if (!table || !table.isConnected) { versteckeTableBar(); return; }
 
   bar._zelle = cell;
   bar.style.display = 'flex';
   const r = table.getBoundingClientRect();
+  if (!r.width && !r.height) { versteckeTableBar(); return; }
+
   const h = bar.offsetHeight || 30;
+  const b = bar.offsetWidth || 160;
   /* Über der Tabelle, und wenn dort kein Platz ist, darunter. Gemessen
      wird am Fenster, denn die Leiste hängt am body – sie soll nicht mit
      der Seite skalieren, sonst wäre sie im Hochformat winzig. */
   const oben = r.top - h - 6;
-  bar.style.left = Math.round(Math.max(8, r.left)) + 'px';
+  // Rechts nicht hinauslaufen lassen (wie beim Einfügen-Menü)
+  const links = Math.max(8, Math.min(window.innerWidth - b - 8, r.left));
+  bar.style.left = Math.round(links) + 'px';
   bar.style.top = Math.round(oben > 60 ? oben : r.bottom + 6) + 'px';
 }
 
@@ -288,10 +379,14 @@ function versteckeTableBar() {
   tblBar._zelle = null;
 }
 
-/** Eine Änderung an der Tabelle ist eine Änderung der Seite. */
-function notiereTabelle(table) {
-  const textDiv = table && table.closest ? table.closest('.j-text') : null;
-  if (!textDiv) return;
+/**
+ * Eine Änderung im Text festhalten und weitergeben.
+ *
+ * Nimmt den TEXTBEREICH, nicht die Tabelle: nach einem „Tabelle löschen"
+ * gibt es keine Tabelle mehr, von der aus man ihn finden könnte.
+ */
+function notiereText(textDiv) {
+  if (!textDiv || !textDiv.isConnected) return;
   const pgEl = textDiv.closest('[data-pgid]');
   const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
   if (!info) return;
@@ -299,6 +394,11 @@ function notiereTabelle(table) {
   info.page.textContent = textDiv.innerHTML;
   if (window.Collab) Collab.noteTextChange(info.page.id, info.page.textContent);
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+}
+
+/** Wie notiereText, aber ausgehend von der Tabelle. */
+function notiereTabelle(table) {
+  notiereText(table && table.closest ? table.closest('.j-text') : null);
 }
 
 /**
@@ -314,29 +414,157 @@ function insertTable(zeilen, spalten) {
   }
   if (S.readOnly) { if (typeof toast === 'function') toast(t('sharedNoRight'), true); return false; }
 
+  /* Keine Tabelle in einer Tabelle: das bringt die Schreibmarken
+     (canvas/text.js zählt <tr> als Block) und den Word-Export durcheinander. */
+  if (currentCell()) {
+    if (typeof toast === 'function') toast(t('tableInTable') || 'In einer Tabelle geht das nicht.', true);
+    return false;
+  }
+
   const pgEl = textDiv.closest('[data-pgid]');
   const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
   if (!info) return false;
 
   if (typeof pushPageHistory === 'function') pushPageHistory(info.page);
 
+  /* Die vorhandenen Tabellen VORHER merken. Der data-ready-Umweg half
+     nicht: das Attribut wurde gleich danach wieder entfernt, also traf
+     :not([data-ready]) beim nächsten Mal wieder die erste Tabelle der
+     Seite – die Marke landete in der falschen. */
+  const vorher = new Set(textDiv.querySelectorAll('table.j-table'));
+
   /* Nach der Tabelle ein leerer Absatz, sonst käme man hinter ihr nicht
      mehr in den Text – eine Tabelle am Ende der Seite wäre eine Sackgasse. */
   document.execCommand('insertHTML', false,
     buildTableHtml(zeilen, spalten) + '<p><br></p>');
 
-  const table = textDiv.querySelector('table.j-table:not([data-ready])');
-  if (table) {
-    table.dataset.ready = '1';
-    focusCell(table.querySelector('th, td'));
-  }
-  // dataset landet als Attribut im Text – wieder weg damit
-  textDiv.querySelectorAll('table[data-ready]').forEach(el => el.removeAttribute('data-ready'));
+  const table = [...textDiv.querySelectorAll('table.j-table')].find(el => !vorher.has(el));
+  if (table) focusCell(table.querySelector('th, td'));
 
   notiereTabelle(table || textDiv.querySelector('table'));
   if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   return true;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SPALTENBREITE ZIEHEN
+
+   Wie in Word: an die Grenze zwischen zwei Spalten fahren, der Zeiger
+   wird zum Doppelpfeil, ziehen.
+
+   >>> Warum <colgroup> und nicht style="width" an der Zelle <<<
+   core/sanitize.js laesst von einem style nur die Farbe stehen – eine
+   Breite an der Zelle waere beim naechsten Abgleich weg. <col width="…">
+   geht durch, seit sanitize.js COLGROUP/COL und das width-Attribut
+   kennt. Ausserdem gilt eine col-Breite fuer die ganze Spalte; an der
+   Zelle muesste sie in jeder Zeile stehen.
+   ══════════════════════════════════════════════════════════════════════ */
+const TBL_GREIF = 5;        // so nah an der Grenze fasst der Zeiger
+const TBL_MIN_SPALTE = 28;  // schmaler wird keine Spalte
+
+let tblZieh = null;         // { table, index, startX, startBreite, gesamt }
+
+/** Sorgt dafuer, dass die Tabelle ein <colgroup> mit festen Breiten hat. */
+function sichereColgroup(table) {
+  let grp = table.querySelector('colgroup');
+  const spalten = table.querySelector('tr') ? table.querySelector('tr').children.length : 0;
+  if (!spalten) return null;
+
+  if (!grp) {
+    grp = document.createElement('colgroup');
+    table.insertBefore(grp, table.firstChild);
+  }
+  while (grp.children.length < spalten) grp.appendChild(document.createElement('col'));
+  while (grp.children.length > spalten) grp.lastElementChild.remove();
+
+  /* Beim ersten Mal die jetzigen Breiten festschreiben. Ohne das spraenge
+     die Tabelle beim ersten Ziehen um, weil table-layout:auto vorher alles
+     nach Inhalt verteilt hat. */
+  const erste = table.querySelector('tr');
+  [...grp.children].forEach((col, i) => {
+    if (col.getAttribute('width')) return;
+    const zelle = erste.children[i];
+    if (zelle) col.setAttribute('width', Math.round(zelle.getBoundingClientRect().width));
+  });
+  return grp;
+}
+
+/** An welcher Spaltengrenze steht der Zeiger – oder -1. */
+function grenzeUnter(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const zelle = el && el.closest ? el.closest('td, th') : null;
+  if (!zelle || !zelle.closest('.j-text')) return { index: -1 };
+
+  const table = zelle.closest('table.j-table');
+  if (!table) return { index: -1 };
+
+  const r = zelle.getBoundingClientRect();
+  const spalte = [...zelle.parentNode.children].indexOf(zelle);
+
+  // Rechte Kante dieser Zelle
+  if (Math.abs(e.clientX - r.right) <= TBL_GREIF) return { table, index: spalte };
+  // Linke Kante = rechte Kante der Spalte davor
+  if (Math.abs(e.clientX - r.left) <= TBL_GREIF && spalte > 0) return { table, index: spalte - 1 };
+  return { index: -1 };
+}
+
+document.addEventListener('pointermove', e => {
+  if (tblZieh) {
+    e.preventDefault();
+    const grp = tblZieh.grp;
+    const col = grp.children[tblZieh.index];
+    if (!col) return;
+    /* In Seiten-Koordinaten rechnen: der Zoom ist ein CSS-transform, ein
+       Pixel auf dem Schirm ist also nicht ein Pixel auf dem Papier. */
+    const dx = (e.clientX - tblZieh.startX) / (tblZieh.zoom || 1);
+    const neu = Math.max(TBL_MIN_SPALTE, Math.round(tblZieh.startBreite + dx));
+    col.setAttribute('width', neu);
+    return;
+  }
+
+  if (S.mode !== 'cursor' || S.readOnly) return;
+  const treffer = grenzeUnter(e);
+  const textDiv = e.target && e.target.closest ? e.target.closest('.j-text') : null;
+  if (textDiv) textDiv.style.cursor = treffer.index >= 0 ? 'col-resize' : '';
+}, { passive: false });
+
+document.addEventListener('pointerdown', e => {
+  if (S.mode !== 'cursor' || S.readOnly) return;
+  const treffer = grenzeUnter(e);
+  if (treffer.index < 0) return;
+
+  const grp = sichereColgroup(treffer.table);
+  if (!grp) return;
+  const col = grp.children[treffer.index];
+  if (!col) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const textDiv = treffer.table.closest('.j-text');
+  const pgEl = textDiv && textDiv.closest('[data-pgid]');
+  const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
+  if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
+
+  tblZieh = {
+    table: treffer.table,
+    grp,
+    index: treffer.index,
+    startX: e.clientX,
+    startBreite: parseFloat(col.getAttribute('width')) || 100,
+    zoom: typeof getZoom === 'function' ? getZoom() : 1,
+    textDiv
+  };
+  treffer.table.classList.add('j-tbl-resizing');
+}, true);
+
+document.addEventListener('pointerup', () => {
+  if (!tblZieh) return;
+  tblZieh.table.classList.remove('j-tbl-resizing');
+  notiereText(tblZieh.textDiv);
+  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+  tblZieh = null;
+});
 
 /* Die Leiste folgt der Schreibmarke. Über selectionchange und nicht über
    einen Klick: die Marke wandert auch mit den Pfeiltasten und mit Tab. */
@@ -352,6 +580,21 @@ document.addEventListener('scroll', () => {
     positionTableBar(tblBar._zelle);
   }
 }, true);
+
+/* Beim Wechsel der Fenstergroesse ebenso – sonst steht sie schief, sobald
+   der Seitenbereich anders sitzt. */
+window.addEventListener('resize', () => {
+  if (tblBar && tblBar._zelle && tblBar.style.display !== 'none') {
+    positionTableBar(tblBar._zelle);
+  }
+}, { passive: true });
+
+/* Wird die Seite neu aufgebaut (Abgleich, Seitenwechsel, Heftwechsel),
+   zeigt _zelle auf eine Zelle, die es nicht mehr gibt. Die Leiste bliebe
+   sonst stehen und haenge an einem Leichnam. */
+window.versteckeTableBarWennWeg = function () {
+  if (tblBar && tblBar._zelle && !tblBar._zelle.isConnected) versteckeTableBar();
+};
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { buildTableHtml, TBL_MAX, TBL_GRID_MAX };

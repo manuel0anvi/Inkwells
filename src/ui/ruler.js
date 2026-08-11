@@ -20,9 +20,20 @@
 
 (function () {
   /* ── Maße ──────────────────────────────────────────────────────────── */
-  const LINEAL_W = 420;          // CSS-Pixel, gesamte Breite
   const LINEAL_H = 58;           // CSS-Pixel, gesamte Höhe
   const LINEAL_H_PAD = 16;       // Platz über den Strichen (für Griff)
+
+  /* Die Breite ist NICHT fest: das Lineal ist so lang wie die Seite breit
+     ist. Ein 420 px langes Stück auf einer 953 px breiten Seite reicht für
+     keinen Rand bis Rand gezogenen Strich – genau so wurde es gemeldet.
+     Weil der Zoom die Seite skaliert, wird die Breite bei jeder
+     Zoom-Änderung neu gerechnet (passeGroesseAn). */
+  let linealBreite = 794;
+
+  function seitenBreite() {
+    const z = typeof getZoom === 'function' ? getZoom() : 1;
+    return Math.max(200, Math.round((CFG.PAGE_W || 794) * z));
+  }
 
   /* echte mm je CSS-Pixel. A4-Seite: 794 px / 210 mm ≈ 3,78 px/mm.
      Bei Zoom z: 1 mm = 3.78 * z px. */
@@ -56,13 +67,31 @@
   }
 
   /* ── Lineal malen ─────────────────────────────────────────────────── */
-  const ln = neuesCanvas(LINEAL_W, LINEAL_H);
+  const ln = neuesCanvas(linealBreite, LINEAL_H);
   document.body.appendChild(ln.canvas);
+
+  /** Bringt das Canvas auf Seitenbreite. Gibt zurück, ob sich etwas
+   *  geändert hat – dann muss neu gemalt werden. */
+  function passeGroesseAn() {
+    const w = seitenBreite();
+    if (w === linealBreite) return false;
+    linealBreite = w;
+
+    const dpr = ln.dpr;
+    ln.canvas.width = Math.round(w * dpr);
+    ln.canvas.height = Math.round(LINEAL_H * dpr);
+    ln.canvas.style.width = w + 'px';
+    ln.canvas.style.height = LINEAL_H + 'px';
+    // Das Setzen von width/height leert den Kontext samt Transformation
+    ln.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ln.ctx.scale(dpr, dpr);
+    return true;
+  }
 
   function maleLineal() {
     const ctx = ln.ctx;
     const dpr = ln.dpr;
-    const w = LINEAL_W, h = LINEAL_H;
+    const w = linealBreite, h = LINEAL_H;
     const pmm = pxJeMm();
     const top = LINEAL_H_PAD;
 
@@ -109,7 +138,7 @@
   }
 
   /* ── Zustand ──────────────────────────────────────────────────────── */
-  const lineal = { x: 200, y: 300, winkel: 0, an: false };
+  const lineal = { x: 200, y: 300, winkel: 0, an: false, gesetzt: false };
 
   function aktualisiereLinealPos() {
     ln.canvas.style.left = Math.round(lineal.x) + 'px';
@@ -170,7 +199,9 @@
 
   /* ── Neumalen bei Zoom-Änderung ────────────────────────────────────── */
   function beimZoomen() {
-    if (lineal.an) maleLineal();
+    if (!lineal.an) return;
+    passeGroesseAn();   // Seitenbreite hat sich mit dem Zoom geändert
+    maleLineal();
   }
 
   // Die App feuert kein eigenes Zoom-Ereignis. Der sicherste Weg ist,
@@ -235,11 +266,13 @@
   function umschaltenLineal() {
     lineal.an = !lineal.an;
     if (lineal.an) {
-      // Beim ersten Mal in der Seitenmitte platzieren
-      if (lineal.x === 200 && lineal.y === 300) {
+      passeGroesseAn();
+      // Beim ersten Mal über der Seite platzieren
+      if (!lineal.gesetzt) {
         const m = seitenMitte();
-        lineal.x = m.x - LINEAL_W / 2;
+        lineal.x = m.x - linealBreite / 2;
         lineal.y = m.y - LINEAL_H / 2;
+        lineal.gesetzt = true;
       }
       maleLineal();
       ln.canvas.style.display = 'block';
@@ -249,6 +282,27 @@
     }
     aktualisiereKnopfZustand();
   }
+
+  /** Ausblenden, ohne den Zustand zu behalten – für den Weg zur Startseite. */
+  function versteckeLineal() {
+    if (!lineal.an) return;
+    lineal.an = false;
+    ln.canvas.style.display = 'none';
+    aktualisiereKnopfZustand();
+  }
+
+  /* Auf der Startseite hat das Lineal nichts zu suchen: es liegt fest am
+     Fenster (position:fixen), die Heft-Übersicht schiebt es nicht weg, und
+     der Knopf zum Ausschalten steht in der Editor-Leiste, die dort gar
+     nicht da ist – man wurde es also nicht mehr los. */
+  (function haengeAnSeitenwechsel() {
+    const orig = window.showHome;
+    if (typeof orig !== 'function') return setTimeout(haengeAnSeitenwechsel, 200);
+    window.showHome = function () {
+      versteckeLineal();
+      return orig.apply(this, arguments);
+    };
+  })();
 
   /* ── Start ────────────────────────────────────────────────────────── */
   if (document.readyState === 'loading') {
@@ -266,7 +320,7 @@
   window.getRulerState = function () {
     if (!lineal.an) return null;
     return { x: lineal.x, y: lineal.y, winkel: lineal.winkel || 0,
-             w: LINEAL_W, h: LINEAL_H, hPad: LINEAL_H_PAD };
+             w: linealBreite, h: LINEAL_H, hPad: LINEAL_H_PAD };
   };
 
 })();

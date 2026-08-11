@@ -210,24 +210,50 @@ body.touch-draw .j-canvas {
 
 .j-text table.j-table td,
 .j-text table.j-table th {
-  border: 1px solid var(--pl, #d4cdc0);
-  padding: 3px 7px;
-  vertical-align: top;
+  /* >>> Warum nicht var(--pl) <<<
+     Das ist die Farbe der Papierlinien. Eine Tabelle war damit von der
+     Linierung nicht zu unterscheiden – gemeldet als „man sieht nichts".
+     Ein Tabellenrand ist gezogen, kein Papier: er gehoert dunkel. */
+  border: 1px solid rgba(28, 20, 10, .72);
+  padding: 0 7px;
+  vertical-align: middle;
   /* Ohne das reisst ein langes Wort die Spalte auf, statt umzubrechen */
   word-break: break-word;
   overflow-wrap: break-word;
   min-width: 28px;
-  /* Die Zellen sind LEER, ohne <br> (Begruendung in core/tables.js).
-     Bei einer Tabellenzelle wirkt `height` als MINDESTmass – eine leere
-     Zeile ist damit anzuklicken, ohne dass ein Platzhalter im Text
-     steht, den die Schreibmarken mitzaehlen muessten. */
-  height: 1.2em
+
+  /* >>> Zeilenhoehe statt 1.2em <<<
+     Bei einer Tabellenzelle wirkt `height` als MINDESTmass. Es stand auf
+     1.2em (= 20,4 px bei 17 px Schrift), die Zeilenhoehe der Seite ist
+     aber 24 oder 32 px (canvas/text.js lhForBg). Eine leere Zelle war
+     damit 20 px hoch – und in dem Augenblick, in dem die Schreibmarke
+     hineinfuhr, entstand eine Zeilenbox von 32 px und die ganze Tabelle
+     sprang auf. Genau das war „beim Draufdruecken wird sie groesser".
+
+     --lh setzt app.js zusammen mit der line-height. Damit ist eine
+     Tabellenzeile genau eine Textzeile hoch, die Tabelle sitzt auf der
+     Linierung, und sie waechst erst, wenn wirklich umgebrochen wird. */
+  height: var(--lh, 32px)
 }
 
 .j-text table.j-table th {
   font-weight: 600;
   text-align: left;
-  background: rgba(0, 0, 0, .035)
+  background: rgba(28, 20, 10, .07)
+}
+
+/* Beim Ziehen an einer Spaltengrenze (core/tables.js) */
+.j-text table.j-table.j-tbl-resizing {
+  cursor: col-resize;
+  user-select: none
+}
+
+.j-tbl-resize-hint {
+  position: fixed;
+  z-index: 1255;
+  width: 2px;
+  background: var(--gold, #c9a227);
+  pointer-events: none
 }
 
 /* Die Leiste an der Tabelle – dieselbe Machart wie die am Bild, aber am
@@ -327,6 +353,120 @@ body.touch-draw .j-canvas {
   display: flex;
   gap: 16px;
   margin: 8px 0 0
+}
+
+/* ── Zeichen-Palette ──────────────────────────────────────────────── */
+.formula-palette {
+  margin: 0 0 12px
+}
+
+.formula-palette-tabs {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-bottom: 6px
+}
+
+.formula-palette-tab {
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--md);
+  cursor: pointer
+}
+
+.formula-palette-tab:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.formula-palette-tab.active {
+  background: var(--sh2);
+  border-color: var(--sb2);
+  color: var(--gold)
+}
+
+.formula-palette-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 7px;
+  background: var(--sp);
+  border: 1px solid var(--sb2);
+  border-radius: 8px;
+  max-height: 132px;
+  overflow-y: auto
+}
+
+.formula-sym {
+  min-width: 34px;
+  height: 32px;
+  padding: 2px 6px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 5px;
+  color: var(--hi);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1
+}
+
+.formula-sym:hover {
+  background: var(--sh2);
+  border-color: var(--gold)
+}
+
+/* KaTeX malt die Zeichen – es darf den Knopf nicht sprengen */
+.formula-sym .katex {
+  font-size: 1em
+}
+
+/* ── Normale Schreibweise ─────────────────────────────────────────── */
+.formula-simple-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--md);
+  cursor: pointer
+}
+
+.formula-simple-row input[type="checkbox"] {
+  accent-color: var(--gold)
+}
+
+.formula-translated {
+  margin: 6px 0 0;
+  padding: 5px 9px;
+  background: var(--sp);
+  border: 1px dashed var(--sb2);
+  border-radius: 5px;
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--lo);
+  word-break: break-all
+}
+
+@media (any-pointer: coarse) {
+
+  .formula-sym {
+    min-width: 40px;
+    height: 38px
+  }
+
+  .formula-palette-tab {
+    padding: 7px 11px
+  }
+
+  .formula-palette-grid {
+    max-height: 150px
+  }
 }
 
 .formula-display-label {
@@ -905,241 +1045,283 @@ body.touch-draw .j-canvas {
   z-index: 1150;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   KOMMENTAR-LEISTE UND -KARTEN
-   ═══════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════
+   KOMMENTARE
 
-.comment-panel {
+   Die Leiste ist ein Geschwister von .editor-col in der .journal-layout-
+   Zeile – wie die Seitenleiste links, nur rechts. Sie steht immer, auch
+   ohne Kommentare; zugeklappt schrumpft sie auf null.
+   ══════════════════════════════════════════════════════════════════════ */
+.comment-rail {
+  flex: 0 0 auto;
+  width: 290px;
   display: flex;
   flex-direction: column;
-  width: 300px;
-  min-width: 260px;
-  max-height: calc(100vh - 60px);
-  position: sticky;
-  top: 56px;
-  background: var(--panel, #f9f8f6);
-  border-left: 1px solid var(--hair, #d8d6d1);
-  overflow-y: auto;
-  overflow-x: hidden;
-  z-index: 1040;
-  font-size: 13px;
+  background: var(--sc);
+  border-left: 1px solid var(--sb2);
+  overflow: hidden;
+  transition: width .18s ease
 }
 
-.comment-panel-head {
+.comment-rail.zu {
+  width: 0;
+  border-left-width: 0
+}
+
+.comment-rail-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--hair, #d8d6d1);
-  position: sticky;
-  top: 0;
-  background: inherit;
-  z-index: 1;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--sb2);
+  flex-shrink: 0
 }
 
-.comment-panel-title {
+.comment-rail-title {
+  font-size: 13px;
   font-weight: 600;
-  font-size: 14px;
-  color: var(--tx1, #1a1510);
+  color: var(--hi);
+  white-space: nowrap
 }
 
-.comment-panel-close {
+.comment-rail-close {
   background: none;
   border: none;
+  color: var(--md);
   cursor: pointer;
-  font-size: 16px;
-  color: var(--tx2, #6b6560);
+  font-size: 14px;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 5px;
+  flex-shrink: 0
 }
 
-.comment-panel-close:hover {
-  background: var(--hover, #e8e5df);
-  color: var(--tx1, #1a1510);
+.comment-rail-close:hover {
+  background: var(--sh2);
+  color: var(--hi)
 }
 
 .comment-list {
   flex: 1;
+  overflow-y: auto;
   padding: 8px;
+  min-width: 274px
 }
 
+.comment-empty {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--lo);
+  text-align: center;
+  min-width: 274px
+}
+
+/* ── Karten ───────────────────────────────────────────────────────── */
 .comment-card {
-  background: #fff;
-  border: 1px solid var(--hair, #d8d6d1);
+  background: var(--sp);
+  border: 1px solid var(--sb2);
   border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  transition: background .3s, box-shadow .3s;
+  padding: 9px 11px;
+  margin-bottom: 7px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s
+}
+
+.comment-card:hover,
+.comment-card.aktiv {
+  border-color: var(--gold)
+}
+
+.comment-card.blitz {
+  box-shadow: 0 0 0 2px var(--gold)
 }
 
 .comment-card.resolved {
-  opacity: .55;
-  background: var(--panel, #f9f8f6);
-}
-
-.comment-card.highlight {
-  box-shadow: 0 0 0 3px #ffb74d;
+  opacity: .5
 }
 
 .comment-card-head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px
+}
+
+.comment-card-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0
 }
 
 .comment-card-author {
-  font-weight: 600;
   font-size: 12px;
-  color: var(--tx1, #1a1510);
+  font-weight: 600;
+  color: var(--hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
 }
 
 .comment-card-time {
   font-size: 11px;
-  color: var(--tx3, #9b9590);
+  color: var(--lo);
+  margin-left: auto;
+  flex-shrink: 0
+}
+
+/* Der kommentierte Ausschnitt – damit man weiss, worum es geht */
+.comment-card-quote {
+  font-size: 11px;
+  color: var(--lo);
+  border-left: 2px solid var(--sb2);
+  padding-left: 7px;
+  margin-bottom: 5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden
 }
 
 .comment-card-text {
   font-size: 13px;
   line-height: 1.45;
-  color: var(--tx1, #1a1510);
-  margin: 4px 0 8px;
+  color: var(--hi);
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: break-word
+}
+
+.comment-replies {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--sb2)
+}
+
+.comment-reply {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0
+}
+
+.comment-reply-author {
+  font-weight: 600;
+  color: var(--md);
+  flex-shrink: 0
+}
+
+.comment-reply-text {
+  color: var(--hi);
+  word-break: break-word
 }
 
 .comment-card-btns {
   display: flex;
   gap: 4px;
-  margin-top: 6px;
+  margin-top: 7px;
+  flex-wrap: wrap
 }
 
 .comment-card-btns .sm-action {
   font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid var(--hair, #d8d6d1);
-  border-radius: 4px;
-  background: var(--panel, #f9f8f6);
-  color: var(--tx2, #6b6560);
-  cursor: pointer;
+  padding: 3px 8px;
+  border: 1px solid var(--sb2);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--md);
+  cursor: pointer
 }
 
 .comment-card-btns .sm-action:hover {
-  background: var(--hover, #e8e5df);
-  color: var(--tx1, #1a1510);
-}
-
-.comment-card-btns .sm-action.danger {
-  color: #c62828;
+  background: var(--sh2);
+  color: var(--hi)
 }
 
 .comment-card-btns .sm-action.danger:hover {
-  background: #ffebee;
-  border-color: #ef9a9a;
+  background: rgba(198, 40, 40, .18);
+  border-color: #c62828;
+  color: #ff8a80
 }
 
-/* Antworten */
-.comment-replies {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--hair, #d8d6d1);
-}
-
-.comment-reply {
-  padding: 4px 0;
+/* ── Der Knopf an der Auswahl ─────────────────────────────────────── */
+.comment-add-pop {
+  position: fixed;
+  z-index: 1290;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 7px;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  color: var(--hi);
   font-size: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: baseline;
+  cursor: pointer
 }
 
-.comment-reply-author {
-  font-weight: 600;
-  color: var(--tx2, #6b6560);
+.comment-add-pop:hover {
+  border-color: var(--gold)
 }
 
-.comment-reply-text {
-  color: var(--tx1, #1a1510);
-  flex: 1;
-  min-width: 120px;
-}
-
-.comment-reply-time {
-  font-size: 10px;
-  color: var(--tx3, #9b9590);
-}
-
-/* Zeile zum Hinzufügen */
-.comment-add-row {
-  padding: 8px 12px 12px;
-  border-top: 1px solid var(--hair, #d8d6d1);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: sticky;
-  bottom: 0;
-  background: inherit;
-}
-
-.comment-add-row textarea {
-  width: 100%;
-  resize: vertical;
-  font: inherit;
+.comment-add-pop-icon {
   font-size: 13px;
-  padding: 6px 8px;
-  border: 1px solid var(--hair, #d8d6d1);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--tx1, #1a1510);
-  outline: none;
-  min-height: 48px;
+  line-height: 1
 }
 
-.comment-add-row textarea:focus {
-  border-color: #90a4ae;
-  box-shadow: 0 0 0 2px rgba(144, 164, 174, .25);
-}
-
-.comment-add-row .ok-btn {
-  align-self: flex-end;
-  font-size: 12px;
-  padding: 5px 14px;
-  border: none;
-  border-radius: 6px;
-  background: #546e7a;
-  color: #fff;
+/* ── Die markierte Stelle im Text ─────────────────────────────────────
+   Auf dem Papier, nicht in der dunklen Oberflaeche: deshalb eine warme
+   Unterlegung statt der Leistenfarben. */
+.j-text .j-comment-mark {
+  background: rgba(255, 196, 61, .28);
+  border-bottom: 2px solid rgba(214, 158, 46, .75);
+  border-radius: 2px;
   cursor: pointer;
+  transition: background .14s
 }
 
-.comment-add-row .ok-btn:hover {
-  background: #37474f;
+.j-text .j-comment-mark:hover,
+.j-text .j-comment-mark.j-aktiv {
+  background: rgba(255, 196, 61, .55)
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   KOMMENTAR-MARKEN IM TEXT
-   ═══════════════════════════════════════════════════════════════════════ */
-
-.j-comment-marker {
-  display: inline;
-  cursor: pointer;
-  user-select: none;
-  font-size: .9em;
-  vertical-align: middle;
-  padding: 0 1px;
-  border-radius: 3px;
-  transition: background .2s;
+.j-text .j-comment-mark.j-resolved {
+  background: rgba(120, 160, 120, .16);
+  border-bottom-color: rgba(90, 130, 90, .5)
 }
 
-.j-comment-marker:hover {
-  background: rgba(255, 183, 77, .35);
+/* ── Schmales Fenster: die Leiste braucht den Platz nicht wegzunehmen ── */
+@media (max-width: 1100px) {
+  .comment-rail {
+    width: 240px
+  }
+
+  .comment-list,
+  .comment-empty {
+    min-width: 224px
+  }
 }
 
-.j-comment-marker.j-resolved {
-  opacity: .6;
+@media (max-width: 900px) {
+  .comment-rail:not(.zu) {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 1285;
+    box-shadow: -8px 0 28px rgba(0, 0, 0, .5)
+  }
 }
 
-.j-comment-marker.j-no-data {
-  opacity: .3;
-  cursor: default;
+@media (any-pointer: coarse) {
+  .comment-card-btns .sm-action {
+    padding: 6px 11px
+  }
+
+  .comment-add-pop {
+    padding: 9px 14px;
+    font-size: 13px
+  }
 }

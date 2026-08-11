@@ -83,14 +83,44 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   const btnNext = E('btn-tb-next');
   if (!bar || !btnPrev || !btnNext) return;
 
-  /* Die Gruppen der Leiste, als flache Liste von links nach rechts –
-     jede Gruppe und jeder Trenner ist ein „Stück", das umgeblättert
-     werden kann. Die Pfeile selbst gehören nicht dazu. */
-  function stuecke() {
+  const istTrenner = el => el.classList
+    && (el.classList.contains('tb-sep') || el.classList.contains('tb-sep-sm'));
+
+  /**
+   * Die blätterbaren Stücke, von links nach rechts.
+   *
+   * >>> Gruppen, nicht Zonen <<<
+   * Gezählt wurden bisher die drei Zonen (.tb-left/.tb-center/.tb-right).
+   * Damit war das kleinste, was weichen konnte, eine ganze Zone – und die
+   * Mitte trägt sowohl die Textformate ALS AUCH das Einfügen. Schon ein
+   * Pixel Überlänge nahm also das „+" mit, obwohl daneben noch Platz war.
+   * Genau so wurde es gemeldet. Jetzt ist eine Gruppe ein Stück.
+   *
+   * >>> Der Trenner reist mit seiner Gruppe <<<
+   * Sonst bliebe ein Strich ohne Knöpfe daneben stehen.
+   *
+   * >>> Die Pfeile bleiben immer <<<
+   * Sie liegen selbst in .tb-right. Wurde die Zone ausgeblendet, war auch
+   * das ▶ weg – man kam nicht mehr zurück.
+   */
+  function sammleStuecke() {
     const alle = [];
-    for (const kind of bar.children) {
-      if (kind === btnPrev || kind === btnNext) continue;
-      alle.push(kind);
+    for (const zone of bar.querySelectorAll('.tb-zone')) {
+      let offenerTrenner = null;
+      for (const kind of zone.children) {
+        if (kind === btnPrev || kind === btnNext) continue;
+        if (istTrenner(kind)) { offenerTrenner = kind; continue; }
+
+        const teile = offenerTrenner ? [offenerTrenner, kind] : [kind];
+        offenerTrenner = null;
+        /* data-tb-more sagt, was entbehrlich ist: 1 weicht zuerst
+           (Speicher-Hinweis), dann 2 (Teilen, Exportieren), dann 3 (Zoom).
+           Ohne Nummer ist die Gruppe unentbehrlich – die Werkzeuge, die
+           Textformate und das Einfügen bleiben immer auf der ersten Seite,
+           denn für das Einfügen gibt es keinen zweiten Weg. */
+        alle.push({ teile, rang: +(kind.dataset.tbMore || 0) });
+      }
+      if (offenerTrenner) alle.push({ teile: [offenerTrenner], rang: 99 });
     }
     return alle;
   }
@@ -102,67 +132,68 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 
   let aktuelleSeite = 0;     // 0 = erste Seite
   let seiten = [];           // [[stück, stück, ...], [stück, ...]]
+  let alleStuecke = [];      // die Stücke dieser Messung (Identität zählt)
   let geplant = false;
+
+  function setzeSichtbar(stueck, an) {
+    for (const el of stueck.teile) el.style.display = an ? '' : 'none';
+  }
+
+  function versteckePfeile() {
+    btnNext.style.display = 'none';
+    btnPrev.style.display = 'none';
+  }
 
   /** Alle Stücke sichtbar machen – Ausgangszustand vor der Messung. */
   function alleZeigen() {
-    for (const s of stuecke()) s.style.display = '';
+    for (const s of alleStuecke) setzeSichtbar(s, true);
   }
 
   /**
-   * Misst, wie viele Seiten nötig sind, und schneidet die Stücke zu.
+   * Misst, was weichen muss, und teilt in zwei Seiten.
    *
-   * Weil die Pfeile selbst Platz brauchen, wird die Messung mit
-   * sichtbarem ▶-Knopf gemacht. Der ◀-Knopf ist auf Seite 0 nie
-   * sichtbar und wird erst nach dem ersten Blättern gebraucht.
+   * Weil die Pfeile selbst Platz brauchen, wird mit sichtbarem ▶ gemessen.
    */
   function anpassen() {
     geplant = false;
-    if (!bar.offsetParent) { alleZeigen(); btnNext.style.display = 'none'; btnPrev.style.display = 'none'; return; }
+    alleStuecke = sammleStuecke();
+
+    if (!bar.offsetParent) { alleZeigen(); versteckePfeile(); return; }
 
     alleZeigen();
-    btnNext.style.display = 'none';
-    btnPrev.style.display = 'none';
+    versteckePfeile();
     aktuelleSeite = 0;
     seiten = [];
 
     if (!zuEng()) return;   // alles passt
 
-    // ▶ braucht selbst Platz – erst zeigen, dann messen
+    // ▶ braucht selbst Platz – erst zeigen, dann rechnen
     btnNext.style.display = '';
-    if (!zuEng()) return;   // mit Pfeil passt immer noch alles (unwahrscheinlich, aber möglich)
+    if (!zuEng()) { btnNext.style.display = 'none'; return; }
 
-    // In Seiten aufteilen: jedes Stück, das nicht mehr ganz hineinpasst,
-    // kommt auf die nächste Seite. Die Pfeile sind immer auf der ersten
-    // sichtbaren Seite dabei.
-    seiten.push([]);
-    let aufSeite = 0;
+    /* Nur Entbehrliches weicht, und zwar nach Rang. Solange es noch zu
+       eng ist, geht das nächste Stück – nach jedem Schritt wird neu
+       gemessen, sonst wanderte alles auf einmal weg. */
+    const entbehrlich = alleStuecke.filter(s => s.rang > 0)
+      .sort((a, b) => a.rang - b.rang);
+    const verdraengt = [];
 
-    for (const s of stuecke()) {
-      // Sicherstellen, dass das Stück sichtbar ist
-      s.style.display = '';
-
-      if (!zuEng() && aufSeite === 0) {
-        // Passt noch auf die aktuelle (erste) Seite
-        seiten[0].push(s);
-      } else {
-        // Passt nicht mehr – ab auf die nächste Seite
-        if (seiten[aufSeite] && seiten[aufSeite].length) aufSeite++;
-        if (!seiten[aufSeite]) seiten.push([]);
-        seiten[aufSeite].push(s);
-      }
+    for (const s of entbehrlich) {
+      if (!zuEng()) break;
+      setzeSichtbar(s, false);
+      verdraengt.push(s);
     }
 
-    // Wenn alle Stücke auf Seite 0 sind, brauchen wir keine Pfeile
-    if (seiten.length <= 1) {
-      seiten = [];
+    if (!verdraengt.length) {
+      /* Es gibt nichts Entbehrliches – dann hilft kein Blättern, und die
+         Leiste rollt eben seitlich weiter (css/toolbar.css). Lieber das
+         als ein „+", das nirgends mehr zu finden ist. */
       alleZeigen();
-      btnNext.style.display = 'none';
-      btnPrev.style.display = 'none';
+      versteckePfeile();
       return;
     }
 
-    // Erste Seite anzeigen
+    seiten = [alleStuecke.filter(s => !verdraengt.includes(s)), verdraengt];
     zeigeSeite(0);
   }
 
@@ -171,9 +202,7 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     aktuelleSeite = nr;
     const sichtbar = new Set(seiten[nr] || []);
 
-    for (const s of stuecke()) {
-      s.style.display = sichtbar.has(s) ? '' : 'none';
-    }
+    for (const s of alleStuecke) setzeSichtbar(s, sichtbar.has(s));
 
     btnPrev.style.display = nr > 0 ? '' : 'none';
     btnNext.style.display = nr < seiten.length - 1 ? '' : 'none';

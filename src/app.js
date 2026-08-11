@@ -490,7 +490,10 @@ function appendPageDOM(page, index) {
   textDiv.spellcheck = !S.readOnly;
   textDiv.dataset.ph = (index === 0 && !S.readOnly) ? 'Tippe hier…' : '';
   const rightPad = rightPadForBg(bgId);
+  // --lh reist mit: die Tabellenzellen richten ihre Hoehe danach
+  // (css/pages.css), damit eine Tabellenzeile eine Textzeile hoch ist
   textDiv.style.cssText = 'font-size:17px;font-family:' + S.fontFamily + ';color:' + S.textColor
+    + ';--lh:' + lh + 'px'
     + ';line-height:' + lh + 'px;padding-top:' + pt + 'px'
     + ';top:64px;left:72px;right:' + rightPad + 'px;bottom:24px'
     + ';pointer-events:' + (S.mode === 'cursor' ? 'auto' : 'none')
