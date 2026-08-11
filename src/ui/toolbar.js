@@ -311,6 +311,7 @@ function updatePenUI() {
 }
 let _customColorTarget = null;
 let _customColorAnchor = null;
+let _customColorCallback = null;  // für Formen u.Ä., die eigene Apply-Logik brauchen
 const _recentCustomColors = [];
 const RECENT_CUSTOM_COLORS_MAX = 5;
 
@@ -322,6 +323,7 @@ function closeCustomColorPopover() {
   E('custom-color-pop').style.display = 'none';
   _customColorTarget = null;
   _customColorAnchor = null;
+  _customColorCallback = null;
 }
 
 function positionCustomColorPopover(anchorEl) {
@@ -389,9 +391,10 @@ function renderRecentCustomColors() {
 
 let _savedTextRange = null;
 
-function openCustomColorPopover(target, anchorEl) {
+function openCustomColorPopover(target, anchorEl, onApply) {
   _customColorTarget = target;
   _customColorAnchor = anchorEl;
+  _customColorCallback = onApply || null;
   
   if (target === 'text') {
     const sel = window.getSelection();
@@ -532,7 +535,11 @@ function baueFarbPresets() {
 function applyCustomColorValue(color, commitHistory) {
   const c = normalizeHexColor(color);
   if (!c) return;
-  syncGlobalCustomColor(c, _customColorTarget === 'text');
+  if (_customColorCallback) {
+    _customColorCallback(c, commitHistory);
+  } else {
+    syncGlobalCustomColor(c, _customColorTarget === 'text');
+  }
   if (commitHistory) {
     saveRecentCustomColor(c);
     renderRecentCustomColors();
@@ -565,22 +572,12 @@ function bindColorPress(el, onOeffnen) {
   });
 }
 
-/* ── Pen-Rainbow-Ring: Ein Klick öffnet den nativen Farbwähler ──────
-   Der Ring trägt jetzt einen Regenbogen und darunter liegt der native
-   input[type=color]. pointer-events:auto (css/toolbar.css) leitet den
-   Klick direkt an ihn durch – kein Popover, kein Zwischenschritt. */
-E('pen-color-in').addEventListener('input', function () {
-  const pen = activePenState();
-  const c = normalizeHexColor(this.value) || '#1a1510';
-  pen.customColor = c;
-  pen.color = c;
-  updatePenUI();
-  if (typeof saveRecentCustomColor === 'function') saveRecentCustomColor(c);
-});
-
-E('pen-color-in').addEventListener('change', function () {
-  const c = normalizeHexColor(this.value);
-  if (c && typeof saveRecentCustomColor === 'function') saveRecentCustomColor(c);
+/* ── Pen-Rainbow-Ring: Ein Klick öffnet das Farb-Popover ──────────
+   Mit nativem Picker, zuletzt verwendeten Farben und Hex-Code. Der
+   darunterliegende input[type=color] wird weiterhin für sich selbst
+   gehört – wer ihn erreicht (etwa per Tab), bekommt den nativen Dialog. */
+bindColorPress(E('pen-color-ring'), el => {
+  openCustomColorPopover('pen', el);
 });
 
 E('custom-color-pop-input').addEventListener('input', function () {
@@ -700,42 +697,10 @@ QA('.pen-sw[data-tcolor]').forEach(sw => {
     E('txt-color-dropdown').style.display = 'none';
   });
 });
-/* ── Text-Rainbow-Ring: nativer Farbwähler direkt ──────────────────
-   Dasselbe wie beim Stift: Klick auf den Regenbogen-Ring öffnet den
-   nativen Picker. Der input[type=color] wird hier eingesetzt, weil er
-   im HTML nicht stand. */
-(function () {
-  const ring = E('txt-custom-ring');
-  if (!ring) return;
-  // Nativen Picker einbauen, falls noch nicht geschehen
-  let picker = ring.querySelector('input[type=color]');
-  if (!picker) {
-    picker = document.createElement('input');
-    picker.type = 'color';
-    picker.id = 'txt-custom-color-in';
-    picker.style.cssText = 'position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%';
-    ring.style.position = 'relative';
-    ring.appendChild(picker);
-  }
-  picker.addEventListener('input', function () {
-    const c = normalizeHexColor(this.value);
-    if (!c) return;
-    S.textCustomColor = c;
-    S.textColor = c;
-    S._textColorChosen = c;
-    E('txt-color-dot').style.background = c;
-    E('txt-custom-ring').classList.add('active');
-    QA('.pen-sw[data-tcolor]').forEach(sw => sw.classList.remove('active'));
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount && !sel.isCollapsed) {
-      document.execCommand('foreColor', false, c);
-    }
-  });
-  picker.addEventListener('change', function () {
-    const c = normalizeHexColor(this.value);
-    if (c && typeof saveRecentCustomColor === 'function') saveRecentCustomColor(c);
-  });
-})();
+/* ── Text-Rainbow-Ring: Ein Klick öffnet das Farb-Popover ──────── */
+bindColorPress(E('txt-custom-ring'), el => {
+  openCustomColorPopover('text', el);
+});
 E('txt-color-in').addEventListener('input', function () {
   S.textColor = this.value; E('txt-color-dot').style.background = this.value;
   S.textCustomColor = this.value;

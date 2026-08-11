@@ -347,9 +347,8 @@ function addShapeChrome(bar, obj, page, objLayer) {
   const flaechig = obj.shapeType !== 'line' && obj.shapeType !== 'arrow';
 
   /* ── Füllung ────────────────────────────────────────────────────────
-     Nur die aktuelle Farbe plus ein Rainbow-Knopf für die freie Wahl.
-     Sieben Farben auf einmal sind zu viel – wer eine bestimmte will,
-     öffnet den nativen Picker. */
+     Ein Knopf zeigt die aktuelle Farbe und öffnet das Farb-Popover mit
+     nativem Picker, zuletzt verwendeten Farben und Hex-Code. */
   if (flaechig) {
     const fuellWahl = document.createElement('div');
     fuellWahl.className = 'obj-fill-row';
@@ -357,31 +356,29 @@ function addShapeChrome(bar, obj, page, objLayer) {
 
     const aktFarbe = obj.fill || 'none';
 
-    // Anzeige der aktuellen Farbe
-    const anzeige = document.createElement('span');
-    anzeige.className = 'obj-fill-sw' + (aktFarbe === 'none' ? ' keine' : '');
-    if (aktFarbe !== 'none') anzeige.style.background = aktFarbe;
-    anzeige.title = aktFarbe === 'none'
-      ? ((typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung')
-      : aktFarbe;
-    fuellWahl.appendChild(anzeige);
-
-    // Nativer Farbwähler
-    const picker = document.createElement('input');
-    picker.type = 'color';
-    picker.value = aktFarbe === 'none' ? '#ffffff' : aktFarbe;
-    picker.className = 'obj-color-picker';
-    picker.title = (typeof t === 'function' && t('shapeFillColor')) || 'Füllfarbe wählen';
-    picker.addEventListener('pointerdown', ev => ev.stopPropagation());
-    picker.addEventListener('input', ev => {
+    const fuellBtn = document.createElement('button');
+    fuellBtn.type = 'button';
+    fuellBtn.className = 'obj-color-btn';
+    fuellBtn.style.cssText = 'width:15px;height:15px;border-radius:4px;border:none;cursor:pointer;padding:0;flex-shrink:0';
+    if (aktFarbe === 'none') {
+      fuellBtn.style.background = 'repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 50% / 8px 8px';
+      fuellBtn.title = (typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung';
+    } else {
+      fuellBtn.style.background = aktFarbe;
+      fuellBtn.title = aktFarbe;
+    }
+    fuellBtn.addEventListener('pointerdown', ev => ev.stopPropagation());
+    fuellBtn.addEventListener('click', ev => {
       ev.stopPropagation();
-      pushPageHistory(page);
-      obj.fill = picker.value;
-      anzeige.style.background = picker.value;
-      anzeige.classList.remove('keine');
-      neuZeichnen();
+      if (typeof openCustomColorPopover !== 'function') return;
+      openCustomColorPopover('shape-fill', fuellBtn, (c, final) => {
+        obj.fill = c;
+        fuellBtn.style.background = c;
+        fuellBtn.title = c;
+        if (final) { pushPageHistory(page); neuZeichnen(); }
+      });
     });
-    fuellWahl.appendChild(picker);
+    fuellWahl.appendChild(fuellBtn);
 
     // Knopf für „ohne Füllung"
     if (aktFarbe !== 'none') {
@@ -394,8 +391,8 @@ function addShapeChrome(bar, obj, page, objLayer) {
         ev.stopPropagation();
         pushPageHistory(page);
         obj.fill = 'none';
-        anzeige.style.background = '';
-        anzeige.classList.add('keine');
+        fuellBtn.style.background = 'repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 50% / 8px 8px';
+        fuellBtn.title = (typeof t === 'function' && t('shapeFillNone')) || 'Ohne Füllung';
         neuZeichnen();
       });
       fuellWahl.appendChild(keineBtn);
@@ -405,36 +402,35 @@ function addShapeChrome(bar, obj, page, objLayer) {
   }
 
   /* ── Linienfarbe ────────────────────────────────────────────────────
-     Nur die aktuelle Farbe plus ein Rainbow-Knopf. Bei Linie und Pfeil ist
-     das die einzige Farbe, die es gibt. */
-  const strichWahl = document.createElement('div');
-  strichWahl.className = 'obj-fill-row';
-  strichWahl.style.gap = '4px';
+     Ein Knopf zeigt die aktuelle Farbe und öffnet das Farb-Popover. */
+  {
+    const strichWahl = document.createElement('div');
+    strichWahl.className = 'obj-fill-row';
+    strichWahl.style.gap = '4px';
 
-  const aktStrich = obj.stroke || '#1a1510';
+    const aktStrich = obj.stroke || '#1a1510';
 
-  const strichAnzeige = document.createElement('span');
-  strichAnzeige.className = 'obj-fill-sw obj-stroke-sw';
-  strichAnzeige.style.background = aktStrich;
-  strichAnzeige.title = (typeof t === 'function' && t('shapeStroke')) || 'Linienfarbe';
-  strichWahl.appendChild(strichAnzeige);
+    const strichBtn = document.createElement('button');
+    strichBtn.type = 'button';
+    strichBtn.className = 'obj-color-btn';
+    strichBtn.style.cssText = 'width:15px;height:15px;border-radius:4px;border:none;cursor:pointer;padding:0;flex-shrink:0';
+    strichBtn.style.background = aktStrich;
+    strichBtn.title = aktStrich;
+    strichBtn.addEventListener('pointerdown', ev => ev.stopPropagation());
+    strichBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (typeof openCustomColorPopover !== 'function') return;
+      openCustomColorPopover('shape-stroke', strichBtn, (c, final) => {
+        obj.stroke = c;
+        strichBtn.style.background = c;
+        strichBtn.title = c;
+        if (final) { pushPageHistory(page); neuZeichnen(); }
+      });
+    });
+    strichWahl.appendChild(strichBtn);
 
-  const strichPicker = document.createElement('input');
-  strichPicker.type = 'color';
-  strichPicker.value = aktStrich;
-  strichPicker.className = 'obj-color-picker';
-  strichPicker.title = (typeof t === 'function' && t('shapeStrokeColor')) || 'Linienfarbe wählen';
-  strichPicker.addEventListener('pointerdown', ev => ev.stopPropagation());
-  strichPicker.addEventListener('input', ev => {
-    ev.stopPropagation();
-    pushPageHistory(page);
-    obj.stroke = strichPicker.value;
-    strichAnzeige.style.background = strichPicker.value;
-    neuZeichnen();
-  });
-  strichWahl.appendChild(strichPicker);
-
-  bar.appendChild(strichWahl);
+    bar.appendChild(strichWahl);
+  }
 
   // Linienstärke: drei Knöpfe (1px, 2px, 4px)
   [1, 2, 4].forEach(sw => {

@@ -318,11 +318,22 @@ function tableBar() {
      sie an der neuen Stelle und ist wieder editierbar. Keine ▲▼-Pfeile,
      kein heimlicher Ziehgriff – ein sichtbarer Knopf und los. */
 
-  knopf(TBL_ICONS.bewegen, txt('tableMove', 'Tabelle verschieben'),
-    mitZelle(pos => {
-      if (!pos || !pos.table) return;
-      starteTabelleVerschieben(pos.table, pos);
-    }));
+  /* Der Bewegen-Knopf umgeht mitZelle, weil der Ziehvorgang asynchron
+     läuft. mitZelle würde sofort nach dem Start notiereText() und
+     positionTableBar() aufrufen – auf einer schon versteckten Tabelle. */
+  const startMove = () => {
+    const cell = tblBar._zelle;
+    if (!cell || !cell.isConnected) { versteckeTableBar(); return; }
+    if (S.readOnly) {
+      if (typeof toast === 'function') toast(t('sharedNoRight'), true);
+      return;
+    }
+    const pos = cellPos(cell);
+    if (!pos.table) { versteckeTableBar(); return; }
+    versteckeTableBar();
+    starteTabelleVerschieben(pos.table, pos);
+  };
+  knopf(TBL_ICONS.bewegen, txt('tableMove', 'Tabelle verschieben'), startMove);
 
   knopf(TBL_ICONS.zeilePlus, txt('tableRowAdd', 'Zeile darunter'),
     mitZelle(pos => {

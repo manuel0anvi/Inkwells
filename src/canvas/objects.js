@@ -779,3 +779,37 @@ function placeObject(objLayer, obj, page) {
   // Erst jetzt hängt es im Baum – vorher findet restackObjects es nicht
   restackObjects(objLayer, page);
 }
+
+/* ── Entf / Rück löscht das ausgewählte Objekt ──────────────────────
+   Wie in jeder anderen Anwendung auch: ein ausgewähltes Ding verschwindet,
+   wenn man die Löschtaste drückt. Der Handler darf nicht feuern, wenn der
+   Fokus im Text oder in einem Eingabefeld steht – sonst kann man nichts mehr
+   schreiben. */
+document.addEventListener('keydown', e => {
+  if (!_selObj) return;
+  const a = document.activeElement;
+  if (a && (a.isContentEditable || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  e.preventDefault();
+
+  const wrap = _selObj;
+  const pgEl = wrap.closest('[data-pgid]');
+  if (!pgEl) return;
+  const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+  const page = info && info.page;
+  if (!page) return;
+
+  const objId = wrap.dataset.objid;
+  if (typeof pushPageHistory === 'function') pushPageHistory(page);
+  page.objects = (page.objects || []).filter(o => String(o.id) !== objId);
+  deselect();
+  wrap.remove();
+
+  const objLayer = pgEl.querySelector('.j-objects');
+  if (objLayer && typeof restackObjects === 'function') restackObjects(objLayer, page);
+
+  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+  if (typeof noteObjectChanged === 'function') noteObjectChanged();
+});

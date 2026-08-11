@@ -377,9 +377,7 @@
   cursor: pointer;
   width: 100%;
   height: 100%;
-  /* pointer-events: auto, damit ein Klick auf den Ring den nativen
-     Farbwähler öffnet – ohne Umweg über ein Popover. */
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .v-div {
