@@ -338,8 +338,14 @@ body.touch-input .nb-card-edit-btn {
   }
 }
 
-/* ── Stufe 1, Weg „schmales Fenster" ───────────────────────────────── */
-@media (max-width:1150px) {
+/* ── Stufe 1, Weg „schmales Fenster" ─────────────────────────────────
+   Von 1150 auf 1300 heraufgesetzt. Die Beschriftungen der Werkzeuge
+   („Cursor", „Stift 1", …) sind mit Abstand das Breiteste in der Leiste –
+   gemessen 417 px für die sechs Knöpfe gegenüber 189 px ohne Text. Bei
+   1200 px lief die Leiste damit über, obwohl die Stufe noch gar nicht
+   griff. Die Sinnbilder allein sind eindeutig genug; der Name steht
+   weiterhin im Tooltip. */
+@media (max-width:1300px) {
 
   .tb-mode span,
   .tb-sep,

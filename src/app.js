@@ -889,9 +889,12 @@ E('btn-panel-toggle').addEventListener('click', () => {
   }, { passive: false });
 })();
 
-/* ── ZOOM BUTTONS ── */
-E('btn-zoom-in').addEventListener('click', zoomIn);
-E('btn-zoom-out').addEventListener('click', zoomOut);
+/* ── ZOOM BUTTONS ──
+   Die eigenen − und + gibt es in der Leiste nicht mehr; beides steht in
+   der Auswahl hinter dem Prozentwert. Die Zeilen bleiben mit ?. stehen,
+   damit ein Tastenkürzel oder ein Test sie weiter ansprechen kann. */
+E('btn-zoom-in')?.addEventListener('click', zoomIn);
+E('btn-zoom-out')?.addEventListener('click', zoomOut);
 
 /* ══════════════════════════════════════════════════════════════════════
    DER ZOOM IM HOCHFORMAT

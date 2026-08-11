@@ -113,14 +113,39 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 
         const teile = offenerTrenner ? [offenerTrenner, kind] : [kind];
         offenerTrenner = null;
+
+        /* >>> Die eigene Sichtbarkeit merken <<<
+           #pen-opts, #eraser-opts und #shape-opts stehen auf display:none,
+           bis ihr Werkzeug gewählt wird (applyMode). Würde das Blättern sie
+           einfach auf '' setzen, stünden alle drei gleichzeitig da – über
+           850 px, die es gar nicht gibt, und die Leiste quillt über. Genau
+           das passierte nach jeder Größenänderung.
+
+           Deshalb wird der eigene Wert gemerkt und beim Einblenden wieder
+           hergestellt, statt ihn zu überschreiben. */
+        const eigen = teile.map(el => el.style.display);
+
         /* data-tb-more sagt, was entbehrlich ist: 1 weicht zuerst
            (Speicher-Hinweis), dann 2 (Teilen, Exportieren), dann 3 (Zoom).
            Ohne Nummer ist die Gruppe unentbehrlich – die Werkzeuge, die
            Textformate und das Einfügen bleiben immer auf der ersten Seite,
            denn für das Einfügen gibt es keinen zweiten Weg. */
-        alle.push({ teile, rang: +(kind.dataset.tbMore || 0) });
+        alle.push({
+          teile, eigen,
+          rang: +(kind.dataset.tbMore || 0),
+          // Von sich aus verborgen? Dann kostet es keine Breite und ist
+          // für das Blättern kein Bewerber.
+          eigenVerborgen: eigen.every(v => v === 'none')
+        });
       }
-      if (offenerTrenner) alle.push({ teile: [offenerTrenner], rang: 99 });
+      if (offenerTrenner) {
+        alle.push({
+          teile: [offenerTrenner],
+          eigen: [offenerTrenner.style.display],
+          rang: 99,
+          eigenVerborgen: offenerTrenner.style.display === 'none'
+        });
+      }
     }
     return alle;
   }
@@ -135,8 +160,12 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   let alleStuecke = [];      // die Stücke dieser Messung (Identität zählt)
   let geplant = false;
 
+  /* Einblenden heisst: auf den EIGENEN Wert zurück, nicht auf ''. Sonst
+     macht das Blättern verborgene Gruppen sichtbar (siehe sammleStuecke). */
   function setzeSichtbar(stueck, an) {
-    for (const el of stueck.teile) el.style.display = an ? '' : 'none';
+    stueck.teile.forEach((el, i) => {
+      el.style.display = an ? (stueck.eigen[i] || '') : 'none';
+    });
   }
 
   function versteckePfeile() {
@@ -174,7 +203,7 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     /* Nur Entbehrliches weicht, und zwar nach Rang. Solange es noch zu
        eng ist, geht das nächste Stück – nach jedem Schritt wird neu
        gemessen, sonst wanderte alles auf einmal weg. */
-    const entbehrlich = alleStuecke.filter(s => s.rang > 0)
+    const entbehrlich = alleStuecke.filter(s => s.rang > 0 && !s.eigenVerborgen)
       .sort((a, b) => a.rang - b.rang);
     const verdraengt = [];
 
@@ -587,6 +616,10 @@ function updateHdrBtns() {
   E('fmt-h2').classList.toggle('active', level === 2);
   E('fmt-h3').classList.toggle('active', level === 3);
   E('fmt-p').classList.toggle('active', !level);
+  // Der Knopf zeigt, was gerade gilt – sonst müsste man die Auswahl öffnen,
+  // nur um zu sehen, in welchem Format man schreibt
+  const lbl = E('fmt-style-lbl');
+  if (lbl) lbl.textContent = level ? ('H' + level) : '¶';
   E('fmt-bold').classList.toggle('active', document.queryCommandState('bold'));
   E('fmt-italic').classList.toggle('active', document.queryCommandState('italic'));
   E('fmt-under').classList.toggle('active', document.queryCommandState('underline'));
@@ -759,6 +792,47 @@ E('fmt-p').addEventListener('mousedown', e => {
 E('fmt-h1').addEventListener('mousedown', e => { e.preventDefault(); toggleHeading('h1'); });
 E('fmt-h2').addEventListener('mousedown', e => { e.preventDefault(); toggleHeading('h2'); });
 E('fmt-h3').addEventListener('mousedown', e => { e.preventDefault(); toggleHeading('h3'); });
+
+/* ── Die Absatzformat-Auswahl ──────────────────────────────────────────
+   Dieselbe Machart wie die Listen-Auswahl darüber: der Knopf öffnet, ein
+   Klick daneben schließt. Die vier Einträge behalten ihre Kennungen und
+   damit ihre Handgriffe – hier kommt nur das Auf und Zu dazu. */
+(function () {
+  const btn = E('fmt-style');
+  const pop = E('style-pop');
+  if (!btn || !pop) return;
+
+  const offen = () => pop.style.display === 'block';
+
+  function schliessen() {
+    pop.style.display = 'none';
+    btn.classList.remove('active');
+    document.removeEventListener('pointerdown', draussen, true);
+  }
+
+  function draussen(e) {
+    if (e.target.closest('#style-pop, #fmt-style')) return;
+    schliessen();
+  }
+
+  // mousedown, nicht click: sonst ist die Schreibmarke schon aus dem Text
+  btn.addEventListener('mousedown', e => {
+    e.preventDefault();
+    if (offen()) { schliessen(); return; }
+    const r = btn.getBoundingClientRect();
+    pop.style.display = 'block';
+    const breite = pop.offsetWidth || 180;
+    pop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - breite - 8, r.left))) + 'px';
+    pop.style.top = Math.round(r.bottom + 6) + 'px';
+    btn.classList.add('active');
+    setTimeout(() => document.addEventListener('pointerdown', draussen, true), 0);
+  });
+
+  // Nach der Wahl zugeht es von selbst
+  pop.querySelectorAll('.style-pop-item').forEach(el => {
+    el.addEventListener('mousedown', () => setTimeout(schliessen, 0));
+  });
+})();
 E('fmt-bold').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('bold'); setTimeout(updateHdrBtns, 0); });
 E('fmt-italic').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('italic'); setTimeout(updateHdrBtns, 0); });
 E('fmt-under').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('underline'); setTimeout(updateHdrBtns, 0); });

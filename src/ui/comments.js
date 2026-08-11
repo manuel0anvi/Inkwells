@@ -3,40 +3,41 @@
 /* ══════════════════════════════════════════════════════════════════════
    KOMMENTAR-OBERFLÄCHE
 
-   Drei Teile, die zusammengehören:
+   Drei Teile:
 
-     1. Die Leiste rechts neben der Seite – dort steht jeder Kommentar als
-        Karte mit Name, Text und Zeit.
-     2. Der kleine Knopf, der erscheint, sobald man Text auswählt. Ein
-        Klick darauf schreibt einen Kommentar zur Auswahl.
-     3. Die farbige Unterlegung der kommentierten Stelle im Text.
+     1. Die Karten stehen im leeren Rand RECHTS NEBEN der Seite, auf der
+        Höhe der Stelle, zu der sie gehören.
+     2. Ein kleiner Knopf erscheint, sobald man Text auswählt.
+     3. Die kommentierte Stelle bekommt Farbe – aber nur, wenn man
+        darüber schwebt oder mit der Schreibmarke darin steht.
 
-   >>> Warum die Leiste neben .editor-col liegt und nicht darin <<<
-   .editor-col ist eine Spalte (flex-direction: column). Ein Kind davon
-   landet UNTER dem Seitenbereich, nicht daneben – und weil darüber
-   overflow: hidden steht, war die Leiste schlicht nicht zu sehen. Genau
-   das war „hat überhaupt keine UI". Sie gehört als Geschwister neben
-   .editor-col in die .journal-layout-Zeile, wie die Seitenleiste links.
+   >>> Warum keine eigene Leiste <<<
+   Es gab eine, 290 px breit, die dem Blatt Platz wegnahm. Neben der Seite
+   ist ohnehin leerer Raum: bei 794 px Blattbreite und einem gewöhnlichen
+   Fenster bleiben links und rechts je gut 200 px übrig. Dort gehören die
+   Karten hin – wie in Word, und ohne dass etwas schmaler wird.
+
+   >>> Und wenn der Platz nicht reicht <<<
+   Bei einem schmalen Fenster gibt es keinen Rand. Dann stehen die Karten
+   nicht dauerhaft da, sondern nur die eine, über deren Stelle man gerade
+   schwebt oder in der die Schreibmarke steht.
    ══════════════════════════════════════════════════════════════════════ */
 
 (function () {
-  /* ── Die Leiste rechts ────────────────────────────────────────────── */
-  const rail = document.createElement('aside');
-  rail.id = 'comment-rail';
-  rail.className = 'comment-rail';
-  rail.innerHTML =
-      '<div class="comment-rail-head">'
-    +   '<span class="comment-rail-title"></span>'
-    +   '<button type="button" class="comment-rail-close" id="comment-rail-close" title="">✕</button>'
-    + '</div>'
-    + '<div class="comment-list" id="comment-list"></div>'
-    + '<p class="comment-empty" id="comment-empty"></p>';
+  const KARTE_B = 210;      // Breite einer Karte
+  const KARTE_LUFT = 14;    // Abstand zwischen Blatt und Karte
+  const MIN_RAND = KARTE_B + KARTE_LUFT + 8;   // ab so viel Rand passt es
+
+  /* ── Die Ebene, in der die Karten liegen ──────────────────────────── */
+  const ebene = document.createElement('div');
+  ebene.id = 'comment-layer';
+  ebene.className = 'comment-layer';
 
   function haengeEin() {
-    const layout = document.querySelector('.journal-layout');
-    const spalte = document.querySelector('.editor-col');
-    if (!layout || !spalte) return setTimeout(haengeEin, 200);
-    layout.appendChild(rail);   // als Geschwister NEBEN der Editorspalte
+    const scroll = E('pg-scroll');
+    if (!scroll) return setTimeout(haengeEin, 200);
+    scroll.appendChild(ebene);
+    scroll.addEventListener('scroll', planeNeu, { passive: true });
   }
   haengeEin();
 
@@ -49,31 +50,49 @@
   wahlKnopf.innerHTML = '<span class="comment-add-pop-icon">💬</span><span class="comment-add-pop-text"></span>';
   document.body.appendChild(wahlKnopf);
 
-  let _gemerkteWahl = null;   // { range, textDiv, pgId, zitat }
+  let _gemerkteWahl = null;
+  let _einzeln = null;      // im Engformat: die gerade gezeigte Karte
 
-  /* ── Beschriftungen ───────────────────────────────────────────────── */
   const txt = (key, ersatz) => (typeof t === 'function' && t(key)) || ersatz;
 
   function beschrifte() {
-    rail.querySelector('.comment-rail-title').textContent = txt('comments', 'Kommentare');
-    rail.querySelector('.comment-rail-close').title = txt('close', 'Schließen');
-    E('comment-empty').textContent = txt('noComments', 'Noch keine Kommentare auf dieser Seite.');
     wahlKnopf.querySelector('.comment-add-pop-text').textContent = txt('addComment', 'Kommentar');
   }
-
   if (typeof t === 'function') beschrifte();
   else window.addEventListener('load', beschrifte);
 
   /* ── Zeitangabe ───────────────────────────────────────────────────── */
   function formatZeit(ts) {
     if (!ts) return '';
-    const d = new Date(ts);
     const diff = Date.now() - ts;
     if (diff < 60000) return txt('timeNow', 'gerade eben');
     if (diff < 3600000) return Math.floor(diff / 60000) + ' min';
     if (diff < 86400000) return Math.floor(diff / 3600000) + ' h';
     const spr = (typeof S !== 'undefined' && S.lang) ? S.lang : 'de';
-    return d.toLocaleDateString(spr, { day: '2-digit', month: '2-digit', year: '2-digit' });
+    return new Date(ts).toLocaleDateString(spr, { day: '2-digit', month: '2-digit', year: '2-digit' });
+  }
+
+  /** Eine gleichbleibende Farbe je Verfasser. */
+  function farbeFuer(kennung) {
+    const s = String(kennung || 'local');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    return 'hsl(' + h + ' 62% 58%)';
+  }
+
+  async function frage(titel) {
+    if (typeof txtModal === 'function') return await txtModal(titel, '');
+    return window.prompt(titel);
+  }
+
+  function kleinerKnopf(beschriftung, tun, extra) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sm-action' + (extra ? ' ' + extra : '');
+    b.textContent = beschriftung;
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', e => { e.stopPropagation(); tun(); });
+    return b;
   }
 
   /* ── Eine Karte bauen ─────────────────────────────────────────────── */
@@ -101,14 +120,6 @@
     kopf.appendChild(autor);
     kopf.appendChild(zeit);
     karte.appendChild(kopf);
-
-    // Der kommentierte Ausschnitt, damit man weiß, worum es geht
-    if (c.zitat) {
-      const zitat = document.createElement('div');
-      zitat.className = 'comment-card-quote';
-      zitat.textContent = c.zitat;
-      karte.appendChild(zitat);
-    }
 
     const text = document.createElement('div');
     text.className = 'comment-card-text';
@@ -148,8 +159,7 @@
       c.resolved ? txt('reopenComment', 'Wieder öffnen') : txt('resolveComment', 'Erledigt'),
       () => { toggleCommentResolved(c.id); zeichne(); }));
 
-    /* Löschen sieht nur, wem der Kommentar gehört. Ein Knopf, der beim
-       Drücken „darfst du nicht" sagt, ist schlechter als keiner. */
+    // Löschen sieht nur, wem der Kommentar gehört
     if (typeof istMeinKommentar === 'function' && istMeinKommentar(c)) {
       reihe.appendChild(kleinerKnopf(txt('deleteComment', 'Löschen'), async () => {
         const ok = typeof showConfirm === 'function'
@@ -163,57 +173,129 @@
 
     karte.appendChild(reihe);
 
-    /* Karte und Textstelle zeigen aufeinander: über der Karte schweben
-       hebt die Stelle im Text hervor und umgekehrt. */
     karte.addEventListener('mouseenter', () => hebeHervor(c.id, true));
     karte.addEventListener('mouseleave', () => hebeHervor(c.id, false));
-    karte.addEventListener('click', () => springeZuMarke(c.id));
 
     return karte;
   }
 
-  function kleinerKnopf(beschriftung, tun, extra) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'sm-action' + (extra ? ' ' + extra : '');
-    b.textContent = beschriftung;
-    b.addEventListener('click', e => { e.stopPropagation(); tun(); });
-    return b;
+  /* ══════════════════════════════════════════════════════════════════
+     KARTEN IM RAND SETZEN
+
+     Jede Karte will auf die Höhe ihrer Stelle. Zwei Karten dicht
+     beieinander würden sich überdecken – deshalb werden sie von oben nach
+     unten durchgegangen und nach unten weggeschoben, bis Platz ist. Das
+     ist dasselbe Verfahren wie in Word und Google Docs.
+     ══════════════════════════════════════════════════════════════════ */
+  function randBreite() {
+    const scroll = E('pg-scroll');
+    const seite = document.querySelector('.j-page');
+    if (!scroll || !seite) return 0;
+    const sr = scroll.getBoundingClientRect();
+    const pr = seite.getBoundingClientRect();
+    return sr.right - pr.right;
   }
 
-  /** Eine gleichbleibende Farbe je Verfasser – wie bei den Mitschreibenden. */
-  function farbeFuer(kennung) {
-    const s = String(kennung || 'local');
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-    return 'hsl(' + h + ' 62% 58%)';
-  }
-
-  async function frage(titel) {
-    if (typeof txtModal === 'function') return await txtModal(titel, '');
-    return window.prompt(titel);
-  }
-
-  /* ── Die Leiste zeichnen ──────────────────────────────────────────── */
   function zeichne() {
-    const liste = E('comment-list');
-    const leer = E('comment-empty');
-    if (!liste) return;
+    if (!ebene.isConnected) return;
 
     const pgId = S.activePgId;
     const kommentare = (pgId && typeof getPageComments === 'function')
       ? getPageComments(pgId) : [];
 
-    liste.innerHTML = '';
-    for (const c of kommentare) liste.appendChild(baueKarte(c));
-
-    // Die Leiste bleibt stehen, auch wenn nichts drinsteht
-    if (leer) leer.style.display = kommentare.length ? 'none' : '';
-
+    ebene.innerHTML = '';
     faerbeMarken();
+
+    if (!kommentare.length) { ebene.style.display = 'none'; return; }
+
+    // Kein Platz im Rand: dann nur die eine, die gerade dran ist
+    if (randBreite() < MIN_RAND) {
+      ebene.style.display = 'none';
+      zeigeEinzeln(_einzeln);
+      return;
+    }
+
+    ebene.style.display = '';
+    const scroll = E('pg-scroll');
+    const sr = scroll.getBoundingClientRect();
+    const seite = document.querySelector('.j-page');
+    const pr = seite.getBoundingClientRect();
+    // Innerhalb der Ebene wird relativ zum Scroll-Inhalt gerechnet
+    const links = (pr.right - sr.left) + scroll.scrollLeft + KARTE_LUFT;
+
+    let untersteKante = -Infinity;
+
+    for (const c of kommentare) {
+      const mark = document.querySelector(
+        '.j-comment-mark[data-cid="' + CSS.escape(String(c.id)) + '"]');
+
+      const karte = baueKarte(c);
+      karte.style.left = Math.round(links) + 'px';
+      karte.style.width = KARTE_B + 'px';
+      ebene.appendChild(karte);
+
+      let oben;
+      if (mark) {
+        const mr = mark.getBoundingClientRect();
+        oben = (mr.top - sr.top) + scroll.scrollTop;
+      } else {
+        oben = untersteKante === -Infinity ? 0 : untersteKante + 8;
+      }
+
+      // Nicht auf die vorige Karte legen
+      if (oben < untersteKante + 8) oben = untersteKante + 8;
+      karte.style.top = Math.round(Math.max(0, oben)) + 'px';
+      untersteKante = Math.max(0, oben) + karte.offsetHeight;
+
+      karte.addEventListener('click', () => {
+        if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
   }
 
-  /* ── Die Marken im Text ───────────────────────────────────────────── */
+  let _geplant = false;
+  function planeNeu() {
+    if (_geplant) return;
+    _geplant = true;
+    requestAnimationFrame(() => { _geplant = false; zeichne(); });
+  }
+
+  window.addEventListener('resize', planeNeu, { passive: true });
+
+  /* ── Engformat: eine einzelne schwebende Karte ────────────────────── */
+  let einzelKarte = null;
+
+  function zeigeEinzeln(cid) {
+    if (einzelKarte) { einzelKarte.remove(); einzelKarte = null; }
+    if (!cid) return;
+
+    const nb = typeof getNb === 'function' ? getNb() : null;
+    const c = nb && nb.comments && nb.comments.find(x => String(x.id) === String(cid));
+    if (!c) return;
+
+    const mark = document.querySelector('.j-comment-mark[data-cid="' + CSS.escape(String(cid)) + '"]');
+    if (!mark) return;
+
+    einzelKarte = baueKarte(c);
+    einzelKarte.classList.add('schwebend');
+    einzelKarte.style.width = KARTE_B + 'px';
+    document.body.appendChild(einzelKarte);
+
+    const mr = mark.getBoundingClientRect();
+    const h = einzelKarte.offsetHeight || 90;
+    const links = Math.max(8, Math.min(window.innerWidth - KARTE_B - 8, mr.left));
+    const oben = mr.top - h - 8;
+    einzelKarte.style.left = Math.round(links) + 'px';
+    einzelKarte.style.top = Math.round(oben > 60 ? oben : mr.bottom + 8) + 'px';
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE MARKIERUNG IM TEXT
+
+     Farbe bekommt sie nur, wenn man darüber schwebt oder mit der
+     Schreibmarke darin steht. Sonst bleibt sie blass – der Text soll
+     Text bleiben und nicht wie ein Textmarker-Feldzug aussehen.
+     ══════════════════════════════════════════════════════════════════ */
   function faerbeMarken() {
     const nb = typeof getNb === 'function' ? getNb() : null;
     const kommentare = (nb && nb.comments) || [];
@@ -228,44 +310,46 @@
   function hebeHervor(cid, an) {
     const wahl = '.j-comment-mark[data-cid="' + CSS.escape(String(cid)) + '"]';
     document.querySelectorAll(wahl).forEach(m => m.classList.toggle('j-aktiv', an));
-    const karte = rail.querySelector('.comment-card[data-cid="' + CSS.escape(String(cid)) + '"]');
-    if (karte) karte.classList.toggle('aktiv', an);
+    ebene.querySelectorAll('.comment-card[data-cid="' + CSS.escape(String(cid)) + '"]')
+      .forEach(k => k.classList.toggle('aktiv', an));
   }
 
-  function springeZuMarke(cid) {
-    const mark = document.querySelector('.j-comment-mark[data-cid="' + CSS.escape(String(cid)) + '"]');
-    if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  /* Klick auf eine markierte Stelle im Text führt zur Karte. */
-  document.addEventListener('click', e => {
-    const mark = e.target.closest && e.target.closest('.j-comment-mark[data-cid]');
-    if (!mark) return;
-    const cid = mark.dataset.cid;
-    const karte = rail.querySelector('.comment-card[data-cid="' + CSS.escape(cid) + '"]');
-    if (!karte) return;
-    karte.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    karte.classList.add('blitz');
-    setTimeout(() => karte.classList.remove('blitz'), 1400);
-  });
-
-  /* Über eine markierte Stelle schweben hebt die zugehörige Karte hervor. */
+  /* Über eine markierte Stelle schweben färbt sie und ihre Karte. */
   document.addEventListener('mouseover', e => {
     const mark = e.target.closest && e.target.closest('.j-comment-mark[data-cid]');
-    if (mark) hebeHervor(mark.dataset.cid, true);
+    if (!mark) return;
+    hebeHervor(mark.dataset.cid, true);
+    if (randBreite() < MIN_RAND) { _einzeln = mark.dataset.cid; zeigeEinzeln(_einzeln); }
   });
+
   document.addEventListener('mouseout', e => {
     const mark = e.target.closest && e.target.closest('.j-comment-mark[data-cid]');
     if (mark) hebeHervor(mark.dataset.cid, false);
   });
 
+  /* Steht die Schreibmarke in einer kommentierten Stelle, gilt sie
+     ebenfalls als aktiv – auch ohne Maus, etwa beim Blättern mit den
+     Pfeiltasten oder auf einem Gerät ganz ohne Zeiger. */
+  function pruefeMarkeUnterCursor() {
+    const sel = window.getSelection();
+    let drin = null;
+    if (sel && sel.rangeCount) {
+      let k = sel.getRangeAt(0).startContainer;
+      if (k.nodeType === Node.TEXT_NODE) k = k.parentNode;
+      const m = k && k.closest ? k.closest('.j-comment-mark[data-cid]') : null;
+      if (m) drin = m.dataset.cid;
+    }
+
+    document.querySelectorAll('.j-comment-mark[data-cid]').forEach(m => {
+      m.classList.toggle('j-cursor', drin !== null && m.dataset.cid === drin);
+    });
+
+    if (drin && randBreite() < MIN_RAND) { _einzeln = drin; zeigeEinzeln(drin); }
+    else if (!drin && _einzeln && randBreite() < MIN_RAND) { _einzeln = null; zeigeEinzeln(null); }
+  }
+
   /* ══════════════════════════════════════════════════════════════════
      DER KNOPF AN DER AUSWAHL
-
-     Erscheint, sobald im Seitentext etwas markiert ist – dort, wo die
-     Auswahl endet. Das ist der einzige Weg zum Kommentieren; das alte
-     Versteck im Einfügen-Menü verlangte eine gesetzte Schreibmarke und
-     lehnte ausgerechnet eine Auswahl ab.
      ══════════════════════════════════════════════════════════════════ */
   function versteckeWahlKnopf() {
     wahlKnopf.style.display = 'none';
@@ -273,6 +357,8 @@
   }
 
   function pruefeAuswahl() {
+    pruefeMarkeUnterCursor();
+
     if (S.readOnly) return versteckeWahlKnopf();
 
     const sel = window.getSelection();
@@ -286,17 +372,10 @@
 
     const zitat = range.toString();
     if (!zitat.trim()) return versteckeWahlKnopf();
-
-    // Schon kommentiert? Dann nicht noch einmal darüber
     if (knoten.closest('.j-comment-mark')) return versteckeWahlKnopf();
 
     const pgEl = textDiv.closest('[data-pgid]');
-    _gemerkteWahl = {
-      range: range.cloneRange(),
-      textDiv,
-      pgId: pgEl ? pgEl.dataset.pgid : null,
-      zitat
-    };
+    _gemerkteWahl = { range: range.cloneRange(), textDiv, pgId: pgEl ? pgEl.dataset.pgid : null, zitat };
 
     const r = range.getBoundingClientRect();
     if (!r.width && !r.height) return versteckeWahlKnopf();
@@ -313,11 +392,9 @@
   let _wahlTimer = 0;
   document.addEventListener('selectionchange', () => {
     clearTimeout(_wahlTimer);
-    // Kurz warten: während des Ziehens feuert das Ereignis dauernd
     _wahlTimer = setTimeout(pruefeAuswahl, 180);
   });
 
-  // Der Klick auf den Knopf darf die Auswahl nicht wegnehmen
   wahlKnopf.addEventListener('mousedown', e => e.preventDefault());
 
   wahlKnopf.addEventListener('click', async () => {
@@ -337,7 +414,6 @@
     if (!c) { _gemerkteWahl = null; return; }
 
     if (!markSelection(c.id)) {
-      // Markieren ging nicht – dann auch keinen leeren Kommentar behalten
       deleteComment(c.id);
       if (typeof toast === 'function') toast(txt('commentNoMark', 'Diese Stelle lässt sich nicht markieren.'), true);
     }
@@ -345,42 +421,6 @@
     _gemerkteWahl = null;
     zeichne();
   });
-
-  /* ── Leiste auf- und zuklappen ────────────────────────────────────── */
-  function umschalten(an) {
-    const zu = (an === undefined) ? !rail.classList.contains('zu') : !an;
-    rail.classList.toggle('zu', zu);
-    const btn = E('btn-comments');
-    if (btn) btn.classList.toggle('active', !zu);
-  }
-
-  E('comment-rail-close').addEventListener('click', () => umschalten(false));
-
-  /* ── Knopf in der Werkzeugleiste ──────────────────────────────────── */
-  (function baueKnopf() {
-    const zone = document.querySelector('.tb-right');
-    if (!zone) return setTimeout(baueKnopf, 200);
-
-    const grp = document.createElement('div');
-    grp.className = 'tb-grp';
-    // Entbehrlich beim Blättern, aber erst nach Speichern und Teilen
-    grp.dataset.tbMore = '3';
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'btn-comments';
-    btn.className = 'tb-opt active';
-    btn.textContent = '💬';
-    btn.title = txt('comments', 'Kommentare');
-    btn.addEventListener('click', () => umschalten());
-    grp.appendChild(btn);
-
-    const prevBtn = E('btn-tb-prev');
-    if (prevBtn) prevBtn.before(grp);
-    else zone.appendChild(grp);
-
-    if (typeof window.updateToolbarOverflow === 'function') window.updateToolbarOverflow();
-  })();
 
   /* ── Bei Seitenwechsel neu zeichnen ───────────────────────────────── */
   (function haengeAnSeitenwechsel() {
@@ -396,6 +436,5 @@
   window.addEventListener('load', () => setTimeout(zeichne, 400));
 
   /* ── Global erreichbar ────────────────────────────────────────────── */
-  window.refreshComments = zeichne;
-  window.toggleCommentRail = umschalten;
+  window.refreshComments = planeNeu;
 })();

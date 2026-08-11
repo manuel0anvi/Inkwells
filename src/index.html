@@ -284,10 +284,13 @@
           </div>
 
           <div class="tb-grp" id="text-opts">
-            <button class="tb-opt" id="fmt-p">¶</button>
-            <button class="tb-opt" id="fmt-h1">H1</button>
-            <button class="tb-opt" id="fmt-h2">H2</button>
-            <button class="tb-opt" id="fmt-h3">H3</button>
+            <!-- EIN Knopf fuer das Absatzformat. Vorher standen ¶, H1, H2
+                 und H3 einzeln nebeneinander – vier Knoepfe fuer eine
+                 Entscheidung, von der immer nur eine gilt. Der Knopf zeigt,
+                 was gerade gilt, und oeffnet die Auswahl (#style-pop). -->
+            <button class="tb-opt tb-style-btn" id="fmt-style" data-i18n-title="textStyle" title="Absatzformat">
+              <span id="fmt-style-lbl">¶</span><span class="tb-caret">▾</span>
+            </button>
             <div class="tb-sep-sm"></div>
             <button class="tb-opt" id="fmt-bold"><b>B</b></button>
             <button class="tb-opt" id="fmt-italic"><i>I</i></button>
@@ -372,10 +375,11 @@
             </button>
           </div>
           <div class="tb-sep"></div>
+          <!-- EIN Zoom-Knopf. Die Auswahl mit −, + und Einpassen gab es
+               schon (#zoom-pop), sie sprang nur im Hochformat an; quer
+               standen daneben noch einmal − und + und nahmen Platz weg. -->
           <div class="tb-grp" data-tb-more="3">
-            <button class="tb-opt" id="btn-zoom-out" data-i18n-title="zoomOut" title="Verkleinern">－</button>
-            <button class="tb-opt" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom zurücksetzen" style="font-family:'DM Mono',monospace;font-size:10px;min-width:38px" >100%</button>
-            <button class="tb-opt" id="btn-zoom-in" data-i18n-title="zoomIn" title="Vergrößern">＋</button>
+            <button class="tb-opt" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom" style="font-family:'DM Mono',monospace;font-size:10px;min-width:44px">100%</button>
           </div>
 
           <!-- Pfeil-Navigation: Wenn die Leiste zu schmal ist, blättert
@@ -795,6 +799,23 @@
   <button class="insert-item" id="ins-table-custom">
     <span class="insert-icon">⋯</span>
     <span data-i18n="insertTableCustom">Benutzerdefiniert …</span>
+  </button>
+</div>
+
+<!-- Absatzformat. Die Knoepfe behalten ihre alten Kennungen, damit die
+     Handgriffe in ui/toolbar.js unveraendert weitergelten. -->
+<div class="style-pop" id="style-pop" style="display:none">
+  <button class="style-pop-item" id="fmt-p">
+    <span class="style-pop-tag">¶</span><span data-i18n="styleBody">Fließtext</span>
+  </button>
+  <button class="style-pop-item" id="fmt-h1">
+    <span class="style-pop-tag">H1</span><span data-i18n="styleH1">Überschrift 1</span>
+  </button>
+  <button class="style-pop-item" id="fmt-h2">
+    <span class="style-pop-tag">H2</span><span data-i18n="styleH2">Überschrift 2</span>
+  </button>
+  <button class="style-pop-item" id="fmt-h3">
+    <span class="style-pop-tag">H3</span><span data-i18n="styleH3">Überschrift 3</span>
   </button>
 </div>
 

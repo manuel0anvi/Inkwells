@@ -218,48 +218,46 @@
 
   /* ── Knöpfe in der Leiste ──────────────────────────────────────────── */
 
+  /**
+   * Den Knopf in die Stift- und Formen-Einstellungen hängen.
+   *
+   * >>> Warum nicht mehr rechts aussen <<<
+   * Dort stand er neben Speichern, Teilen und Zoom und machte die Leiste
+   * noch voller – gemeldet als „alles zugespammt". Ein Lineal ist eine
+   * Zeichenhilfe: es gehört dorthin, wo Farbe und Strichstärke stehen,
+   * und ist damit nur zu sehen, wenn wirklich gezeichnet wird.
+   */
   function baueKnoepfe() {
-    const zone = document.querySelector('.tb-right');
-    if (!zone) return setTimeout(baueKnoepfe, 200);
+    const ziele = ['pen-opts', 'shape-opts'].map(id => E(id)).filter(Boolean);
+    if (!ziele.length) return setTimeout(baueKnoepfe, 200);
 
-    const sep = document.createElement('div');
-    sep.className = 'tb-sep';
+    for (const grp of ziele) {
+      if (grp.querySelector('.btn-ruler')) continue;
 
-    const grp = document.createElement('div');
-    grp.className = 'tb-grp';
+      const teiler = document.createElement('div');
+      teiler.className = 'v-div';
 
-    function knopf(id, text, titelKey, titelFallback, onClick) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.id = id;
-      btn.className = 'tb-opt';
-      btn.textContent = text;
-      btn.title = (typeof t === 'function' && t(titelKey)) || titelFallback;
-      btn.addEventListener('click', onClick);
-      return btn;
+      btn.className = 'tb-opt btn-ruler';
+      btn.textContent = '📏';
+      btn.title = (typeof t === 'function' && t('ruler')) || 'Lineal';
+      btn.addEventListener('click', umschaltenLineal);
+
+      grp.appendChild(teiler);
+      grp.appendChild(btn);
     }
 
-    const btnL = knopf('btn-ruler', '📏', 'ruler', 'Lineal', umschaltenLineal);
-    grp.appendChild(btnL);
-
-    // Vor den Pfeil-Knöpfen einfügen
-    const prevBtn = E('btn-tb-prev');
-    if (prevBtn) {
-      prevBtn.before(sep, grp);
-    } else {
-      zone.appendChild(sep);
-      zone.appendChild(grp);
-    }
-
-    // Overflow nach dem Hinzufügen neu rechnen
+    aktualisiereKnopfZustand();
     if (typeof window.updateToolbarOverflow === 'function') {
       window.updateToolbarOverflow();
     }
   }
 
   function aktualisiereKnopfZustand() {
-    const btnL = E('btn-ruler');
-    if (btnL) btnL.classList.toggle('active', lineal.an);
+    // Es gibt den Knopf zweimal: bei den Stift- und bei den Formen-Optionen
+    document.querySelectorAll('.btn-ruler')
+      .forEach(b => b.classList.toggle('active', lineal.an));
   }
 
   /* ── Ein- und Ausschalten ─────────────────────────────────────────── */

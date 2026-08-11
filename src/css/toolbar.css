@@ -183,6 +183,70 @@
   padding: 10px
 }
 
+/* ── Absatzformat: ein Knopf statt vier ───────────────────────────── */
+.tb-style-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 42px;
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 11px
+}
+
+.tb-caret {
+  font-size: 8px;
+  opacity: .6;
+  line-height: 1
+}
+
+.style-pop {
+  position: fixed;
+  z-index: 1300;
+  background: var(--sc);
+  border: 1px solid var(--sb2);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  padding: 5px;
+  min-width: 178px
+}
+
+.style-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--md);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left
+}
+
+.style-pop-item:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.style-pop-item.active {
+  color: var(--gold)
+}
+
+.style-pop-tag {
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 11px;
+  min-width: 22px;
+  opacity: .75
+}
+
+@media (any-pointer: coarse) {
+  .style-pop-item {
+    padding: 10px 12px
+  }
+}
+
 .list-style-pop-head {
   color: var(--hi);
   font-size: 12px;
@@ -770,9 +834,20 @@
   line-height: 1;
 }
 
+/* >>> Nur zu sehen, wenn es etwas zu sagen gibt <<<
+   „Gespeichert" stand dauerhaft in der Leiste und nahm Platz weg, obwohl
+   es der Normalfall ist – das gruene Zeichen sagt dasselbe. Beim Speichern
+   und bei einem Fehler kommt der Text zurueck. */
 .save-text {
   font-size: 11px;
   font-family: 'Crimson Pro', serif;
+  display: none;
+}
+
+.save-status.unsaved .save-text,
+.save-status.error .save-text,
+.save-status.local-only .save-text {
+  display: inline;
 }
 
 /* Save status states */
