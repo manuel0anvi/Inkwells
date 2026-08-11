@@ -66,7 +66,16 @@
     'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
     'B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL',
     'FONT',
-    'UL', 'OL', 'LI', 'BLOCKQUOTE', 'SECTION'
+    'UL', 'OL', 'LI', 'BLOCKQUOTE', 'SECTION',
+
+    /* ── Tabellen ────────────────────────────────────────────────────
+       Sie standen bewusst NICHT hier: bis es sie im Editor gab, war ein
+       <table> in einem Seitentext etwas Fremdes, und die Bereinigung hat
+       es ausgepackt (Text blieb, Element weg). Seit core/tables.js
+       gehören sie dazu – ohne diese Zeilen zerfiele jede Tabelle beim
+       ersten Abgleich in eine Reihe loser Wörter, und zwar unwiederbringlich. */
+    'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'CAPTION',
+    'COLGROUP', 'COL'
   ]);
 
   /* Nur die Ueberschriften- und die Aufzaehlungsklassen. Alles andere
@@ -79,7 +88,28 @@
      einem style bleibt unten allein die Farbe stehen. Das Muster ist
      bewusst allgemein gehalten, damit eine neue Form nicht an zwei
      Stellen nachgetragen werden muss. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?)$/;
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?|comment-mark|resolved)$/;
+
+  /* KaTeX erzeugt beim Rendern eine Vielzahl innerer Elemente mit eigenen
+     Klassen. Sie alle aufzuzählen wäre brüchig – jede neue KaTeX-Version
+     kann andere mitbringen. Weil KaTeX-Ausgabe aber reine Darstellung ist
+     (keine Handler, keine URLs), bekommt sie einen eigenen, breiteren
+     Filter: alles, was mit 'katex' beginnt, und alle kurzen Mathe-Klassen
+     der Form m… (mord, mfrac etc.) und Hilfsklassen (base, strut, vlist). */
+  const KATEX_KLASSEN = /^(katex|katex-(html|mathml|display)|base|strut|vlist|accent|overline|reset-size|sizing|delimsizing|nulldelimiter|op-symbol|m[a-z]{2,10}(-[a-z]{2,10})?)$/;
+
+  /* Nur an Tabellenzellen, nur diese zwei, und nur als kleine Zahl. Ohne
+     sie ginge eine verbundene Zelle beim ersten Abgleich auseinander –
+     eingefügt aus Word kommt so etwas regelmäßig. */
+  const ZELLEN_ATTRIBUTE = new Set(['colspan', 'rowspan']);
+  const istSpanne = (wert) => /^[1-9]\d{0,1}$/.test(String(wert).trim());
+
+  /* Die gezogene Spaltenbreite an <col> und die gezogene Zeilenhoehe an
+     <tr> (core/tables.js). Beide stehen als Attribut da und nicht als
+     style, denn von einem style bleibt unten allein die Farbe stehen –
+     Breite und Hoehe waeren beim ersten Abgleich weg.
+     Erlaubt ist eine nackte Zahl, nichts weiter. */
+  const istMass = (wert) => /^[1-9]\d{0,3}$/.test(String(wert).trim());
 
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {
@@ -100,7 +130,7 @@
       const wert = el.attributes[i].value;
 
       if (name === 'class') {
-        const behalten = String(wert).split(/\s+/).filter(c => ERLAUBTE_KLASSEN.test(c));
+        const behalten = String(wert).split(/\s+/).filter(c => ERLAUBTE_KLASSEN.test(c) || KATEX_KLASSEN.test(c));
         if (behalten.length) el.setAttribute('class', behalten.join(' '));
         else el.removeAttribute('class');
         continue;
@@ -118,6 +148,26 @@
 
       // <font color="…"> – der Weg, auf dem Chromium foreColor ablegt
       if (name === 'color' && el.tagName === 'FONT' && istFarbe(wert)) continue;
+
+      // Verbundene Zellen, siehe ZELLEN_ATTRIBUTE
+      if (ZELLEN_ATTRIBUTE.has(name) && (el.tagName === 'TD' || el.tagName === 'TH')
+          && istSpanne(wert)) continue;
+
+      // Gezogene Spaltenbreite und Zeilenhoehe, siehe istMass
+      if (name === 'width' && el.tagName === 'COL' && istMass(wert)) continue;
+      if (name === 'height' && el.tagName === 'TR' && istMass(wert)) continue;
+
+      // data-latex auf Formel-Spans: der LaTeX-Quelltext, aus dem KaTeX rendert.
+      // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.
+      if (name === 'data-latex' && el.tagName === 'SPAN'
+          && el.classList.contains('j-formula')) continue;
+
+      /* data-cid an der kommentierten Stelle: die Kennung des Kommentars,
+         zu dem sie gehört. Ohne sie ginge die Verknüpfung zwischen Text und
+         Karte nach dem ersten Abgleich verloren – die Markierung bliebe
+         stehen, wüsste aber nicht mehr, wovon sie handelt. */
+      if (name === 'data-cid' && el.tagName === 'SPAN'
+          && el.classList.contains('j-comment-mark')) continue;
 
       /* Alles Uebrige faellt weg: on*-Handler, src, href, srcset, formaction,
          data-*, xlink:href … Eine Liste des Verbotenen waere immer

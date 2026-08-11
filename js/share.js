@@ -367,8 +367,105 @@ async function signInMicrosoftInteractive(loginHint = '') {
   if (loginHint) params.login_hint = loginHint;
   provider.setCustomParameters(params);
 
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  try {
+    const result = await signInWithPopup(auth, provider);
+    offeneVerknuepfung = null;
+    return result.user;
+  } catch (err) {
+    if (err?.code !== 'auth/account-exists-with-different-credential') throw err;
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIESELBE ADRESSE, SCHON ÜBER GOOGLE ANGEMELDET
+
+       Firebase führt je E-Mail-Adresse EIN Konto. Wer sein
+       Microsoft-Konto auf eine Adresse angelegt hat, mit der er hier
+       schon einmal über Google angemeldet war (bei einer @gmail.com als
+       Microsoft-Konto keine Seltenheit), bekommt beim
+       Microsoft-Anmelden genau diesen Fehler.
+
+       Auflösen lässt sich das nur so, wie Firebase es vorsieht: einmal
+       mit dem BEKANNTEN Anbieter anmelden und die Microsoft-Anmeldung
+       daran anhängen. Danach gehören beide Wege zu einem Konto, und
+       Inkwell sieht dieselbe Person – wichtig, weil die Freigaben an der
+       Adresse hängen, nicht an der Anmeldeart.
+
+       Der Anhang bleibt hier liegen, statt gleich weiterzumachen: das
+       Fenster für Google braucht einen eigenen Klick. Ein zweites
+       Fenster ohne Zutun des Nutzers wird geblockt – es geht sonst
+       stumm nichts mehr. Die Oberfläche macht daraus den Knopf
+       „Mit Google bestätigen" (ui/share.js).
+       ══════════════════════════════════════════════════════════════════ */
+    /* Der Anhang darf FEHLEN. credentialFromError liefert ihn nicht in
+       jedem Fall zurück, und daran darf der zweite Schritt nicht
+       scheitern: worauf es ankommt, ist, dass Firebase den Nutzer unter
+       DIESER Adresse kennt – und das erledigt schon die Anmeldung über
+       Google. Der Anhang macht daraus zusätzlich ein Konto mit beiden
+       Wegen. Ohne ihn ging bisher gar nichts weiter: der Knopf blieb auf
+       Schritt eins stehen, und niemand kam je zu Schritt zwei. */
+    offeneVerknuepfung = {
+      credential: OAuthProvider.credentialFromError(err) || null,
+      email: normalizeEmail(err?.customData?.email) || normalizeEmail(loginHint),
+      at: Date.now()
+    };
+    const fehler = new Error('MICROSOFT_NEEDS_GOOGLE');
+    fehler.code = 'inkwell/microsoft-needs-google';
+    fehler.email = offeneVerknuepfung.email;
+    throw fehler;
+  }
+}
+
+/* Die Microsoft-Anmeldung, die auf ihre Verknüpfung wartet. Nur im
+   Speicher: eine Anmeldung von Microsoft ist Minuten gültig, nicht Tage. */
+let offeneVerknuepfung = null;
+
+/** Wartet gerade eine Microsoft-Anmeldung auf das Ja über Google? */
+function microsoftWartetAufGoogle() {
+  if (!offeneVerknuepfung) return null;
+  // Nach fünf Minuten ist die Anmeldung von Microsoft ohnehin abgelaufen
+  if (Date.now() - offeneVerknuepfung.at > 5 * 60 * 1000) {
+    offeneVerknuepfung = null;
+    return null;
+  }
+  return { email: offeneVerknuepfung.email };
+}
+
+/**
+ * Holt das Ja über Google und hängt Microsoft an dasselbe Konto.
+ *
+ * Muss aus einem KLICK heraus gerufen werden – es öffnet ein Fenster.
+ *
+ * @returns {Promise<object>} der jetzt angemeldete Nutzer
+ */
+async function linkMicrosoftWithGoogle(emailHint = '') {
+  const wartet = microsoftWartetAufGoogle();
+  const credential = offeneVerknuepfung ? offeneVerknuepfung.credential : null;
+  const email = (wartet && wartet.email) || normalizeEmail(emailHint);
+
+  const google = new GoogleAuthProvider();
+  google.addScope('email');
+  if (email) google.setCustomParameters({ login_hint: email });
+
+  await signInWithPopup(auth, google);
+
+  /* Ab hier kennt Firebase den Nutzer unter seiner Adresse – das ist das
+     Ziel, und die geteilten Dokumente gehen damit. Das Anhängen von
+     Microsoft ist die Zugabe: es erspart den Umweg beim nächsten Mal.
+     Scheitert sie, wird das nicht zum Fehler des Ganzen gemacht. */
+  if (credential) {
+    try {
+      await linkWithCredential(auth.currentUser, credential);
+    } catch (err) {
+      /* Schon verknüpft? Dann ist genau das erreicht, was gewollt war.
+         Kommt vor, wenn der Knopf zweimal gedrückt wurde. */
+      if (err?.code !== 'auth/provider-already-linked'
+          && err?.code !== 'auth/credential-already-in-use') {
+        console.warn('[Share] Microsoft liess sich nicht anhängen:',
+          err?.code || '', err?.message || err);
+      }
+    }
+  }
+  offeneVerknuepfung = null;
+  return auth.currentUser;
 }
 
 /* Antworten, die schlicht heissen „dafuer braucht es einen Menschen". Kein
@@ -401,8 +498,25 @@ async function signInMicrosoftSilently(loginHint = '') {
 
   try {
     const result = await signInWithPopup(auth, provider);
+    offeneVerknuepfung = null;
     return result.user;
   } catch (err) {
+    /* Dieselbe Adresse gehört schon zu einer Anmeldung über Google. Die
+       Anmeldung von Microsoft ist damit gültig, aber heimatlos – hier
+       aufheben, damit der Knopf in der Oberfläche daraus den zweiten
+       Schritt machen kann, ohne noch einmal bei Microsoft zu fragen. */
+    if (err?.code === 'auth/account-exists-with-different-credential') {
+      const anhang = OAuthProvider.credentialFromError(err);
+      if (anhang) {
+        offeneVerknuepfung = {
+          credential: anhang,
+          email: normalizeEmail(err?.customData?.email) || normalizeEmail(loginHint),
+          at: Date.now()
+        };
+      }
+      return null;
+    }
+
     const text = String(err?.code || '') + ' ' + String(err?.message || '');
     if (STILL_GESCHEITERT.test(text)) return null;
     throw err;
@@ -1976,6 +2090,12 @@ const CARET_THROTTLE_MS = 150;
    ui/collab.js, damit sich beides überlappt. */
 const LOCK_REFRESH_MS = 2000;
 
+/* So oft schreibt sich der Anwesenheitseintrag neu, auch wenn sich nichts
+   geändert hat – siehe setPage. Deutlich unter PRESENCE_STALE_MS
+   (90 s in ui/collab.js), damit ein Eintrag nie als alt gilt, solange
+   jemand wirklich da ist. */
+const PRESENCE_HEARTBEAT_MS = 5000;  // war 12000 – schneller erholen nach Besitzer-Wiedereinstieg
+
 /* Angaben, die an einer Änderung MITREISEN dürfen, aber nicht müssen:
    Stelle der Schreibmarke (c) und die beanspruchten Zeilen (lf, lt).
    Kennt die veröffentlichte Regel sie nicht, geht die Änderung ohne sie
@@ -2293,6 +2413,11 @@ async function joinDocRoom(docId, options = {}) {
         + 'dann nicht auf. Abhilfe: website/database.rules.json in der '
         + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.');
     }
+    // Etwaigen lost-Vermerk der VORIGEN Verbindung überschreiben.
+    // Schließt der Besitzer die App und öffnet sie sofort wieder, feuert
+    // das alte onDisconnect serverseitig NACH der neuen Verbindung und
+    // setzt lost:1 auf den frischen Eintrag – das hier löscht es wieder.
+    await set(meRef, { ...card, lost: null, at: rtNow() });
   }
   if (!ownerMarkOk) await onDisconnect(meRef).remove();
 
@@ -2338,7 +2463,30 @@ async function joinDocRoom(docId, options = {}) {
     /* Nichts Neues – aber eine bestehende Sperre muss trotzdem regelmäßig
        aufgefrischt werden, sonst läuft sie mitten im Schreiben ab. */
     const stale = from >= 0 && (Date.now() - card.lockAt) > LOCK_REFRESH_MS;
-    if (samePlace && sameLock && !stale) return;
+
+    /* ══════════════════════════════════════════════════════════════════
+       UND EIN LEBENSZEICHEN, AUCH WENN SICH NICHTS ÄNDERT
+
+       >>> Der Fall, den das repariert <<<
+       Der Besitzer macht die App zu und gleich wieder auf. Sein
+       onDisconnect-Auftrag von der ALTEN Verbindung läuft beim Server
+       erst Sekunden später ab – also NACH dem Beitreten der neuen. Er
+       setzt dann seinen Eintrag wieder auf `lost: 1`, obwohl er längst
+       wieder da ist. Für alle anderen bleibt er damit „nicht erreichbar",
+       und sie lesen nur noch.
+
+       Herauskommen konnte man daraus nicht: geschrieben wurde die
+       Anwesenheit nur bei einer Änderung, und wer gerade zusieht, ändert
+       nichts. Genau so wurde es gemeldet – „kurz raus und wieder rein,
+       bei den anderen steht immer noch Nur-Lesen".
+
+       Deshalb schreibt sich der Eintrag alle paar Sekunden von selbst neu.
+       Das kostet fast nichts und heilt jeden Fall, in dem er jemandem
+       abhandengekommen ist.
+       ══════════════════════════════════════════════════════════════════ */
+    const verblasst = Date.now() - lastPageWrite > PRESENCE_HEARTBEAT_MS;
+
+    if (samePlace && sameLock && !stale && !verblasst) return;
 
     const wasPage = card.pageId;
     card.pageId = pageId;
@@ -2609,6 +2757,9 @@ const InkwellShare = {
   signInWithProviderToken,
   signInMicrosoftInteractive,
   signInMicrosoftSilently,
+  // Dieselbe Adresse gehört schon zu einer Google-Anmeldung
+  microsoftWartetAufGoogle,
+  linkMicrosoftWithGoogle,
   signOutIdentity,
   currentIdentity,
   hasRealIdentity,
@@ -2670,6 +2821,7 @@ export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
   signInWithProviderToken, signInMicrosoftInteractive, signInMicrosoftSilently,
+  microsoftWartetAufGoogle, linkMicrosoftWithGoogle,
   signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
   shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,

@@ -660,7 +660,7 @@ function renderPrivacyEditor() {
   // Abschnitte
   const sectionBox = document.getElementById('privacy-section-fields');
   sectionBox.textContent = '';
-  (data.sections || []).forEach((section) => {
+  (data.sections || []).forEach((section, index) => {
     const block = document.createElement('div');
     block.className = 'admin-section-block';
 
@@ -668,11 +668,25 @@ function renderPrivacyEditor() {
     headingField.className = 'admin-field';
     const headingLabel = document.createElement('label');
     headingLabel.textContent = t('admin_privacy_section_heading');
+
+    /* Überschrift und Löschknopf in einer Zeile – der Knopf gehört an
+       den Abschnitt, den er trifft, und nicht in eine Liste am Ende. */
+    const headingRow = document.createElement('div');
+    headingRow.style.cssText = 'display:flex; gap:10px; align-items:center;';
     const headingInput = document.createElement('input');
     headingInput.type = 'text';
+    headingInput.style.flex = '1';
     headingInput.value = section.h || '';
     headingInput.addEventListener('input', () => { section.h = headingInput.value; });
-    headingField.append(headingLabel, headingInput);
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn-m warn';
+    delBtn.textContent = t('admin_privacy_section_del');
+    delBtn.addEventListener('click', () => entfernePrivacyAbschnitt(index));
+
+    headingRow.append(headingInput, delBtn);
+    headingField.append(headingLabel, headingRow);
     block.appendChild(headingField);
 
     /* Absätze stehen im Datenmodell als Liste. Im Formular sind sie ein
@@ -714,6 +728,75 @@ function renderPrivacyEditor() {
 
     sectionBox.appendChild(block);
   });
+
+  /* Der Knopf zum Anhängen steht UNTER der Liste, dort wo der neue
+     Abschnitt auch erscheint. */
+  const hinweis = document.createElement('p');
+  hinweis.className = 'admin-hint';
+  hinweis.style.margin = '4px 0 8px';
+  hinweis.textContent = t('admin_privacy_section_hint');
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn-m';
+  addBtn.textContent = t('admin_privacy_section_add');
+  addBtn.addEventListener('click', ergaenzePrivacyAbschnitt);
+
+  sectionBox.append(hinweis, addBtn);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ABSCHNITTE ANLEGEN UND ENTFERNEN
+
+   >>> Warum immer in ALLEN Sprachen zugleich <<<
+   Die Datenschutzseite ist EIN Text in drei Sprachen, und die Abschnitte
+   stehen in jeder Sprache an derselben Stelle. Käme einer nur auf Deutsch
+   dazu, hätte die englische Seite ihn nicht – und niemand merkte es, denn
+   im Formular sieht man immer nur eine Sprache.
+
+   Angelegt wird er deshalb überall, leer; gefüllt wird er je Sprache über
+   die Auswahl oben. Solange er leer bleibt, zeigt die Seite ihn gar
+   nicht an – datenschutz/index.html überspringt Abschnitte ohne jeden
+   Inhalt. Ein halb gefüllter Text steht also nie mit einer leeren
+   Überschrift da.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Die drei Sprachen der Seite. Ausdruecklich aufgezaehlt und nicht ueber
+   Object.keys geholt: im gespeicherten Dokument koennen auch andere
+   Felder stehen (Zeitstempel), und die haben keine Abschnitte. */
+const PRIVACY_SPRACHEN = ['de', 'en', 'it'];
+
+function privacySprachen() {
+  return PRIVACY_SPRACHEN.map((k) => privacyDraft && privacyDraft[k]).filter(Boolean);
+}
+
+function ergaenzePrivacyAbschnitt() {
+  if (!privacyDraft) return;
+  for (const fassung of privacySprachen()) {
+    if (!Array.isArray(fassung.sections)) fassung.sections = [];
+    fassung.sections.push({ h: '', p: [] });
+  }
+  renderPrivacyEditor();
+  // Ans Ende rollen: der neue Abschnitt steht dort, wo man ihn sucht
+  const box = document.getElementById('privacy-section-fields');
+  const letzter = box && box.querySelector('.admin-section-block:last-of-type');
+  if (letzter) letzter.scrollIntoView({ block: 'nearest' });
+}
+
+async function entfernePrivacyAbschnitt(index) {
+  if (!privacyDraft) return;
+  const ok = await askConfirm({
+    title: t('admin_privacy_section_del_title'),
+    body: t('admin_privacy_section_del_body'),
+    confirm: t('admin_privacy_section_del'),
+    danger: true
+  });
+  if (!ok) return;
+
+  for (const fassung of privacySprachen()) {
+    if (Array.isArray(fassung.sections)) fassung.sections.splice(index, 1);
+  }
+  renderPrivacyEditor();
 }
 
 async function savePrivacyDraft() {

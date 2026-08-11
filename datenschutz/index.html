@@ -112,7 +112,23 @@
     const box = document.getElementById('privacy-content');
     box.innerHTML = '';
 
+    /* Ein Abschnitt ohne jeden Inhalt wird uebersprungen.
+
+       Im Verwaltungsbereich lassen sich Abschnitte anlegen (admin/), und
+       ein neuer ist zunaechst leer – in allen drei Sprachen, denn er
+       entsteht ueberall zugleich. Wer ihn auf Deutsch ausfuellt und
+       speichert, haette sonst auf der englischen Seite eine leere
+       Ueberschrift stehen. Hier faellt sie einfach weg, bis dort etwas
+       drinsteht. */
+    const hatInhalt = (s) => !!(
+      (s.h && s.h.trim())
+      || (s.p && s.p.length) || (s.p2 && s.p2.length)
+      || (s.ul && s.ul.length) || s.table
+      || (s.note && s.note.trim()) || (s.links && s.links.length)
+    );
+
     for (const section of data.sections) {
+      if (!hatInhalt(section)) continue;
       const wrap = el('section', 'privacy-section');
 
       const h = el('h2');
