@@ -30,6 +30,9 @@
      · Tab in der LETZTEN Zelle hängt eine Zeile an.
      · Enter macht eine neue Zeile INNERHALB der Zelle, nicht darunter.
      · Die Spalten wachsen mit dem Inhalt (table-layout: auto).
+     · Spaltenbreite und Zeilenhöhe lassen sich an der Kante ziehen.
+       Die Höhe rastet dabei auf ganze Zeilen ein, damit der Text
+       darunter auf den Linien des Papiers bleibt.
      · Steht die Marke in einer Tabelle, erscheint eine kleine Leiste
        zum Einfügen und Löschen von Zeilen und Spalten.
    ══════════════════════════════════════════════════════════════════════ */
@@ -680,24 +683,98 @@ function setzeGriffe(table) {
     griff.dataset.spalte = String(i);
     zelle.appendChild(griff);
   });
+
+  /* ── Und ein waagerechter Streifen je Zeile ──────────────────────
+     Er liegt an der UNTERKANTE, auch bei der letzten Zeile: die tiefer
+     zu machen ist genauso naheliegend wie jede andere.
+
+     >>> Warum nur in der ersten Spalte <<<
+     Genau wie die senkrechten Streifen nur in der ersten ZEILE stehen.
+     Ein Streifen in jeder Zelle waere ein Element je Zelle, das im
+     beschreibbaren Text mitliegt – und mit ihm eine Stelle mehr, an der
+     die Schreibmarke haengen bleiben kann. Die linke Kante ist die,
+     an der auch Word den Zeiger anbietet. */
+  [...table.querySelectorAll('tr')].forEach(zeile => {
+    const zelle = zeile.firstElementChild;
+    if (!zelle || zelle.querySelector(':scope > .j-tbl-zeilengriff')) return;
+
+    const griff = document.createElement('span');
+    griff.className = 'j-tbl-zeilengriff';
+    griff.contentEditable = 'false';
+    zelle.appendChild(griff);
+  });
 }
 
 /** Alle Greifstreifen aus einem Baum nehmen – vor dem Sichern. */
 function entferneGriffe(wurzel) {
   if (!wurzel || !wurzel.querySelectorAll) return;
-  wurzel.querySelectorAll('.j-tbl-griff').forEach(g => g.remove());
+  wurzel.querySelectorAll('.j-tbl-griff, .j-tbl-zeilengriff').forEach(g => g.remove());
 }
 
 /* Die Streifen kommen und gehen mit der Schreibmarke: nur die Tabelle,
    in der man gerade steht, zeigt sie. */
 function aktualisiereGriffe(cell) {
-  document.querySelectorAll('.j-tbl-griff').forEach(g => {
+  document.querySelectorAll('.j-tbl-griff, .j-tbl-zeilengriff').forEach(g => {
     if (!cell || g.closest('table') !== cell.closest('table')) g.remove();
   });
   if (cell) setzeGriffe(cell.closest('table.j-table'));
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ZEILENHÖHE ZIEHEN
+
+   Dasselbe wie bei den Spalten, nur senkrecht – und mit einem Zusatz,
+   den die Spalten nicht brauchen: die Höhe RASTET EIN.
+
+   >>> Warum sie einrastet <<<
+   Der ganze Seitentext sitzt in einem Raster von einer Zeilenhöhe
+   (--lh, meist 32 px). Eine Tabellenzeile von 47 px würde alles darunter
+   um 15 px neben die Linien des Papiers schieben – genau der Fehler, der
+   für die Ränder eigens behoben wurde (css/pages.css). Eine gezogene
+   Zeile ist deshalb immer ein ganzes Vielfaches einer Zeilenhöhe, und
+   das fühlt sich beim Ziehen auch richtig an: sie springt von Zeile zu
+   Zeile, wie das Papier darunter.
+
+   Die Höhe steht als height am <tr> und nicht als style: von einem style
+   bleibt beim Bereinigen allein die Farbe stehen (core/sanitize.js).
+   ══════════════════════════════════════════════════════════════════════ */
+let zeilenZieh = null;
+
+/** Die Zeilenhöhe der Seite, in der diese Tabelle steht. */
+function zeilenhoeheVon(table) {
+  const textDiv = table && table.closest ? table.closest('.j-text') : null;
+  if (!textDiv) return 32;
+  const wert = parseFloat(getComputedStyle(textDiv).lineHeight);
+  return wert > 0 ? wert : 32;
+}
+
 document.addEventListener('pointerdown', e => {
+  const zGriff = e.target.closest && e.target.closest('.j-tbl-zeilengriff');
+  if (zGriff && !S.readOnly) {
+    const zeile = zGriff.closest('tr');
+    const table = zGriff.closest('table.j-table');
+    if (!zeile || !table) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    try { zGriff.setPointerCapture(e.pointerId); } catch (err) { }
+    zGriff.classList.add('j-zieht');
+
+    const textDiv = table.closest('.j-text');
+    const pgEl = textDiv && textDiv.closest('[data-pgid]');
+    const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
+    if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
+
+    const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+    zeilenZieh = {
+      zeile, griff: zGriff, textDiv, zoom,
+      lh: zeilenhoeheVon(table),
+      startY: e.clientY,
+      startHoehe: zeile.getBoundingClientRect().height / (zoom || 1)
+    };
+    return;
+  }
+
   const griff = e.target.closest && e.target.closest('.j-tbl-griff');
   if (!griff || S.readOnly) return;
 
@@ -730,6 +807,16 @@ document.addEventListener('pointerdown', e => {
 }, true);
 
 document.addEventListener('pointermove', e => {
+  if (zeilenZieh) {
+    e.preventDefault();
+    const dy = (e.clientY - zeilenZieh.startY) / (zeilenZieh.zoom || 1);
+    const lh = zeilenZieh.lh;
+    // Auf ganze Zeilenhöhen runden, mindestens eine – siehe Kopf oben
+    const stufen = Math.max(1, Math.round((zeilenZieh.startHoehe + dy) / lh));
+    zeilenZieh.zeile.setAttribute('height', String(Math.round(stufen * lh)));
+    return;
+  }
+
   if (!tblZieh) return;
   e.preventDefault();
 
@@ -750,6 +837,13 @@ document.addEventListener('pointermove', e => {
 }, { passive: false });
 
 function beendeZiehen() {
+  if (zeilenZieh) {
+    zeilenZieh.griff.classList.remove('j-zieht');
+    notiereText(zeilenZieh.textDiv);
+    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+    zeilenZieh = null;
+    return;
+  }
   if (!tblZieh) return;
   tblZieh.griff.classList.remove('j-zieht');
   notiereText(tblZieh.textDiv);
@@ -766,8 +860,10 @@ document.addEventListener('selectionchange', () => {
   const cell = currentCell();
   if (cell) positionTableBar(cell);
   else versteckeTableBar();
-  // Die Greifstreifen zeigt nur die Tabelle, in der die Marke steht
-  if (!tblZieh) aktualisiereGriffe(cell);
+  // Die Greifstreifen zeigt nur die Tabelle, in der die Marke steht.
+  // Waehrend gezogen wird nicht: das Neusetzen naehme den Streifen weg,
+  // an dem der Finger gerade haengt.
+  if (!tblZieh && !zeilenZieh) aktualisiereGriffe(cell);
 });
 
 // Beim Rollen und Zoomen zieht sie mit

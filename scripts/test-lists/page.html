@@ -227,10 +227,39 @@ pruefe('Und zurueck ergibt wieder drei Punkte nebeneinander',
   && feld.querySelectorAll('li').length === 3
   && feld.textContent === 'abc', bau());
 
+/* Der erste Punkt hat keinen Vorgaenger, unter den er rutschen koennte –
+   in Word rueckt er trotzdem ein, und genau das wurde vermisst. Gebaut
+   wird eine Huelle an seiner Stelle: <ul><ul><li>. */
 stelle(DREI, 0);                     // der erste Punkt
 Lists.indent();
-pruefe('Der erste Punkt kann nicht tiefer',
-  !feld.querySelector('li ul'), bau());
+pruefe('Auch der erste Punkt rueckt ein (wie in Word)',
+  /<ul[^>]*><ul[^>]*><li>a<\/li><\/ul><li>b<\/li><li>c<\/li><\/ul>/.test(bau()), bau());
+pruefe('Und er sitzt sichtbar weiter rechts',
+  feld.querySelector('ul ul li').getBoundingClientRect().left
+  > feld.querySelectorAll('li')[1].getBoundingClientRect().left,
+  bau());
+
+// Noch einmal Tab: eine Ebene tiefer, nicht eine Huelle daneben
+Lists.indent();
+pruefe('Noch ein Tab geht noch eine Ebene tiefer',
+  feld.querySelectorAll('ul ul ul li').length === 1, bau());
+
+Lists.outdent();
+Lists.outdent();
+pruefe('Und zweimal zurueck ergibt wieder die flache Liste',
+  feld.querySelectorAll('ul').length === 1
+  && feld.querySelectorAll('li').length === 3
+  && feld.textContent === 'abc', bau());
+
+/* Der zweite Punkt hinter einer schon eingerueckten Huelle gehoert IN
+   sie – sonst stuenden zwei Unterlisten nebeneinander. */
+stelle(DREI, 0);
+Lists.indent();                      // a in eine Huelle
+stelle(bau(), 2);                    // Marke in „b"
+Lists.indent();
+pruefe('Der naechste Punkt kommt in dieselbe Huelle',
+  feld.querySelectorAll('ul ul').length === 1
+  && feld.querySelectorAll('ul ul li').length === 2, bau());
 
 /* Ausruecken in der MITTE: was danach kommt, muss unter dem Punkt
    bleiben, sonst rutschen Zeilen vor ihn. */
@@ -364,6 +393,66 @@ const letzter = bloecke[bloecke.length - 1].getBoundingClientRect();
 const gesamt = Math.round(letzter.bottom - ersteOben);
 pruefe('Sechs Zeilen sind ' + (6 * ZEILE) + ' px – kein Abstand um die Liste',
   gesamt === 6 * ZEILE, gesamt + ' px');
+
+/* ── Und eine Tabelle verschiebt es nicht ─────────────────────────────
+   Eine Tabelle im Text ist der zweite Weg, auf dem das Raster kaputt
+   geht: ein Rand nimmt Platz ein, und aus 32 px Zeile werden 33. Bei
+   drei Zeilen sitzt der Text darunter dann vier Pixel neben der Linie,
+   und zwar fuer den Rest der Seite. Genau so wurde es gemeldet.
+
+   css/pages.css malt die Zellenraender deshalb als box-shadow (der
+   liegt IM Element und kostet nichts) und gibt der Tabelle margin 0.
+   Geprueft wird beides zusammen: der Abstand des Absatzes UNTER der
+   Tabelle muss ein ganzes Vielfaches der Zeilenhoehe sein. */
+abschnitt('Eine Tabelle bleibt im Raster');
+
+feld.style.setProperty('--lh', ZEILE + 'px');
+
+function tabellenAbstand(zeilen, inhalt) {
+  let tr = '';
+  for (let i = 0; i < zeilen; i++) tr += '<tr><td>' + inhalt + '</td><td>b</td></tr>';
+  feld.innerHTML = '<p>davor</p><table class="j-table"><tbody>' + tr
+    + '</tbody></table><p>danach</p>';
+  const p = feld.querySelectorAll('p');
+  return p[1].getBoundingClientRect().top - p[0].getBoundingClientRect().top;
+}
+
+for (const n of [1, 2, 3, 5]) {
+  const d = tabellenAbstand(n, 'a');
+  pruefe(n + ' Tabellenzeile(n): der Text darunter sitzt auf der Linie',
+    d % ZEILE === 0 && d === (n + 1) * ZEILE, d + ' px');
+}
+
+/* Auch mit Umbruch in einer Zelle – dort waechst die Zeile um ganze
+   Zeilenhoehen, nicht um irgendetwas. */
+feld.innerHTML = '<p>davor</p><table class="j-table">'
+  + '<colgroup><col width="90"><col width="90"></colgroup><tbody>'
+  + '<tr><td>ein ziemlich langer Satz der in einer schmalen Spalte umbricht</td><td>b</td></tr>'
+  + '<tr><td>c</td><td>d</td></tr></tbody></table><p>danach</p>';
+const tblP = feld.querySelectorAll('p');
+const tblAbstand = tblP[1].getBoundingClientRect().top - tblP[0].getBoundingClientRect().top;
+pruefe('Auch eine umbrechende Zelle bleibt im Raster',
+  tblAbstand % ZEILE === 0, tblAbstand + ' px');
+
+/* Die gezogene Zeilenhoehe steht als height am <tr> (core/tables.js) und
+   rastet auf ganze Zeilen ein. Der Browser muss sie auch wirklich
+   annehmen – sonst zoege man ins Leere. */
+feld.innerHTML = '<p>davor</p><table class="j-table"><tbody>'
+  + '<tr height="' + (3 * ZEILE) + '"><td>a</td><td>b</td></tr>'
+  + '<tr><td>c</td><td>d</td></tr></tbody></table><p>danach</p>';
+const zeilenHoehen = [...feld.querySelectorAll('tr')]
+  .map(r => Math.round(r.getBoundingClientRect().height));
+pruefe('Eine gezogene Zeilenhoehe gilt',
+  JSON.stringify(zeilenHoehen) === JSON.stringify([3 * ZEILE, ZEILE]),
+  JSON.stringify(zeilenHoehen));
+
+const gezogenP = feld.querySelectorAll('p');
+const gezogenAbstand = gezogenP[1].getBoundingClientRect().top
+  - gezogenP[0].getBoundingClientRect().top;
+pruefe('Und bleibt dabei im Raster',
+  gezogenAbstand === 5 * ZEILE, gezogenAbstand + ' px');
+
+feld.style.removeProperty('--lh');
 
 abschnitt('Die Marken werden wirklich gemalt');
 

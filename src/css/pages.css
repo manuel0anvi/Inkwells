@@ -199,13 +199,44 @@ body.touch-draw .j-canvas {
    Die Breite ist auf 100 % gedeckelt, sonst schöbe eine lange Zeile die
    Tabelle über den Blattrand hinaus, wo sie abgeschnitten wird
    (.j-page hat overflow: hidden).
+
+   ══ DIE TABELLE DARF DAS LINIENRASTER NICHT VERSCHIEBEN ══════════════
+   Alles auf dieser Seite sitzt in einem Raster von einer Zeilenhöhe
+   (--lh, meist 32 px). Was eine Tabelle an Höhe einnimmt, muss deshalb
+   ein VIELFACHES davon sein – sonst rutscht jede Zeile darunter neben
+   die Linien des Papiers, und zwar für den Rest der Seite. Gemeldet
+   wurde genau das: eine Tabelle über dem Text, und der Text sitzt nicht
+   mehr auf den Linien.
+
+   Zwei Dinge standen dem im Weg:
+
+     1. `margin: 6px 0` – zwölf Pixel, die durch nichts teilbar sind.
+        Gemessen sass der Text darunter danach 14 px zu tief. Jetzt 0;
+        wer Luft will, lässt eine Zeile frei, und die ist 32 px hoch.
+
+     2. Der RAND der Zellen. Ein Rand nimmt Platz ein: eine Zeile mit
+        32 px Inhalt und 1 px Rand ist 33 px hoch, und bei n Zeilen
+        stimmt es um n+1 Pixel nicht mehr. `height` an der Zelle half
+        nicht – der Inhalt ist schon eine volle Zeilenhöhe hoch, und
+        weniger wird eine Zelle davon nicht.
+
+   Deshalb wird der Rand als `box-shadow: inset` gemalt statt als
+   `border`. Ein Schatten liegt IM Element und kostet keinen Platz;
+   gemessen ist eine Zeile damit auf den Pixel genau eine Zeilenhöhe
+   hoch, auch wenn eine Zelle umbricht und über mehrere Zeilen geht.
+
+   Rechts und unten je Zelle, oben und links einmal an der Tabelle –
+   sonst lägen zwischen zwei Zellen zwei Striche nebeneinander und die
+   Linie wäre doppelt so dick.
    ══════════════════════════════════════════════════════════════════════ */
 .j-text table.j-table {
   border-collapse: collapse;
   table-layout: auto;
   max-width: 100%;
-  margin: 6px 0;
-  font-size: inherit
+  margin: 0;
+  font-size: inherit;
+  /* Der obere und der linke Rand der ganzen Tabelle */
+  box-shadow: inset 1px 1px 0 0 rgba(28, 20, 10, .72)
 }
 
 /* >>> Sobald Spaltenbreiten gesetzt sind, gilt fest <<<
@@ -249,10 +280,37 @@ body.touch-draw .j-canvas {
       var(--gold, #c9a227) 6px, transparent 6px)
 }
 
+/* Und derselbe Streifen waagerecht, an der Unterkante jeder Zeile
+   (core/tables.js). Er sitzt in der ERSTEN Zelle der Zeile – dieselbe
+   Sparsamkeit wie oben, wo die senkrechten nur in der ersten Zeile
+   stehen. */
+.j-tbl-zeilengriff {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 9px;
+  cursor: row-resize;
+  z-index: 3;
+  background: transparent
+}
+
+.j-tbl-zeilengriff:hover,
+.j-tbl-zeilengriff.j-zieht {
+  background: linear-gradient(to bottom,
+      transparent 3px, var(--gold, #c9a227) 3px,
+      var(--gold, #c9a227) 6px, transparent 6px)
+}
+
 @media (any-pointer: coarse) {
   .j-tbl-griff {
     right: -7px;
     width: 15px
+  }
+
+  .j-tbl-zeilengriff {
+    bottom: -7px;
+    height: 15px
   }
 }
 
@@ -261,8 +319,13 @@ body.touch-draw .j-canvas {
   /* >>> Warum nicht var(--pl) <<<
      Das ist die Farbe der Papierlinien. Eine Tabelle war damit von der
      Linierung nicht zu unterscheiden – gemeldet als „man sieht nichts".
-     Ein Tabellenrand ist gezogen, kein Papier: er gehoert dunkel. */
-  border: 1px solid rgba(28, 20, 10, .72);
+     Ein Tabellenrand ist gezogen, kein Papier: er gehoert dunkel.
+
+     >>> Und warum box-shadow statt border <<<
+     Weil ein Rand Platz einnimmt und damit das Linienraster der Seite
+     verschiebt. Die lange Begruendung steht oben am Tabellen-Block. */
+  border: 0;
+  box-shadow: inset -1px -1px 0 0 rgba(28, 20, 10, .72);
   padding: 0 7px;
   vertical-align: middle;
   /* Ohne das reisst ein langes Wort die Spalte auf, statt umzubrechen */

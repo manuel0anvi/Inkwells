@@ -10,12 +10,15 @@
 
      · An, aus, Form wechseln – auch aus reinem Text heraus, denn solange
        nur getippt wurde, hat eine Seite gar keine Absätze.
-     · Tab, Enter und Rücktaste verhalten sich wie in Word.
+     · Tab, Enter und Rücktaste verhalten sich wie in Word – auch auf
+       dem ERSTEN Punkt, den Word ebenfalls einrückt.
      · Aus getipptem „1. " oder „- " wird eine Liste.
      · DAS RASTER: jede Zeile bleibt genau eine Zeilenhöhe hoch. Geht das
        verloren, sitzt der ganze Text darunter neben den Linien des
        Papiers – und die Schreibmarken der Mitschreiber rechnen aus
-       derselben Zeilenhöhe.
+       derselben Zeilenhöhe. Geprüft wird das für Aufzählungen UND für
+       Tabellen: eine Tabelle im Text ist der zweite Weg, auf dem das
+       Raster verrutscht (css/pages.css, core/tables.js).
 
    Läuft NICHT in `npm test` – das ist reines Node und soll es bleiben.
    Aufruf:  npm run test:lists

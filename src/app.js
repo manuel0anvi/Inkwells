@@ -105,13 +105,17 @@ function _applyPageSnapshot(page, snap) {
   if (typeof ensureCommentsFromMarkers === 'function') ensureCommentsFromMarkers(pgEl);
 }
 
+/* Die Bedienteile im Text: die Greifstreifen an den Spaltengrenzen und
+   an den Zeilenunterkanten (core/tables.js). */
+const GRIFF_WAHL = '.j-tbl-griff, .j-tbl-zeilengriff';
+
 /**
  * Der HTML-Inhalt eines Textbereichs OHNE die Bedienteile.
  *
- * Bisher steht darin nur der Greifstreifen an den Tabellenspalten
- * (core/tables.js). Er liegt als Kind in der Zelle, damit er sich mit ihr
- * bewegt – gespeichert werden darf er aber nicht, sonst reist er durch
- * Yjs zu den anderen und kommt bei jedem Abgleich ein weiteres Mal dazu.
+ * Die Greifstreifen liegen als Kind in der Zelle, damit sie sich mit ihr
+ * bewegen – gespeichert werden dürfen sie aber nicht, sonst reisen sie
+ * durch Yjs zu den anderen und kommen bei jedem Abgleich ein weiteres
+ * Mal dazu.
  *
  * Kopiert wird der Baum, statt die Streifen kurz herauszunehmen: das
  * Herausnehmen und Zurückhängen im lebenden Baum verschöbe die
@@ -119,9 +123,9 @@ function _applyPageSnapshot(page, snap) {
  */
 function ohneGriffe(textDiv) {
   if (!textDiv) return '';
-  if (!textDiv.querySelector('.j-tbl-griff')) return textDiv.innerHTML;
+  if (!textDiv.querySelector(GRIFF_WAHL)) return textDiv.innerHTML;
   const kopie = textDiv.cloneNode(true);
-  kopie.querySelectorAll('.j-tbl-griff').forEach(g => g.remove());
+  kopie.querySelectorAll(GRIFF_WAHL).forEach(g => g.remove());
   return kopie.innerHTML;
 }
 
@@ -912,68 +916,14 @@ E('btn-panel-toggle').addEventListener('click', () => {
   }, { passive: false });
 })();
 
-/* ── ZOOM BUTTONS ──
-   Die eigenen − und + gibt es in der Leiste nicht mehr; beides steht in
-   der Auswahl hinter dem Prozentwert. Die Zeilen bleiben mit ?. stehen,
-   damit ein Tastenkürzel oder ein Test sie weiter ansprechen kann. */
+/* ── ZOOM ──────────────────────────────────────────────────────────
+   − und + stehen wieder fest in der Leiste (index.html) und werden nie
+   weggeblaettert. Der Prozentwert dazwischen setzt zurueck: quer auf
+   100 %, im Hochformat auf „eingepasst" (core/zoom.js, zoomReset). */
 E('btn-zoom-in')?.addEventListener('click', zoomIn);
 E('btn-zoom-out')?.addEventListener('click', zoomOut);
+E('btn-zoom-reset')?.addEventListener('click', zoomReset);
 
-/* ══════════════════════════════════════════════════════════════════════
-   DER ZOOM IM HOCHFORMAT
-
-   Quer stehen drei Knoepfe da: −, der Prozentwert, +. Im Hochformat ist
-   die Leiste zu schmal dafuer, und css/responsive.css nimmt − und + weg
-   (Stufe 2). Uebrig bleibt der Prozentwert – und der setzte nur zurueck.
-   Im Hochformat heisst „zuruecksetzen" aber: wieder einpassen, also
-   genau der Zustand, in dem man ohnehin schon ist. Ein Druck darauf tat
-   sichtbar nichts, und groesser oder kleiner ging gar nicht mehr.
-
-   Deshalb oeffnet er dort eine kleine Auswahl mit −, + und Einpassen.
-   Gefragt wird nicht nach der Fensterbreite, sondern danach, ob die
-   beiden Knoepfe gerade wirklich zu sehen sind: die Schwelle steht in der
-   Medienabfrage und haengt zusaetzlich an der Navigation.
-   ══════════════════════════════════════════════════════════════════════ */
-function zoomButtonsVisible() {
-  const btn = E('btn-zoom-in');
-  return !!btn && btn.offsetParent !== null;
-}
-
-function zoomPopOpen() {
-  return E('zoom-pop')?.style.display === 'flex';
-}
-
-function closeZoomPop() {
-  const pop = E('zoom-pop');
-  if (pop) pop.style.display = 'none';
-  document.removeEventListener('pointerdown', _zoomPopOutside, true);
-}
-
-function _zoomPopOutside(e) {
-  if (e.target.closest('#zoom-pop, #btn-zoom-reset')) return;
-  closeZoomPop();
-}
-
-function openZoomPop() {
-  const pop = E('zoom-pop'), anchor = E('btn-zoom-reset');
-  if (!pop || !anchor) return;
-  const r = anchor.getBoundingClientRect();
-  pop.style.display = 'flex';
-  // Erst messen, wenn es steht – vorher ist die Breite 0
-  const w = pop.offsetWidth || 150;
-  pop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))) + 'px';
-  pop.style.top = Math.round(r.bottom + 6) + 'px';
-  setTimeout(() => document.addEventListener('pointerdown', _zoomPopOutside, true), 0);
-}
-
-E('btn-zoom-reset').addEventListener('click', () => {
-  if (zoomButtonsVisible()) { zoomReset(); return; }
-  if (zoomPopOpen()) closeZoomPop(); else openZoomPop();
-});
-
-E('zoom-pop-out')?.addEventListener('click', zoomOut);
-E('zoom-pop-in')?.addEventListener('click', zoomIn);
-E('zoom-pop-fit')?.addEventListener('click', () => { zoomReset(); closeZoomPop(); });
 
 
 /* ── ADD PAGE BUTTON ── */

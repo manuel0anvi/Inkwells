@@ -474,16 +474,49 @@
         const liste = listeVon(li);
         if (!liste) continue;
 
-        /* Der erste Punkt einer Liste kann nicht tiefer: unter welchen
-           denn? Word lässt ihn ebenfalls stehen. */
         const davor = li.previousElementSibling;
-        if (!davor || davor.tagName !== 'LI') continue;
 
-        let unter = davor.lastElementChild;
+        /* ── Der gewöhnliche Fall: unter den Punkt davor ──────────── */
+        if (davor && davor.tagName === 'LI') {
+          let unter = davor.lastElementChild;
+          if (!istListe(unter)) {
+            unter = document.createElement(liste.tagName);
+            unter.className = liste.className;
+            davor.appendChild(unter);
+          }
+          unter.appendChild(li);
+          etwas = true;
+          continue;
+        }
+
+        /* ── Der ERSTE Punkt einer Liste ──────────────────────────────
+           Hier stand: „kann nicht tiefer – unter welchen denn?" Das ist
+           die Sicht von HTML, wo eine Ebene ein Punkt IN einem Punkt
+           ist. Word sieht es anders: dort ist eine Ebene ein Einzug,
+           und der erste Punkt rückt genauso ein wie jeder andere.
+
+           Gemeldet wurde genau das – „Unterpunkte gehen nicht": wer
+           eine Aufzählung anfängt und gleich Tab drückt, sah nichts
+           geschehen. Und das ist der häufigste Weg überhaupt, denn die
+           erste Zeile ist die, an der man anfängt.
+
+           Gebaut wird dafür eine Hülle an der STELLE des Punktes, nicht
+           in einem Vorgänger: <ul><ul><li>…  Das ist zwar nicht die
+           sauberste Verschachtelung, aber die einzige ohne einen leeren
+           Eltern-Punkt, der als Marke ohne Text dastünde. Alles
+           Übrige kommt damit zurecht – einenAusruecken() kennt die Form
+           ausdrücklich, css/pages.css staffelt über den Nachfahren-
+           Selektor, und core/docx.js zählt die Ebene an den Listen und
+           nicht an den Punkten dazwischen.
+
+           Ist der Vorgänger schon so eine Hülle, geht der Punkt dort
+           hinein – sonst stünden zwei Unterlisten nebeneinander, wo
+           eine gemeint war. */
+        let unter = davor;
         if (!istListe(unter)) {
           unter = document.createElement(liste.tagName);
           unter.className = liste.className;
-          davor.appendChild(unter);
+          liste.insertBefore(unter, li);
         }
         unter.appendChild(li);
         etwas = true;

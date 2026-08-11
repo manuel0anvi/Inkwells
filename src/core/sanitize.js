@@ -92,11 +92,12 @@
   const ZELLEN_ATTRIBUTE = new Set(['colspan', 'rowspan']);
   const istSpanne = (wert) => /^[1-9]\d{0,1}$/.test(String(wert).trim());
 
-  /* Die gezogene Spaltenbreite (core/tables.js). Sie steht an <col> und
-     nicht als style an der Zelle, denn von einem style bleibt unten allein
-     die Farbe stehen – die Breite waere beim ersten Abgleich weg.
+  /* Die gezogene Spaltenbreite an <col> und die gezogene Zeilenhoehe an
+     <tr> (core/tables.js). Beide stehen als Attribut da und nicht als
+     style, denn von einem style bleibt unten allein die Farbe stehen –
+     Breite und Hoehe waeren beim ersten Abgleich weg.
      Erlaubt ist eine nackte Zahl, nichts weiter. */
-  const istBreite = (wert) => /^[1-9]\d{0,3}$/.test(String(wert).trim());
+  const istMass = (wert) => /^[1-9]\d{0,3}$/.test(String(wert).trim());
 
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {
@@ -140,8 +141,9 @@
       if (ZELLEN_ATTRIBUTE.has(name) && (el.tagName === 'TD' || el.tagName === 'TH')
           && istSpanne(wert)) continue;
 
-      // Gezogene Spaltenbreite, siehe istBreite
-      if (name === 'width' && el.tagName === 'COL' && istBreite(wert)) continue;
+      // Gezogene Spaltenbreite und Zeilenhoehe, siehe istMass
+      if (name === 'width' && el.tagName === 'COL' && istMass(wert)) continue;
+      if (name === 'height' && el.tagName === 'TR' && istMass(wert)) continue;
 
       // data-latex auf Formel-Spans: der LaTeX-Quelltext, aus dem KaTeX rendert.
       // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.

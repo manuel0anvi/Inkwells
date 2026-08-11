@@ -334,7 +334,10 @@ function buildPdfPage(nb, sec, page, pageNo) {
      ausloesen. */
   const exportText = sanitizePageHtml(page.textContent);
   if (exportText) {
-    html += `<div class="tx" style="line-height:${lh}px;padding-top:${pt}px;right:${rightPad}px">`
+    /* --lh muss mit: die Tabellenzellen halten darüber ihre Mindesthöhe
+       auf genau eine Zeile (siehe die Regeln im Kopf von buildPdf). Ohne
+       das wäre eine leere Zelle im Ausdruck ein Strich ohne Höhe. */
+    html += `<div class="tx" style="line-height:${lh}px;--lh:${lh}px;padding-top:${pt}px;right:${rightPad}px">`
       + exportText + '</div>';
   }
 
@@ -521,6 +524,52 @@ function buildPdf(nb, options = {}) {
         font-style: italic; color: #2a1f14; border-bottom: 1px solid #e2dbd0; display: block }
   .tx h2, .tx p.j-title-2 { font-weight: 600; color: #2a1f14; display: block }
   .tx h3, .tx p.j-title-3 { font-weight: 600; font-style: italic; color: #3a2e22; display: block }
+
+  /* ── Aufzaehlungen und Tabellen ──────────────────────────────────────
+     ACHTUNG: Dieser Block steht INNERHALB einer Schablonenzeichenkette.
+     Ein Gegenstrich-Anfuehrungszeichen beendete sie hier mitten im
+     Kommentar – deshalb steht im Folgenden keines.
+
+     Beide Regelsaetze standen hier gar nicht, und das ist im Ausdruck zu
+     sehen: der Rundumschlag ganz oben (Sternchen, margin 0, padding 0)
+     nimmt einer Liste ihren Einzug – die Punkte klebten am linken Rand –
+     und eine Tabelle bekam die Voreinstellung des Browsers, also keine
+     Linien.
+
+     Die Regeln sind dieselben wie in css/pages.css – auch der Grund
+     dafuer, dass die Zellenlinien aus einem box-shadow kommen und nicht
+     aus einem border: ein Rand nimmt Platz ein und schoebe den Text
+     unter der Tabelle neben die Linien des Papiers. */
+  .tx ul, .tx ol { margin: 0; padding: 0 0 0 32px; line-height: inherit }
+  .tx li { margin: 0; padding: 0; line-height: inherit }
+  .tx ul.j-list-disc { list-style-type: disc }
+  .tx ul.j-list-circle { list-style-type: circle }
+  .tx ul.j-list-square { list-style-type: square }
+  .tx ul.j-list-dash { list-style-type: '– ' }
+  .tx ul.j-list-arrow { list-style-type: '➤ ' }
+  .tx ul.j-list-check { list-style-type: '✓ ' }
+  .tx ol.j-list-decimal { list-style-type: decimal }
+  .tx ol.j-list-lower-alpha { list-style-type: lower-alpha }
+  .tx ol.j-list-upper-alpha { list-style-type: upper-alpha }
+  .tx ol.j-list-lower-roman { list-style-type: lower-roman }
+  .tx ol.j-list-upper-roman { list-style-type: upper-roman }
+  .tx ol.j-list-paren { list-style-type: decimal }
+  .tx ol.j-list-paren > li::marker { content: counter(list-item) ') ' }
+  .tx ol.j-list-alpha-paren { list-style-type: lower-alpha }
+  .tx ol.j-list-alpha-paren > li::marker { content: counter(list-item, lower-alpha) ') ' }
+  .tx ul.j-list-disc ul.j-list-disc { list-style-type: circle }
+  .tx ul.j-list-disc ul.j-list-disc ul.j-list-disc { list-style-type: square }
+  .tx ol.j-list-decimal ol.j-list-decimal { list-style-type: lower-alpha }
+  .tx ol.j-list-decimal ol.j-list-decimal ol.j-list-decimal { list-style-type: lower-roman }
+
+  .tx table.j-table { border-collapse: collapse; table-layout: auto; max-width: 100%;
+        margin: 0; font-size: inherit; box-shadow: inset 1px 1px 0 0 rgba(28,20,10,.72) }
+  .tx table.j-table:has(colgroup) { table-layout: fixed }
+  .tx table.j-table td, .tx table.j-table th { border: 0;
+        box-shadow: inset -1px -1px 0 0 rgba(28,20,10,.72);
+        padding: 0 7px; vertical-align: middle; word-break: break-word;
+        overflow-wrap: break-word; min-width: 28px; height: var(--lh, 32px) }
+  .tx table.j-table th { font-weight: 600; text-align: left; background: rgba(28,20,10,.07) }
 
   /* Dieselbe Staffelung wie in der App (css/pages.css): Muster 1 ·
      Bild hinten 100 · Text 1000 · Handschrift 1100 · Seitenkopf 1300 ·

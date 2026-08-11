@@ -127,6 +127,31 @@ pruefe('Aber ohne Handgriffe daran',
 pruefe('Und ohne unsinnige Spannweite',
   !boeseZelle.includes('99999'), JSON.stringify(boeseZelle));
 
+/* Die gezogenen Masse (core/tables.js): die Spaltenbreite an <col>, die
+   Zeilenhoehe an <tr>. Beide muessen hier durchkommen, sonst waeren sie
+   beim ersten Abgleich weg und die Tabelle spraenge auf ihre alten Masse
+   zurueck. Ein style waere keine Alternative – davon bleibt unten allein
+   die Farbe stehen. */
+const gezogen = sanitizePageHtml(
+  '<table class="j-table"><colgroup><col width="120"><col width="90"></colgroup>'
+  + '<tbody><tr height="96"><td>a</td><td>b</td></tr></tbody></table>');
+pruefe('Die gezogene Spaltenbreite bleibt',
+  gezogen.includes('width="120"') && gezogen.includes('width="90"'), JSON.stringify(gezogen));
+pruefe('Und die gezogene Zeilenhoehe auch',
+  gezogen.includes('height="96"'), JSON.stringify(gezogen));
+
+/* Nur eine nackte Zahl, und nur an den zwei Elementen, an denen sie
+   etwas zu suchen hat. */
+const boeseMasse = sanitizePageHtml(
+  '<table><colgroup><col width="99999"></colgroup>'
+  + '<tbody><tr height="expression(alert(1))"><td width="200" height="200">a</td></tr></tbody></table>');
+pruefe('Unsinnige Masse fallen weg',
+  !boeseMasse.includes('99999') && !/expression/i.test(boeseMasse),
+  JSON.stringify(boeseMasse));
+pruefe('Und an der Zelle gibt es sie gar nicht',
+  !/width="200"/.test(boeseMasse) && !/height="200"/.test(boeseMasse),
+  JSON.stringify(boeseMasse));
+
 abschnitt('Text geht nie verloren');
 
 const rausRahmen = sanitizePageHtml('<marquee>Zelle</marquee>');
