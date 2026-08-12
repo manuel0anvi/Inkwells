@@ -161,6 +161,25 @@
   vorschauLabel.style.marginTop = '12px';
   vorschauLabel.textContent = (typeof t === 'function' && t('formulaPreview')) || 'Vorschau';
 
+  /* ══════════════════════════════════════════════════════════════════
+     INLINE ODER BLOCK – NUR NOCH IM TEXT
+
+     „Wieso gibt es bei Formel Inline und Block, man kann ja beide zoomen,
+     kommt aufs Gleiche" – für eine Formel als OBJEKT stimmt das. Sie
+     liegt frei auf der Seite, fliesst in keiner Zeile mit und wird an den
+     Ecken gezogen; „eigene Zeile, zentriert" heisst dort gar nichts mehr.
+     Übrig blieb ein Unterschied, den man kaum sieht: die Setzweise von
+     KaTeX. Zwei Knöpfe für so wenig sind zwei zu viel.
+
+     Ein Objekt wird deshalb immer in der grossen Setzweise gerendert –
+     die, die man von einer freistehenden Formel erwartet: Summen- und
+     Integralgrenzen stehen über und unter dem Zeichen, Brüche in voller
+     Höhe.
+
+     Die Wahl bleibt für Formeln, die IM TEXT stehen (ältere Hefte). Dort
+     ist sie ein echter Unterschied: mitten im Satz oder als eigener,
+     zentrierter Absatz.
+     ══════════════════════════════════════════════════════════════════ */
   const displayRow = document.createElement('div');
   displayRow.className = 'formula-display-row';
 
@@ -249,11 +268,16 @@
       ? window.normalToLatex(roh) : roh;
   }
 
+  /** Die Setzweise: im Text die gewählte, als Objekt immer die grosse. */
+  function istBlock() {
+    return _editSpan ? radioBlock.checked : true;
+  }
+
   /* ── Vorschau ────────────────────────────────────────────────────── */
   function aktualisiereVorschau() {
     const roh = latexFeld.value;
     const latex = fertigesLatex();
-    const displayMode = radioBlock.checked;
+    const displayMode = istBlock();
 
     // Nur zeigen, wenn die Übersetzung wirklich etwas geändert hat
     if (latex && latex !== roh.trim()) {
@@ -392,7 +416,7 @@
   function einfuegen() {
     const latex = fertigesLatex().trim();
     if (!latex) { schliessen(); return; }
-    const displayMode = radioBlock.checked;
+    const displayMode = istBlock();
 
     /* Ein Formel-OBJEKT wird an Ort und Stelle geändert – es liegt in
        page.objects[] und nicht im Text, also gibt es hier nichts
@@ -471,6 +495,8 @@
 
     radioInline.checked = !displayMode;
     radioBlock.checked = !!displayMode;
+    // Die Wahl gibt es nur für Formeln im Text (siehe oben)
+    displayRow.style.display = _editSpan ? '' : 'none';
     titel.textContent = (_editSpan || _editObj)
       ? ((typeof t === 'function' && t('formulaEdit')) || 'Formel bearbeiten')
       : ((typeof t === 'function' && t('formulaEditor')) || 'Formel');

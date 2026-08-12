@@ -96,6 +96,12 @@ function buildFormulaHtml(latex, displayMode) {
  */
 function measureFormula(latex, displayMode) {
   const probe = document.createElement('div');
+  /* Dieselbe Klasse wie später beim Anzeigen (css/pages.css). Ohne sie
+     misst man etwas anderes, als man malt: KaTeX gibt der grossen
+     Setzweise ein margin von 1em oben und unten, und weil der Mess-Div
+     absolut sitzt, zählt das zu seiner Höhe. Der Kasten um die Formel
+     wäre zwei Zeilen zu hoch – oben und unten nichts als Luft. */
+  probe.className = 'j-formula-obj';
   probe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;'
     + 'visibility:hidden;white-space:nowrap';
   probe.innerHTML = renderFormula(latex, displayMode).html || '';
