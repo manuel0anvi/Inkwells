@@ -12,6 +12,17 @@ function attachInput(canvas, textDiv, objLayer, page) {
      gespeicherte Datei. */
   let _strichAnfang = 0;
 
+  /* Wo die Uhr für die Gerade zuletzt aufgezogen wurde – siehe
+     armLineTimer. Auch das gehört nicht in den Strich. */
+  let _halteBei = null;
+  const HALTE_ZITTERN = 4;   // Seiten-Pixel, die noch als Stillstand gelten
+
+  /* Ein Tipp ist kein Strich: so weit darf der Finger dabei wandern. */
+  const TIPP_WEG = 9;
+
+  /* Ein Finger, der aufgesetzt hat, ohne zu zeichnen: { id, sx, sy }. */
+  let _tippStart = null;
+
   function activateTextEditingAt(clientX, clientY, forceManual = false) {
     if (S.mode !== 'cursor') switchMode('cursor');
     textDiv.style.pointerEvents = 'auto';
@@ -58,9 +69,27 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
   }
 
-  function armLineTimer(stroke) {
-    if (!stroke || stroke.isEraser) return;
+  /**
+   * Zieht die Uhr auf, nach der aus dem Strich eine Gerade wird.
+   *
+   * >>> Warum sie nicht bei jeder Meldung neu aufgezogen wird <<<
+   * Ein aufgesetzter Stift steht nie ganz still: er zittert um ein, zwei
+   * Pixel, und jede dieser Bewegungen stellte die Uhr wieder auf null.
+   * Die Gerade kam damit nur zustande, wenn die Hand zufällig ruhig genug
+   * war – „funktioniert schon, aber nicht immer" ist genau das. Erst eine
+   * Bewegung über HALTE_ZITTERN hinaus gilt jetzt als Weiterzeichnen.
+   *
+   * @param {object} stroke
+   * @param {{x:number,y:number}} [punkt]  wo der Stift gerade steht
+   */
+  function armLineTimer(stroke, punkt) {
+    if (!stroke || stroke.isEraser || stroke._lasso) return;
+    if (punkt && _halteBei && stroke._lineTimer
+        && Math.hypot(punkt.x - _halteBei.x, punkt.y - _halteBei.y) < HALTE_ZITTERN) {
+      return;   // gilt noch als Stillstand – die laufende Uhr darf zu Ende gehen
+    }
     clearTimeout(stroke._lineTimer);
+    _halteBei = punkt ? { x: punkt.x, y: punkt.y } : null;
     stroke._lineTimer = setTimeout(() => {
       if (!S.isDrawing || S._cur !== stroke) return;
       stroke._lineLocked = true;
@@ -175,6 +204,25 @@ function attachInput(canvas, textDiv, objLayer, page) {
     return beste;
   }
 
+  /** Nimmt den eben gezogenen Strich wieder aus der Seite heraus. */
+  function nimmStrichZurueck(stroke) {
+    S.strokeHistory[page.id] = (S.strokeHistory[page.id] || []).filter(s => s !== stroke);
+  }
+
+  /** Wie weit ist der Strich gewandert? Darunter war es ein Tipp. */
+  function spannweite(stroke) {
+    const pts = (stroke && stroke.path) || [];
+    if (pts.length < 2) return 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    return Math.hypot(maxX - minX, maxY - minY);
+  }
+
   /** Einen Punkt am Lineal ausrichten und den Klebe-Zustand fortschreiben. */
   function amLinealAusrichten(c, canvas, page) {
     const rs = window.getRulerState && window.getRulerState();
@@ -197,9 +245,10 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // sichtbar – und wirkten dadurch wie eine gespeicherte Änderung.
     if (S.readOnly) return;
 
-    // Die hintere Taste am Stift radiert – bei der Maus die rechte
-    const isE = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
-    if (isE) {
+    const radiert = istRadierTaste(e);
+    const lasso = !radiert && istLassoTaste(e);
+
+    if (radiert) {
       if (S.mode !== 'eraser') { S._restoreMode = S.mode; switchMode('eraser'); }
     } else if (S._restoreMode) {
       S._restoreMode = null;
@@ -211,7 +260,12 @@ function attachInput(canvas, textDiv, objLayer, page) {
        während schon der nächste Strich entsteht. */
     if (typeof window.deselectStroke === 'function') window.deselectStroke();
     e.preventDefault();
-    try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
+    /* Gefangen wird an der SEITE, nicht am getroffenen Element. Der Stift
+       setzt aus der Zeigerstellung heraus auf dem Textfeld auf, und das
+       stellen wir gleich darauf auf pointer-events: none – ein Fang daran
+       waere heikel. Die Seite traegt ohnehin die Hoerer fuer Bewegung und
+       Abheben. */
+    try { div.setPointerCapture(e.pointerId); } catch (err) { }
     textDiv.style.pointerEvents = 'none';
     textDiv.dataset.ph = '';
     setActivePg(page.id);
@@ -223,14 +277,17 @@ function attachInput(canvas, textDiv, objLayer, page) {
     S.isDrawing = true;
     // Zustand vor dem Strich sichern – ein Strich ist ein Rückgängig-Schritt
     pushPageHistory(page);
-    if (S.mode !== 'eraser' || S.eraser.type === 'pixel') {
+    // Eine gerade Linie wird ganz weggenommen, nicht angeknabbert
+    if (!lasso && S.mode === 'eraser' && S.eraser.type === 'pixel') geradeGanzWeg(c, page, canvas);
+    if (lasso || S.mode !== 'eraser' || S.eraser.type === 'pixel') {
       if (!S.strokeHistory[page.id]) S.strokeHistory[page.id] = [];
-      const stroke = buildStroke(c);
-      if (S.mode === 'eraser') {
+      const stroke = lasso ? baueLassoStrich(c) : buildStroke(c);
+      if (!lasso && S.mode === 'eraser') {
         stroke.isEraser = true; stroke.color = 'rgba(0,0,0,1)'; stroke.width = ERASER_SIZES[S.eraser.szIdx] * 2;
       }
       S.strokeHistory[page.id].push(stroke); S._cur = stroke;
-      armLineTimer(stroke);
+      _halteBei = null;
+      armLineTimer(stroke, c);
       if (stroke.isHL) {
         const pw = page.w || CFG.PAGE_W;
         const ph = page.h || CFG.PAGE_H;
@@ -248,35 +305,43 @@ function attachInput(canvas, textDiv, objLayer, page) {
   /* ══════════════════════════════════════════════════════════════════
      WELCHES GERAET WAS TUT
 
-     Es zaehlt allein das gewaehlte Werkzeug: auf Stift, Marker oder
-     Radierer zeichnet jedes Geraet, auf dem Zeiger keines.
+     >>> Der Stift MALT – immer <<<
+     Er berührt die Seite, also will jemand etwas darauf haben. Steht das
+     Werkzeug gerade auf dem Zeiger, greift er von selbst zum zuletzt
+     benutzten Stift; seine Tasten radieren und kreisen ein, ebenfalls
+     ohne Umweg über die Leiste.
 
-     Der Stift schaltete frueher von selbst auf das zuletzt benutzte
-     Werkzeug um. Das nahm einem die Wahl wieder weg – wer den Zeiger
-     gewaehlt hatte, konnte mit dem Stift nichts mehr antippen, weil
-     schon die Beruehrung einen Strich machte.
+     Das war schon einmal so, wurde entfernt („mit dem Stift liess sich
+     nichts mehr antippen") und ist jetzt zurück – aus einem Grund, der
+     damals fehlte: Antippen mit dem Stift setzte die Schreibmarke, und
+     auf einem Tablet fährt dann die Bildschirmtastatur heraus, obwohl
+     niemand schreiben wollte. Was der Stift nicht mehr kann, kann der
+     Finger: antippen, auswählen, blättern.
 
-     Auf dem Zeiger ist der Stift ein FINGER, keine Maus: schieben
-     scrollt, antippen setzt die Marke. Das ueberlaesst er ganz dem
-     Browser. Setzten wir die Marke hier selbst (wie bei der Maus),
-     wurde daraus ein Markieren – und die Seite stand fest.
+     >>> Der Finger ist das Zeigegerät <<<
+     Er scrollt, tippt an und wählt aus – und er zeichnet, solange der
+     Schalter in der Leiste an ist (S.touchDraw, an, bis jemand ihn
+     ausschaltet). Ein TIPP auf einen vorhandenen Strich zählt dabei
+     nicht als Punkt, sondern als Auswahl (siehe pointerup).
 
-     Der Finger scrollt ebenso – ausser das Zeichnen mit dem Finger ist
-     eingeschaltet und ein Zeichenwerkzeug gewaehlt.
+     Die Maus bleibt, was sie war: sie folgt dem gewählten Werkzeug.
      ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointerdown', e => {
     const target = e.target;
     if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-bar')) return;
-    if (target.closest('.j-text')) return;
 
     if (e.pointerType === 'pen') {
-      /* Die zweite Taste am Stift radiert in jedem Werkzeug – umdrehen,
-         wegwischen, weiterschreiben, ohne zur Leiste zu muessen. */
-      const zweiteTaste = e.button === 5 || e.button === 2 || (e.buttons & 32) || (e.buttons & 2);
-      if (e.button !== 0 && !zweiteTaste) return;
-      if (isDrawMode(S.mode) || zweiteTaste) { handleDrawStart(e); return; }
-      return; // Zeiger: der Browser scrollt und setzt die Marke
+      const radiert = istRadierTaste(e), lasso = istLassoTaste(e);
+      if (e.button !== 0 && !radiert && !lasso) return;
+      /* Zur Zeigerstellung gehört keine Zeichenfläche: der Stift landet
+         dort auf dem Textfeld. Deshalb steht die Abfrage auf .j-text
+         erst unter diesem Zweig – für Maus und Finger gilt sie weiter. */
+      if (!isDrawMode(S.mode) && !radiert && !lasso) switchMode(letztesZeichenwerkzeug());
+      handleDrawStart(e);
+      return;
     }
+
+    if (target.closest('.j-text')) return;
 
     if (e.pointerType === 'mouse') {
       // Die rechte Maustaste bleibt dem Kontextmenue, sonst waere das
@@ -293,8 +358,33 @@ function attachInput(canvas, textDiv, objLayer, page) {
       return;
     }
 
-    if (e.pointerType === 'touch' && touchDrawActive()) { handleDrawStart(e); return; }
+    if (e.pointerType === 'touch') {
+      if (touchDrawActive()) { handleDrawStart(e); return; }
+      /* Der Finger scrollt hier – abgefangen wird nichts. Gemerkt wird
+         nur, wo er aufgesetzt hat: bleibt er liegen und lag dort ein
+         Strich, war es ein Tipp und damit eine Auswahl (siehe unten).
+         Ohne das gäbe es mit ausgeschaltetem „mit dem Finger malen"
+         überhaupt keinen Weg, einen Strich anzufassen. */
+      _tippStart = { id: e.pointerId, sx: e.clientX, sy: e.clientY };
+      return;
+    }
     // sonst bleibt der Finger fuers Scrollen und Zoomen (app.js)
+  });
+
+  /** Ein Finger, der ohne zu zeichnen aufgesetzt hat – siehe oben. */
+  div.addEventListener('pointerup', e => {
+    const start = _tippStart;
+    _tippStart = null;
+    if (!start || e.pointerId !== start.id || S.readOnly) return;
+    if (Math.hypot(e.clientX - start.sx, e.clientY - start.sy) > TIPP_WEG) return;
+    if (typeof window.strichBeiPunkt !== 'function') return;
+
+    const c = coords(e);
+    const treffer = window.strichBeiPunkt(page.id, c.x, c.y, null);
+    if (!treffer) return;
+    if (S.mode !== 'cursor') switchMode('cursor');
+    if (typeof window.waehleStriche === 'function') window.waehleStriche(page.id, [treffer]);
+    unterdrueckeTextTipp();
   });
 
   div.addEventListener('pointermove', e => {
@@ -305,13 +395,14 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // An der Lineal-Kante einrasten (siehe ui/ruler.js)
     const c = amLinealAusrichten(coords(e), canvas, page);
     const ctx = canvas.getContext('2d');
-    if (S.mode === 'eraser' && S.eraser.type === 'stroke') {
+    if (S.mode === 'eraser' && S.eraser.type === 'stroke' && !S._cur?._lasso) {
       strokeErase(c, page, canvas);
     }
     else {
+      if (S._cur?.isEraser) geradeGanzWeg(c, page, canvas);
       if (S._cur) {
         const stroke = S._cur;
-        if (!stroke.isEraser) armLineTimer(stroke);
+        if (!stroke.isEraser) armLineTimer(stroke, c);
         // If a shape was detected, don't override it with line logic
         if (stroke._lineLocked && !stroke._shapeDetected && !stroke.isEraser) {
           const start = stroke.path[0] || { x: c.x, y: c.y, p: c.p };
@@ -357,19 +448,50 @@ function attachInput(canvas, textDiv, objLayer, page) {
     /* ══════════════════════════════════════════════════════════════
        WAR DAS EINE SCHLINGE?
 
-       Schnell um etwas herumgezogen heisst „das da meine ich" und nicht
-       „male einen Kreis" (canvas/strokeSelect.js). Der Marker bleibt
-       aussen vor: mit ihm fährt man um Wörter herum, ohne etwas
-       auswählen zu wollen.
+       Drei Wege führen dazu, dass aus dem eben Gezogenen eine Auswahl
+       wird statt eines Strichs (canvas/strokeSelect.js):
 
-       Der Strich verschwindet dann wieder – und mit ihm sein
-       Rückgängig-Schritt, der in handleDrawStart schon gesetzt wurde.
-       Sonst nähme das erste Strg+Z danach etwas weg, das der Nutzer nie
-       hinzugefügt hat.
+         · die TASTE am Stift – dann war es von vornherein eine Schlinge
+         · schnell um etwas HERUMGEZOGEN – „das da meine ich" und nicht
+           „male einen Kreis". Der Marker bleibt aussen vor: mit ihm
+           fährt man um Wörter herum, ohne etwas auswählen zu wollen
+         · ein TIPP mit dem Finger auf einen vorhandenen Strich
+
+       Der eben gezogene Strich verschwindet dann wieder – und mit ihm
+       sein Rückgängig-Schritt, der in handleDrawStart schon gesetzt
+       wurde. Sonst nähme das erste Strg+Z danach etwas weg, das der
+       Nutzer nie hinzugefügt hat.
        ══════════════════════════════════════════════════════════════ */
-    const alsAuswahl = finished && !finished.isEraser && !finished.isHL
-      && typeof window.versucheLasso === 'function'
-      && window.versucheLasso(page.id, finished, performance.now() - _strichAnfang);
+    let alsAuswahl = false;
+
+    if (finished && finished._lasso) {
+      nimmStrichZurueck(finished);
+      if (typeof window.waehleEingekreiste === 'function') {
+        window.waehleEingekreiste(page.id, finished.path);
+      }
+      alsAuswahl = true;
+    } else if (finished && !finished.isEraser && e.pointerType === 'touch'
+               && spannweite(finished) < TIPP_WEG) {
+      const c = coords(e);
+      const treffer = typeof window.strichBeiPunkt === 'function'
+        && window.strichBeiPunkt(page.id, c.x, c.y, finished);
+      if (treffer) {
+        nimmStrichZurueck(finished);
+        /* Auf den Zeiger umstellen: was jetzt ausgewählt daliegt, will
+           verschoben oder gelöscht werden, nicht übermalt. */
+        if (S.mode !== 'cursor') switchMode('cursor');
+        if (typeof window.waehleStriche === 'function') window.waehleStriche(page.id, [treffer]);
+        // Der Tipp darf nicht gleich noch die Schreibmarke setzen
+        unterdrueckeTextTipp();
+        alsAuswahl = true;
+      }
+    }
+
+    if (!alsAuswahl) {
+      alsAuswahl = !!finished && !finished.isEraser && !finished.isHL
+        && typeof window.versucheLasso === 'function'
+        && window.versucheLasso(page.id, finished, performance.now() - _strichAnfang);
+    }
 
     if (alsAuswahl) {
       redrawStrokes(canvas, S.strokeHistory[page.id]);
@@ -484,6 +606,143 @@ function clearLiveCanvas() {
     _liveCanvas.remove();
     _liveCanvas = null;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE TASTEN AM STIFTSCHAFT
+
+   Ein Stift meldet seine Tasten als ZWEI verschiedene Dinge:
+
+     button 2  / buttons & 2    die Taste am Schaft („Rechtsklick")
+     button 5  / buttons & 32   das Radierer-Zeichen – bei einem Stift mit
+                                zwei Tasten ueblicherweise die OBERE, bei
+                                anderen das umgedrehte Ende
+
+   Bisher hiess beides „radieren". Damit tat die obere Taste dasselbe wie
+   die untere, obwohl sie anderswo (Word, OneNote) den Lasso aufzieht –
+   genau so wurde es gemeldet. Jetzt: untere radiert, obere kreist ein.
+
+   >>> Was das kostet <<<
+   Ein Stift mit umgedrehtem Radierer-Ende meldet dasselbe Zeichen. An dem
+   Ende wird also eingekreist statt radiert. Welche Taste welchen Code
+   schickt, steht in keinem Datenblatt – es haengt am Treiber. Wer
+   nachsehen will: `window.stiftTastenZeigen = true` in der Konsole, dann
+   meldet jeder Druck seinen Code.
+   ══════════════════════════════════════════════════════════════════════ */
+window.stiftTastenZeigen = false;
+
+/* Beim Stift die Schafttaste, bei der Maus die rechte – dieselben Codes. */
+function istRadierTaste(e) {
+  return e.button === 2 || !!(e.buttons & 2);
+}
+
+function istLassoTaste(e) {
+  return e.pointerType === 'pen' && (e.button === 5 || !!(e.buttons & 32));
+}
+
+document.addEventListener('pointerdown', e => {
+  if (!window.stiftTastenZeigen || e.pointerType !== 'pen') return;
+  if (typeof toast === 'function') toast('Stift: button ' + e.button + ', buttons ' + e.buttons);
+}, true);
+
+/** Der Strich, mit dem eingekreist wird: duenn und blass, er bleibt nicht. */
+function baueLassoStrich(c) {
+  return {
+    path: [{ x: c.x, y: c.y, p: c.p }],
+    color: 'rgba(90,90,110,.7)', width: 1.4, isHL: false, _lasso: true
+  };
+}
+
+/**
+ * Das Zeichenwerkzeug, zu dem der Stift greift, wenn gerade der Zeiger
+ * gewaehlt ist. Der Radierer zaehlt nicht dazu: wer ihn zuletzt hatte und
+ * dann auf den Zeiger ging, will beim naechsten Aufsetzen schreiben und
+ * nicht weglöschen.
+ */
+function letztesZeichenwerkzeug() {
+  const m = S._letzterStift;
+  return (m === 'pen1' || m === 'pen2' || m === 'hl') ? m : 'pen1';
+}
+
+/**
+ * Ist das eine gerade Linie?
+ *
+ * Nicht ueber die Anzahl der Punkte: eine am Lineal gezogene Linie hat
+ * hundert davon und ist trotzdem schnurgerade. Gemessen wird, wie weit
+ * der weiteste Punkt von der Verbindung zwischen Anfang und Ende abweicht.
+ */
+function istGeraderStrich(s) {
+  const pts = s && s.path;
+  if (!pts || pts.length < 2) return false;
+  const a = pts[0], b = pts[pts.length - 1];
+  if (Math.hypot(b.x - a.x, b.y - a.y) < 12) return false;
+  if (pts.length === 2) return true;
+  for (const p of pts) {
+    if (pointToLineDistance(p.x, p.y, a.x, a.y, b.x, b.y) > 2.5) return false;
+  }
+  return true;
+}
+
+/**
+ * Nimmt eine gerade Linie GANZ weg, statt ein Loch hineinzuradieren.
+ *
+ * Der Radierer arbeitet sonst punktweise, und das ist bei Handschrift
+ * auch richtig. Eine Linie ist aber ein Ding und kein Gekritzel: ein
+ * Stueck aus ihrer Mitte herauszuwischen laesst zwei Reste stehen, die
+ * niemand haben wollte. Genau so wurde es gemeldet.
+ */
+function geradeGanzWeg(c, page, canvas) {
+  const r = ERASER_SIZES[S.eraser.szIdx];
+  const liste = S.strokeHistory[page.id] || [];
+  const bleibt = liste.filter(s => {
+    if (s === S._cur || s.isEraser || !istGeraderStrich(s)) return true;
+    const pts = s.path;
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (pointToLineDistance(c.x, c.y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) < r) return false;
+    }
+    return true;
+  });
+  if (bleibt.length === liste.length) return;
+  S.strokeHistory[page.id] = bleibt;
+  redrawStrokes(canvas, bleibt);
+  page.inkStrokes = JSON.parse(JSON.stringify(bleibt));
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   NACH DEM AUSWAEHLEN NICHT AUCH NOCH IN DEN TEXT TIPPEN
+
+   Mit dem Finger etwas auszuwaehlen setzte gleich darauf die
+   Schreibmarke in die Zeile darunter – und auf einem Tablet faehrt dann
+   die Bildschirmtastatur heraus, obwohl niemand schreiben wollte. Zweimal
+   gemeldet: fuer Striche und fuer Formen.
+
+   >>> Warum preventDefault am pointerdown dafuer nicht reicht <<<
+   Bei einer BERUEHRUNG entstehen die Maus-Ersatzereignisse nicht aus dem
+   Zeiger-, sondern aus dem Beruehrungsereignis. Ein abgewehrtes
+   pointerdown haelt sie nicht auf; der Klick kommt trotzdem, und mit ihm
+   der Fokus. Abgewehrt werden muss deshalb das mousedown selbst – und nur
+   dieses eine, nur wenn es im Text landet.
+   ══════════════════════════════════════════════════════════════════════ */
+function unterdrueckeTextTipp() {
+  const imText = ev => ev.target && ev.target.closest && ev.target.closest('.j-text');
+
+  const aus = () => {
+    document.removeEventListener('mousedown', aufMausdruck, true);
+    document.removeEventListener('click', aufKlick, true);
+    clearTimeout(uhr);
+  };
+  function aufMausdruck(ev) { if (imText(ev)) { ev.preventDefault(); ev.stopPropagation(); } }
+  function aufKlick(ev) { if (imText(ev)) { ev.preventDefault(); ev.stopPropagation(); } aus(); }
+
+  const uhr = setTimeout(aus, 600);
+  document.addEventListener('mousedown', aufMausdruck, true);
+  document.addEventListener('click', aufKlick, true);
+
+  /* Stand die Marke schon vorher im Text, ist die Tastatur bereits
+     draussen – dann hilft nur, den Fokus wirklich abzugeben. */
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains('j-text')) a.blur();
 }
 
 // Helper: distance from point to line segment

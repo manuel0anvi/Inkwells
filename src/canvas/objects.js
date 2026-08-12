@@ -685,7 +685,15 @@ function placeObject(objLayer, obj, page) {
        ausgewaehlten Bild scrollt der Finger weiter wie ueberall sonst.
        Maus und Stift treffen genau, fuer sie bleibt es beim ersten
        Griff. */
-    if (e.pointerType === 'touch' && _selObj !== wrap) { select(); return; }
+    if (e.pointerType === 'touch' && _selObj !== wrap) {
+      select();
+      /* Und die Berührung darf nicht gleich noch die Schreibmarke in die
+         Zeile darunter setzen: auf einem Tablet fährt sonst die
+         Bildschirmtastatur heraus, obwohl nur eine Form ausgewählt
+         werden sollte (canvas/input.js). */
+      if (typeof unterdrueckeTextTipp === 'function') unterdrueckeTextTipp();
+      return;
+    }
 
     select();
     body.setPointerCapture(e.pointerId);

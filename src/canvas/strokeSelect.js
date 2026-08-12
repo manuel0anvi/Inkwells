@@ -56,11 +56,11 @@
   }
 
   /** Der oberste Strich unter dem Punkt – oder null. Von hinten nach vorn. */
-  function strichUnter(pageId, x, y) {
+  function strichUnter(pageId, x, y, ausser) {
     const liste = S.strokeHistory[pageId] || [];
     for (let i = liste.length - 1; i >= 0; i--) {
       const s = liste[i];
-      if (s.isEraser) continue;
+      if (s.isEraser || s === ausser) continue;
       if (trifft(s, x, y)) return s;
     }
     return null;
@@ -430,6 +430,41 @@
     return drin / pts.length;
   }
 
+  /** Alle Striche der Seite, die in der Schlinge liegen. */
+  function imKreisGefangen(pageId, schlinge, ausser) {
+    return (S.strokeHistory[pageId] || []).filter(s =>
+      s !== ausser && !s.isEraser && !s._lasso && anteilDrin(s, schlinge) >= LASSO_ANTEIL);
+  }
+
+  /**
+   * Wählt aus, was in dieser Schlinge liegt – ohne jede Prüfung, ob sie
+   * schnell oder rund genug war.
+   *
+   * Für den Lasso an der oberen Stifttaste (canvas/input.js): dort hat der
+   * Nutzer die Absicht schon mit der Taste erklärt, da braucht es keine
+   * Geste mehr, die sie errät.
+   *
+   * @returns {boolean} ob etwas gefunden wurde
+   */
+  function waehleEingekreiste(pageId, schlinge) {
+    if (!schlinge || schlinge.length < 3) return false;
+    const gefunden = imKreisGefangen(pageId, schlinge, null);
+    if (!gefunden.length) {
+      abwaehlen(); versteckeLeiste();
+      return false;
+    }
+    return waehleStriche(pageId, gefunden);
+  }
+
+  /** Legt den Auswahlrahmen um diese Striche. */
+  function waehleStriche(pageId, strokes) {
+    const pageEl = document.querySelector('[data-pgid="' + CSS.escape(pageId) + '"]');
+    if (!pageEl || !strokes || !strokes.length) return false;
+    abwaehlen();
+    baueHuelle(pageEl, pageId, strokes);
+    return true;
+  }
+
   /**
    * Prüft einen fertigen Strich auf die Einkreis-Geste.
    *
@@ -461,17 +496,13 @@
     const umfang = weg + luecke;
     if ((4 * Math.PI * flaeche(pts)) / (umfang * umfang) < LASSO_RUNDHEIT) return false;
 
-    const gefunden = (S.strokeHistory[pageId] || []).filter(s =>
-      s !== stroke && !s.isEraser && anteilDrin(s, pts) >= LASSO_ANTEIL);
+    const gefunden = imKreisGefangen(pageId, pts, stroke);
     if (!gefunden.length) return false;
 
     // Die Schlinge selbst ist nur die Geste – sie bleibt nicht stehen
     S.strokeHistory[pageId] = (S.strokeHistory[pageId] || []).filter(s => s !== stroke);
 
-    const pageEl = document.querySelector('[data-pgid="' + CSS.escape(pageId) + '"]');
-    if (!pageEl) return true;
-    abwaehlen();
-    baueHuelle(pageEl, pageId, gefunden);
+    waehleStriche(pageId, gefunden);
     return true;
   }
 
@@ -484,6 +515,14 @@
   document.addEventListener('pointerdown', e => {
     // Nur der Zeiger wählt durch Antippen aus; die Werkzeuge zeichnen weiter
     if (S.mode !== 'cursor' || S.readOnly) return;
+    /* >>> Der Stift wählt nicht aus, er malt <<<
+       Seit er auch aus der Zeigerstellung heraus zeichnet (canvas/input.js),
+       darf er hier nicht abgefangen werden. Diese Stelle läuft in der
+       ABFANGPHASE und hält die Bewegung mit stopPropagation an – ein Stift,
+       der auf einem Strich aufsetzte, kam damit nie beim Zeichnen an. Mit
+       gedrückter Schafttaste hiess das: radieren ging überall, nur nicht
+       dort, wo wirklich etwas steht. */
+    if (e.pointerType === 'pen') return;
     // Innerhalb der eigenen Bedienteile nichts tun
     if (e.target.closest('.ink-sel, .ink-sel-bar, .obj-wrap, .j-table-bar')) return;
 
@@ -511,6 +550,12 @@
 
     e.preventDefault();
     e.stopPropagation();
+    /* Mit dem Finger reicht das nicht: der Klick, der aus der Berührung
+       entsteht, käme trotzdem und setzte die Schreibmarke in die Zeile
+       darunter – samt Bildschirmtastatur (canvas/input.js). */
+    if (e.pointerType === 'touch' && typeof unterdrueckeTextTipp === 'function') {
+      unterdrueckeTextTipp();
+    }
     abwaehlen();
     baueHuelle(pageEl, pageId, [treffer]);
   }, true);
@@ -534,4 +579,7 @@
   /* ── Global erreichbar ───────────────────────────────────────────── */
   window.deselectStroke = function () { abwaehlen(); versteckeLeiste(); };
   window.versucheLasso = versucheLasso;
+  window.waehleEingekreiste = waehleEingekreiste;
+  window.waehleStriche = waehleStriche;
+  window.strichBeiPunkt = strichUnter;
 })();
