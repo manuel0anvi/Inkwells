@@ -205,6 +205,22 @@ window.pruefstand = {
     };
   },
 
+  /**
+   * Würde ein Anschlag an dieser Stelle abgewiesen?
+   *
+   * Genau das fragt app.js in 'beforeinput' (lockedHere). Der Editor
+   * selbst läuft hier nicht mit – geprüft wird die Auskunft, auf die er
+   * sich verlässt.
+   *
+   * @returns {string|null} wer sperrt, oder null
+   */
+  anschlagAn(stelle, art) {
+    textDiv.focus();
+    setFlatCaret(textDiv, stelle);
+    const p = Collab.editBlockedBy(seite.id, textDiv, art || 'insertText');
+    return p ? (p.name || p.uid) : null;
+  },
+
   /** Was hier gerade steht. */
   text() { return flatTextOf(textDiv); },
   eigeneStelle() { return flatCaretPos(textDiv); },
@@ -248,6 +264,20 @@ window.pruefstand = {
     const jetzt = marken.concat(QA('.collab-lock'));
     const alt = window.__gemerkt || [];
     if (!marken.length || !alt.length || alt.length !== jetzt.length) return false;
+    return alt.every((el, i) => el === jetzt[i] && el.isConnected);
+  },
+
+  /* Das Abzeichen am Seitenrand („wer ist auf welcher Seite"). Es wurde
+     bei jeder Anwesenheitsmeldung neu gebaut und fing damit seine
+     Einblend-Bewegung von vorn an – es sah aus, als pulsiere es. */
+  merkeAbzeichen() {
+    window.__abzeichen = QA('.collab-marker .collab-dot');
+    return window.__abzeichen.length;
+  },
+  abzeichenUnveraendert() {
+    const jetzt = QA('.collab-marker .collab-dot');
+    const alt = window.__abzeichen || [];
+    if (!alt.length || alt.length !== jetzt.length) return false;
     return alt.every((el, i) => el === jetzt[i] && el.isConnected);
   },
 

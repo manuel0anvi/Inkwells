@@ -495,9 +495,60 @@
     S.sharedDoc.ownerAway = now;
 
     applyReadOnlyChrome(now || S.sharedDoc.role !== 'edit', S.sharedDoc);
+    if (window.Collab?.setCanWrite) {
+      window.Collab.setCanWrite(!now && S.sharedDoc.role === 'edit');
+    }
 
     // Nur beim Wechsel melden – der erste Rückruf kommt beim Betreten
-    if (now !== was) toast(now ? t('sharedOwnerOffline') : t('sharedOwnerBack'));
+    if (now !== was) {
+      toast(now ? t('sharedOwnerOffline') : t('sharedOwnerBack'));
+      if (!now) holeStandNach();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DER BESITZER IST WIEDER DA – UND HAT INZWISCHEN GESCHRIEBEN
+
+     Solange er weg war, ging von ihm nichts in den Raum. Er hat
+     woanders oder ohne Netz weitergearbeitet, und was dabei entstand,
+     liegt in Firestore. Der Raum überträgt aber nur ÄNDERUNGEN AB DEM
+     BEITRETEN: wer die ganze Zeit offen hatte, sieht davon nie etwas.
+     Genau so gemeldet – „wenn der Besitzer zurückkommt, sehen die
+     anderen nicht, was er gemacht hat, und bleiben im Lesemodus".
+
+     Deshalb einmal frisch aufmachen, sobald er wieder da ist. Der
+     eigene Stand kann dabei nicht verlorengehen: ohne Besitzer im Raum
+     darf ohnehin niemand schreiben (onOwnerAway in core/share.js).
+
+     >>> Warum an der Fassung und nicht an der Zeit <<<
+     Eine kurz abgerissene Leitung meldet dasselbe wie ein
+     Zurückkommen. Neu geladen wird deshalb nur, wenn der Kopf des
+     Dokuments eine andere Fassung trägt als die, die hier steht – dann
+     ist wirklich etwas passiert. Bei einem Aussetzer bleibt alles
+     stehen, samt Bildlauf und Schreibmarke.
+     ══════════════════════════════════════════════════════════════════ */
+  let holtNach = false;
+
+  async function holeStandNach() {
+    const doc = S.sharedDoc;
+    if (!doc || doc.isOwner || !doc.docId || holtNach) return;
+
+    holtNach = true;
+    try {
+      const api = await whenShareReady();
+      const head = await api.loadDocumentHead(doc.docId);
+      // Inzwischen zugemacht oder ein anderes Dokument offen?
+      if (!head || !S.sharedDoc || S.sharedDoc.docId !== doc.docId) return;
+      if (head.revision && head.revision === doc.revision) return;
+
+      if (window.Collab) await Collab.stop(doc.docId);
+      await openSharedDocument(head);
+    } catch (err) {
+      console.warn('[SharedDocs] Der Stand des Besitzers kam nicht nach:',
+        err?.message || err);
+    } finally {
+      holtNach = false;
+    }
   }
 
   /* ══════════════════════════════════════════════════════════════════

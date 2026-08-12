@@ -679,6 +679,24 @@ app.on('ready', async () => {
       beimSchweben >= 3, 'ohne Klick in die Tabelle gibt es nichts zu fassen');
 
     /* ══════════════════════════════════════════════════════════════════
+       KEIN PLATZ FÜR DEN NAMEN? DANN BEIM DARÜBERFAHREN
+
+       Das Fenster ist 1240 px breit – unter der Schwelle von 1300, ab der
+       die Beschriftungen der Werkzeuge weichen (css/responsive.css).
+       Genau dann muss der Name im Hinweis stehen.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Die Namen der Knöpfe beim Darüberfahren');
+    const namen = await js(`(() => {
+      const b = document.querySelector('.tb-mode[data-mode="cursor"]');
+      const s = b.querySelector('span');
+      return { verdeckt: getComputedStyle(s).display === 'none',
+               name: (s.textContent || '').trim(), titel: b.title }; })()`);
+    pruefe('Der Name ist im schmalen Fenster wirklich verdeckt', namen.verdeckt === true,
+      'die Beschriftung steht noch da – die Prüfung misst ins Leere');
+    pruefe('Dafür steht er im Hinweis („' + namen.titel + '")',
+      namen.titel === namen.name, 'der Knopf hat keinen Namen mehr, nirgends');
+
+    /* ══════════════════════════════════════════════════════════════════
        DAS FORMEL-FENSTER ZIEHT KEINE TASTATUR HOCH
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Das Formel-Fenster mit dem Finger');

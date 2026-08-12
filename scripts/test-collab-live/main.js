@@ -56,10 +56,14 @@ setTimeout(() => { zeilen.push('ABBRUCH: Zeitgrenze erreicht'); fertig(2); }, 12
 const karten = new Map();      // uid -> Anwesenheitskarte
 const fenster = [];
 
-ipcMain.on('praesenz', (e, karte) => {
-  karten.set(karte.uid, karte);
+function schickePraesenz() {
   const liste = Array.from(karten.values());
   for (const w of fenster) if (!w.isDestroyed()) w.webContents.send('praesenz', liste);
+}
+
+ipcMain.on('praesenz', (e, karte) => {
+  karten.set(karte.uid, karte);
+  schickePraesenz();
 });
 
 ipcMain.on('op', (e, op) => {
@@ -233,6 +237,35 @@ app.on('ready', async () => {
       'die Auswahl wurde mit aufgehoben');
 
     /* ══════════════════════════════════════════════════════════════════
+       2c. UND DER ANSCHLAG SELBST WIRD ABGEWIESEN
+
+       Bis hierher war nur geprüft, dass die MARKE aus der Sperre
+       herausgeht. Gemeldet wurde aber, man könne trotzdem schreiben –
+       also gehört die Auskunft geprüft, auf die sich app.js in
+       'beforeinput' verlässt (lockedHere → Collab.editBlockedBy). Der
+       Editor selbst läuft in diesem Prüfstand nicht mit; diese eine
+       Frage ist es, an der alles hängt.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein Anschlag in der gesperrten Zeile wird abgewiesen');
+
+    // A tippt noch einmal, damit die Sperre frisch ist
+    await A(`pruefstand.markeAuf(11)`);
+    await A(`pruefstand.setzeText(${JSON.stringify('<p>Eins</p><p>Zwei</p><p>DXrei</p><p>Vier</p>')}, 12)`);
+    await warte(700);
+
+    const drin = await B('pruefstand.anschlagAn(12)');
+    pruefe('Mitten in der gesperrten Zeile geht nichts (' + drin + ')', drin === 'A',
+      'dort lässt sich schreiben, obwohl das Band darüberliegt');
+
+    const rueck = await B(`pruefstand.anschlagAn(12, 'deleteContentBackward')`);
+    pruefe('Auch Löschen nicht (' + rueck + ')', rueck === 'A',
+      'die Zeile lässt sich von innen abräumen');
+
+    const frei = await B('pruefstand.anschlagAn(2)');
+    pruefe('Zwei Zeilen darüber schon (' + frei + ')', frei === null,
+      'die Sperre greift zu weit');
+
+    /* ══════════════════════════════════════════════════════════════════
        2b. WIE SCHNELL FOLGT DIE MARKE EINER REINEN BEWEGUNG?
 
        Beim Tippen gilt die Stelle aus der Textänderung – sie gehört zum
@@ -313,6 +346,20 @@ app.on('ready', async () => {
     pruefe('Während der andere tippt, bleibt die Marke stehen',
       verschwunden === 0 && neuGebaut === 0,
       'sie verschwindet oder wird neu gebaut – das ist das Flackern');
+
+    /* Und das Abzeichen am Seitenrand ebenso. Es wurde bei JEDER
+       Anwesenheitsmeldung weggeworfen und neu gesetzt – alle 150 ms fing
+       damit seine Einblend-Bewegung von vorn an. Gemeldet als „das
+       Symbol pulsiert die ganze Zeit". */
+    const abz = await B('pruefstand.merkeAbzeichen()');
+    notiz('Abzeichen am Seitenrand: ' + abz);
+    for (let i = 0; i < 5; i++) {
+      await A(`pruefstand.markeAuf(${14 + i})`);
+      await warte(180);
+    }
+    pruefe('Das Abzeichen am Seitenrand steht still',
+      abz > 0 && (await B('pruefstand.abzeichenUnveraendert()')) === true,
+      'es wird bei jeder Meldung neu gebaut und pulsiert deshalb');
 
     /* ══════════════════════════════════════════════════════════════════
        4. BLEIBT DIE EIGENE MARKE, WO SIE WAR?
@@ -402,6 +449,52 @@ app.on('ready', async () => {
     pruefe('Eine Tabellenzeile ist eine Zeile im flachen Maß',
       zeilenImText === 4,     // 3 Tabellenzeilen + der Absatz dahinter
       zeilenImText + ' statt 4');
+
+    /* ══════════════════════════════════════════════════════════════════
+       WER IST ALLES DA?
+
+       Höchstens fünf Abzeichen, danach eins mit einem Plus – und ein Tipp
+       darauf zeigt alle mit vollem Namen. Steht am SCHLUSS: die
+       erfundenen Gäste würden jede Messung davor verfälschen.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Wer ist alles da');
+
+    for (let i = 1; i <= 6; i++) {
+      karten.set('gast' + i, {
+        uid: 'gast' + i, name: 'Gast ' + i, initials: 'G' + i,
+        email: 'gast' + i + '@probe.example', color: '#2e8a46',
+        pageId: 'p1', offset: -1, lockFrom: -1, lockTo: -1, lockAt: 0,
+        cx: '', at: Date.now()
+      });
+    }
+    schickePraesenz();
+    await warte(400);
+
+    const leiste = await B(`(() => {
+      const bar = document.getElementById('collab-people');
+      const mehr = bar.querySelector('.collab-dot-more');
+      return { punkte: bar.querySelectorAll('.collab-dot').length,
+               plus: mehr ? mehr.textContent : '' }; })()`);
+    notiz('Leiste: ' + JSON.stringify(leiste));
+    pruefe('Sieben Beteiligte ergeben fünf Abzeichen und ein Plus',
+      leiste.punkte === 6 && leiste.plus === '+',
+      'es sind ' + leiste.punkte + ' Abzeichen');
+
+    const karteAuf = await B(`(() => {
+      const bar = document.getElementById('collab-people');
+      bar.firstElementChild.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const k = document.querySelector('.collab-card');
+      if (!k) return { offen: false, zeilen: 0, erster: '' };
+      return { offen: k.style.display !== 'none',
+               zeilen: k.querySelectorAll('.collab-card-zeile').length,
+               erster: (k.querySelector('.collab-card-text strong') || {}).textContent || '' };
+    })()`);
+    notiz('Fenster: ' + JSON.stringify(karteAuf));
+    pruefe('Ein Tipp darauf zeigt alle acht mit Namen',
+      karteAuf.offen && karteAuf.zeilen === 8,
+      'es stehen ' + karteAuf.zeilen + ' Namen da');
+    pruefe('Man selbst steht obenan („' + karteAuf.erster + '")',
+      /^B\b/.test(karteAuf.erster), 'die eigene Zeile fehlt');
 
     if (fehlerA.length || fehlerB.length) {
       abschnitt('Fehler aus den Fenstern');

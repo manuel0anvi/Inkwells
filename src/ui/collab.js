@@ -422,12 +422,13 @@
     if (!bar) return;
 
     bar.innerHTML = '';
-    if (!others.length) { bar.style.display = 'none'; return; }
+    if (!others.length) { bar.style.display = 'none'; schliesseLeute(); return; }
     bar.style.display = 'flex';
 
-    // Wie bei Google Docs: ab sechs Personen wird zusammengefasst.
-    const shown = others.slice(0, 5);
-    for (const person of shown) {
+    /* Höchstens fünf Abzeichen, und wenn es mehr sind, ein sechstes mit
+       einem Plus. Die Namen stehen alle im Fenster darunter – dafür ist
+       ein Abzeichen anzutippen. */
+    for (const person of others.slice(0, 5)) {
       const dot = document.createElement('span');
       dot.className = 'collab-dot';
       dot.style.background = person.color || 'var(--gold)';
@@ -435,14 +436,123 @@
       dot.title = person.name || person.email || '';
       bar.appendChild(dot);
     }
-    if (others.length > shown.length) {
+    if (others.length > 5) {
       const more = document.createElement('span');
       more.className = 'collab-dot collab-dot-more';
-      more.textContent = '+' + (others.length - shown.length);
+      more.textContent = '+';
       more.title = others.slice(5).map(p => p.name || p.email).join(', ');
       bar.appendChild(more);
     }
+
+    if (leuteOffen()) zeigeLeute();   // offenes Fenster mitführen
   }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WER IST DAS? – DAS FENSTER AN DER LEISTE
+
+     Auf einem Abzeichen stehen zwei Buchstaben; wer dahinter steckt,
+     stand nur im Tooltip, und den gibt es auf einem Tablet nicht. Ein
+     Tipp auf die Leiste zeigt deshalb alle Beteiligten mit vollem Namen,
+     Adresse und der Seite, auf der sie gerade sind – auch die, die nicht
+     mehr in die fünf Abzeichen gepasst haben.
+
+     Das Bild ist dasselbe wie überall sonst in der App: ein farbiger
+     Kreis mit den Initialen (ui/auth.js macht es in der Titelleiste
+     genauso). Ein echtes Profilbild liegt gar nicht vor – Microsoft
+     liefert keines, und ein fremder Bildserver käme an der
+     Inhaltsrichtlinie in src/index.html ohnehin nicht vorbei.
+     ══════════════════════════════════════════════════════════════════ */
+  let leuteKarte = null;
+
+  function leuteOffen() {
+    return !!leuteKarte && leuteKarte.style.display !== 'none';
+  }
+
+  function schliesseLeute() {
+    if (leuteKarte) leuteKarte.style.display = 'none';
+  }
+
+  function baueLeuteKarte() {
+    if (leuteKarte) return leuteKarte;
+    leuteKarte = document.createElement('div');
+    leuteKarte.className = 'collab-card';
+    leuteKarte.style.display = 'none';
+    document.body.appendChild(leuteKarte);
+
+    // Daneben getippt heisst zu
+    document.addEventListener('pointerdown', (e) => {
+      if (!leuteOffen()) return;
+      if (leuteKarte.contains(e.target)) return;
+      if (e.target.closest && e.target.closest('#collab-people')) return;
+      schliesseLeute();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && leuteOffen()) schliesseLeute();
+    });
+    return leuteKarte;
+  }
+
+  /** „Seite 3" – oder nichts, wenn die Seite hier nicht bekannt ist. */
+  function seitenName(pageId) {
+    if (!pageId) return t('collabNoPage');
+    const nb = (S.notebooks || []).find(n => n.id === S.activeNbId);
+    const nr = (nb && typeof pageNumberOf === 'function') ? pageNumberOf(nb, pageId) : 0;
+    return nr ? t('collabPageNr').replace('{n}', nr) : t('collabNoPage');
+  }
+
+  function zeigeLeute() {
+    const karte = baueLeuteKarte();
+    const leiste = E('collab-people');
+    if (!leiste) return;
+
+    const alle = [];
+    if (room && room.me) alle.push({ ...room.me, selbst: true });
+    alle.push(...others);
+
+    karte.innerHTML = '';
+    const kopf = document.createElement('div');
+    kopf.className = 'collab-card-kopf';
+    kopf.textContent = t('collabPeople');
+    karte.appendChild(kopf);
+
+    for (const person of alle) {
+      const zeile = document.createElement('div');
+      zeile.className = 'collab-card-zeile';
+
+      const kreis = document.createElement('span');
+      kreis.className = 'collab-face';
+      kreis.style.background = person.color || 'var(--gold)';
+      kreis.textContent = person.initials || '?';
+      zeile.appendChild(kreis);
+
+      const text = document.createElement('div');
+      text.className = 'collab-card-text';
+      const name = document.createElement('strong');
+      name.textContent = (person.name || person.email || '?')
+        + (person.selbst ? ' (' + t('collabYou') + ')' : '');
+      const wo = document.createElement('small');
+      wo.textContent = seitenName(person.pageId);
+      text.appendChild(name);
+      text.appendChild(wo);
+      zeile.appendChild(text);
+
+      karte.appendChild(zeile);
+    }
+
+    karte.style.display = 'block';
+
+    // Unter der Leiste, aber nie aus dem Fenster hinaus
+    const r = leiste.getBoundingClientRect();
+    const b = karte.offsetWidth || 240;
+    karte.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - b - 8, r.left))) + 'px';
+    karte.style.top = Math.round(r.bottom + 6) + 'px';
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest || !e.target.closest('#collab-people')) return;
+    if (leuteOffen()) schliesseLeute();
+    else zeigeLeute();
+  });
 
   /**
    * Marker an den Seitenrand: ein Abzeichen mit den Initialen auf Höhe
@@ -450,10 +560,20 @@
    * bewusst NICHT gezeigt – so gewünscht, und nebenbei erheblich
    * einfacher.
    */
-  function renderMarkers() {
-    document.querySelectorAll('.collab-marker').forEach(el => el.remove());
-    if (!others.length) return;
+  /* ══════════════════════════════════════════════════════════════════
+     DAS ABZEICHEN STEHT STILL
 
+     Hier wurden alle Marker weggeworfen und neu gebaut. Die Anwesenheit
+     kommt aber alle 150 ms – und ein frisch eingesetztes Element fängt
+     seine Einblend-Bewegung von vorn an (collab-pop in css/layout.css).
+     Das Abzeichen pulsierte dadurch ununterbrochen, obwohl sich gar
+     nichts geändert hatte; genau so wurde es gemeldet.
+
+     Jetzt wird nur noch nachgeführt: neu angelegt wird ein Abzeichen,
+     wenn die Person dazukommt, entfernt, wenn sie geht. Wer bleibt,
+     behält sein Element – und damit seine Ruhe.
+     ══════════════════════════════════════════════════════════════════ */
+  function renderMarkers() {
     const byPage = new Map();
     for (const person of others) {
       if (!person.pageId) continue;
@@ -461,22 +581,51 @@
       byPage.get(person.pageId).push(person);
     }
 
+    const gebrauchteLeisten = new Set();
+
     for (const [pageId, people] of byPage) {
       const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
       if (!pgEl) continue;
 
-      const rail = document.createElement('div');
-      rail.className = 'collab-marker';
-      for (const person of people.slice(0, 3)) {
-        const dot = document.createElement('span');
-        dot.className = 'collab-dot';
-        dot.style.background = person.color || 'var(--gold)';
-        dot.textContent = person.initials || '?';
-        dot.title = (person.name || person.email || '') + ' – ' + t('collabOnThisPage');
-        rail.appendChild(dot);
+      let rail = pgEl.querySelector(':scope > .collab-marker');
+      if (!rail) {
+        rail = document.createElement('div');
+        rail.className = 'collab-marker';
+        pgEl.appendChild(rail);
       }
-      pgEl.appendChild(rail);
+      gebrauchteLeisten.add(rail);
+
+      const vorhanden = new Map();
+      for (const el of rail.children) vorhanden.set(el.dataset.uid, el);
+
+      for (const person of people.slice(0, 3)) {
+        let dot = vorhanden.get(person.uid);
+        if (!dot) {
+          dot = document.createElement('span');
+          dot.className = 'collab-dot';
+          dot.dataset.uid = person.uid;
+          rail.appendChild(dot);
+        }
+        vorhanden.delete(person.uid);
+
+        const farbe = person.color || 'var(--gold)';
+        if (dot.dataset.farbe !== farbe) {
+          dot.dataset.farbe = farbe;
+          dot.style.background = farbe;
+        }
+        const kurz = person.initials || '?';
+        if (dot.textContent !== kurz) dot.textContent = kurz;
+        const titel = (person.name || person.email || '') + ' – ' + t('collabOnThisPage');
+        if (dot.title !== titel) dot.title = titel;
+      }
+
+      // Wer diese Seite verlassen hat
+      for (const el of vorhanden.values()) el.remove();
     }
+
+    document.querySelectorAll('.collab-marker').forEach(rail => {
+      if (!gebrauchteLeisten.has(rail)) rail.remove();
+    });
   }
 
   function cssEscapeId(value) {
@@ -678,10 +827,9 @@
      enden also von allein.
 
      Gerechnet ab der letzten MELDUNG, nicht ab dem letzten Anschlag:
-     wer weiterschreibt, frischt ununterbrochen auf. Nach dem Aufhören
-     kommen noch LOCK_CLAIM_MS lang Meldungen, danach läuft dieser
-     Nachlauf – zusammen bleibt eine Zeile also rund 14 Sekunden
-     belegt. */
+     wer weiterschreibt, frischt ununterbrochen auf. Wer aufhört, gibt die
+     Sperre nach LOCK_CLAIM_MS ausdrücklich frei – dieser Nachlauf greift
+     also nur, wenn jemand gar nichts mehr meldet (Absturz, Leitung weg). */
   const LOCK_TTL_MS = 10000;
 
   // Höchstens so oft ein Hinweis, wenn jemand in eine gesperrte Zeile tippt
@@ -974,8 +1122,11 @@
      ohne ihn landet die Marke beim Austausch des Inhalts auf Stelle 0. */
   const letzteEigeneStelle = new Map();
 
-  // So lange nach dem letzten Anschlag gilt man noch als „am Schreiben"
-  const LOCK_CLAIM_MS = 4000;
+  /* So lange nach dem letzten Anschlag gilt man noch als „am Schreiben".
+     Das ist die Zeit, die eine Zeile für die anderen belegt bleibt –
+     vier Sekunden waren zu knapp: wer einen Satz überlegt, hatte seine
+     Zeile schon wieder freigegeben, während er noch daran arbeitete. */
+  const LOCK_CLAIM_MS = 10000;
 
   /**
    * Schreibt diese Person gerade auf dieser Seite?
