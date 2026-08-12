@@ -3,13 +3,21 @@
 /* ══════════════════════════════════════════════════════════════════════
    GEZEICHNETES AUSWÄHLEN
 
-   Mit dem Zeiger auf einen Strich tippen wählt ihn aus. Danach:
+   Zwei Wege führen zu einer Auswahl:
+
+     · Mit dem ZEIGER auf einen Strich tippen – dann ist genau dieser
+       eine gemeint.
+     · Mit dem STIFT etwas schnell EINKREISEN – dann ist alles gemeint,
+       was in der Schlinge liegt (siehe „Schnell eingekreist" unten).
+
+   Danach gilt:
 
      · eine GERADE Linie bekommt einen Griff an jedem Ende – damit lässt
        sie sich verlängern, kürzen und drehen, genau wie eine Linie aus
        dem Formen-Werkzeug
-     · alles andere – Handschrift, Gekritzel – bekommt einen Rahmen und
-       lässt sich verschieben, verdoppeln und löschen
+     · alles andere – Handschrift, Gekritzel, mehrere Striche zusammen –
+       bekommt einen Rahmen und lässt sich verschieben, verdoppeln und
+       löschen
 
    >>> Warum genau auf den Strich getroffen werden muss <<<
    Der Textbereich liegt über fast der ganzen Seite. Würde schon ein Klick
@@ -27,7 +35,7 @@
   const ZUGABE = 5;          // Seiten-Pixel Zugabe um die Linie herum
   const MIN_LAENGE = 6;      // kürzer wird keine Linie gezogen
 
-  let _sel = null;           // { pageId, stroke, pageEl, huelle, griffe[] }
+  let _sel = null;           // { pageId, strokes[], pageEl, huelle, griffe[] }
 
   /* ── Treffer suchen ──────────────────────────────────────────────── */
 
@@ -58,22 +66,42 @@
     return null;
   }
 
-  /** Ist das eine gerade Linie? Dann hat sie genau zwei Punkte. */
-  const istGerade = stroke => stroke.path && stroke.path.length === 2;
+  /** Ist das eine einzelne gerade Linie? Dann hat sie genau zwei Punkte. */
+  function istGerade(strokes) {
+    return strokes.length === 1 && strokes[0].path && strokes[0].path.length === 2;
+  }
 
-  /** Das umschliessende Rechteck eines Strichs. */
-  function rechteck(stroke) {
+  /** Das umschliessende Rechteck – nackt, ohne Zugabe für die Strichbreite. */
+  function rohRechteck(strokes) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const p of stroke.path) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
+    for (const stroke of strokes) {
+      for (const p of stroke.path) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
     }
-    const rand = Math.max(3, (stroke.width || 2) / 2) + 3;
+    return { minX, minY, maxX, maxY };
+  }
+
+  /** Dasselbe Rechteck als Lage und Grösse, mit Platz für die Strichbreite. */
+  function rechteck(strokes) {
+    const r = rohRechteck(strokes);
+    const dick = strokes.reduce((m, s) => Math.max(m, s.width || 2), 2);
+    const rand = Math.max(3, dick / 2) + 3;
     return {
-      x: minX - rand, y: minY - rand,
-      w: (maxX - minX) + rand * 2, h: (maxY - minY) + rand * 2
+      x: r.minX - rand, y: r.minY - rand,
+      w: (r.maxX - r.minX) + rand * 2, h: (r.maxY - r.minY) + rand * 2
+    };
+  }
+
+  /** Breite und Höhe der Seite – für die Grenzen beim Verschieben. */
+  function seitenMass(pageId) {
+    const info = typeof getPage === 'function' ? getPage(pageId) : null;
+    return {
+      w: (info && info.page.w) || CFG.PAGE_W,
+      h: (info && info.page.h) || CFG.PAGE_H
     };
   }
 
@@ -97,37 +125,40 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     DIE HÜLLE UM DEN AUSGEWÄHLTEN STRICH
+     DIE HÜLLE UM DAS AUSGEWÄHLTE
      ══════════════════════════════════════════════════════════════════ */
   function zeichneHuelle() {
     if (!_sel) return;
-    const r = rechteck(_sel.stroke);
+    const r = rechteck(_sel.strokes);
     const h = _sel.huelle;
     h.style.left = r.x + 'px';
     h.style.top = r.y + 'px';
     h.style.width = r.w + 'px';
     h.style.height = r.h + 'px';
 
-    if (istGerade(_sel.stroke)) {
+    if (istGerade(_sel.strokes)) {
       // Die Griffe sitzen an den ENDEN, nicht an den Ecken des Rechtecks
       _sel.griffe.forEach((g, i) => {
-        const p = _sel.stroke.path[i];
+        const p = _sel.strokes[0].path[i];
         g.style.left = (p.x - r.x) + 'px';
         g.style.top = (p.y - r.y) + 'px';
       });
     }
   }
 
-  function baueHuelle(pageEl, pageId, stroke) {
+  function baueHuelle(pageEl, pageId, strokes) {
+    if (!strokes || !strokes.length) return;
     const huelle = document.createElement('div');
     huelle.className = 'ink-sel';
     pageEl.appendChild(huelle);
 
     const griffe = [];
-    _sel = { pageId, stroke, pageEl, huelle, griffe };
+    _sel = { pageId, strokes, pageEl, huelle, griffe };
+    const mass = seitenMass(pageId);
 
     /* ── Gerade Linie: ein Griff je Ende ──────────────────────────── */
-    if (istGerade(stroke)) {
+    if (istGerade(strokes)) {
+      const stroke = strokes[0];
       huelle.classList.add('gerade');
       [0, 1].forEach(nr => {
         const g = document.createElement('div');
@@ -161,6 +192,11 @@
               ny = fest.y + Math.sin(w) * len;
             }
 
+            // Auf dem Blatt bleiben – nach dem Einrasten, sonst zöge der
+            // Winkelschritt das Ende wieder hinaus
+            nx = klemme(nx, 0, mass.w);
+            ny = klemme(ny, CFG.HDR, mass.h);
+
             // Nicht auf null zusammenziehen – sonst ist sie nicht mehr zu fassen
             if (Math.hypot(nx - fest.x, ny - fest.y) < MIN_LAENGE) return;
 
@@ -191,12 +227,33 @@
       if (info) pushPageHistory(info.page);
 
       const sx = e.clientX, sy = e.clientY;
-      const anfang = stroke.path.map(p => ({ x: p.x, y: p.y }));
+      const anfang = strokes.map(s => s.path.map(p => ({ x: p.x, y: p.y })));
       const zoom = typeof getZoom === 'function' ? getZoom() : 1;
 
+      /* ══════════════════════════════════════════════════════════
+         NICHT VOM BLATT HERUNTER
+
+         Verschoben wurde bisher ohne jede Grenze. Die Zeichenfläche
+         ist aber so gross wie die Seite und schneidet ab: was man
+         hinausschob, war weg – nicht gelöscht, sondern unsichtbar auf
+         Koordinaten ausserhalb des Blatts. Genau so wurde es gemeldet.
+
+         Begrenzt wird die VERSCHIEBUNG, nicht der einzelne Punkt:
+         sonst würde die Auswahl am Rand zusammengedrückt statt
+         anzustossen.
+
+         klemme() steht in canvas/objects.js – dort gilt dieselbe
+         Grenze für Bilder, Formen und Formeln.
+         ══════════════════════════════════════════════════════════ */
+      const box = rohRechteck(strokes);
+
       const mv = ev => {
-        const dx = (ev.clientX - sx) / zoom, dy = (ev.clientY - sy) / zoom;
-        stroke.path.forEach((p, i) => { p.x = anfang[i].x + dx; p.y = anfang[i].y + dy; });
+        let dx = (ev.clientX - sx) / zoom, dy = (ev.clientY - sy) / zoom;
+        dx = klemme(dx, -box.minX, mass.w - box.maxX);
+        dy = klemme(dy, CFG.HDR - box.minY, mass.h - box.maxY);
+        strokes.forEach((s, i) => {
+          s.path.forEach((p, k) => { p.x = anfang[i][k].x + dx; p.y = anfang[i][k].y + dy; });
+        });
         notiere(pageId, false);
         zeichneHuelle();
         stelleLeiste();
@@ -277,10 +334,10 @@
   /* ── Handgriffe der Leiste ───────────────────────────────────────── */
   function loeschen() {
     if (!_sel) return;
-    const { pageId, stroke } = _sel;
+    const { pageId, strokes } = _sel;
     const info = getPage(pageId);
     if (info) pushPageHistory(info.page);
-    S.strokeHistory[pageId] = (S.strokeHistory[pageId] || []).filter(s => s !== stroke);
+    S.strokeHistory[pageId] = (S.strokeHistory[pageId] || []).filter(s => !strokes.includes(s));
     abwaehlen();
     versteckeLeiste();
     notiere(pageId, true);
@@ -288,17 +345,134 @@
 
   function verdoppeln() {
     if (!_sel) return;
-    const { pageId, stroke, pageEl } = _sel;
+    const { pageId, strokes, pageEl } = _sel;
     const info = getPage(pageId);
     if (info) pushPageHistory(info.page);
 
-    const kopie = JSON.parse(JSON.stringify(stroke));
-    kopie.path.forEach(p => { p.x += 14; p.y += 14; });
-    S.strokeHistory[pageId].push(kopie);
+    const kopien = strokes.map(s => {
+      const k = JSON.parse(JSON.stringify(s));
+      k.path.forEach(p => { p.x += 14; p.y += 14; });
+      return k;
+    });
+    S.strokeHistory[pageId].push(...kopien);
 
     abwaehlen();
     notiere(pageId, true);
-    baueHuelle(pageEl, pageId, kopie);   // die Kopie ist gleich ausgewählt
+    baueHuelle(pageEl, pageId, kopien);   // die Kopie ist gleich ausgewählt
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     SCHNELL EINGEKREIST = AUSGEWÄHLT
+
+     Wer mit dem Stift schnell eine Schlinge um etwas zieht, meint nicht
+     die Schlinge, sondern das, was darin liegt. Wer langsam zeichnet,
+     meint den Strich. Dieselbe Geste kennt Microsoft Journal, und so
+     wurde sie auch gewünscht.
+
+     >>> Woran sich beides unterscheidet <<<
+     Am TEMPO der Hand, gemessen in Bildschirm-Pixeln je Millisekunde.
+     Bewusst am Bildschirm und nicht am Blatt: eine Schlinge um dasselbe
+     Wort ist beim Vergrössern die gleiche Handbewegung, auf dem Blatt
+     aber ein kürzerer Weg. Geschrieben wird mit etwa 0,2–0,4, eine
+     hingeworfene Schlinge liegt bei 1 und darüber.
+
+     Tempo allein reicht nicht – ein schneller Zickzack wäre sonst auch
+     eine Auswahl. Es müssen alle vier Dinge zusammenkommen:
+
+       · schnell genug
+       · GESCHLOSSEN – Anfang und Ende nah beieinander
+       · halbwegs RUND – die Fläche muss zum Umfang passen; ein Gekritzel
+         umschliesst fast nichts, egal wie lang es ist
+       · und es muss etwas DRIN liegen
+
+     Das letzte ist die wichtigste Bremse: eine Schlinge um nichts bleibt
+     ein Strich. Wer wirklich einen Kreis malen will, malt ihn also aufs
+     leere Blatt – und wenn er dabei etwas einschliesst, malt er langsam.
+     ══════════════════════════════════════════════════════════════════ */
+  const LASSO_TEMPO = 0.8;       // Bildschirm-Pixel je Millisekunde
+  const LASSO_MIN_WEG = 120;     // Seiten-Pixel; darunter ist es ein Buchstabe
+  const LASSO_MIN_KANTE = 24;    // Seiten-Pixel, kleinste Seite des Rechtecks
+  const LASSO_LUECKE = 0.3;      // Anteil des Weges zwischen Anfang und Ende
+  const LASSO_RUNDHEIT = 0.2;    // 4πA/U²: Kreis 1, Quadrat 0,79, Gekritzel ~0
+  const LASSO_ANTEIL = 0.7;      // so viel eines Strichs muss innen liegen
+
+  function wegLaenge(pts) {
+    let l = 0;
+    for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    return l;
+  }
+
+  /** Fläche des Vielecks nach Gauss – das Vorzeichen sagt den Umlaufsinn. */
+  function flaeche(pts) {
+    let a = 0;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      a += (pts[j].x + pts[i].x) * (pts[j].y - pts[i].y);
+    }
+    return Math.abs(a / 2);
+  }
+
+  /** Liegt der Punkt im Vieleck? Strahlenverfahren. */
+  function imVieleck(pts, x, y) {
+    let drin = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) drin = !drin;
+    }
+    return drin;
+  }
+
+  /** Wie viel von diesem Strich liegt in der Schlinge? 0 bis 1. */
+  function anteilDrin(stroke, schlinge) {
+    const pts = stroke.path || [];
+    if (!pts.length) return 0;
+    let drin = 0;
+    for (const p of pts) if (imVieleck(schlinge, p.x, p.y)) drin++;
+    return drin / pts.length;
+  }
+
+  /**
+   * Prüft einen fertigen Strich auf die Einkreis-Geste.
+   *
+   * Erkennt sie, nimmt sie den Strich aus der Seite heraus und wählt
+   * stattdessen aus, was er umschlossen hat.
+   *
+   * @param {string} pageId
+   * @param {object} stroke  der eben gezeichnete Strich
+   * @param {number} dauer   Millisekunden vom Aufsetzen bis zum Abheben
+   * @returns {boolean} ob der Strich als Auswahl verbraucht wurde
+   */
+  function versucheLasso(pageId, stroke, dauer) {
+    const pts = stroke && stroke.path;
+    if (!pts || pts.length < 8 || !(dauer > 0)) return false;
+
+    const weg = wegLaenge(pts);
+    if (weg < LASSO_MIN_WEG) return false;
+
+    const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+    if ((weg * zoom) / dauer < LASSO_TEMPO) return false;
+
+    const a = pts[0], b = pts[pts.length - 1];
+    const luecke = Math.hypot(b.x - a.x, b.y - a.y);
+    if (luecke > weg * LASSO_LUECKE) return false;
+
+    const kasten = rohRechteck([stroke]);
+    if (Math.min(kasten.maxX - kasten.minX, kasten.maxY - kasten.minY) < LASSO_MIN_KANTE) return false;
+
+    const umfang = weg + luecke;
+    if ((4 * Math.PI * flaeche(pts)) / (umfang * umfang) < LASSO_RUNDHEIT) return false;
+
+    const gefunden = (S.strokeHistory[pageId] || []).filter(s =>
+      s !== stroke && !s.isEraser && anteilDrin(s, pts) >= LASSO_ANTEIL);
+    if (!gefunden.length) return false;
+
+    // Die Schlinge selbst ist nur die Geste – sie bleibt nicht stehen
+    S.strokeHistory[pageId] = (S.strokeHistory[pageId] || []).filter(s => s !== stroke);
+
+    const pageEl = document.querySelector('[data-pgid="' + CSS.escape(pageId) + '"]');
+    if (!pageEl) return true;
+    abwaehlen();
+    baueHuelle(pageEl, pageId, gefunden);
+    return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -308,7 +482,7 @@
      zuerst drankommt.
      ══════════════════════════════════════════════════════════════════ */
   document.addEventListener('pointerdown', e => {
-    // Nur der Zeiger wählt aus; die Werkzeuge zeichnen weiter
+    // Nur der Zeiger wählt durch Antippen aus; die Werkzeuge zeichnen weiter
     if (S.mode !== 'cursor' || S.readOnly) return;
     // Innerhalb der eigenen Bedienteile nichts tun
     if (e.target.closest('.ink-sel, .ink-sel-bar, .obj-wrap, .j-table-bar')) return;
@@ -333,12 +507,12 @@
     if (!treffer) { abwaehlen(); versteckeLeiste(); return; }
 
     // Denselben noch einmal angetippt: stehen lassen
-    if (_sel && _sel.stroke === treffer) return;
+    if (_sel && _sel.strokes.length === 1 && _sel.strokes[0] === treffer) return;
 
     e.preventDefault();
     e.stopPropagation();
     abwaehlen();
-    baueHuelle(pageEl, pageId, treffer);
+    baueHuelle(pageEl, pageId, [treffer]);
   }, true);
 
   /* Entf löscht, Esc hebt auf – wie bei jedem ausgewählten Ding. */
@@ -359,4 +533,5 @@
 
   /* ── Global erreichbar ───────────────────────────────────────────── */
   window.deselectStroke = function () { abwaehlen(); versteckeLeiste(); };
+  window.versucheLasso = versucheLasso;
 })();

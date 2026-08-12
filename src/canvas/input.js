@@ -5,6 +5,13 @@ function attachInput(canvas, textDiv, objLayer, page) {
   const div = canvas.parentElement;
   const LINE_HOLD_MS = 320;
 
+  /* Wann der laufende Strich angesetzt hat. Aus der Dauer wird beim
+     Abheben das Tempo – und daraus, ob eine Schlinge eine Auswahl war
+     (canvas/strokeSelect.js, versucheLasso). Bewusst NICHT am Strich
+     selbst: der wandert unverändert in page.inkStrokes und damit in die
+     gespeicherte Datei. */
+  let _strichAnfang = 0;
+
   function activateTextEditingAt(clientX, clientY, forceManual = false) {
     if (S.mode !== 'cursor') switchMode('cursor');
     textDiv.style.pointerEvents = 'auto';
@@ -198,6 +205,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
       S._restoreMode = null;
     }
     S._drawPointerId = e.pointerId;
+    _strichAnfang = performance.now();
+    /* Eine Auswahl aus einer vorigen Schlinge gilt nur, bis wieder
+       gezeichnet wird – sonst bliebe ihr Rahmen als Fremdkörper stehen,
+       während schon der nächste Strich entsteht. */
+    if (typeof window.deselectStroke === 'function') window.deselectStroke();
     e.preventDefault();
     try { e.target.setPointerCapture(e.pointerId); } catch (err) { }
     textDiv.style.pointerEvents = 'none';
@@ -340,14 +352,37 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
     if (S._cur?.isHL || S._cur?.isEraser) redrawStrokes(canvas, S.strokeHistory[page.id]);
 
-    // Der fertige Strich geht sofort an die anderen. Erst beim Loslassen –
-    // während des Zeichnens wäre es ein Sturm aus Zwischenständen, und der
-    // Strich sieht ohnehin erst am Ende richtig aus.
     const finished = S._cur;
-    if (finished && !finished.isEraser && window.Collab) Collab.noteStroke(page.id, finished);
+
+    /* ══════════════════════════════════════════════════════════════
+       WAR DAS EINE SCHLINGE?
+
+       Schnell um etwas herumgezogen heisst „das da meine ich" und nicht
+       „male einen Kreis" (canvas/strokeSelect.js). Der Marker bleibt
+       aussen vor: mit ihm fährt man um Wörter herum, ohne etwas
+       auswählen zu wollen.
+
+       Der Strich verschwindet dann wieder – und mit ihm sein
+       Rückgängig-Schritt, der in handleDrawStart schon gesetzt wurde.
+       Sonst nähme das erste Strg+Z danach etwas weg, das der Nutzer nie
+       hinzugefügt hat.
+       ══════════════════════════════════════════════════════════════ */
+    const alsAuswahl = finished && !finished.isEraser && !finished.isHL
+      && typeof window.versucheLasso === 'function'
+      && window.versucheLasso(page.id, finished, performance.now() - _strichAnfang);
+
+    if (alsAuswahl) {
+      redrawStrokes(canvas, S.strokeHistory[page.id]);
+      if (typeof popPageHistory === 'function') popPageHistory(page.id);
+    } else if (finished && !finished.isEraser && window.Collab) {
+      // Der fertige Strich geht sofort an die anderen. Erst beim Loslassen –
+      // während des Zeichnens wäre es ein Sturm aus Zwischenständen, und der
+      // Strich sieht ohnehin erst am Ende richtig aus.
+      Collab.noteStroke(page.id, finished);
+    }
 
     S._cur = null; page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
-    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    if (!alsAuswahl && window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
   div.addEventListener('pointercancel', () => {
     stopLineTimer(S._cur);
