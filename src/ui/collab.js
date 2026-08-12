@@ -1769,11 +1769,17 @@
     return {
       pages,
       order: (nb.pages || []).map(p => String(p.id)).join(','),
+      /* Kommentare gehören mit hinein. Sie standen bisher NICHT im
+         Vergleich: die Markierung im Text reiste über Yjs mit, der
+         Kommentar selbst blieb zurück – beim anderen stand die Stelle
+         markiert da, und dazu ein leerer Eintrag von „Unbekannt"
+         (core/comments.js, ensureCommentsFromMarkers). */
       struct: JSON.stringify({
         sections: nb.sections || [],
         name: nb.name || '',
         color: nb.color || '',
-        defaultBg: nb.defaultBg || ''
+        defaultBg: nb.defaultBg || '',
+        comments: nb.comments || []
       })
     };
   }
@@ -1954,14 +1960,15 @@
       if (!now.pages[pageId]) sendLive('pg-', pageId, {});
     }
 
-    // 4. Abschnitte, Reihenfolge, Heftangaben
+    // 4. Abschnitte, Reihenfolge, Heftangaben, Kommentare
     if (now.struct !== snapshot.struct || now.order !== snapshot.order) {
       sendLive('st', '*', {
         sections: liveNb.sections || [],
         order: (liveNb.pages || []).map(p => String(p.id)),
         name: liveNb.name || '',
         color: liveNb.color || '',
-        defaultBg: liveNb.defaultBg || ''
+        defaultBg: liveNb.defaultBg || '',
+        comments: liveNb.comments || []
       });
     }
 
@@ -2135,6 +2142,34 @@
     if (typeof data.name === 'string' && data.name) liveNb.name = data.name;
     if (typeof data.color === 'string' && data.color) liveNb.color = data.color;
     if (typeof data.defaultBg === 'string' && data.defaultBg) liveNb.defaultBg = data.defaultBg;
+
+    /* ══════════════════════════════════════════════════════════════
+       KOMMENTARE
+
+       Die Markierung im Text reist über Yjs mit, der Kommentar selbst
+       nicht: beim anderen stand die Stelle farbig da und dazu ein leerer
+       Eintrag von „Unbekannt" (core/comments.js baut den aus der
+       Markierung, damit wenigstens etwas da ist). Jetzt kommt der Text
+       mit – feldweise übernommen, nicht mit der eigenen Liste
+       verschmolzen: der Absender hat den vollständigen Stand, und zwei
+       Listen zu vereinen hiesse, Gelöschtes wiederauferstehen zu lassen.
+       ══════════════════════════════════════════════════════════════ */
+    if (Array.isArray(data.comments)) {
+      liveNb.comments = data.comments.map(c => ({
+        id: String(c.id),
+        pageId: String(c.pageId || ''),
+        text: String(c.text || ''),
+        zitat: String(c.zitat || ''),
+        author: c.author && typeof c.author === 'object'
+          ? { uid: String(c.author.uid || ''), name: String(c.author.name || '') }
+          : { uid: '', name: '' },
+        created: Number(c.created) || Date.now(),
+        edited: Number(c.edited) || 0,
+        resolved: !!c.resolved,
+        replies: Array.isArray(c.replies) ? c.replies : []
+      }));
+      if (typeof window.refreshComments === 'function') window.refreshComments();
+    }
 
     // Reihenfolge der Seiten übernehmen, Unbekanntes hinten anhängen
     if (Array.isArray(data.order) && data.order.length) {

@@ -126,12 +126,33 @@
    * Firebase den Nutzer nicht kannte. Damit war der graue Knopf nicht zu
    * erklären.
    */
+  /* ══════════════════════════════════════════════════════════════════
+     STEHT HIER JEMAND MIT MICROSOFT UND FEHLENDEM ZWEITEN SCHRITT?
+
+     Dann taugt keine der allgemeinen Erklärungen: „melde dich an" ist
+     falsch (er IST angemeldet), und „fehlt ein Anmelde-Nachweis von
+     Google, melde dich ab und wieder an" schickt ihn zu einem Anbieter,
+     den er gar nicht benutzt, und zu einem Weg, der nichts ändert.
+
+     Genau das wurde gemeldet: mit Microsoft angemeldet, zweiter Schritt
+     offen, und im Freigabe-Fenster stand Text, der zur Lage nicht passte.
+     Richtig ist der Hinweis auf den Knopf gleich darunter.
+     ══════════════════════════════════════════════════════════════════ */
+  function microsoftBrauchtZweitenSchritt() {
+    const cs = (typeof CloudSync_ !== 'undefined' && CloudSync_) ? CloudSync_ : null;
+    return !!cs && cs.getProviderId?.() === 'microsoft' && !!cs.isAuthenticated?.();
+  }
+
   function describeIdentityProblem() {
     const problem = (typeof CloudSync_ !== 'undefined' && CloudSync_)
       ? CloudSync_.identityProblem
       : 'offline';
 
     if (problem === 'offline') return t('shareOffline');
+    if (microsoftBrauchtZweitenSchritt()
+        && (problem === 'signedOut' || problem === 'noIdToken' || !problem)) {
+      return t('shareMicrosoftUnsupported');
+    }
     if (problem === 'signedOut') return t('shareNeedsAccount');
     if (problem === 'noIdToken') return t('shareNoIdToken');
     // Die Adresse gehört hier schon zu einer Anmeldung über Google
@@ -170,14 +191,15 @@
          Wer hier auf die Firebase Console verwiesen wird, sucht
          vergeblich – der Anbieter ist eingeschaltet. */
       if (/invalid-credential|provider-id/i.test(detail)) {
-        const isMicrosoft = (typeof CloudSync_ !== 'undefined' && CloudSync_)
-          && CloudSync_.getProviderId() === 'microsoft';
-        if (isMicrosoft) return t('shareMicrosoftUnsupported');
+        if (microsoftBrauchtZweitenSchritt()) return t('shareMicrosoftUnsupported');
         return t('shareCredentialRejected') + (detail ? ' (' + detail + ')' : '');
       }
 
+      // Auch bei einer unbekannten Ursache gilt bei Microsoft der Knopf
+      if (microsoftBrauchtZweitenSchritt()) return t('shareMicrosoftUnsupported');
       return t('shareIdentityFailed') + (detail ? ' (' + detail + ')' : '');
     }
+    if (microsoftBrauchtZweitenSchritt()) return t('shareMicrosoftUnsupported');
     return t('shareNeedsAccount');
   }
 

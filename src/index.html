@@ -1235,8 +1235,18 @@
       </p>
 
       <!-- Ohne echte Anmeldung bei Firebase geht nichts davon; dann steht
-           hier statt der Bedienelemente eine Erklärung. -->
-      <p id="share-needs-account" style="display:none; font-size:12px; color:var(--md); line-height:1.6; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px; margin:0;" data-i18n="shareNeedsAccount">
+           hier statt der Bedienelemente eine Erklärung.
+
+           >>> KEIN data-i18n <<<
+           Es stand hier, und damit schrieb jedes applyTranslations() den
+           allgemeinen Satz „melde dich an" über die Erklärung, die
+           ui/share.js gerade eingesetzt hatte. Wer mit Microsoft
+           angemeldet war und den zweiten Schritt noch vor sich hatte, las
+           deshalb, er sei nicht angemeldet – und der Hinweis auf den
+           Knopf darunter fehlte ganz. Diesen Absatz füllt allein
+           describeIdentityProblem(); der Text hier ist nur die Anzeige,
+           solange niemand ihn gesetzt hat. -->
+      <p id="share-needs-account" style="display:none; font-size:12px; color:var(--md); line-height:1.6; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px; margin:0;">
         Zum Teilen musst du in Inkwell mit deinem Google- oder Microsoft-Konto angemeldet sein.
       </p>
 

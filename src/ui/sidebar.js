@@ -533,9 +533,22 @@ function showSecMgrPageMenu(x, y, page) {
     await deletePageFromManager(page);
   }, true));
 
-  menu.style.left = x + 'px';
-  menu.style.top = y + 'px';
-  menu.style.display = 'block';
+  /* ══════════════════════════════════════════════════════════════════
+     DAS MENÜ BLEIBT AUF DEM SCHIRM
+
+     Hier standen die Klickkoordinaten roh: wer im Hochformat auf eine
+     Seite weit unten oder rechts drückte, bekam das Menü halb ausserhalb
+     des Fensters – und mit ihm die Einträge, wegen derer er es geöffnet
+     hatte. Gemessen wird erst unsichtbar, dann gerückt; ohne das kennt
+     niemand seine Höhe. Dieselbe Rechnung wie in ui/contextMenu.js.
+     ══════════════════════════════════════════════════════════════════ */
+  const rand = 8;
+  menu.style.cssText = 'display:block;position:fixed;left:0;top:0;z-index:1000;visibility:hidden';
+  const mx = Math.max(rand, Math.min(x, window.innerWidth - (menu.offsetWidth || 200) - rand));
+  const my = Math.max(rand, Math.min(y, window.innerHeight - (menu.offsetHeight || 200) - rand));
+  menu.style.left = mx + 'px';
+  menu.style.top = my + 'px';
+  menu.style.visibility = 'visible';
 }
 
 /* Seite aus der Verwaltung löschen.
