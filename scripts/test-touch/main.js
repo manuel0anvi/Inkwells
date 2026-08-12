@@ -149,13 +149,25 @@ app.on('ready', async () => {
        32 px ist die untere Grenze, die ein Finger noch zuverlaessig
        trifft. Ohne die Regeln in responsive.css sind es 24. */
     abschnitt('Trefferflaechen (mindestens 32 px Kante)');
+    /* #fmt-h1 und #fmt-p standen hier einzeln in der Leiste. Sie stecken
+       jetzt in der Auswahl hinter #fmt-style – dort sind sie geschlossen
+       und deshalb „nicht sichtbar"; gemessen wird die Auswahl weiter
+       unten, nachdem sie aufgemacht wurde. */
     for (const sel of ['#fmt-list', '#fmt-list-more',
-                       '#fmt-bold', '#fmt-h1', '#fmt-p', '.tb-mode',
+                       '#fmt-bold', '#fmt-style', '.tb-mode',
+                       '#btn-undo', '#btn-redo',
                        '.pg-menu-btn', '#btn-panel-toggle']) {
       const m = await mitte(sel);
       pruefe(sel.padEnd(20) + (m ? m.w + '×' + m.h : 'nicht sichtbar'),
         !!m && Math.min(m.w, m.h) >= 32, m ? 'zu klein fuer einen Finger' : 'fehlt');
     }
+
+    await tippe('#fmt-style');
+    const stilZelle = await mitte('.style-pop-item');
+    pruefe('.style-pop-item'.padEnd(20) + (stilZelle ? stilZelle.w + '×' + stilZelle.h : 'nicht sichtbar'),
+      !!stilZelle && Math.min(stilZelle.w, stilZelle.h) >= 32,
+      stilZelle ? 'zu klein fuer einen Finger' : 'die Auswahl ging nicht auf');
+    await js(`document.getElementById('style-pop').style.display = 'none'`);
 
     /* ── Mit dem Finger ─────────────────────────────────────────────── */
     abschnitt('Mit dem Finger');
@@ -214,18 +226,38 @@ app.on('ready', async () => {
     html = await js(`document.querySelector('.j-text').innerHTML`);
     pruefe('Noch ein Druck nimmt die Liste weg', !/<(ul|ol)/.test(html), html.slice(0, 140));
 
-    /* ── Mit dem Stift ──────────────────────────────────────────────── */
-    abschnitt('Mit dem Stift');
-    await js(`(() => { document.querySelector('.j-text').innerHTML = '<p>Eins</p><p>Zwei</p>'; return true; })()`);
-    await stift('.j-text');
-    pruefe('Ein Tipp setzt die Schreibmarke',
-      await js(`(() => { const s = getSelection();
-        return !!(s.rangeCount && document.querySelector('.j-text').contains(s.getRangeAt(0).startContainer)); })()`),
-      'keine Marke');
+    /* ══════════════════════════════════════════════════════════════════
+       MIT DEM STIFT
 
+       >>> Hier stand einmal das Gegenteil <<<
+       „Ein Tipp setzt die Schreibmarke" – der Stift war auf dem Zeiger ein
+       Finger. Genau das wurde zurueckgemeldet: auf einem Tablet faehrt
+       damit die Bildschirmtastatur heraus, obwohl niemand schreiben will.
+       Der Stift MALT jetzt, auch wenn der Zeiger gewaehlt ist
+       (canvas/input.js); antippen und auswaehlen ist Sache des Fingers.
+       Die ganze Aufteilung steht in scripts/test-stift.
+
+       Was hier bleibt, ist die Frage, um die es in dieser Datei geht: ob
+       ein Knopf in der LEISTE auch auf den Stift reagiert.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Mit dem Stift');
+    await js(`(() => { switchMode('cursor');
+      document.querySelector('.j-text').innerHTML = '<p>Eins</p><p>Zwei</p>';
+      S.strokeHistory[S.activePgId] = []; return true; })()`);
+    await stift('.j-page');
+    pruefe('Ein Tipp auf die Seite malt, statt die Tastatur zu holen',
+      (await js(`(S.strokeHistory[S.activePgId] || []).length`)) === 1
+      && (await js(`S.mode`)) !== 'cursor', 'es entstand kein Strich');
+
+    // Zurueck zum Zeiger – und zwar mit dem Stift, auf einem Knopf der Leiste
+    await stift('.tb-mode[data-mode="cursor"]');
+    pruefe('Ein Knopf der Leiste reagiert auf den Stift',
+      (await js(`S.mode`)) === 'cursor', 'das Werkzeug blieb auf ' + (await js(`S.mode`)));
+
+    await tippe('.j-text');
     await stift('#fmt-list');
     html = await js(`document.querySelector('.j-text').innerHTML`);
-    pruefe('Der Knopf wirkt auch mit dem Stift', /<(ul|ol)[^>]*j-list-/.test(html), html.slice(0, 140));
+    pruefe('Und der Listenknopf wirkt auch mit dem Stift', /<(ul|ol)[^>]*j-list-/.test(html), html.slice(0, 140));
 
     /* ── Umgeklappt ─────────────────────────────────────────────────── */
     abschnitt('Umgeklappt (quer nach hoch)');
@@ -274,22 +306,23 @@ app.on('ready', async () => {
       for (const navOffen of [false, true]) {
         await js(`document.getElementById('side-panel').classList.toggle('open', ${navOffen})`);
         await new Promise(r => setTimeout(r, 450));
+        /* Die Leiste BLAETTERT inzwischen (◀ ▶ in ui/toolbar.js), sie
+           sammelt nichts mehr in einem „⋯"-Menue. Hier standen deshalb
+           zwei Abfragen auf Elemente, die es nicht mehr gibt – die zweite
+           warf, und die ganze Pruefung brach an dieser Stelle ab. */
         const m = await js(`(() => { const tb = document.querySelector('.toolbar');
+          const weiter = document.getElementById('btn-tb-next');
+          const grp = [...tb.querySelectorAll('.tb-grp')];
           return { platz: Math.round(tb.clientWidth), noetig: Math.round(tb.scrollWidth),
-                   imMenue: document.getElementById('tb-more-pop').childElementCount,
-                   knopf: getComputedStyle(document.getElementById('btn-tb-more')).display }; })()`);
+                   imMenue: weiter && getComputedStyle(weiter).display !== 'none' ? 1 : 0,
+                   weg: grp.filter(g => g.style.display === 'none').length,
+                   da: grp.filter(g => g.style.display !== 'none').length,
+                   knopf: weiter ? getComputedStyle(weiter).display : 'none' }; })()`);
         pruefe((lage + (navOffen ? ' + Navigation' : '')).padEnd(24)
           + m.noetig + ' von ' + m.platz + ' px'
-          + (m.imMenue ? '  (' + m.imMenue + ' im Menü)' : ''),
-          m.noetig <= m.platz, 'es stehen ' + (m.noetig - m.platz) + ' px heraus');
-
-        /* Und wenn etwas ausgelagert wurde, muss der Knopf dazu auch da
-           sein – sonst waeren die Gruppen unerreichbar statt bloss
-           weggeraeumt. */
-        if (m.imMenue) {
-          pruefe((lage + (navOffen ? ' + Navigation' : '')).padEnd(24) + 'Knopf „⋯" ist da',
-            m.knopf !== 'none', 'ausgelagert, aber kein Weg hin');
-        }
+          + (m.imMenue ? '  (geblättert)' : ''),
+          m.noetig <= m.platz, 'es stehen ' + (m.noetig - m.platz) + ' px heraus; '
+          + m.da + ' Gruppen sichtbar, ' + m.weg + ' weggeblättert, Pfeil ' + m.knopf);
       }
       await js(`document.getElementById('side-panel').classList.remove('open')`);
     }
@@ -445,14 +478,23 @@ app.on('ready', async () => {
     /* ══════════════════════════════════════════════════════════════════
        GROESSER UND KLEINER IM HOCHFORMAT
 
-       − und + weichen der schmalen Leiste (css/responsive.css, Stufe 2).
-       Was blieb, war der Prozentwert, und der setzte im Hochformat auf
-       „eingepasst" zurueck – also auf den Zustand, in dem man ohnehin
-       schon war. Ein Druck darauf tat sichtbar nichts.
+       >>> Hier stand die Auswahl, die es nicht mehr gibt <<<
+       Frueher wichen − und + der schmalen Leiste, und der Prozentwert
+       oeffnete ein kleines Fenster (#zoom-pop) mit „groesser", „kleiner"
+       und „einpassen". Beides ist weg: die drei stehen jetzt immer in der
+       Leiste (css/toolbar.css). Diese Pruefung fragte weiterhin nach dem
+       Fenster, fand es nicht – und riss mit ihrem Fehler den ganzen Rest
+       der Datei mit, der danach nie mehr lief.
+
+       Geprueft wird deshalb, was heute gilt: die drei sind mit dem Finger
+       erreichbar und sie wirken.
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Groesser und kleiner im Hochformat');
-    pruefe('Die beiden Zoomknoepfe sind hier wirklich weg',
-      (await mitte('#btn-zoom-in')) === null, 'sie sind noch da – dann braucht es die Auswahl nicht');
+    for (const sel of ['#btn-zoom-out', '#btn-zoom-reset', '#btn-zoom-in']) {
+      const p = await mitte(sel);
+      pruefe(sel.padEnd(18) + (p ? p.w + '×' + p.h : 'nicht sichtbar'),
+        !!p, 'im Hochformat nicht erreichbar');
+    }
 
     /* >>> Die Pause gehoert dazu <<<
        Ein Tipp, der einer gezogenen Geste auf dem Fuss folgt, erzeugt in
@@ -460,21 +502,23 @@ app.on('ready', async () => {
        Der pointerdown kommt an, der click nie. Ohne diese Pause scheitert
        die Pruefung hier und sieht aus wie ein Fehler in der App. */
     await new Promise(r => setTimeout(r, 800));
-    await tippe('#btn-zoom-reset');
-    pruefe('Der Prozentwert oeffnet die Auswahl',
-      (await js(`getComputedStyle(document.getElementById('zoom-pop')).display`)) === 'flex',
-      'es passiert weiterhin nichts');
-
     const z0 = await js('getZoom()');
-    await tippe('#zoom-pop-in');
+    await tippe('#btn-zoom-in');
     const z1 = await js('getZoom()');
-    pruefe('Und darin vergroessert es sich (' + z0.toFixed(2) + ' auf ' + z1.toFixed(2) + ')',
+    pruefe('Der Finger vergroessert (' + z0.toFixed(2) + ' auf ' + z1.toFixed(2) + ')',
       z1 > z0 + 0.01, 'der Zoom blieb stehen');
 
-    await tippe('#zoom-pop-fit');
-    pruefe('„Einpassen" holt die Seite zurueck und schliesst',
-      (await js(`getComputedStyle(document.getElementById('zoom-pop')).display`)) === 'none'
-      && (await js('getZoom()')) < z1, 'blieb offen oder blieb gross');
+    /* Zurueck auf „eingepasst" – und das ist NICHT einfach „kleiner":
+       eingepasst heisst die volle Breite des Ausschnitts, und der ist
+       ohne offene Navigation breiter als das, was ein Druck auf + gerade
+       ergeben hat. Verglichen wird deshalb mit dem Einpasswert selbst. */
+    await new Promise(r => setTimeout(r, 500));
+    await tippe('#btn-zoom-reset');
+    const zFit = await js('getVerticalFitZoom()');
+    const zJetzt = await js('getZoom()');
+    pruefe('Und der Prozentwert passt wieder ein ('
+      + zJetzt.toFixed(2) + ', eingepasst wäre ' + zFit.toFixed(2) + ')',
+      Math.abs(zJetzt - zFit) < 0.01, 'er hat nichts zurückgesetzt');
 
     /* ══════════════════════════════════════════════════════════════════
        DIE ABSCHNITTE MIT DEM FINGER AUFZIEHEN

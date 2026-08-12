@@ -1,0 +1,427 @@
+/* ══════════════════════════════════════════════════════════════════════
+   WER WAS DARF: STIFT, FINGER, MAUS
+
+   Auf einem umklappbaren Laptop liegen drei Eingabegeräte nebeneinander,
+   und jedes meint etwas anderes. Was hier geprüft wird, ist genau diese
+   Aufteilung – sie ist mehrfach gemeldet worden und lässt sich weder
+   durch Lesen noch mit synthetischen Ereignissen beantworten: es geht um
+   Fokus, Bildschirmtastatur und um Tasten am Stiftschaft.
+
+     · Der STIFT malt, auch wenn gerade der Zeiger gewählt ist. Sonst
+       setzt sein Antippen die Schreibmarke, und auf dem Tablet fährt die
+       Bildschirmtastatur heraus.
+     · Seine untere TASTE radiert – ebenfalls aus der Zeigerstellung
+       heraus, ohne den Umweg über zwei Knöpfe in der Leiste.
+     · Seine obere TASTE kreist ein, statt auch zu radieren.
+     · Der FINGER wählt mit einem Tipp aus, statt einen Punkt zu malen.
+     · Der RADIERER nimmt eine gerade Linie ganz weg statt stückweise.
+     · HALTEN am Ende macht aus dem Strich eine Gerade, auch wenn die
+       Hand dabei zittert.
+     · Das TABELLEN-RASTER lässt sich mit dem Finger aufziehen.
+     · Das FORMEL-Fenster zieht nicht die Tastatur hoch.
+     · ZURÜCK und VOR stehen als Knöpfe da, für Geräte ohne Tastatur.
+
+   Läuft NICHT in `npm test` – das ist reines Node und soll es bleiben.
+   Aufruf:  npm run test:stift
+   ══════════════════════════════════════════════════════════════════════ */
+
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..', '..');
+app.disableHardwareAcceleration();
+
+const ATTRAPPEN = {
+  'load-settings': {}, 'save-settings': true, 'load-registry': { notebooks: [] },
+  'save-registry': true, 'get-default-save-path': '', 'check-internet': false,
+  'get-pending-deep-link': null, 'get-pending-share-link': null, 'pick-folder': null
+};
+for (const [kanal, wert] of Object.entries(ATTRAPPEN)) ipcMain.handle(kanal, async () => wert);
+
+const zeilen = [];
+const abschnitt = (name) => { zeilen.push(''); zeilen.push(name); };
+const pruefe = (was, ok, hinweis) =>
+  zeilen.push((ok ? 'ok   ' : 'FEHL ') + was + (ok ? '' : '  -> ' + hinweis));
+
+function fertig(code) {
+  process.stdout.write('\nWer was darf: Stift, Finger, Maus\n');
+  process.stdout.write(zeilen.map(l => '  ' + l).join('\n') + '\n');
+  const fehl = zeilen.filter(l => /^(FEHL|ABBRUCH)/.test(l)).length;
+  process.stdout.write('\n' + (fehl ? fehl + ' Prüfung(en) fehlgeschlagen.' : 'Alle Prüfungen bestanden.') + '\n');
+  app.exit(fehl ? 1 : code);
+}
+
+setTimeout(() => { zeilen.push('ABBRUCH: Zeitgrenze erreicht'); fertig(2); }, 150000);
+const warte = ms => new Promise(r => setTimeout(r, ms));
+
+app.on('ready', async () => {
+  try {
+    const win = new BrowserWindow({
+      width: 1240, height: 940, show: true, backgroundColor: '#12121a',
+      webPreferences: { preload: path.join(ROOT, 'preload.js'), contextIsolation: true }
+    });
+    await win.loadFile(path.join(ROOT, 'src', 'index.html'));
+    await warte(2000);
+
+    const dbg = win.webContents.debugger;
+    dbg.attach('1.3');
+    await dbg.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 10 });
+    const js = (code) => win.webContents.executeJavaScript(code);
+
+    await js(`(() => {
+      const nb = { id: 'probe', name: 'Probe', color: '#c8a96e', defaultBg: 'ruled',
+                   pages: [makePage('ruled')], sections: [], created: Date.now() };
+      S.notebooks = [nb];
+      openNotebook('probe');
+      return true;
+    })()`);
+    await warte(900);
+
+    /* ── Werkzeuge zum Zeichnen ───────────────────────────────────────
+       `tasten` ist die Bitmaske: 1 Spitze, 2 untere Schafttaste,
+       32 Radierer-Zeichen (die obere). */
+    async function stiftZieht(punkte, pause, tasten = 1) {
+      const g = { pointerType: 'pen', force: 0.5 };
+      /* Immer die Spitze („left"): sie ist es, die die Seite berührt. Die
+         Schafttasten stehen daneben in der Maske – genau so meldet es ein
+         echter Stift, der mit gedrückter Taste aufsetzt (buttons 3). Mit
+         button: 'right' kommt gar kein pointerdown an, weil der Stift
+         dabei nicht als aufgesetzt gilt. */
+      const knopf = 'left';
+      await dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed', clickCount: 1, button: knopf, buttons: tasten,
+        x: Math.round(punkte[0].x), y: Math.round(punkte[0].y), ...g });
+      for (let i = 1; i < punkte.length; i++) {
+        if (pause) await warte(pause);
+        await dbg.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseMoved', button: knopf, buttons: tasten,
+          x: Math.round(punkte[i].x), y: Math.round(punkte[i].y), ...g });
+      }
+      const l = punkte[punkte.length - 1];
+      await dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased', clickCount: 1, button: knopf, buttons: 0,
+        x: Math.round(l.x), y: Math.round(l.y), ...g });
+      await warte(260);
+    }
+
+    /* ── Der Stift MIT gedrückter Schafttaste ─────────────────────────
+       Über das DevTools-Protokoll geht das nicht: `buttons` mit Bit 2
+       oder 32 kommt gar nicht erst als pointerdown an, und mit
+       button: 'right' gilt der Stift als nicht aufgesetzt. Gemessen
+       nachgestellt, nicht geraten – deshalb hier selbst gebaute
+       Zeigerereignisse. Sie laufen durch dieselben Handgriffe wie ein
+       echter Stift; nur die Codes stammen aus der Spezifikation
+       (2 = Schafttaste, 32 = Radierer-Zeichen) statt aus der Hardware. */
+    async function stiftMitTaste(punkte, tasten) {
+      await js(`(() => {
+        const pg = document.querySelector('.j-page');
+        const p = ${JSON.stringify(punkte)};
+        const schick = (art, x, y, b) => pg.dispatchEvent(new PointerEvent(art, {
+          bubbles: true, cancelable: true, pointerId: 7, pointerType: 'pen',
+          buttons: b, button: art === 'pointermove' ? -1 : 0,
+          clientX: x, clientY: y, pressure: art === 'pointerup' ? 0 : .5 }));
+        schick('pointerdown', p[0].x, p[0].y, ${tasten});
+        for (let i = 1; i < p.length; i++) schick('pointermove', p[i].x, p[i].y, ${tasten});
+        schick('pointerup', p[p.length - 1].x, p[p.length - 1].y, 0);
+        return true; })()`);
+      await warte(300);
+    }
+
+    async function fingerTippt(x, y) {
+      await dbg.sendCommand('Input.dispatchTouchEvent', {
+        type: 'touchStart', touchPoints: [{ x: Math.round(x), y: Math.round(y), id: 1, force: 1 }] });
+      await warte(60);
+      await dbg.sendCommand('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await warte(300);
+    }
+
+    async function fingerZieht(punkte, pause = 40) {
+      await dbg.sendCommand('Input.dispatchTouchEvent', {
+        type: 'touchStart', touchPoints: [{ x: Math.round(punkte[0].x), y: Math.round(punkte[0].y), id: 1, force: 1 }] });
+      for (let i = 1; i < punkte.length; i++) {
+        await warte(pause);
+        await dbg.sendCommand('Input.dispatchTouchEvent', {
+          type: 'touchMove', touchPoints: [{ x: Math.round(punkte[i].x), y: Math.round(punkte[i].y), id: 1, force: 1 }] });
+      }
+      await dbg.sendCommand('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await warte(300);
+    }
+
+    /** Eine gut sichtbare Stelle auf der Seite, unterhalb des Kopfes. */
+    const stelle = (dy = 300) => js(`(() => {
+      const r = document.querySelector('.j-page').getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + ${dy}) }; })()`);
+
+    /** Legt Striche in Seitenkoordinaten um eine Bildschirmstelle. */
+    const legeHin = (m, art) => js(`(() => {
+      const pg = document.querySelector('.j-page');
+      const r = pg.getBoundingClientRect(), z = getZoom();
+      const cx = (${m.x} - r.left) / z, cy = (${m.y} - r.top) / z;
+      const punkte = [];
+      if ('${art}' === 'gerade') {
+        punkte.push({ x: cx - 90, y: cy, p: .5 }, { x: cx + 90, y: cy, p: .5 });
+      } else {
+        for (let i = 0; i <= 20; i++) {
+          punkte.push({ x: cx - 90 + i * 9, y: cy + Math.sin(i) * 14, p: .5 });
+        }
+      }
+      S.strokeHistory[S.activePgId] = [{ path: punkte, color: '#1a1510', width: 3, isHL: false }];
+      const c = pg.querySelector('.j-canvas:not(.live-canvas)');
+      redrawStrokes(c, S.strokeHistory[S.activePgId]);
+      getPage(S.activePgId).page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[S.activePgId]));
+      return true; })()`);
+
+    const zahl = (was) => js(`(() => (${was}))()`);
+
+    /* ══════════════════════════════════════════════════════════════════
+       DER STIFT MALT VON SELBST
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Der Stift malt, auch aus der Zeigerstellung');
+    await js(`switchMode('cursor'); S.strokeHistory[S.activePgId] = []; true`);
+    await warte(200);
+    let m = await stelle();
+    await stiftZieht([m, { x: m.x + 60, y: m.y + 40 }, { x: m.x + 130, y: m.y + 10 }], 25);
+
+    const nachStift = await js(`(() => ({
+      striche: (S.strokeHistory[S.activePgId] || []).length,
+      modus: S.mode,
+      imText: !!(document.activeElement && document.activeElement.classList
+                 && document.activeElement.classList.contains('j-text')) }))()`);
+    pruefe('Ein Zug hinterlässt einen Strich (' + nachStift.striche + ')',
+      nachStift.striche === 1, 'der Stift schrieb nicht');
+    pruefe('Und das Werkzeug steht danach auf dem Stift (' + nachStift.modus + ')',
+      nachStift.modus === 'pen1', 'es blieb auf ' + nachStift.modus);
+    pruefe('Die Schreibmarke bleibt aus dem Text heraus',
+      nachStift.imText === false, 'der Text hat den Fokus – die Tastatur fährt hoch');
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIE UNTERE TASTE RADIERT
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Die untere Schafttaste radiert');
+    await js(`switchMode('cursor'); true`);
+    m = await stelle();
+    await legeHin(m, 'krumm');
+    // buttons 3 = Spitze auf dem Blatt UND die Taste am Schaft gedrückt
+    await stiftMitTaste([{ x: m.x - 100, y: m.y }, { x: m.x, y: m.y }, { x: m.x + 100, y: m.y }], 3);
+
+    const nachRadier = await js(`(() => ({
+      radierer: (S.strokeHistory[S.activePgId] || []).filter(s => s.isEraser).length,
+      modus: S.mode }))()`);
+    pruefe('Sie radiert auch, wenn der Zeiger gewählt war',
+      nachRadier.radierer === 1, 'es entstand kein Radierstrich');
+    pruefe('Und danach steht das Werkzeug wieder, wo es war (' + nachRadier.modus + ')',
+      nachRadier.modus === 'cursor', 'es blieb auf ' + nachRadier.modus);
+
+    /* ══════════════════════════════════════════════════════════════════
+       EINE GERADE LINIE GEHT GANZ WEG
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Der Radierer nimmt eine gerade Linie ganz weg');
+    await js(`switchMode('eraser'); S.eraser.type = 'pixel'; true`);
+    await warte(200);
+    m = await stelle();
+    await legeHin(m, 'gerade');
+    await stiftZieht([{ x: m.x - 10, y: m.y }, { x: m.x + 10, y: m.y }], 30);
+
+    const nachGerade = await zahl(`(S.strokeHistory[S.activePgId] || []).filter(s => !s.isEraser).length`);
+    pruefe('Sie ist ganz weg, nicht angeknabbert (' + nachGerade + ' übrig)',
+      nachGerade === 0, 'es blieben Reste stehen');
+
+    /* Und Handschrift bleibt punktweise – sonst wäre ein Wort schon beim
+       Streifen verloren. */
+    await js(`switchMode('pen1'); true`);
+    m = await stelle(420);
+    await legeHin(m, 'krumm');
+    await js(`switchMode('eraser'); true`);
+    await stiftZieht([{ x: m.x - 10, y: m.y }, { x: m.x + 10, y: m.y }], 30);
+    const nachKrumm = await zahl(`(S.strokeHistory[S.activePgId] || []).filter(s => !s.isEraser).length`);
+    pruefe('Gekritzel dagegen bleibt stehen', nachKrumm === 1,
+      'auch die Handschrift verschwand ganz');
+
+    /* ══════════════════════════════════════════════════════════════════
+       HALTEN MACHT EINE GERADE – AUCH MIT ZITTERNDER HAND
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Halten am Ende macht eine Gerade');
+    await js(`switchMode('pen1'); S.strokeHistory[S.activePgId] = []; true`);
+    await warte(200);
+    m = await stelle(500);
+    const weg = [{ x: m.x - 120, y: m.y }];
+    for (let i = 1; i <= 8; i++) weg.push({ x: m.x - 120 + i * 30, y: m.y + (i % 2 ? 6 : -6) });
+    // Und dann liegen bleiben – aber nicht totenstill, wie eine echte Hand
+    for (let i = 0; i < 10; i++) weg.push({ x: m.x + 120 + (i % 2 ? 1 : -1), y: m.y + (i % 2 ? 1 : -1) });
+    await stiftZieht(weg, 60);
+
+    const gerade = await js(`(() => { const s = (S.strokeHistory[S.activePgId] || [])[0];
+      return s ? s.path.length : -1; })()`);
+    pruefe('Aus dem Strich wird eine Gerade (' + gerade + ' Punkte)',
+      gerade === 2, 'er blieb krumm – das Zittern zog die Uhr immer wieder auf');
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIE OBERE TASTE KREIST EIN
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Die obere Schafttaste kreist ein');
+    await js(`switchMode('pen1'); true`);
+    m = await stelle(300);
+    await legeHin(m, 'krumm');
+    const schlinge = [];
+    for (let i = 0; i <= 16; i++) {
+      const w = i / 16 * Math.PI * 2;
+      schlinge.push({ x: Math.round(m.x + Math.cos(w) * 130), y: Math.round(m.y + Math.sin(w) * 60) });
+    }
+    // buttons 33 = Spitze plus das Radierer-Zeichen, also die obere Taste
+    await stiftMitTaste(schlinge, 33);
+
+    const nachLasso = await js(`(() => ({
+      striche: (S.strokeHistory[S.activePgId] || []).length,
+      auswahl: document.querySelectorAll('.ink-sel').length }))()`);
+    pruefe('Die Schlinge bleibt nicht liegen (' + nachLasso.striche + ' Striche)',
+      nachLasso.striche === 1, 'sie wurde als Strich gespeichert');
+    pruefe('Und das Eingekreiste ist ausgewählt', nachLasso.auswahl === 1,
+      'kein Auswahlrahmen – die obere Taste radierte wohl wieder');
+
+    /* ══════════════════════════════════════════════════════════════════
+       EIN TIPP MIT DEM FINGER WÄHLT AUS
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein Tipp mit dem Finger wählt aus');
+    await js(`deselectStroke(); S.touchDraw = true; switchMode('pen1'); true`);
+    await warte(200);
+    m = await stelle(300);
+    await legeHin(m, 'gerade');
+    await fingerTippt(m.x, m.y);
+
+    const nachTipp = await js(`(() => ({
+      striche: (S.strokeHistory[S.activePgId] || []).length,
+      auswahl: document.querySelectorAll('.ink-sel').length,
+      modus: S.mode,
+      imText: !!(document.activeElement && document.activeElement.classList
+                 && document.activeElement.classList.contains('j-text')) }))()`);
+    pruefe('Er malt keinen Punkt (' + nachTipp.striche + ' Striche)',
+      nachTipp.striche === 1, 'es kam ein Punkt dazu');
+    pruefe('Sondern wählt den Strich aus', nachTipp.auswahl === 1, 'kein Auswahlrahmen');
+    pruefe('Und stellt dafür auf den Zeiger um (' + nachTipp.modus + ')',
+      nachTipp.modus === 'cursor', 'das Werkzeug blieb auf ' + nachTipp.modus);
+    pruefe('Ohne die Schreibmarke in die Zeile zu setzen',
+      nachTipp.imText === false, 'der Text hat den Fokus – die Tastatur fährt hoch');
+
+    /* Und mit AUSGESCHALTETEM „mit dem Finger malen" ebenso: dort
+       entsteht gar kein Strich, aus dem man einen Tipp ablesen könnte –
+       der Finger scrollt. Ohne einen eigenen Weg käme man an einen Strich
+       dann überhaupt nicht mehr heran. */
+    await js(`deselectStroke(); S.touchDraw = false; switchMode('pen1'); true`);
+    await warte(200);
+    m = await stelle(300);
+    await legeHin(m, 'gerade');
+    await fingerTippt(m.x, m.y);
+    const ohneFingerMalen = await js(`(() => ({
+      striche: (S.strokeHistory[S.activePgId] || []).length,
+      auswahl: document.querySelectorAll('.ink-sel').length, modus: S.mode }))()`);
+    pruefe('Auch ohne „mit dem Finger malen" wählt der Tipp aus',
+      ohneFingerMalen.auswahl === 1 && ohneFingerMalen.striche === 1
+      && ohneFingerMalen.modus === 'cursor', JSON.stringify(ohneFingerMalen));
+    await js(`deselectStroke(); S.touchDraw = true; true`);
+
+    /* Und ein gezogener Finger malt weiterhin, sonst wäre der Schalter
+       „mit dem Finger malen" nutzlos geworden. */
+    await js(`deselectStroke(); switchMode('pen1'); S.strokeHistory[S.activePgId] = []; true`);
+    await warte(200);
+    m = await stelle(560);
+    await fingerZieht([m, { x: m.x + 60, y: m.y + 30 }, { x: m.x + 120, y: m.y }], 30);
+    const fingerStrich = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
+    pruefe('Ein gezogener Finger malt weiter', fingerStrich === 1, 'er malte nichts');
+
+    /* ══════════════════════════════════════════════════════════════════
+       DAS TABELLEN-RASTER MIT DEM FINGER
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Das Tabellen-Raster mit dem Finger');
+    await js(`switchMode('cursor');
+      const td = document.querySelector('.j-text');
+      td.innerHTML = '<p>Text</p>';
+      td.focus();
+      setFlatCaret(td, 4); true`);
+    await warte(300);
+    await js(`document.getElementById('btn-table').dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true })); true`);
+    await warte(300);
+
+    const feld = (r, c) => js(`(() => {
+      const z = document.querySelector('.tbl-cell[data-r="${r}"][data-c="${c}"]');
+      if (!z) return null; const b = z.getBoundingClientRect();
+      return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }; })()`);
+
+    const a1 = await feld(1, 1), a34 = await feld(3, 4);
+    if (!a1 || !a34) {
+      pruefe('Das Raster steht offen', false, 'die Felder sind nicht zu finden');
+    } else {
+      /* Erst ziehen, ohne abzuheben: dann steht in der Beschriftung, was
+         das Raster gerade versteht. Beides getrennt zu prüfen sagt im
+         Fehlerfall, woran es lag – am Verfolgen oder am Einsetzen. */
+      const mitte = { x: Math.round((a1.x + a34.x) / 2), y: Math.round((a1.y + a34.y) / 2) };
+      await dbg.sendCommand('Input.dispatchTouchEvent', {
+        type: 'touchStart', touchPoints: [{ x: a1.x, y: a1.y, id: 1, force: 1 }] });
+      for (const p of [mitte, a34]) {
+        await warte(60);
+        await dbg.sendCommand('Input.dispatchTouchEvent', {
+          type: 'touchMove', touchPoints: [{ x: p.x, y: p.y, id: 1, force: 1 }] });
+      }
+      await warte(60);
+      const marke = (await js(`document.getElementById('tbl-grid-label').textContent`)).trim();
+      pruefe('Der gezogene Finger führt die Grösse mit („' + marke + '")',
+        /^3\s*×\s*4/.test(marke), 'das Raster folgt dem Finger nicht');
+
+      await dbg.sendCommand('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await warte(400);
+      const tab = await js(`(() => { const t = document.querySelector('.j-text table');
+        if (!t) return null;
+        return { zeilen: t.rows.length, spalten: t.rows[0] ? t.rows[0].cells.length : 0 }; })()`);
+      pruefe('Und beim Abheben steht die Tabelle da ('
+        + (tab ? tab.zeilen + '×' + tab.spalten : 'keine') + ')',
+        !!tab && tab.zeilen === 3 && tab.spalten === 4,
+        'es kam ' + JSON.stringify(tab) + ' statt 3×4');
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       DAS FORMEL-FENSTER ZIEHT KEINE TASTATUR HOCH
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Das Formel-Fenster mit dem Finger');
+    await js(`document.body.classList.add('touch-input');
+      openFormulaEditor('', false, null, null); true`);
+    await warte(300);
+    const imFeld = await js(`document.activeElement && document.activeElement.id`);
+    pruefe('Die Schreibmarke springt nicht ins Eingabefeld (' + (imFeld || 'nichts') + ')',
+      imFeld !== 'formula-latex', 'die Bildschirmtastatur deckt die Palette zu');
+
+    await js(`document.getElementById('formula-cancel').click();
+      document.body.classList.remove('touch-input'); true`);
+    await warte(200);
+
+    /* ══════════════════════════════════════════════════════════════════
+       ZURÜCK UND VOR
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Zurück und Vor als Knöpfe');
+    await js(`switchMode('pen1'); S.strokeHistory[S.activePgId] = [];
+      getPage(S.activePgId).page.inkStrokes = []; S.history[S.activePgId] = { undo: [], redo: [] };
+      updateUndoRedoUI(); true`);
+    await warte(200);
+    const leerAus = await js(`document.getElementById('btn-undo').disabled`);
+    pruefe('Ohne Verlauf sind sie grau', leerAus === true, 'der Knopf ist aktiv, obwohl es nichts gibt');
+
+    m = await stelle(700);
+    await stiftZieht([m, { x: m.x + 80, y: m.y + 30 }, { x: m.x + 150, y: m.y }], 25);
+    const vorUndo = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
+
+    await js(`document.getElementById('btn-undo').click(); true`);
+    await warte(400);
+    const nachUndo = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
+    pruefe('Zurück nimmt den Strich weg (' + vorUndo + ' auf ' + nachUndo + ')',
+      vorUndo === 1 && nachUndo === 0, 'der Knopf wirkte nicht');
+
+    await js(`document.getElementById('btn-redo').click(); true`);
+    await warte(400);
+    const nachRedo = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
+    pruefe('Und Vor holt ihn zurück (' + nachRedo + ')', nachRedo === 1, 'er blieb weg');
+
+    fertig(0);
+  } catch (err) {
+    zeilen.push('ABBRUCH ' + ((err && err.stack) || err));
+    fertig(3);
+  }
+});
