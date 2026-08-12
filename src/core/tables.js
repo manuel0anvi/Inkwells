@@ -259,7 +259,7 @@ function tableBar() {
     b.setAttribute('aria-label', titel);
     // Die Marke darf beim Klick nicht aus der Tabelle fallen
     b.addEventListener('mousedown', ev => ev.preventDefault());
-    b.addEventListener('click', ev => { ev.stopPropagation(); tun(); });
+    b.addEventListener('click', ev => { ev.stopPropagation(); tun(ev); });
     tblBar.appendChild(b);
     return b;
   };
@@ -324,7 +324,7 @@ function tableBar() {
   /* Der Bewegen-Knopf umgeht mitZelle, weil der Ziehvorgang asynchron
      läuft. mitZelle würde sofort nach dem Start notiereText() und
      positionTableBar() aufrufen – auf einer schon versteckten Tabelle. */
-  const startMove = () => {
+  const startMove = (ev) => {
     const cell = tblBar._zelle;
     if (!cell || !cell.isConnected) { versteckeTableBar(); return; }
     if (S.readOnly) {
@@ -334,7 +334,7 @@ function tableBar() {
     const pos = cellPos(cell);
     if (!pos.table) { versteckeTableBar(); return; }
     versteckeTableBar();
-    starteTabelleVerschieben(pos.table, pos);
+    starteTabelleVerschieben(pos.table, pos, ev);
   };
   knopf(TBL_ICONS.bewegen, txt('tableMove', 'Tabelle verschieben'), startMove);
 
@@ -416,7 +416,7 @@ function versteckeTableBar() {
  * sieht genauso aus und folgt dem Zeiger; die echte Tabelle bleibt
  * unsichtbar an ihrem Platz, bis der Klon losgelassen wird.
  */
-function starteTabelleVerschieben(table, pos) {
+function starteTabelleVerschieben(table, pos, startEv) {
   if (!table || !table.isConnected) return;
   if (S.readOnly) {
     if (typeof toast === 'function') toast(t('sharedNoRight'), true);
@@ -440,18 +440,24 @@ function starteTabelleVerschieben(table, pos) {
   // Echte Tabelle unsichtbar, aber im Fluss lassen – sonst springt der Text
   beide.forEach(el => { el.style.visibility = 'hidden'; });
 
-  // Klon der Tabelle als ziehbares Element
+  /* ══════════════════════════════════════════════════════════════════
+     DAS SCHATTENBILD HAT DIE GRÖSSE DER TABELLE
+
+     Der Klon hängt am body und damit AUSSERHALB der Seitenhülle, die der
+     Zoom skaliert. Mit den Layout-Massen der Tabelle war er deshalb bei
+     120 % ein Fünftel zu klein und bei 200 % halb so gross wie das, was
+     man gerade anfasst – gemeldet als „das weisse Rechteck hat nicht die
+     Grösse der Tabelle". Die Masse bleiben, der Zoom kommt als eigene
+     Skalierung dazu; so stimmt beides zusammen wieder.
+     ══════════════════════════════════════════════════════════════════ */
+  const zoom = typeof getZoom === 'function' ? getZoom() : 1;
   const klon = table.cloneNode(true);
   klon.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;'
     + 'box-shadow:0 4px 20px rgba(0,0,0,.25);border-radius:4px;'
-    + 'background:var(--page-bg,#fdfbf7);';
+    + 'background:var(--page-bg,#fdfbf7);'
+    + 'transform-origin:top left;transform:scale(' + zoom + ');';
   klon.style.width = table.offsetWidth + 'px';
-  // Die Höhe des Klons auf die echte Höhe setzen
-  const tr = klon.querySelector('tr');
-  if (tr) {
-    const echteTr = table.querySelector('tr');
-    if (echteTr) klon.style.height = table.offsetHeight + 'px';
-  }
+  klon.style.height = table.offsetHeight + 'px';
 
   const r = table.getBoundingClientRect();
   klon.style.left = r.left + 'px';
@@ -459,9 +465,43 @@ function starteTabelleVerschieben(table, pos) {
 
   document.body.appendChild(klon);
 
+  /* ══════════════════════════════════════════════════════════════════
+     ER SPRINGT NICHT UNTER DEN ZEIGER
+
+     Hier stand `ev.clientX - r.width / 2`: die Tabelle sprang mit ihrer
+     Mitte unter die Maus, egal wo sie vorher lag. Sie folgt jetzt der
+     Bewegung, statt sich anzusaugen – der Abstand zwischen Zeiger und
+     Tabelle bleibt der, den er beim Anfassen hatte.
+     ══════════════════════════════════════════════════════════════════ */
+  let ankerX = startEv ? r.left - startEv.clientX : -r.width / 2;
+  let ankerY = startEv ? r.top - startEv.clientY : -20;
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND MIT DEM FINGER
+
+     Zwei Dinge kamen dazwischen: der Browser machte aus der Bewegung ein
+     Scrollen, und die Berührung auf dem Text setzte die Schreibmarke –
+     die Bildschirmtastatur fuhr mitten im Ziehen heraus. Solange die
+     Tabelle in der Luft ist, nimmt der Text deshalb weder Bewegung noch
+     Marke an.
+     ══════════════════════════════════════════════════════════════════ */
+  const alteAction = textDiv.style.touchAction;
+  textDiv.style.touchAction = 'none';
+  textDiv.contentEditable = 'false';
+  document.body.classList.add('j-tbl-zieht');
+
   const zieh = ev => {
-    klon.style.left = (ev.clientX - r.width / 2) + 'px';
-    klon.style.top = (ev.clientY - 20) + 'px';
+    if (ev.cancelable) ev.preventDefault();
+    /* Der erste Finger, der nach dem Knopfdruck aufsetzt, übernimmt: bei
+       einer Berührung gibt es zwischen Knopf und Ziehen keinen
+       durchgehenden Zeiger, an dem der Abstand hinge. */
+    if (ev.pointerType === 'touch' && !zieh._hat) {
+      zieh._hat = true;
+      ankerX = klon.getBoundingClientRect().left - ev.clientX;
+      ankerY = klon.getBoundingClientRect().top - ev.clientY;
+    }
+    klon.style.left = (ev.clientX + ankerX) + 'px';
+    klon.style.top = (ev.clientY + ankerY) + 'px';
   };
 
   const los = ev => {
@@ -469,11 +509,21 @@ function starteTabelleVerschieben(table, pos) {
     document.removeEventListener('pointerup', los);
     document.removeEventListener('pointercancel', los);
     klon.remove();
+    textDiv.style.touchAction = alteAction;
+    textDiv.contentEditable = S.readOnly ? 'false' : 'true';
+    document.body.classList.remove('j-tbl-zieht');
 
     // Tabelle wieder sichtbar
     beide.forEach(el => { el.style.visibility = ''; });
 
-    // Einfügeposition über die Maus finden
+    /* ══════════════════════════════════════════════════════════════
+       SIE LANDET DA, WO LOSGELASSEN WURDE
+
+       Eine Tabelle steht im Textfluss – „an dieser Stelle" heisst also
+       „vor oder hinter diesem Absatz". Bisher immer davor; wer unter
+       den letzten Absatz zog, bekam sie darüber. Jetzt entscheidet die
+       Hälfte, in der man loslässt.
+       ══════════════════════════════════════════════════════════════ */
     let eingesetzt = false;
     if (document.caretRangeFromPoint) {
       const cr = document.caretRangeFromPoint(ev.clientX, ev.clientY);
@@ -483,8 +533,10 @@ function starteTabelleVerschieben(table, pos) {
         while (block && block !== textDiv && !/^(P|H[1-6]|DIV|TABLE|UL|OL|BLOCKQUOTE)$/i.test(block.tagName)) {
           block = block.parentNode;
         }
-        if (block && block !== textDiv && block !== table) {
-          block.before(...beide);
+        if (block && block !== textDiv && block !== table && !table.contains(block)) {
+          const br = block.getBoundingClientRect();
+          if (ev.clientY > br.top + br.height / 2) block.after(...beide);
+          else block.before(...beide);
           eingesetzt = true;
         }
       }
@@ -512,7 +564,7 @@ function starteTabelleVerschieben(table, pos) {
     }, 20);
   };
 
-  document.addEventListener('pointermove', zieh);
+  document.addEventListener('pointermove', zieh, { passive: false });
   document.addEventListener('pointerup', los);
   document.addEventListener('pointercancel', los);
 }

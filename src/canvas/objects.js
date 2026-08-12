@@ -711,17 +711,83 @@ function placeObject(objLayer, obj, page) {
     select();
     body.setPointerCapture(e.pointerId);
     // Waehrend des Zugs darf das Bild ueber den Seitenrand hinausragen
-    const startPgEl = wrap.closest('.j-page');
-    if (startPgEl) startPgEl.classList.add('obj-dragging');
-    const sx = e.clientX, sy = e.clientY, ox = obj.x, oy = obj.y;
-    const others = (page.objects || []).filter(o => o.id !== obj.id);
+    let aktPgEl = wrap.closest('.j-page');
+    let aktPage = page, aktLayer = objLayer;
+    let gewechselt = false;
+    if (aktPgEl) aktPgEl.classList.add('obj-dragging');
+    let sx = e.clientX, sy = e.clientY, ox = obj.x, oy = obj.y;
+
     let xs = [], ys = [], cxs = [], cys = [];
-    others.forEach(o => { xs.push(o.x, o.x + o.w); ys.push(o.y, o.y + o.h); cxs.push(o.x + o.w / 2); cys.push(o.y + o.h / 2); });
+    function sammleNachbarn() {
+      xs = []; ys = []; cxs = []; cys = [];
+      (aktPage.objects || []).filter(o => o.id !== obj.id).forEach(o => {
+        xs.push(o.x, o.x + o.w); ys.push(o.y, o.y + o.h);
+        cxs.push(o.x + o.w / 2); cys.push(o.y + o.h / 2);
+      });
+    }
+    sammleNachbarn();
+
+    /* ══════════════════════════════════════════════════════════════
+       AUF DIE ANDERE SEITE, WÄHREND MAN ZIEHT
+
+       Bisher entschied sich das erst beim Loslassen: man musste den
+       Finger auf die andere Seite legen, loslassen, und erst dann sprang
+       das Bild hinüber – bis dahin sah es aus, als ginge gar nichts.
+       Genau so wurde es gemeldet.
+
+       Jetzt wandert es, sobald der Zeiger wirklich IN einer anderen Seite
+       steht (nicht schon in der Lücke dazwischen – dort flackerte es
+       zwischen beiden hin und her). Der Bezugspunkt wird dabei neu
+       gesetzt, sonst ruckte das Bild beim nächsten Millimeter um eine
+       ganze Seitenlänge.
+       ══════════════════════════════════════════════════════════════ */
+    function seiteUnterZeiger(cx, cy) {
+      for (const el of QA('.j-page')) {
+        const r = el.getBoundingClientRect();
+        if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return el;
+      }
+      return null;
+    }
+
+    function wechsleSeite(zielEl, ev) {
+      const info = getPage(zielEl.dataset.pgid);
+      const zielLayer = zielEl.querySelector('.j-objects');
+      if (!info || !zielLayer || info.page === aktPage) return false;
+
+      // Beide Seiten aendern sich – beide brauchen ihren Rueckgaengig-Schritt
+      pushPageHistory(info.page);
+
+      const alt = wrap.getBoundingClientRect();
+      const ziel = zielEl.getBoundingClientRect();
+
+      aktPage.objects = (aktPage.objects || []).filter(o => o.id !== obj.id);
+      (info.page.objects || (info.page.objects = [])).push(obj);
+
+      obj.x = Math.round((alt.left - ziel.left) / _zoom);
+      obj.y = Math.round((alt.top - ziel.top) / _zoom);
+      haltAufBlatt(obj, info.page);
+      wrap.style.left = obj.x + 'px';
+      wrap.style.top = obj.y + 'px';
+
+      zielLayer.appendChild(wrap);
+      if (aktPgEl) aktPgEl.classList.remove('obj-dragging');
+      zielEl.classList.add('obj-dragging');
+
+      aktPgEl = zielEl; aktPage = info.page; aktLayer = zielLayer;
+      ox = obj.x; oy = obj.y; sx = ev.clientX; sy = ev.clientY;
+      gewechselt = true;
+      sammleNachbarn();
+      return true;
+    }
 
     let _hasMutated = false;
     const mv = ev => {
       if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
       hideSnaps();
+
+      const unterZeiger = seiteUnterZeiger(ev.clientX, ev.clientY);
+      if (unterZeiger && unterZeiger !== aktPgEl) wechsleSeite(unterZeiger, ev);
+
       let nx = ox + (ev.clientX - sx) / _zoom, ny = oy + (ev.clientY - sy) / _zoom;
       let sXL = getSnaps(nx, xs), sXR = getSnaps(nx + obj.w, xs), sXC = getSnaps(nx + obj.w / 2, cxs);
       if (sXL.sn) { nx = sXL.v; showSnap('v', nx); } else if (sXR.sn) { nx = sXR.v - obj.w; showSnap('v', sXR.v); } else if (sXC.sn) { nx = sXC.v - obj.w / 2; showSnap('v', sXC.v); }
@@ -733,7 +799,7 @@ function placeObject(objLayer, obj, page) {
          siehe objGrenzen(). Dort stehen Seitenzahl, Datum und die zwei
          Knoepfe; ein Bild darueber deckte sie zu, und weil es vor dem
          Text liegt, war der Kopf danach nicht mehr zu treffen. */
-      const g = objGrenzen(obj, page);
+      const g = objGrenzen(obj, aktPage);
       nx = klemme(nx, g.minX, g.maxX);
       ny = klemme(ny, g.minY, g.maxY);
 
@@ -746,8 +812,23 @@ function placeObject(objLayer, obj, page) {
       body.removeEventListener('pointermove', mv);
       body.removeEventListener('pointerup', up);
       body.removeEventListener('pointercancel', up);
-      if (startPgEl) startPgEl.classList.remove('obj-dragging');
-      // Losgelassen ueber einer anderen Seite? Dann gehoert es jetzt dorthin.
+      if (aktPgEl) aktPgEl.classList.remove('obj-dragging');
+
+      if (gewechselt) {
+        /* Unterwegs auf eine andere Seite gewandert: neu aufbauen, denn
+           alle Schliessungen hier zeigen noch auf die alte. */
+        restackObjects(aktLayer, aktPage);
+        deselect();
+        wrap.remove();
+        placeObject(aktLayer, obj, aktPage);
+        updateUndoRedoUI();
+        noteObjectChanged();
+        return;
+      }
+
+      /* Losgelassen ueber einer anderen Seite, ohne dass der Zeiger je
+         darin stand – etwa in der Luecke dazwischen. Dann entscheidet
+         wie bisher die Stelle des Loslassens. */
       const gewandert = ev.type === 'pointerup' && moveToPageAt(ev.clientX, ev.clientY);
       if (_hasMutated && !gewandert) noteObjectChanged();
     };

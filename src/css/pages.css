@@ -296,8 +296,19 @@ body.touch-draw .j-canvas {
      Finger. Auf dem Streifen selbst gibt es nichts zu scrollen, also
      kostet none hier auch nichts. */
   touch-action: none;
-  /* Unsichtbar, aber greifbar. Beim Überfahren zeigt sich die Linie. */
-  background: transparent
+  /* ══════════════════════════════════════════════════════════════════
+     ZU SEHEN, SOBALD MAN IN DER TABELLE STEHT
+
+     Der Streifen war unsichtbar und zeigte sich erst beim Überfahren.
+     Mit dem Finger schwebt niemand: dort war das Ziehen zwar da, aber
+     nicht zu erraten – gemeldet als „Zeilen und Spalten soll man ziehen
+     können", obwohl man es konnte. Die Streifen gibt es ohnehin nur in
+     der Tabelle, in der die Schreibmarke steht (core/tables.js), also
+     stehen sie dort auch blass da. Beim Anfassen werden sie deutlich.
+     ══════════════════════════════════════════════════════════════════ */
+  background: linear-gradient(to right,
+      transparent 3px, rgba(201, 162, 39, .38) 3px,
+      rgba(201, 162, 39, .38) 6px, transparent 6px)
 }
 
 .j-tbl-griff:hover,
@@ -323,7 +334,10 @@ body.touch-draw .j-canvas {
      wird nach oben und unten, also genau in die Richtung, in die
      .j-text sonst scrollt. */
   touch-action: none;
-  background: transparent
+  /* Blass sichtbar wie der senkrechte Streifen – siehe dort */
+  background: linear-gradient(to bottom,
+      transparent 3px, rgba(201, 162, 39, .38) 3px,
+      rgba(201, 162, 39, .38) 6px, transparent 6px)
 }
 
 .j-tbl-zeilengriff:hover,
@@ -1442,6 +1456,15 @@ body.touch-draw .j-canvas {
 
 .comment-card.resolved {
   opacity: .45
+}
+
+/* Solange eine Tabelle in der Luft ist, gehört die Bewegung ihr: kein
+   Scrollen, keine Textmarkierung, kein Zoomen nebenher (core/tables.js). */
+.j-tbl-zieht,
+.j-tbl-zieht .j-text,
+.j-tbl-zieht .pg-scroll {
+  touch-action: none;
+  user-select: none
 }
 
 /* ══════════════════════════════════════════════════════════════════════

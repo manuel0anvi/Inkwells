@@ -110,19 +110,20 @@ app.on('ready', async () => {
       await warte(250);
     }
 
-    /* Ein Kreis aus 16 Punkten um eine Stelle des Bildschirms.
+    /* Ein Kreis um eine Stelle des Bildschirms.
 
-       >>> Warum er gross ist <<<
-       Ob die Geste erkannt wird, haengt am Tempo, und das Tempo haengt
-       hier daran, wie schnell das DevTools-Protokoll die sechzehn
-       Ereignisse durchreicht – auf einem beschaeftigten Rechner sind das
-       schnell ein paar hundert Millisekunden mehr. Ein grosser Kreis legt
-       in derselben Zeit mehr Weg zurueck und haelt Abstand zur Schwelle;
-       mit 110 px Radius kippte die Pruefung gelegentlich. */
-    const kreis = (mx, my, r) => {
+       >>> Warum er gross ist und aus wenigen Punkten besteht <<<
+       Ob die Geste erkannt wird, haengt am Tempo – und das Tempo haengt
+       hier daran, wie schnell das DevTools-Protokoll die Ereignisse
+       durchreicht. Auf einem beschaeftigten Rechner sind das je Punkt
+       schnell hundert Millisekunden; mit sechzehn Punkten auf einem
+       kleinen Kreis kippte die Pruefung gelegentlich unter die Schwelle.
+       Weniger Punkte auf einem groesseren Kreis heisst mehr Weg in
+       weniger Uebertragungen: derselbe Zug, aber mit Abstand zur Grenze. */
+    const kreis = (mx, my, r = 200, punkte = 12) => {
       const p = [];
-      for (let i = 0; i <= 16; i++) {
-        const w = (i / 16) * Math.PI * 2;
+      for (let i = 0; i <= punkte; i++) {
+        const w = (i / punkte) * Math.PI * 2;
         p.push({ x: mx + Math.cos(w) * r, y: my + Math.sin(w) * r });
       }
       return p;
@@ -159,7 +160,7 @@ app.on('ready', async () => {
     abschnitt('Schnell einkreisen wählt aus');
     let m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 130), 0);
+    await stiftZieht(kreis(m.x, m.y), 0);
 
     let z = await zustand();
     pruefe('Die Schlinge bleibt nicht als Strich stehen (' + z.striche + ' Striche)',
@@ -187,7 +188,7 @@ app.on('ready', async () => {
     await js(`deselectStroke()`);
     m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 130), 100);
+    await stiftZieht(kreis(m.x, m.y), 200);
 
     z = await zustand();
     pruefe('Der Kreis steht als dritter Strich da (' + z.striche + ')',
@@ -201,7 +202,7 @@ app.on('ready', async () => {
     await js(`deselectStroke()`);
     m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 130), 0);
+    await stiftZieht(kreis(m.x, m.y), 0);
     pruefe('Zum Verschieben liegt wieder eine Auswahl bereit',
       (await zustand()).auswahl === 1, 'keine Auswahl');
 
@@ -237,7 +238,7 @@ app.on('ready', async () => {
     await js(`deselectStroke()`);
     m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 130), 0);
+    await stiftZieht(kreis(m.x, m.y), 0);
     await stiftZieht([
       { x: m.x, y: m.y },
       { x: m.x - 350, y: m.y - 250 },
@@ -364,7 +365,7 @@ app.on('ready', async () => {
       el.innerHTML = ''; placeObject(el, obj, info.page);
       return true; })()`);
     await warte(300);
-    await stiftZieht(kreis(m.x, m.y, 130), 0);
+    await stiftZieht(kreis(m.x, m.y), 0);
 
     const mitBild = await js(`(() => ({
       auswahl: document.querySelectorAll('.ink-sel').length,
