@@ -719,6 +719,79 @@ app.on('ready', async () => {
     const nachRedo = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
     pruefe('Und Vor holt ihn zurück (' + nachRedo + ')', nachRedo === 1, 'er blieb weg');
 
+    /* ══════════════════════════════════════════════════════════════════
+       EIN BILD AUF DIE SEITE DARÜBER
+
+       Gemeldet: „von einer unteren Seite auf eine obere geschoben gehen
+       die Bilder ganz oben hin und nicht dahin, wo ich den Finger
+       gelassen habe." Der Abstand zwischen Zeiger und Bild muss den
+       Seitenwechsel überleben – das lässt sich nur messen, nicht lesen.
+       Steht bewusst am SCHLUSS: hier werden Seiten und Zoom verstellt.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein Bild auf die Seite darüber');
+    await js(`(() => {
+      const nb = S.notebooks[0];
+      while (nb.pages.length < 2) nb.pages.push(makePage('ruled'));
+      nb.pages[0].objects = [];
+      nb.pages[1].objects = [{ id: 'probe-bild', kind: 'image', layer: 'front',
+        src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="%23c00"/></svg>',
+        x: 80, y: 120, w: 220, h: 180 }];
+      openNotebook(nb.id);
+      switchMode('cursor');
+      setZoom(0.35);
+      return true; })()`);
+    await warte(900);
+
+    const lage = await js(`(() => {
+      const w = document.querySelector('.obj-wrap[data-objid="probe-bild"]');
+      const s = document.querySelectorAll('.j-page');
+      if (!w || s.length < 2) return null;
+      const b = w.getBoundingClientRect(), o = s[0].getBoundingClientRect();
+      return { bild: { x: Math.round(b.left + b.width / 2), oben: Math.round(b.top),
+                       unten: Math.round(b.bottom) },
+               obere: { unten: Math.round(o.bottom), oben: Math.round(o.top) } }; })()`);
+
+    if (!lage) {
+      pruefe('Zwei Seiten mit einem Bild stehen bereit', false, 'nichts zu finden');
+    } else {
+      /* Am UNTEREN Rand anfassen und ÜBER den oberen Seitenrand hinaus
+         ziehen, dann wieder herunter. Über dem Rand muss das Bild
+         festgehalten werden – aber nur auf dem Bildschirm. Wurde die
+         zurechtgerückte Lage in den Bezugspunkt geschrieben, klebt es
+         danach oben fest und kommt nicht mehr an den Finger zurück.
+         Genau das war der gemeldete Fehler. */
+      const griff = { x: lage.bild.x, y: lage.bild.unten - 8 };
+      const abstand = griff.y - lage.bild.oben;
+      const ziel = { x: lage.bild.x, y: lage.obere.unten - 100 };
+      await dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed', button: 'left', buttons: 1, clickCount: 1,
+        x: griff.x, y: griff.y });
+      for (const y of [lage.obere.unten - 40, lage.obere.oben + 60,
+                       lage.obere.oben + 20, ziel.y]) {
+        await warte(50);
+        await dbg.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseMoved', button: 'left', buttons: 1, x: ziel.x, y });
+      }
+      await warte(60);
+      await dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased', button: 'left', buttons: 0, clickCount: 1, x: ziel.x, y: ziel.y });
+      await warte(300);
+
+      const danach = await js(`(() => {
+        const nb = S.notebooks[0];
+        const w = document.querySelector('.obj-wrap[data-objid="probe-bild"]');
+        return { obenDrauf: (nb.pages[0].objects || []).length,
+                 untenNoch: (nb.pages[1].objects || []).length,
+                 oben: w ? Math.round(w.getBoundingClientRect().top) : null }; })()`);
+
+      pruefe('Es liegt auf der oberen Seite', danach.obenDrauf === 1 && danach.untenNoch === 0,
+        JSON.stringify(danach));
+      const soll = ziel.y - abstand;
+      pruefe('Und dort, wo der Finger war (' + danach.oben + ' statt ' + soll + ')',
+        danach.oben !== null && Math.abs(danach.oben - soll) <= 14,
+        'es ist beim Seitenwechsel weggesprungen');
+    }
+
     fertig(0);
   } catch (err) {
     zeilen.push('ABBRUCH ' + ((err && err.stack) || err));

@@ -749,35 +749,70 @@ function placeObject(objLayer, obj, page) {
       return null;
     }
 
-    function wechsleSeite(zielEl, ev) {
+    /**
+     * @param {number} rohX  Lage auf der ALTEN Seite, noch ungeklemmt
+     * @returns {{x:number,y:number}|null} dieselbe Lage, auf die neue Seite
+     *   umgerechnet – der Aufrufer rechnet damit weiter
+     *
+     * >>> Warum die ROHE Lage und nicht der Rahmen auf dem Bildschirm <<<
+     * Hier wurde wrap.getBoundingClientRect() genommen und das Ergebnis
+     * mit haltAufBlatt() auf die neue Seite geklemmt. Beides ging schief,
+     * und zwar zusammen:
+     *
+     *   · Der Rahmen steht noch dort, wo die VORIGE Bewegung ihn gesetzt
+     *     hat. Bei einem schnellen Zug – und über eine Seitengrenze zieht
+     *     man schnell – hinkt er einen Schritt hinterher.
+     *   · Das Klemmen schrieb die zurechtgerückte Lage in den Bezugspunkt
+     *     (ox/oy). Wer ein Bild an seiner Unterkante hielt, dessen
+     *     Oberkante beim Übertritt noch über der neuen Seite lag, bekam
+     *     sie an den oberen Rand geschoben – und von da an folgte das Bild
+     *     dem Finger nicht mehr, sondern klebte oben. Genau so gemeldet.
+     *
+     * Die rohe Lage kennt der Aufrufer; umgerechnet wird nur der Bezug
+     * (Seite A → Seite B). Geklemmt wird danach wie bei jeder anderen
+     * Bewegung auch – für die Anzeige, nicht für den Bezugspunkt.
+     */
+    function wechsleSeite(zielEl, ev, rohX, rohY) {
       const info = getPage(zielEl.dataset.pgid);
       const zielLayer = zielEl.querySelector('.j-objects');
-      if (!info || !zielLayer || info.page === aktPage) return false;
+      if (!info || !zielLayer || info.page === aktPage || !aktPgEl) return null;
 
       // Beide Seiten aendern sich – beide brauchen ihren Rueckgaengig-Schritt
       pushPageHistory(info.page);
 
-      const alt = wrap.getBoundingClientRect();
+      const alt = aktPgEl.getBoundingClientRect();
       const ziel = zielEl.getBoundingClientRect();
+      const nx = rohX + (alt.left - ziel.left) / _zoom;
+      const ny = rohY + (alt.top - ziel.top) / _zoom;
 
       aktPage.objects = (aktPage.objects || []).filter(o => o.id !== obj.id);
       (info.page.objects || (info.page.objects = [])).push(obj);
 
-      obj.x = Math.round((alt.left - ziel.left) / _zoom);
-      obj.y = Math.round((alt.top - ziel.top) / _zoom);
-      haltAufBlatt(obj, info.page);
+      obj.x = nx; obj.y = ny;
       wrap.style.left = obj.x + 'px';
       wrap.style.top = obj.y + 'px';
 
       zielLayer.appendChild(wrap);
-      if (aktPgEl) aktPgEl.classList.remove('obj-dragging');
+      /* ══════════════════════════════════════════════════════════════
+         DER ZEIGER MUSS NEU GEFANGEN WERDEN
+
+         Ein Element umzuhängen ist für den Browser ein Herausnehmen und
+         ein Einsetzen – und dabei verliert es den gefangenen Zeiger.
+         Danach kamen die Bewegungen nicht mehr an: das Bild blieb genau
+         dort stehen, wo es beim Übertritt gerade war, und liess sich
+         nicht mehr nachführen. Wer schnell nach oben zog, hatte es
+         deshalb oben kleben – gemeldet als „es geht ganz oben hin und
+         nicht dahin, wo ich den Finger gelassen habe".
+         ══════════════════════════════════════════════════════════════ */
+      try { body.setPointerCapture(ev.pointerId); } catch (err) { }
+      aktPgEl.classList.remove('obj-dragging');
       zielEl.classList.add('obj-dragging');
 
       aktPgEl = zielEl; aktPage = info.page; aktLayer = zielLayer;
-      ox = obj.x; oy = obj.y; sx = ev.clientX; sy = ev.clientY;
+      ox = nx; oy = ny; sx = ev.clientX; sy = ev.clientY;
       gewechselt = true;
       sammleNachbarn();
-      return true;
+      return { x: nx, y: ny };
     }
 
     let _hasMutated = false;
@@ -785,10 +820,15 @@ function placeObject(objLayer, obj, page) {
       if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
       hideSnaps();
 
-      const unterZeiger = seiteUnterZeiger(ev.clientX, ev.clientY);
-      if (unterZeiger && unterZeiger !== aktPgEl) wechsleSeite(unterZeiger, ev);
-
+      // Erst die rohe Lage, dann der Seitenwechsel: er rechnet sie um
       let nx = ox + (ev.clientX - sx) / _zoom, ny = oy + (ev.clientY - sy) / _zoom;
+
+      const unterZeiger = seiteUnterZeiger(ev.clientX, ev.clientY);
+      if (unterZeiger && unterZeiger !== aktPgEl) {
+        const umgerechnet = wechsleSeite(unterZeiger, ev, nx, ny);
+        if (umgerechnet) { nx = umgerechnet.x; ny = umgerechnet.y; }
+      }
+
       let sXL = getSnaps(nx, xs), sXR = getSnaps(nx + obj.w, xs), sXC = getSnaps(nx + obj.w / 2, cxs);
       if (sXL.sn) { nx = sXL.v; showSnap('v', nx); } else if (sXR.sn) { nx = sXR.v - obj.w; showSnap('v', sXR.v); } else if (sXC.sn) { nx = sXC.v - obj.w / 2; showSnap('v', sXC.v); }
 
