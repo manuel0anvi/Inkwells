@@ -44,6 +44,51 @@ function objLayerOf(obj) {
   return obj && obj.layer === 'back' ? 'back' : 'front';
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   AUF DEM BLATT BLEIBEN
+
+   Ein Bild, eine Form oder eine Formel liess sich beliebig weit ueber den
+   Rand hinausschieben. Zu sehen war davon nichts – .j-page schneidet ab –,
+   und beim Ausdrucken erst recht nicht: das Ding war weg, stand aber
+   weiterhin in page.objects und wanderte bei jedem Abgleich mit. Genau so
+   wurde es gemeldet.
+
+   Gerechnet wird mit dem Platz, den das Objekt GEDREHT einnimmt. Gedreht
+   wird um die Mitte (canvas/objects.js, applyRotation), ein um 90°
+   gedrehtes Hochformat ragt also links und rechts ueber sein eigenes
+   Rechteck hinaus – ohne diesen Zuschlag stuende es sichtbar daneben.
+
+   Oben ist die Grenze nicht das Blatt, sondern der Seitenkopf (CFG.HDR):
+   dort stehen Seitenzahl und Datum, und dieselbe Kante schneidet auch die
+   Handschrift ab (css/pages.css).
+   ══════════════════════════════════════════════════════════════════════ */
+function klemme(wert, min, max) {
+  // Groesser als das Blatt: dann gewinnt die obere linke Ecke
+  if (max <= min) return min;
+  return Math.max(min, Math.min(max, wert));
+}
+
+function objGrenzen(obj, page) {
+  const pw = (page && page.w) || CFG.PAGE_W;
+  const ph = (page && page.h) || CFG.PAGE_H;
+  const rad = (obj.rot || 0) * Math.PI / 180;
+  const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
+  // Wie weit die Drehung ueber das ungedrehte Rechteck hinausragt
+  const ueberX = ((obj.w * c + obj.h * s) - obj.w) / 2;
+  const ueberY = ((obj.w * s + obj.h * c) - obj.h) / 2;
+  return {
+    minX: ueberX, maxX: pw - obj.w - ueberX,
+    minY: CFG.HDR + ueberY, maxY: ph - obj.h - ueberY
+  };
+}
+
+/** Schiebt ein Objekt so weit zurueck, dass es ganz auf dem Blatt liegt. */
+function haltAufBlatt(obj, page) {
+  const g = objGrenzen(obj, page);
+  obj.x = klemme(obj.x, g.minX, g.maxX);
+  obj.y = klemme(obj.y, g.minY, g.maxY);
+}
+
 /**
  * Schreibt allen Bildern einer Seite ihre Zahl neu.
  *
@@ -312,6 +357,11 @@ function placeObject(objLayer, obj, page) {
         const mind = obj.kind === 'formula' ? 12 : 20;
         // Auch beim Ziehen an der Oberkante bleibt der Seitenkopf frei
         if (ny < CFG.HDR) { nh -= (CFG.HDR - ny); ny = CFG.HDR; }
+        /* Nicht ueber das Blatt hinaus WACHSEN. Nur wachsen: sonst liesse
+           sich ein Objekt, das von frueher ueber dem Rand liegt, nicht
+           einmal mehr kleiner ziehen. */
+        const pw = page.w || CFG.PAGE_W, ph = page.h || CFG.PAGE_H;
+        if (nw > ow && (nx < 0 || nx + nw > pw || ny + nh > ph)) return;
         if (nw > mind && nh > mind) {
           obj.w = nw; obj.h = nh; obj.x = nx; obj.y = ny;
           wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px'; wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px';
@@ -398,6 +448,11 @@ function placeObject(objLayer, obj, page) {
             nx = fest.x + Math.cos(w) * len;
             ny = fest.y + Math.sin(w) * len;
           }
+
+          // Auch ein Linienende bleibt auf dem Blatt – nach dem Einrasten,
+          // sonst drehte der Winkelschritt es wieder hinaus
+          nx = klemme(nx, 0, page.w || CFG.PAGE_W);
+          ny = klemme(ny, CFG.HDR, page.h || CFG.PAGE_H);
 
           const p = [null, null];
           p[nr] = { x: nx, y: ny };
@@ -527,6 +582,8 @@ function placeObject(objLayer, obj, page) {
   function duplicate() {
     pushPageHistory(page);
     const copy = { ...obj, id: uid(), x: (obj.x || 0) + 16, y: (obj.y || 0) + 16 };
+    // Die Kopie liegt versetzt – am Blattrand sonst schon halb daneben
+    haltAufBlatt(copy, page);
     const list = page.objects || (page.objects = []);
     list.splice(list.indexOf(obj) + 1, 0, copy);
     placeObject(objLayer, copy, page);
@@ -651,12 +708,13 @@ function placeObject(objLayer, obj, page) {
       let sYT = getSnaps(ny, ys), sYB = getSnaps(ny + obj.h, ys), sYC = getSnaps(ny + obj.h / 2, cys);
       if (sYT.sn) { ny = sYT.v; showSnap('h', ny); } else if (sYB.sn) { ny = sYB.v - obj.h; showSnap('h', sYB.v); } else if (sYC.sn) { ny = sYC.v - obj.h / 2; showSnap('h', sYC.v); }
 
-      /* Nicht in den Seitenkopf hinauf. Dort stehen Seitenzahl, Datum
-         und die zwei Knoepfe – ein Bild darueber deckte sie zu, und weil
-         es vor dem Text liegt, war der Kopf danach nicht mehr zu
-         treffen. Dieselbe Grenze schneidet die Striche ab
-         (css/pages.css, .j-canvas). */
-      ny = Math.max(CFG.HDR, ny);
+      /* Nicht ueber den Blattrand und nicht in den Seitenkopf hinauf –
+         siehe objGrenzen(). Dort stehen Seitenzahl, Datum und die zwei
+         Knoepfe; ein Bild darueber deckte sie zu, und weil es vor dem
+         Text liegt, war der Kopf danach nicht mehr zu treffen. */
+      const g = objGrenzen(obj, page);
+      nx = klemme(nx, g.minX, g.maxX);
+      ny = klemme(ny, g.minY, g.maxY);
 
       obj.x = nx; obj.y = ny; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
       placeBar();
@@ -731,6 +789,10 @@ function placeObject(objLayer, obj, page) {
     const ziel = zielEl.getBoundingClientRect();
     obj.x = Math.round((alt.left - ziel.left) / _zoom);
     obj.y = Math.round((alt.top - ziel.top) / _zoom);
+    /* Losgelassen wird ueber der neuen Seite, das Bild selbst haengt aber
+       noch am unteren Rand der alten: umgerechnet ergaebe das ein y weit
+       oberhalb der neuen Seite. Es faengt dort also oben an. */
+    haltAufBlatt(obj, info.page);
 
     page.objects = (page.objects || []).filter(o => o.id !== obj.id);
     (info.page.objects || (info.page.objects = [])).push(obj);
@@ -773,6 +835,8 @@ function placeObject(objLayer, obj, page) {
       const mindH = obj.kind === 'formula' ? 12 : 20;
       if (nw > mindW && nh > mindH) {
         obj.x -= (nw - obj.w) / 2; obj.y -= (nh - obj.h) / 2; obj.w = nw; obj.h = nh;
+        // Es waechst aus der Mitte heraus – dabei kann es ueber den Rand geraten
+        haltAufBlatt(obj, page);
         wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px'; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
         // Formel-Inhalt neu rendern, damit die Skalierung greift
         if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
