@@ -242,13 +242,16 @@
 
     ebene.innerHTML = '';
     faerbeMarken();
+    fuelleLeiste(kommentare);
 
     if (!kommentare.length) { ebene.style.display = 'none'; return; }
 
-    // Kein Platz im Rand: dann nur die eine, die gerade dran ist
-    if (randBreite() < MIN_RAND) {
+    /* Kein Platz im Rand: dann übernimmt die Leiste (siehe unten). Und
+       steht die offen, hat der Rand nichts mehr zu zeigen – zweimal
+       dieselbe Karte wäre nur verwirrend. */
+    if (leisteOffen() || randBreite() < MIN_RAND) {
       ebene.style.display = 'none';
-      zeigeEinzeln(_einzeln);
+      zeigeEinzeln(leisteOffen() ? null : _einzeln);
       return;
     }
 
@@ -298,6 +301,145 @@
   }
 
   window.addEventListener('resize', planeNeu, { passive: true });
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE LEISTE AM RECHTEN RAND
+
+     Auf einem kleinen Bildschirm und im Hochformat liegt das Blatt Kante
+     an Kante im Fenster – der Rand, in dem die Karten sonst stehen, ist
+     dann gar nicht da, und die Kommentare waren ueberhaupt nicht mehr zu
+     sehen. Genau so wurde es gemeldet.
+
+     Drei Wege hinein, damit man sie auch mit dem Finger findet:
+     der Griff an der Kante, ein Wischen von rechts (wie die Navigation
+     links) und das Antippen einer kommentierten Stelle im Text.
+
+     >>> Warum sie das Blatt schiebt und sich nicht darueberlegt <<<
+     Ein Kommentar gehoert zu einer Stelle. Deckt die Leiste sie zu, liest
+     man eine Bemerkung zu etwas, das man nicht mehr sieht.
+     ══════════════════════════════════════════════════════════════════ */
+  const leiste = () => E('comment-panel');
+  const leisteOffen = () => !!leiste() && leiste().classList.contains('open');
+
+  /* Welche Karte hervorgehoben ist. Als Wert und nicht als Klasse am
+     Element: die Liste wird nach jedem Öffnen neu aufgebaut, und eine
+     Klasse allein hätte diesen Neubau nicht überlebt. */
+  let _hervor = null;
+
+  function setzeLeiste(offen) {
+    const p = leiste();
+    if (!p || p.classList.contains('open') === offen) return;
+    if (!offen) _hervor = null;
+    p.classList.toggle('open', offen);
+    // Die Spalte wird schmaler: der Zoom passt die Seite neu ein
+    setTimeout(() => { if (typeof _applyZoom === 'function') _applyZoom(); planeNeu(); }, 220);
+    stelleGriff();
+  }
+
+  /** Der Griff steht da, wenn es etwas zu sehen gibt und nichts offen ist. */
+  function stelleGriff() {
+    const griff = E('comment-tab');
+    if (!griff) return;
+    const pgId = S.activePgId;
+    const anzahl = (pgId && typeof getPageComments === 'function')
+      ? getPageComments(pgId).length : 0;
+    const noetig = anzahl > 0 && !leisteOffen() && randBreite() < MIN_RAND;
+    griff.style.display = noetig ? 'flex' : 'none';
+    const zahl = E('comment-tab-count');
+    if (zahl) zahl.textContent = String(anzahl);
+  }
+
+  function fuelleLeiste(kommentare) {
+    const liste = E('comment-panel-list');
+    stelleGriff();
+    if (!liste) return;
+    // Kein Platz im Rand mehr? Dann ist die Leiste der einzige Weg.
+    if (!kommentare.length) { setzeLeiste(false); liste.innerHTML = ''; return; }
+
+    liste.innerHTML = '';
+    for (const c of kommentare) {
+      const karte = baueKarte(c);
+      if (_hervor && String(c.id) === String(_hervor)) karte.classList.add('aktiv');
+      karte.addEventListener('click', () => {
+        const mark = document.querySelector(
+          '.j-comment-mark[data-cid="' + CSS.escape(String(c.id)) + '"]');
+        if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      liste.appendChild(karte);
+    }
+  }
+
+  /** Aufmachen und die Karte zu dieser Stelle hervorheben. */
+  function zeigeInLeiste(cid) {
+    _hervor = cid || null;
+    setzeLeiste(true);
+    const liste = E('comment-panel-list');
+    if (!liste || !cid) return;
+    liste.querySelectorAll('.comment-card.aktiv').forEach(k => k.classList.remove('aktiv'));
+    const karte = liste.querySelector('.comment-card[data-cid="' + CSS.escape(String(cid)) + '"]');
+    if (!karte) return;
+    karte.classList.add('aktiv');
+    karte.scrollIntoView({ block: 'nearest' });
+  }
+
+  E('comment-tab')?.addEventListener('click', () => setzeLeiste(true));
+  E('comment-panel-close')?.addEventListener('click', () => setzeLeiste(false));
+
+  /* Eine kommentierte Stelle antippen holt die Leiste – aber nur, wenn
+     die Karten sonst nirgends stehen. Im breiten Fenster liegen sie im
+     Rand, dort waere das Aufziehen nur im Weg. */
+  document.addEventListener('pointerdown', e => {
+    const mark = e.target.closest && e.target.closest('.j-comment-mark[data-cid]');
+    if (!mark || randBreite() >= MIN_RAND) return;
+    zeigeInLeiste(mark.dataset.cid);
+  }, true);
+
+  /* ── Von rechts hereinwischen ─────────────────────────────────────
+     Dasselbe Muster wie bei der Navigation (app.js): waagerecht muss es
+     sein, senkrecht wird gescrollt, und beim Zeichnen gilt es nicht. Das
+     Band reicht ein Stueck ins Fenster hinein, weil Windows am
+     Bildschirmrand selbst zugreift. */
+  (function wischen() {
+    const WISCH_MIN = 32, RAND = 56;
+    let x0 = 0, y0 = 0, aktiv = false;
+
+    /* >>> Am Dokument und nicht an der Seitenspalte <<<
+       Der Griff liegt fest am Fenster und damit ausserhalb des Layouts.
+       Ausgerechnet auf ihm wischt man aber los – dort sucht ihn der
+       Daumen. Ein Hoerer an der Spalte bekaeme diese Beruehrung nie zu
+       sehen. Auf der Startseite gilt die Geste nicht. */
+    const imHeft = () => {
+      const v = E('view-journal');
+      return !!v && v.style.display !== 'none';
+    };
+
+    document.addEventListener('touchstart', e => {
+      aktiv = false;
+      if (e.touches.length !== 1 || !imHeft()) return;
+      if (typeof touchDrawActive === 'function' && touchDrawActive()) return;
+      const t = e.touches[0];
+      const p = leiste();
+      const links = p ? p.getBoundingClientRect().left : window.innerWidth;
+      if (t.clientX < links - RAND) return;
+      aktiv = true; x0 = t.clientX; y0 = t.clientY;
+    }, { passive: true });
+
+    document.addEventListener('touchend', e => {
+      if (!aktiv) return;
+      aktiv = false;
+      const t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - x0, dy = t.clientY - y0;
+      if (Math.abs(dx) < WISCH_MIN || Math.abs(dx) <= Math.abs(dy)) return;
+      e.preventDefault();
+      // Die Bildschirmtastatur hat mit dieser Geste nichts zu tun
+      const fokus = document.activeElement;
+      if (fokus && fokus.classList && fokus.classList.contains('j-text')) {
+        try { fokus.blur(); } catch (err) { /* egal */ }
+      }
+      setzeLeiste(dx < 0);
+    }, { passive: false });
+  })();
 
   /* ── Engformat: eine einzelne schwebende Karte ────────────────────── */
   let einzelKarte = null;

@@ -521,6 +521,140 @@ app.on('ready', async () => {
       Math.abs(zJetzt - zFit) < 0.01, 'er hat nichts zurückgesetzt');
 
     /* ══════════════════════════════════════════════════════════════════
+       KOMMENTARE AUF SCHMALEM SCHIRM
+
+       Die Karten stehen sonst im leeren Rand neben dem Blatt. Auf einem
+       kleinen Bildschirm und im Hochformat gibt es diesen Rand nicht –
+       dann waren die Kommentare ueberhaupt nicht mehr zu sehen. Die
+       Leiste rechts ist der Rand, wenn es keinen gibt.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Kommentare auf schmalem Schirm');
+    win.setContentSize(800, 1200);
+    await new Promise(r => setTimeout(r, 700));
+
+    await js(`(() => {
+      /* Auf der ERSTEN Seite, und die auch als aktive setzen: gezeigt
+         werden die Kommentare der aktiven Seite, und die vorigen
+         Pruefungen haben eine zweite angelegt. */
+      const pgEl = document.querySelector('.j-page');
+      setActivePg(pgEl.dataset.pgid);
+      const td = pgEl.querySelector('.j-text');
+      td.innerHTML = '<p>Ein Satz mit einer Stelle darin.</p>';
+      td.focus();
+      // Eine Stelle markieren und kommentieren – ueber dieselben Wege,
+      // die auch der Knopf an der Auswahl nimmt
+      const knoten = td.querySelector('p').firstChild;
+      const r = document.createRange();
+      r.setStart(knoten, 14); r.setEnd(knoten, 20);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      const c = addComment(S.activePgId, 'Stimmt das?', 'Stelle');
+      markSelection(c.id);
+      refreshComments();
+      return true; })()`);
+    await new Promise(r => setTimeout(r, 500));
+
+    const lage = await js(`(() => {
+      const griff = document.getElementById('comment-tab');
+      const karten = document.querySelectorAll('#comment-layer .comment-card').length;
+      return { griff: getComputedStyle(griff).display, imRand: karten }; })()`);
+    pruefe('Im Rand ist kein Platz – dort steht keine Karte',
+      lage.imRand === 0, 'die Karten stehen doch im Rand');
+    pruefe('Stattdessen steht der Griff an der Kante',
+      lage.griff !== 'none', 'kein Weg zu den Kommentaren');
+
+    await tippe('#comment-tab');
+    const offen = await js(`(() => {
+      const p = document.getElementById('comment-panel');
+      return { offen: p.classList.contains('open'),
+               karten: document.querySelectorAll('#comment-panel-list .comment-card').length,
+               breite: Math.round(p.getBoundingClientRect().width) }; })()`);
+    pruefe('Der Griff zieht die Leiste auf (' + offen.breite + ' px)',
+      offen.offen === true && offen.breite > 100, JSON.stringify(offen));
+    pruefe('Und darin steht der Kommentar', offen.karten === 1, JSON.stringify(offen));
+
+    /* Das Blatt muss daneben bleiben – eine Leiste, die den Text zudeckt,
+       zeigt eine Bemerkung zu etwas, das man nicht mehr sieht. Die Pause
+       gehoert dazu: die Seite passt sich erst neu ein, wenn die Leiste
+       ausgefahren ist (ui/comments.js, setzeLeiste). */
+    await new Promise(r => setTimeout(r, 700));
+    const nebeneinander = await js(`(() => {
+      const p = document.getElementById('comment-panel').getBoundingClientRect();
+      const pg = document.querySelector('.j-page').getBoundingClientRect();
+      return pg.right <= p.left + 1; })()`);
+    pruefe('Das Blatt bleibt daneben, statt darunter', nebeneinander === true,
+      'die Leiste liegt über der Seite');
+
+    // Zumachen: mit dem Finger nach rechts wischen
+    const inLeiste = await mitte('#comment-panel-list');
+    if (inLeiste) await ziehe(inLeiste.x, inLeiste.y, inLeiste.x + 160, inLeiste.y + 6);
+    pruefe('Ein Wischen nach rechts schliesst sie wieder',
+      (await js(`document.getElementById('comment-panel').classList.contains('open')`)) === false,
+      'sie blieb offen');
+
+    /* Und von rechts hereinwischen macht sie wieder auf. Nicht ganz am
+       Rand ansetzen: dort liegt die Rollleiste, und am Bildschirmrand
+       greift Windows selbst zu – deshalb reicht das Band ins Fenster
+       hinein (ui/comments.js). */
+    const rand = await js(`(() => ({ x: innerWidth - 45, y: Math.round(innerHeight / 2) }))()`);
+    await ziehe(rand.x, rand.y, rand.x - 170, rand.y + 6);
+    pruefe('Ein Wischen von rechts zieht sie auf',
+      (await js(`document.getElementById('comment-panel').classList.contains('open')`)) === true,
+      'sie blieb zu');
+
+    /* Der dritte Weg hinein: die kommentierte Stelle selbst antippen.
+       Das war der andere Vorschlag – „wenn man auf eine Stelle mit
+       Kommentar geht, soll man ihn dort sehen". */
+    /* Die Stelle ins Bild holen – und die Seite dazu als die aktive
+       setzen: gezeigt werden immer die Kommentare der aktiven Seite, und
+       das Rollen kann sie beim Nachbarn gelassen haben. */
+    await js(`(() => {
+      document.getElementById('comment-panel-close').click();
+      const m = document.querySelector('.j-comment-mark[data-cid]');
+      m.scrollIntoView({ block: 'center' });
+      const pg = m.closest('[data-pgid]');
+      if (pg) setActivePg(pg.dataset.pgid);
+      refreshComments();
+      return true; })()`);
+    await new Promise(r => setTimeout(r, 500));
+    const stelleImText = await mitte('.j-comment-mark');
+    if (stelleImText) await tippe('.j-comment-mark');
+    const nachTipp = await js(`(() => ({
+      offen: document.getElementById('comment-panel').classList.contains('open'),
+      hervor: document.querySelectorAll('#comment-panel-list .comment-card.aktiv').length }))()`);
+    pruefe('Die kommentierte Stelle antippen holt die Leiste',
+      nachTipp.offen === true, JSON.stringify(nachTipp) + ' Stelle: '
+      + JSON.stringify(stelleImText) + ' ' + JSON.stringify(await js(`(() => {
+        const m = document.querySelector('.j-comment-mark');
+        return { da: !!m, cid: m && m.dataset.cid, modus: S.mode,
+                 klasse: m && m.className }; })()`)));
+    pruefe('Und hebt die Karte dazu hervor', nachTipp.hervor === 1, JSON.stringify(nachTipp));
+
+    /* Und wo neben dem Blatt wirklich Platz ist, bleibt alles beim Alten:
+       die Karte steht im Rand, der Griff hat dort nichts zu suchen. Das
+       braucht ein breites Fenster – eine Karte ist 210 px, und links und
+       rechts vom Blatt muss sie hineinpassen. Auf einem gewöhnlichen
+       Laptop ist das nie der Fall, und genau deshalb gibt es die
+       Leiste. */
+    await js(`document.getElementById('comment-panel-close').click()`);
+    win.setContentSize(1520, 900);
+    await new Promise(r => setTimeout(r, 900));
+    const quer = await js(`(() => {
+      // Das Umklappen kann die aktive Seite bei der Nachbarin gelassen haben
+      const m = document.querySelector('.j-comment-mark[data-cid]');
+      const pg = m && m.closest('[data-pgid]');
+      if (pg) setActivePg(pg.dataset.pgid);
+      refreshComments();
+      return new Promise(r => setTimeout(() => r({
+        imRand: document.querySelectorAll('#comment-layer .comment-card').length,
+        griff: getComputedStyle(document.getElementById('comment-tab')).display }), 250)); })()`);
+    pruefe('Quer steht die Karte wieder im Rand', quer.imRand === 1, JSON.stringify(quer));
+    pruefe('Und der Griff verschwindet', quer.griff === 'none', JSON.stringify(quer));
+
+    await js(`const nb = getNb(); nb.comments = []; refreshComments(); true`);
+    win.setContentSize(800, 1200);
+    await new Promise(r => setTimeout(r, 500));
+
+    /* ══════════════════════════════════════════════════════════════════
        DIE ABSCHNITTE MIT DEM FINGER AUFZIEHEN
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Die Abschnitte aufziehen');

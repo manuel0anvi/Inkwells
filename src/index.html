@@ -469,8 +469,32 @@
         </button>
       </div>
     </div>
+
+    <!-- Die Kommentare stehen sonst im leeren Rand neben dem Blatt. Auf
+         einem kleinen Bildschirm und im Hochformat gibt es keinen Rand –
+         dann waren sie ueberhaupt nicht mehr zu sehen. Diese Leiste ist
+         der Rand, wenn es keinen gibt: sie geht ueber den Griff an ihrer
+         Kante auf, ueber ein Wischen von rechts, oder wenn man eine
+         kommentierte Stelle antippt (ui/comments.js). -->
+    <aside class="comment-panel" id="comment-panel">
+      <div class="comment-panel-inner">
+        <div class="comment-panel-head">
+          <span data-i18n="comments">Kommentare</span>
+          <button class="modal-close-x" id="comment-panel-close" title="✕">✕</button>
+        </div>
+        <div class="comment-panel-list" id="comment-panel-list"></div>
+      </div>
+    </aside>
   </div>
 </div>
+
+<!-- Der Griff an der Kante. Fest am Fenster, damit er keine Blattbreite
+     kostet; nur da, wenn die Seite ueberhaupt Kommentare hat. -->
+<button class="comment-tab" id="comment-tab" style="display:none"
+        data-i18n-title="comments" title="Kommentare">
+  <span class="comment-tab-icon">💬</span>
+  <span class="comment-tab-count" id="comment-tab-count">0</span>
+</button>
 
 <!-- SECTION MANAGER MODAL -->
 <div class="overlay" id="ov-sec-mgr" style="display:none">
