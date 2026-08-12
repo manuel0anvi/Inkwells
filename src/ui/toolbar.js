@@ -116,34 +116,35 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
         const teile = offenerTrenner ? [offenerTrenner, kind] : [kind];
         offenerTrenner = null;
 
-        /* >>> Die eigene Sichtbarkeit merken <<<
+        /* >>> Die eigene Sichtbarkeit lesen, nicht überschreiben <<<
            #pen-opts, #eraser-opts und #shape-opts stehen auf display:none,
-           bis ihr Werkzeug gewählt wird (applyMode). Würde das Blättern sie
-           einfach auf '' setzen, stünden alle drei gleichzeitig da – über
-           850 px, die es gar nicht gibt, und die Leiste quillt über. Genau
-           das passierte nach jeder Größenänderung.
+           bis ihr Werkzeug gewählt wird (applyMode). Was von sich aus
+           verborgen ist, kostet keine Breite und ist kein Bewerber fürs
+           Blättern.
 
-           Deshalb wird der eigene Wert gemerkt und beim Einblenden wieder
-           hergestellt, statt ihn zu überschreiben. */
-        const eigen = teile.map(el => el.style.display);
+           Das Blättern selbst fasst style.display NICHT an, sondern setzt
+           eine Klasse (siehe setzeSichtbar). Vorher merkte es sich hier
+           den „eigenen" Wert – und der war nach dem ersten Wegblättern
+           'none'. Von da an galt die Gruppe als von sich aus verborgen und
+           kam nie wieder: Teilen und Exportieren verschwanden auf einem
+           schmalen Fenster dauerhaft, auch wenn wieder Platz war. */
+        const eigenVerborgen = teile.every(el => el.style.display === 'none');
 
         /* data-tb-more sagt, was entbehrlich ist: 1 weicht zuerst
-           (Speicher-Hinweis), dann 2 (Teilen, Exportieren), dann 3 (Zoom).
-           Ohne Nummer ist die Gruppe unentbehrlich – die Werkzeuge, die
-           Textformate und das Einfügen bleiben immer auf der ersten Seite,
-           denn für das Einfügen gibt es keinen zweiten Weg. */
+           (Speicher-Hinweis), dann 2 (Teilen, Exportieren), zuletzt 4
+           (Rückgängig und Vor). Ohne Nummer ist die Gruppe unentbehrlich –
+           die Werkzeuge, die Textformate, das Einfügen und der Zoom
+           bleiben immer auf der ersten Seite, denn für das Einfügen gibt
+           es keinen zweiten Weg. */
         alle.push({
-          teile, eigen,
+          teile,
           rang: +(kind.dataset.tbMore || 0),
-          // Von sich aus verborgen? Dann kostet es keine Breite und ist
-          // für das Blättern kein Bewerber.
-          eigenVerborgen: eigen.every(v => v === 'none')
+          eigenVerborgen
         });
       }
       if (offenerTrenner) {
         alle.push({
           teile: [offenerTrenner],
-          eigen: [offenerTrenner.style.display],
           rang: 99,
           eigenVerborgen: offenerTrenner.style.display === 'none'
         });
@@ -162,12 +163,12 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   let alleStuecke = [];      // die Stücke dieser Messung (Identität zählt)
   let geplant = false;
 
-  /* Einblenden heisst: auf den EIGENEN Wert zurück, nicht auf ''. Sonst
-     macht das Blättern verborgene Gruppen sichtbar (siehe sammleStuecke). */
+  /* Weggeblättert wird über eine KLASSE, nicht über style.display. So
+     bleibt der eigene Wert der Gruppe unangetastet – und eine Gruppe, die
+     einmal weichen musste, gilt später nicht als von sich aus verborgen
+     (siehe sammleStuecke). */
   function setzeSichtbar(stueck, an) {
-    stueck.teile.forEach((el, i) => {
-      el.style.display = an ? (stueck.eigen[i] || '') : 'none';
-    });
+    stueck.teile.forEach(el => el.classList.toggle('tb-weg', !an));
   }
 
   function versteckePfeile() {
@@ -254,6 +255,24 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   });
 
   window.addEventListener('resize', planen, { passive: true });
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND WENN NUR DIE LEISTE SCHMALER WIRD
+
+     Das Aufziehen der Navigation nimmt der Leiste über hundert Pixel,
+     ohne dass sich das Fenster ändert – ein resize kommt dabei nicht.
+     Die Aufteilung blieb deshalb stehen, wie sie ohne Navigation
+     gerechnet war, und im Hochformat stand die Leiste danach über den
+     Rand hinaus (scripts/test-touch, „hoch 700 + Navigation").
+
+     Ein Beobachter auf der Leiste selbst deckt jeden Grund ab, aus dem
+     sie schmaler wird. Eine Schleife entsteht daraus nicht: anpassen()
+     blendet nur Kinder aus, die Breite der Leiste selbst rührt es nicht
+     an – und planen() bündelt ohnehin auf ein Einzelbild.
+     ══════════════════════════════════════════════════════════════════ */
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(planen).observe(bar);
+  }
 
   /* Der Werkzeugwechsel blendet ganze Gruppen ein und aus (applyMode) –
      danach ist die Rechnung eine andere. */
@@ -1131,6 +1150,10 @@ function isDrawMode(mode) {
 
 function switchMode(mode) {
   S.mode = mode;
+  /* Wozu der Stift greift, wenn er aus der Zeigerstellung heraus die
+     Seite berührt (canvas/input.js, letztesZeichenwerkzeug). Der
+     Radierer gehört nicht dazu – siehe dort. */
+  if (mode === 'pen1' || mode === 'pen2' || mode === 'hl') S._letzterStift = mode;
   // Ein ausgewaehlter Strich gehoert zum Zeiger; mit dem Stift in der Hand
   // waere seine Huelle nur im Weg (canvas/strokeSelect.js)
   if (mode !== 'cursor' && typeof window.deselectStroke === 'function') window.deselectStroke();
@@ -1152,11 +1175,25 @@ function switchMode(mode) {
   updateUndoRedoUI();
 }
 
-/* Die Knöpfe für Rückgängig/Wiederholen gibt es nicht mehr (siehe
-   index.html). Beide laufen über die änderbaren Kürzel
-   (core/shortcuts.js) und rufen von dort undoPage()/redoPage() auf.
-   Hier standen bis zuletzt zwei addEventListener auf Elemente, die es
-   seit dem Entfernen der Knöpfe nicht mehr gibt. */
+/* ══════════════════════════════════════════════════════════════════════
+   RÜCKGÄNGIG UND VOR
+
+   Die beiden Knöpfe waren einmal weg, weil Strg+Z jeder kennt. Auf einem
+   Tablet liegt aber keine Tastatur dabei: ein verrutschter Strich liess
+   sich dort überhaupt nicht mehr zurücknehmen. Sie stehen wieder in der
+   Leiste (index.html) und rufen dasselbe wie die Kürzel.
+
+   >>> Warum pointerdown abgewehrt wird <<<
+   Ein Druck auf einen Knopf nimmt dem Textfeld den Fokus und damit die
+   Schreibmarke. Nach einem Rückgängig will man aber genau dort
+   weiterschreiben, wo man war.
+   ══════════════════════════════════════════════════════════════════════ */
+[['btn-undo', () => undoPage()], ['btn-redo', () => redoPage()]].forEach(([id, tun]) => {
+  const b = E(id);
+  if (!b) return;
+  b.addEventListener('pointerdown', e => e.preventDefault());
+  b.addEventListener('click', e => { e.preventDefault(); tun(); });
+});
 
 /* TOOLBAR mode/pen/color/heading controls moved to ui/toolbar.js */
 

@@ -122,6 +122,24 @@
   color: var(--gold)
 }
 
+/* Weggeblättert (ui/toolbar.js). Als Klasse und nicht als style.display,
+   damit der eigene Wert einer Gruppe – #pen-opts und Co. stehen je nach
+   Werkzeug auf none – erhalten bleibt. Deshalb auch !important: gegen
+   genau diesen Inline-Wert muss es sich durchsetzen. */
+.tb-weg {
+  display: none !important
+}
+
+/* Nichts zum Rückgängigmachen: der Knopf bleibt stehen, statt zu
+   verschwinden – ein Knopf, der springt, ist schwerer zu treffen als
+   einer, der grau ist. Er nimmt auch keinen Zeiger mehr an, sonst
+   bekäme man auf dem Tablet einen Druck ohne jede Wirkung. */
+.tb-opt:disabled {
+  opacity: .3;
+  cursor: default;
+  pointer-events: none
+}
+
 .tb-opt.export {
   color: var(--gold);
   border-color: var(--gd);
@@ -714,10 +732,17 @@
 }
 
 /* Das Raster wie in Word: darueberfahren waehlt, ein Klick setzt. */
+/* ── Das Raster der Tabelle ───────────────────────────────────────────
+   touch-action: none ist hier kein Beiwerk, sondern die halbe Miete: ohne
+   das macht der Browser aus dem gezogenen Finger ein Scrollen, bricht die
+   Bewegung mit pointercancel ab und das Raster bleibt bei 1×1 stehen. Mit
+   dem Finger liess sich die Grösse deshalb gar nicht wählen – genau so
+   wurde es gemeldet. Geprüft in scripts/test-stift. */
 .tbl-grid {
   display: grid;
   gap: 3px;
-  padding: 4px 10px
+  padding: 4px 10px;
+  touch-action: none
 }
 
 .tbl-cell {

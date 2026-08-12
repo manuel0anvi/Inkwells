@@ -77,19 +77,55 @@
     }
   }
 
-  /* Zeigen und Antippen laufen über dasselbe: mit dem Finger gibt es kein
-     Schweben, dort wählt die Berührung schon aus. */
-  raster.addEventListener('pointermove', e => {
-    const z = e.target.closest('.tbl-cell');
-    if (z) markiere(+z.dataset.r, +z.dataset.c);
-  });
-  raster.addEventListener('pointerleave', () => markiere(0, 0));
-  raster.addEventListener('click', e => {
-    const z = e.target.closest('.tbl-cell');
+  /* ══════════════════════════════════════════════════════════════════
+     MIT DEM FINGER ÜBER DAS RASTER FAHREN
+
+     Mit der Maus fährt man darüber und sieht die Größe wachsen. Mit dem
+     Finger ging das nicht – gemeldet als „man kann mit dem Finger schwer
+     auswählen, wie groß die Tabelle sein soll".
+
+     >>> Woran es lag <<<
+     Eine Berührung wird beim ersten Element FESTGEHALTEN (implizites
+     Pointer-Capture): jede weitere Meldung kommt mit demselben Ziel an,
+     auch wenn der Finger längst drei Felder weiter ist. e.target sagt
+     also immer „Feld 1×1". Deshalb wird die Stelle unter dem Finger
+     selbst gesucht statt dem Ziel geglaubt.
+
+     Gewählt wird beim Abheben und nicht per Klick: nach einer gezogenen
+     Berührung meldet Chromium den Klick auf dem ANFANGS-Element – man
+     bekäme also immer 1×1, egal wie weit man gezogen hat.
+     ══════════════════════════════════════════════════════════════════ */
+  let gewaehlt = null;
+
+  function zelleBei(e) {
+    if (e.pointerType === 'mouse' && e.target.closest) {
+      const z = e.target.closest('.tbl-cell');
+      if (z) return z;
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    return el && el.closest ? el.closest('.tbl-cell') : null;
+  }
+
+  function zeige(e) {
+    const z = zelleBei(e);
     if (!z) return;
+    gewaehlt = { r: +z.dataset.r, c: +z.dataset.c };
+    markiere(gewaehlt.r, gewaehlt.c);
+  }
+
+  raster.addEventListener('pointerdown', e => { e.preventDefault(); zeige(e); });
+  raster.addEventListener('pointermove', zeige);
+  // Nur die Maus verlässt das Raster, ohne etwas zu wollen
+  raster.addEventListener('pointerleave', e => {
+    if (e.pointerType === 'mouse') { gewaehlt = null; markiere(0, 0); }
+  });
+  raster.addEventListener('pointerup', e => {
+    zeige(e);
+    if (!gewaehlt) return;
+    const { r, c } = gewaehlt;
     schliessen();
     if (!stelleWiederher()) return;
-    insertTable(+z.dataset.r, +z.dataset.c);
+    insertTable(r, c);
   });
 
   /* ── Benutzerdefiniert ──────────────────────────────────────────── */
@@ -135,6 +171,7 @@
   function schliessen() {
     pop.style.display = 'none';
     btn.classList.remove('active');
+    gewaehlt = null;
     markiere(0, 0);
     document.removeEventListener('pointerdown', draussen, true);
   }
