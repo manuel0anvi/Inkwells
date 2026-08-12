@@ -182,6 +182,79 @@
   color: var(--hi)
 }
 
+/* Die Abzeichen in der Leiste sind ein Knopf: sie öffnen die Liste
+   darunter (ui/collab.js). Die am Seitenrand nicht – dort sind sie nur
+   Anzeige. */
+.collab-people .collab-dot {
+  cursor: pointer
+}
+
+/* ── Wer ist das? Die Liste unter der Leiste ────────────────────────
+   Am Fenster festgemacht und nicht in der Leiste: sie soll über allem
+   liegen und nicht am Rand der Leiste abgeschnitten werden. */
+.collab-card {
+  position: fixed;
+  z-index: 1300;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--sb);
+  border: 1px solid var(--sb2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5)
+}
+
+.collab-card-kopf {
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--md);
+  padding: 2px 6px 8px
+}
+
+.collab-card-zeile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px
+}
+
+.collab-face {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  color: #fff;
+  border: 1.5px solid var(--bg);
+  user-select: none
+}
+
+.collab-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0
+}
+
+.collab-card-text strong {
+  font-size: 13px;
+  color: var(--hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis
+}
+
+.collab-card-text small {
+  font-size: 11px;
+  color: var(--md)
+}
+
 /* Marker am rechten Seitenrand – INNERHALB der Seite, weil .j-page
    alles abschneidet, was darüber hinausragt (overflow: hidden). Liegt
    über dem Text, aber im schmalen Randstreifen, in den nicht geschrieben

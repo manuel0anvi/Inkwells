@@ -181,6 +181,39 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     for (const s of alleStuecke) setzeSichtbar(s, true);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     OHNE PLATZ FÜR DEN NAMEN: DER NAME BEIM DARÜBERFAHREN
+
+     Ab 1300 px – mit offener Navigation schon ab 1350 – fallen die
+     Beschriftungen weg und es bleiben die Sinnbilder. „Der Name steht
+     weiterhin im Tooltip" stand als Absicht bereits im Stylesheet
+     (css/responsive.css), nur gab es diesen Tooltip nie: die Knöpfe
+     tragen ihren Namen im <span>, nicht in einem title.
+
+     Gesetzt wird er genau dann, wenn der Name wirklich nicht zu lesen
+     ist. Sonst stünde neben dem sichtbaren Wort „Cursor" nach einer
+     Sekunde noch einmal „Cursor". Ein Knopf, der schon von sich aus
+     einen title hat, behält ihn.
+     ══════════════════════════════════════════════════════════════════ */
+  function stelleKurznamen() {
+    for (const btn of bar.querySelectorAll('button')) {
+      const schild = btn.querySelector('span');
+      const name = schild ? (schild.textContent || '').trim() : '';
+      if (!name) continue;
+
+      const verdeckt = getComputedStyle(schild).display === 'none';
+      if (verdeckt) {
+        if (!btn.title || btn.dataset.titelAusName) {
+          btn.title = name;
+          btn.dataset.titelAusName = '1';
+        }
+      } else if (btn.dataset.titelAusName) {
+        btn.removeAttribute('title');
+        delete btn.dataset.titelAusName;
+      }
+    }
+  }
+
   /**
    * Misst, was weichen muss, und teilt in zwei Seiten.
    *
@@ -189,6 +222,7 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   function anpassen() {
     geplant = false;
     alleStuecke = sammleStuecke();
+    stelleKurznamen();
 
     if (!bar.offsetParent) { alleZeigen(); versteckePfeile(); return; }
 

@@ -331,6 +331,48 @@ class CloudSyncManager {
      ZUSTAND
      ══════════════════════════════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════════════════════════════
+     WEM GEHÖRT DIE ABLAGE GERADE?
+
+     Ein Heft, das hochgeladen wurde, bekommt diesen Schlüssel eingeprägt
+     (cloudKonto). Daran erkennt die Übersicht später, dass es zu einer
+     anderen Anmeldung gehört und hier nichts mehr zu suchen hat
+     (fremdesKonto in core/data.js).
+
+     Der Anbieter steht mit davor: dieselbe Kennung kann bei Google und
+     bei Microsoft zwei verschiedene Menschen meinen.
+
+     @returns {string} '' heißt: niemand angemeldet
+     ══════════════════════════════════════════════════════════════════ */
+  kontoSchluessel() {
+    if (!this.isAuthenticated()) return '';
+    const id = Settings.get('cloudUserId') || Settings.get('cloudEmail') || '';
+    return id ? this.getProviderId() + ':' + id : '';
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WAS SCHON OBEN LIEGT, ABER NOCH KEIN KONTO TRÄGT
+
+     Das Kennzeichen ist neu. Alles, was vor dieser Fassung hochgeladen
+     wurde, hätte ohne diesen Nachtrag als „nie hochgeladen" gegolten und
+     wäre nach einem Kontowechsel weiter zu sehen gewesen. Nachgetragen
+     wird beim Start, also bevor gewechselt werden kann – die Anmeldung,
+     die gerade steht, ist dann auch die, unter der es hochgegangen ist.
+     ══════════════════════════════════════════════════════════════════ */
+  stempleAltbestand() {
+    const konto = this.kontoSchluessel();
+    if (!konto || typeof S === 'undefined' || !S.notebooks) return 0;
+
+    let stück = 0;
+    for (const nb of S.notebooks) {
+      if (nb.origin === 'shared' || nb.cloudKonto || !nb.syncedAt) continue;
+      nb.cloudKonto = konto;
+      stück++;
+    }
+    if (stück) console.log('[CloudSync]', stück, 'Heft(e) dem Konto zugeordnet');
+    return stück;
+  }
+
   isConfigured() {
     return this.provider.isConfigured();
   }
@@ -1176,6 +1218,12 @@ class CloudSyncManager {
 
     let action = options.action || 'upload';
     const nb = getNb(nbId);
+
+    /* Und genauso wenig gehört ein Heft aus einem ANDEREN Konto hier
+       hinauf. Ohne diese Bremse hätte der nächste Abgleich nach einem
+       Kontowechsel den ganzen alten Bestand in die neue Cloud kopiert –
+       Hefte, die dort niemand haben will (fremdesKonto in core/data.js). */
+    if (typeof fremdesKonto === 'function' && fremdesKonto(nb)) return;
     const nbName = options.nbName || (nb ? nb.name : '');
 
     /* ── Randfall: offline erstellen + offline löschen ────────────────
@@ -1512,6 +1560,8 @@ class CloudSyncManager {
     await this._upsertRemoteNotebook(localCopy);
 
     notebook.syncedAt = localCopy.updatedAt;
+    // Ab jetzt gehört es zu diesem Konto (fremdesKonto in core/data.js)
+    notebook.cloudKonto = this.kontoSchluessel() || notebook.cloudKonto || '';
     await Settings.update({ cloudLastSync: new Date().toISOString() });
   }
 
@@ -1624,6 +1674,9 @@ class CloudSyncManager {
         const localTime = this._toTime(localNb.updatedAt);
         const remoteTime = remoteNb ? this._toTime(remoteNb.updatedAt) : 0;
 
+        // Hefte eines anderen Kontos bleiben, wo sie sind (queueNotebook)
+        if (typeof fremdesKonto === 'function' && fremdesKonto(localNb)) continue;
+
         if (!remoteNb || localTime > remoteTime) {
           const inQueue = this.syncQueue.some(e => {
             return (typeof e === 'string' ? e : e.nbId) === localNb.id;
@@ -1675,6 +1728,8 @@ class CloudSyncManager {
     const normalized = this._normalizeNotebook(remoteNotebook);
     normalized.updatedAt = remoteNotebook.updatedAt || normalized.updatedAt || new Date().toISOString();
     normalized.syncedAt = normalized.updatedAt;
+    // Heruntergeladen heisst: es liegt im Konto, das gerade angemeldet ist
+    normalized.cloudKonto = this.kontoSchluessel() || '';
 
     const index = S.notebooks.findIndex(nb => nb.id === normalized.id);
     if (index >= 0) S.notebooks[index] = normalized;
