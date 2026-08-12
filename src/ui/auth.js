@@ -412,8 +412,19 @@
      Zaehler, Listen und Anschluesse liegen vollstaendig dort. */
 
   if (window.CloudSync_) {
+    /* Beim Kontowechsel gehört die Übersicht neu gezeichnet: sie zeigt
+       nur die Hefte des angemeldeten Kontos (fremdesKonto in
+       core/data.js). Gerechnet wird das erst beim Zeichnen, also muss
+       gezeichnet werden. */
+    let letztesKonto = window.CloudSync_.kontoSchluessel?.() || '';
+
     window.CloudSync_.onChange(() => {
       refreshTitleBarAvatar();
+      const jetzt = window.CloudSync_.kontoSchluessel?.() || '';
+      if (jetzt !== letztesKonto) {
+        letztesKonto = jetzt;
+        if (typeof renderHomeGrid === 'function') renderHomeGrid();
+      }
       // Zaehler und Listen des Sync-Fensters versorgt ui/syncPanel.js
       // selbst – es haengt an derselben Meldung.
       if (accountOverlay.style.display === 'flex') refreshUI();

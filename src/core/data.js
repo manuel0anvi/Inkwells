@@ -19,9 +19,36 @@ function isSharedNotebook(nbOrId) {
   return !!(nb && nb.origin === 'shared');
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN HEFT AUS EINEM ANDEREN KONTO
+
+   Ein Heft, das in einer Cloud liegt, gehört zu dem Konto, in dem es
+   liegt. Wer sich mit einer anderen Adresse anmeldete, sah bisher
+   trotzdem die Hefte der vorigen: die Dateien liegen ja weiter auf der
+   Platte, und die Übersicht kommt aus der örtlichen Merkliste. Genau so
+   wurde es gemeldet.
+
+   Ausgeblendet, nicht gelöscht: auf der Platte und im alten Konto bleibt
+   alles stehen, und mit der Anmeldung von vorhin sind sie wieder da. Wer
+   gar nicht angemeldet ist, sieht ebenfalls alles – ohne Konto gibt es
+   kein fremdes. Ein Heft, das nie hochgeladen wurde, trägt gar kein
+   Konto und bleibt immer.
+
+   Dieselbe Frage hält auch das Hochladen an (core/cloudSync.js): sonst
+   wanderten die Hefte des einen Kontos beim nächsten Abgleich in die
+   Cloud des anderen.
+   ══════════════════════════════════════════════════════════════════════ */
+function fremdesKonto(nb) {
+  if (!nb || !nb.cloudKonto) return false;
+  const cs = (typeof CloudSync_ !== 'undefined') ? CloudSync_ : null;
+  const jetzt = (cs && typeof cs.kontoSchluessel === 'function') ? cs.kontoSchluessel() : '';
+  if (!jetzt) return false;
+  return nb.cloudKonto !== jetzt;
+}
+
 /** Nur die eigenen Hefte – das, was auf der Startseite steht. */
 function ownNotebooks() {
-  return S.notebooks.filter(nb => nb.origin !== 'shared');
+  return S.notebooks.filter(nb => nb.origin !== 'shared' && !fremdesKonto(nb));
 }
 
 /** Alle gerade geöffneten geteilten Dokumente. */

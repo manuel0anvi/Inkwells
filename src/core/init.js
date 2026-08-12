@@ -370,7 +370,15 @@ async function loadNotebooksFromRegistry() {
   for (const id of toRemove) {
     await Registry.remove(id);
   }
-  
+
+  /* Hefte, die schon vor dieser Fassung hochgeladen wurden, tragen noch
+     kein Konto. Nachgetragen wird hier, also beim Start und damit vor
+     jedem möglichen Wechsel – die Anmeldung, die gerade steht, ist dann
+     auch die, unter der sie hochgegangen sind (core/cloudSync.js). */
+  if (typeof CloudSync_ !== 'undefined' && CloudSync_?.stempleAltbestand) {
+    try { CloudSync_.stempleAltbestand(); } catch (err) { /* Anzeige darf nichts kosten */ }
+  }
+
   // Refresh the home grid if visible
   if (typeof renderHomeGrid === 'function') {
     renderHomeGrid();

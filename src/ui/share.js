@@ -108,6 +108,22 @@
     });
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     SIEHT DIESER FEHLER NACH „KEIN INTERNET" AUS?
+
+     Firebase meldet eine fehlende Leitung unter einem halben Dutzend
+     Namen, und keiner davon lautet „offline": mal 'auth/network-request-
+     failed', mal 'unavailable', mal ein blankes „Failed to fetch". Wer
+     ohne Netz auf Freigeben drückte, bekam deshalb eine Auskunft über
+     sein Konto – und vorher fünfzehn Sekunden Wartezeit. Genau so wurde
+     es gemeldet.
+     ══════════════════════════════════════════════════════════════════ */
+  function istNetzfehler(err) {
+    const text = String((err && (err.code || err.message)) || err || '');
+    return /SHARE_OFFLINE|network|failed to fetch|unavailable|ENOTFOUND|ETIMEDOUT|timed? ?out/i
+      .test(text);
+  }
+
   function describeError(err) {
     if (!err) return t('shareFailed').replace('{msg}', '?');
     const msg = err.message || '';
@@ -159,6 +175,9 @@
     if (problem === 'needsGoogle') return t('shareNeedsGoogleHint');
     if (problem === 'failed') {
       const detail = CloudSync_.identityError || '';
+
+      // Zuerst die Leitung: ohne sie sagt jede andere Erklärung das Falsche
+      if (istNetzfehler(detail)) return t('shareOffline');
 
       /* Der mit Abstand häufigste Stolperstein: Inkwells OAuth-Client liegt
          in einem anderen Google-Cloud-Projekt als Firebase. Ohne Eintrag in
@@ -414,14 +433,18 @@
 
     overlay.style.display = 'flex';
 
-    // Ohne Netz sofort Bescheid geben, statt in eine Zeitgrenze zu laufen
-    if (isOffline()) {
+    /** Kein Netz: sagen, dass es das Netz ist, und nichts weiter anbieten. */
+    const ohneNetz = () => {
       needsAccountEl.textContent = t('shareOffline');
       needsAccountEl.style.display = 'block';
       linkSection.style.display = 'none';
       peopleSection.style.display = 'none';
-      return;
-    }
+      showMicrosoftLink(false);
+      statusEl.textContent = '';
+    };
+
+    // Ohne Netz sofort Bescheid geben, statt in eine Zeitgrenze zu laufen
+    if (isOffline()) { ohneNetz(); return; }
 
     /* Ohne echte Anmeldung bei Firebase geht nichts davon. Vorher aber
        einen Versuch, sie nachzuholen: das ID-Token wird beim Anmelden
@@ -429,13 +452,32 @@
     statusEl.textContent = t('shareCheckingAccount');
 
     let signedIn = false;
+    let netzWeg = false;
     try {
-      await whenShareReady();
+      /* >>> Nicht fünfzehn Sekunden warten <<<
+         whenShareReady() gibt so lange Zeit, und bis dahin stand das
+         Fenster mit „Konto wird geprüft" da. Ohne Leitung kommt in
+         dieser Zeit nichts – acht Sekunden reichen auch für einen
+         langsamen Start, und was danach eintrifft, ändert nichts mehr. */
+      await Promise.race([
+        whenShareReady(),
+        new Promise((_, weg) => setTimeout(() => weg(new Error('SHARE_OFFLINE')), 8000))
+      ]);
       signedIn = await CloudSync_.ensureFirebaseIdentity();
     } catch (err) {
+      netzWeg = istNetzfehler(err);
       statusEl.textContent = describeError(err);
     }
     if (statusEl.textContent === t('shareCheckingAccount')) statusEl.textContent = '';
+
+    // Inzwischen zugemacht oder ein anderes Heft im Fenster?
+    if (!shareNb || shareNb.id !== nb.id || overlay.style.display === 'none') return;
+
+    if (netzWeg || istNetzfehler(CloudSync_.identityError)
+        || CloudSync_.identityProblem === 'offline') {
+      ohneNetz();
+      return;
+    }
 
     needsAccountEl.textContent = describeIdentityProblem();
     needsAccountEl.style.display = signedIn ? 'none' : 'block';

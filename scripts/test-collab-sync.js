@@ -156,8 +156,16 @@ function makeClient(name, uid, notebook) {
         if (m && elements.has(m[1])) return elements.get(m[1]).pageEl;
         return null;
       },
+      /* Genug Element, um die Anzeige durchlaufen zu lassen: children,
+         dataset und querySelector fehlten, und die Marker am Seitenrand
+         (renderMarkers in ui/collab.js) fuehren ihre Abzeichen seither
+         nach, statt sie wegzuwerfen – dafuer sehen sie nach, was schon
+         dasteht. Ohne diese Handvoll Felder scheiterte das Zeichnen und
+         riss den Abgleich mit. */
       createElement: () => ({
         style: {}, classList: { add() {} }, append() {}, appendChild() {},
+        dataset: {}, children: [], firstElementChild: null,
+        querySelector: () => null, querySelectorAll: () => [], remove() {},
         set textContent(v) { this._t = v; }, get textContent() { return this._t; }
       })
     }

@@ -678,6 +678,17 @@
 
   function scheduleCaretsAndLocks() {
     if (_renderScheduled) return;
+
+    /* >>> Ohne Bildtakt wird nicht gezeichnet <<<
+       Im Prüfstand ohne Fenster (scripts/test-collab-sync.js) gibt es kein
+       requestAnimationFrame. Der Aufruf warf dort einen Fehler mitten im
+       Einarbeiten einer fremden Änderung – und riss damit den ABGLEICH
+       mit, obwohl nur eine Anzeige nicht gezeichnet werden konnte.
+       Gehalten hat das bisher nur ein Zufall: der erste Fehler fiel an
+       einer Stelle an, die ihn verschluckte, und danach stand das Flag
+       schon. */
+    if (typeof requestAnimationFrame !== 'function') return;
+
     _renderScheduled = true;
     requestAnimationFrame(_flushCaretsAndLocks);
   }
