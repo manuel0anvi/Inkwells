@@ -204,6 +204,79 @@ function attachInput(canvas, textDiv, objLayer, page) {
     return beste;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WIE EINE SCHLINGE AUSSIEHT
+
+     Nicht wie ein Strich: gestrichelte Kante und blass gefülltes Inneres
+     – dieselbe Sprache, die jedes Auswahlwerkzeug spricht, und man sieht
+     schon beim Ziehen, was drin liegen wird.
+
+     >>> Warum auf der Vorschau-Fläche <<<
+     Sie liegt über der Zeichenfläche und wird beim Abheben weggeworfen.
+     Damit muss nichts zurückgenommen werden, und die Seite selbst bekommt
+     von der Schlinge nie etwas zu sehen. Ihre 38 % Deckkraft gelten dem
+     Marker; für die Schlinge wird sie auf voll gestellt (die Fläche
+     entsteht für jeden Strich neu, ein Zurücksetzen erübrigt sich).
+
+     Gefüllt wird die GESCHLOSSENE Form, gestrichelt nur der wirklich
+     gezogene Weg – die Sehne zurück zum Anfang zu malen sähe aus wie
+     ein Strich, den man nicht gezogen hat.
+     ══════════════════════════════════════════════════════════════════ */
+  function maleLasso(stroke) {
+    const pts = stroke.path;
+    if (!pts || !pts.length) return;
+    const pw = page.w || CFG.PAGE_W, ph = page.h || CFG.PAGE_H;
+    const lctx = getLiveCtx(div, pw, ph);
+    setLiveOpacity(1);
+    lctx.clearRect(0, 0, pw, ph);
+
+    const weg = ctx2 => {
+      ctx2.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx2.lineTo(pts[i].x, pts[i].y);
+    };
+
+    lctx.save();
+    lctx.beginPath();
+    weg(lctx);
+    lctx.closePath();
+    lctx.fillStyle = 'rgba(140,140,155,.16)';
+    lctx.fill();
+
+    lctx.beginPath();
+    weg(lctx);
+    lctx.setLineDash([8, 6]);
+    lctx.lineWidth = 1.6;
+    lctx.lineJoin = 'round';
+    lctx.lineCap = 'round';
+    lctx.strokeStyle = 'rgba(60,60,75,.8)';
+    lctx.stroke();
+    lctx.restore();
+  }
+
+  /**
+   * Ein Fingertipp auf geschriebenen Text: dorthin gehört die Marke.
+   *
+   * >>> Warum das hier stehen muss <<<
+   * In der Zeigerstellung erledigt das der Browser von selbst – der Tipp
+   * landet auf .j-text, und dort gehört er hin. Sobald aber ein
+   * Zeichenwerkzeug gewählt ist, liegt die Zeichenfläche darüber und
+   * fängt ihn ab: mit dem Finger liess sich dann in keine Zeile mehr
+   * tippen, nur noch mit der Maus. Genau so wurde es gemeldet, und zwar
+   * unmittelbar nachdem der Stift anfing, das Werkzeug selbst
+   * umzustellen – seither ist das der Normalfall, nicht die Ausnahme.
+   *
+   * Nur auf WIRKLICH geschriebenem Text (isFreeEditorAreaClick), sonst
+   * käme bei jedem Punkt, den jemand malen will, die Tastatur hoch.
+   *
+   * @returns {boolean} ob der Tipp als Schreibmarke verbraucht wurde
+   */
+  function tippAufText(e) {
+    if (S.readOnly) return false;
+    if (isFreeEditorAreaClick(e.clientX, e.clientY)) return false;
+    activateTextEditingAt(e.clientX, e.clientY, false);
+    return true;
+  }
+
   /** Nimmt den eben gezogenen Strich wieder aus der Seite heraus. */
   function nimmStrichZurueck(stroke) {
     S.strokeHistory[page.id] = (S.strokeHistory[page.id] || []).filter(s => s !== stroke);
@@ -277,12 +350,25 @@ function attachInput(canvas, textDiv, objLayer, page) {
     S.isDrawing = true;
     // Zustand vor dem Strich sichern – ein Strich ist ein Rückgängig-Schritt
     pushPageHistory(page);
+    /* ══════════════════════════════════════════════════════════════
+       DIE SCHLINGE IST KEIN STRICH
+
+       Sie kommt gar nicht erst in die Seite: gemalt wird sie auf der
+       Vorschau-Fläche (maleLasso), und beim Abheben bleibt von ihr
+       nichts als die Auswahl. So kann sie auch nirgends versehentlich
+       mitgespeichert oder mitgezeichnet werden.
+       ══════════════════════════════════════════════════════════════ */
+    if (lasso) {
+      S._cur = baueLassoStrich(c);
+      maleLasso(S._cur);
+      return;
+    }
     // Eine gerade Linie wird ganz weggenommen, nicht angeknabbert
-    if (!lasso && S.mode === 'eraser' && S.eraser.type === 'pixel') geradeGanzWeg(c, page, canvas);
-    if (lasso || S.mode !== 'eraser' || S.eraser.type === 'pixel') {
+    if (S.mode === 'eraser' && S.eraser.type === 'pixel') geradeGanzWeg(c, page, canvas);
+    if (S.mode !== 'eraser' || S.eraser.type === 'pixel') {
       if (!S.strokeHistory[page.id]) S.strokeHistory[page.id] = [];
-      const stroke = lasso ? baueLassoStrich(c) : buildStroke(c);
-      if (!lasso && S.mode === 'eraser') {
+      const stroke = buildStroke(c);
+      if (S.mode === 'eraser') {
         stroke.isEraser = true; stroke.color = 'rgba(0,0,0,1)'; stroke.width = ERASER_SIZES[S.eraser.szIdx] * 2;
       }
       S.strokeHistory[page.id].push(stroke); S._cur = stroke;
@@ -381,7 +467,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
     const c = coords(e);
     const treffer = window.strichBeiPunkt(page.id, c.x, c.y, null);
-    if (!treffer) return;
+    if (!treffer) { tippAufText(e); return; }
     if (S.mode !== 'cursor') switchMode('cursor');
     if (typeof window.waehleStriche === 'function') window.waehleStriche(page.id, [treffer]);
     unterdrueckeTextTipp();
@@ -392,6 +478,14 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // beim Zoomen darf nicht mitmalen
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
     e.preventDefault();
+    /* Die Schlinge geht ihren eigenen Weg: kein Lineal, keine Gerade nach
+       dem Halten, kein Strich auf der Seite – nur die Vorschau. */
+    if (S._cur && S._cur._lasso) {
+      const p = coords(e);
+      S._cur.path.push({ x: p.x, y: p.y, p: p.p });
+      maleLasso(S._cur);
+      return;
+    }
     // An der Lineal-Kante einrasten (siehe ui/ruler.js)
     const c = amLinealAusrichten(coords(e), canvas, page);
     const ctx = canvas.getContext('2d');
@@ -460,12 +554,12 @@ function attachInput(canvas, textDiv, objLayer, page) {
        Der eben gezogene Strich verschwindet dann wieder – und mit ihm
        sein Rückgängig-Schritt, der in handleDrawStart schon gesetzt
        wurde. Sonst nähme das erste Strg+Z danach etwas weg, das der
-       Nutzer nie hinzugefügt hat.
+       Nutzer nie hinzugefügt hat. (Die Schlinge an der Stifttaste stand
+       nie in der Seite, bei ihr genügt der Rückgängig-Schritt.)
        ══════════════════════════════════════════════════════════════ */
     let alsAuswahl = false;
 
     if (finished && finished._lasso) {
-      nimmStrichZurueck(finished);
       if (typeof window.waehleEingekreiste === 'function') {
         window.waehleEingekreiste(page.id, finished.path);
       }
@@ -483,6 +577,10 @@ function attachInput(canvas, textDiv, objLayer, page) {
         if (typeof window.waehleStriche === 'function') window.waehleStriche(page.id, [treffer]);
         // Der Tipp darf nicht gleich noch die Schreibmarke setzen
         unterdrueckeTextTipp();
+        alsAuswahl = true;
+      } else if (tippAufText(e)) {
+        // Kein Punkt, sondern ein Tipp in eine Zeile – der Punkt kommt weg
+        nimmStrichZurueck(finished);
         alsAuswahl = true;
       }
     }
@@ -608,36 +706,45 @@ function clearLiveCanvas() {
   }
 }
 
+/* Die Vorschau-Fläche liegt mit 38 % Deckkraft da – das ist der Marker.
+   Die Schlinge bringt ihre eigene Blässe mit und braucht sie voll. */
+function setLiveOpacity(wert) {
+  if (_liveCanvas) _liveCanvas.style.opacity = String(wert);
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    DIE TASTEN AM STIFTSCHAFT
 
    Ein Stift meldet seine Tasten als ZWEI verschiedene Dinge:
 
+     button 5  / buttons & 32   das „Radierer-Zeichen"
      button 2  / buttons & 2    die Taste am Schaft („Rechtsklick")
-     button 5  / buttons & 32   das Radierer-Zeichen – bei einem Stift mit
-                                zwei Tasten ueblicherweise die OBERE, bei
-                                anderen das umgedrehte Ende
 
    Bisher hiess beides „radieren". Damit tat die obere Taste dasselbe wie
-   die untere, obwohl sie anderswo (Word, OneNote) den Lasso aufzieht –
-   genau so wurde es gemeldet. Jetzt: untere radiert, obere kreist ein.
+   die untere, obwohl sie anderswo (Word, OneNote) den Lasso aufzieht.
 
-   >>> Was das kostet <<<
-   Ein Stift mit umgedrehtem Radierer-Ende meldet dasselbe Zeichen. An dem
-   Ende wird also eingekreist statt radiert. Welche Taste welchen Code
-   schickt, steht in keinem Datenblatt – es haengt am Treiber. Wer
-   nachsehen will: `window.stiftTastenZeigen = true` in der Konsole, dann
-   meldet jeder Druck seinen Code.
+   >>> Welche Taste welchen Code schickt, steht in keinem Datenblatt <<<
+   Es haengt am Treiber, und die naheliegende Annahme war falsch: an dem
+   Stift, um den es hier geht, meldet die UNTERE Taste das
+   Radierer-Zeichen und die obere den Rechtsklick – nicht umgekehrt.
+   Gemessen, nicht geraten; die erste Fassung tat prompt das Gegenteil
+   von dem, was draufstand.
+
+   Deshalb: 32 radiert, 2 kreist ein. Ein Stift mit umgedrehtem
+   Radierer-Ende meldet ebenfalls 32 und radiert damit auch – das passt.
+   Wer bei anderer Hardware nachsehen will: `window.stiftTastenZeigen =
+   true` in der Konsole, dann meldet jeder Druck seinen Code.
    ══════════════════════════════════════════════════════════════════════ */
 window.stiftTastenZeigen = false;
 
-/* Beim Stift die Schafttaste, bei der Maus die rechte – dieselben Codes. */
 function istRadierTaste(e) {
+  // Beim Stift das Radierer-Zeichen, bei der Maus die rechte Taste
+  if (e.pointerType === 'pen') return e.button === 5 || !!(e.buttons & 32);
   return e.button === 2 || !!(e.buttons & 2);
 }
 
 function istLassoTaste(e) {
-  return e.pointerType === 'pen' && (e.button === 5 || !!(e.buttons & 32));
+  return e.pointerType === 'pen' && (e.button === 2 || !!(e.buttons & 2));
 }
 
 document.addEventListener('pointerdown', e => {

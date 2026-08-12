@@ -110,22 +110,28 @@ app.on('ready', async () => {
        button: 'right' gilt der Stift als nicht aufgesetzt. Gemessen
        nachgestellt, nicht geraten – deshalb hier selbst gebaute
        Zeigerereignisse. Sie laufen durch dieselben Handgriffe wie ein
-       echter Stift; nur die Codes stammen aus der Spezifikation
-       (2 = Schafttaste, 32 = Radierer-Zeichen) statt aus der Hardware. */
-    async function stiftMitTaste(punkte, tasten) {
+       echter Stift. Die Codes stammen vom Geraet selbst: 32 („Radierer-
+       Zeichen") schickt dort die UNTERE Taste, 2 („Rechtsklick") die
+       obere – umgekehrt, als man vermuten wuerde. */
+    async function stiftMitTaste(punkte, tasten, ohneAbheben) {
       await js(`(() => {
         const pg = document.querySelector('.j-page');
         const p = ${JSON.stringify(punkte)};
-        const schick = (art, x, y, b) => pg.dispatchEvent(new PointerEvent(art, {
+        window.__stiftSchick = (art, x, y, b) => pg.dispatchEvent(new PointerEvent(art, {
           bubbles: true, cancelable: true, pointerId: 7, pointerType: 'pen',
           buttons: b, button: art === 'pointermove' ? -1 : 0,
           clientX: x, clientY: y, pressure: art === 'pointerup' ? 0 : .5 }));
-        schick('pointerdown', p[0].x, p[0].y, ${tasten});
-        for (let i = 1; i < p.length; i++) schick('pointermove', p[i].x, p[i].y, ${tasten});
-        schick('pointerup', p[p.length - 1].x, p[p.length - 1].y, 0);
+        __stiftSchick('pointerdown', p[0].x, p[0].y, ${tasten});
+        for (let i = 1; i < p.length; i++) __stiftSchick('pointermove', p[i].x, p[i].y, ${tasten});
+        if (!${!!ohneAbheben}) __stiftSchick('pointerup', p[p.length - 1].x, p[p.length - 1].y, 0);
         return true; })()`);
       await warte(300);
     }
+
+    const stiftAbheben = async (p) => {
+      await js(`__stiftSchick('pointerup', ${p.x}, ${p.y}, 0)`);
+      await warte(300);
+    };
 
     async function fingerTippt(x, y) {
       await dbg.sendCommand('Input.dispatchTouchEvent', {
@@ -201,8 +207,10 @@ app.on('ready', async () => {
     await js(`switchMode('cursor'); true`);
     m = await stelle();
     await legeHin(m, 'krumm');
-    // buttons 3 = Spitze auf dem Blatt UND die Taste am Schaft gedrückt
-    await stiftMitTaste([{ x: m.x - 100, y: m.y }, { x: m.x, y: m.y }, { x: m.x + 100, y: m.y }], 3);
+    /* buttons 33 = Spitze auf dem Blatt UND das Radierer-Zeichen. Genau
+       das schickt die untere Taste – an diesem Stift gemessen, nicht aus
+       der Spezifikation abgeleitet (canvas/input.js). */
+    await stiftMitTaste([{ x: m.x - 100, y: m.y }, { x: m.x, y: m.y }, { x: m.x + 100, y: m.y }], 33);
 
     const nachRadier = await js(`(() => ({
       radierer: (S.strokeHistory[S.activePgId] || []).filter(s => s.isEraser).length,
@@ -267,8 +275,35 @@ app.on('ready', async () => {
       const w = i / 16 * Math.PI * 2;
       schlinge.push({ x: Math.round(m.x + Math.cos(w) * 130), y: Math.round(m.y + Math.sin(w) * 60) });
     }
-    // buttons 33 = Spitze plus das Radierer-Zeichen, also die obere Taste
-    await stiftMitTaste(schlinge, 33);
+    // buttons 3 = Spitze plus Rechtsklick – das schickt die obere Taste
+    await stiftMitTaste(schlinge, 3, true);
+
+    /* Noch aufgesetzt: so sieht die Schlinge aus. Gefragt ist nicht das
+       Aussehen im Einzelnen, sondern dass sie überhaupt auf der Vorschau
+       landet und nicht auf dem Blatt – und dass deren Marker-Blässe für
+       sie abgeschaltet ist. */
+    const vorschau = await js(`(() => {
+      const lc = document.querySelector('.live-canvas');
+      if (!lc) return null;
+      const r = lc.getBoundingClientRect();
+      const proPx = lc.width / r.width;
+      const lies = (x, y) => lc.getContext('2d').getImageData(
+        Math.round((x - r.left) * proPx), Math.round((y - r.top) * proPx), 1, 1).data[3];
+      return { deckkraft: getComputedStyle(lc).opacity,
+               innen: lies(${m.x}, ${m.y}),
+               aussen: lies(r.left + 4, r.top + 4) }; })()`);
+    pruefe('Die Schlinge liegt auf der Vorschau, nicht auf dem Blatt',
+      !!vorschau, 'es gibt keine Vorschau-Fläche');
+    if (vorschau) {
+      pruefe('Ihr Inneres ist blass gefüllt (Alpha ' + vorschau.innen + ')',
+        vorschau.innen > 8 && vorschau.innen < 120,
+        'entweder gar nicht oder viel zu kräftig gefüllt');
+      pruefe('Draussen bleibt frei (Alpha ' + vorschau.aussen + ')',
+        vorschau.aussen === 0, 'die Füllung läuft über die Schlinge hinaus');
+      pruefe('Und die Marker-Blässe gilt nicht für sie (' + vorschau.deckkraft + ')',
+        Math.abs(+vorschau.deckkraft - 1) < 0.01, 'sie wird zusätzlich durchsichtig gemalt');
+    }
+    await stiftAbheben(schlinge[schlinge.length - 1]);
 
     const nachLasso = await js(`(() => ({
       striche: (S.strokeHistory[S.activePgId] || []).length,
@@ -327,6 +362,68 @@ app.on('ready', async () => {
     await fingerZieht([m, { x: m.x + 60, y: m.y + 30 }, { x: m.x + 120, y: m.y }], 30);
     const fingerStrich = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
     pruefe('Ein gezogener Finger malt weiter', fingerStrich === 1, 'er malte nichts');
+
+    /* ══════════════════════════════════════════════════════════════════
+       UND SCHREIBEN GEHT WEITERHIN
+
+       Der Finger ist das Zeigegerät – dazu gehört, die Schreibmarke zu
+       setzen. Gemeldet wurde das Gegenteil: nach dem Zeichnen liess sich
+       mit dem Finger in keine Zeile mehr tippen, nur noch mit der Maus.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Mit dem Finger in eine Zeile tippen');
+    await js(`deselectStroke(); switchMode('pen1'); true`);
+    await warte(200);
+    m = await stelle(300);
+    // Erst mit dem Finger etwas malen – das ist der Zustand, aus dem heraus
+    // es gemeldet wurde
+    await fingerZieht([{ x: m.x - 60, y: m.y }, { x: m.x, y: m.y + 20 }, { x: m.x + 60, y: m.y }], 30);
+    await js(`switchMode('cursor');
+      document.querySelector('.j-text').innerHTML = '<p>Erste Zeile</p><p>Zweite Zeile</p>';
+      getSelection().removeAllRanges();
+      document.activeElement && document.activeElement.blur(); true`);
+    await warte(300);
+
+    const zeile = await js(`(() => {
+      const p = document.querySelectorAll('.j-text p')[1];
+      const r = p.getBoundingClientRect();
+      return { x: Math.round(r.left + 30), y: Math.round(r.top + r.height / 2) }; })()`);
+    await fingerTippt(zeile.x, zeile.y);
+
+    const marke = await js(`(() => { const s = getSelection();
+      const td = document.querySelector('.j-text');
+      return { imText: !!(s.rangeCount && td.contains(s.getRangeAt(0).startContainer)),
+               fokus: document.activeElement === td,
+               durchlaessig: getComputedStyle(td).pointerEvents }; })()`);
+    pruefe('Ein Tipp auf eine Zeile setzt die Schreibmarke',
+      marke.imText === true, JSON.stringify(marke));
+    pruefe('Und das Textfeld nimmt Zeiger überhaupt an ('
+      + marke.durchlaessig + ')', marke.durchlaessig !== 'none',
+      'es steht auf pointer-events: none – dann trifft nur noch die Maus');
+
+    /* >>> Und dasselbe mit gewaehltem Stift <<<
+       Das ist der Fall, aus dem heraus es gemeldet wurde: seit der Stift
+       das Werkzeug selbst umstellt, steht fast immer ein Zeichenwerkzeug
+       da – und dessen Zeichenflaeche liegt ueber dem Text. Beide Schalter
+       fuer den Finger, denn die Wege dorthin sind verschieden. */
+    for (const malen of [true, false]) {
+      await js(`deselectStroke(); S.touchDraw = ${malen}; switchMode('pen1');
+        getSelection().removeAllRanges();
+        document.activeElement && document.activeElement.blur(); true`);
+      await warte(250);
+      const vorher = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
+      await fingerTippt(zeile.x, zeile.y);
+      const imStift = await js(`(() => { const s = getSelection();
+        const td = document.querySelector('.j-text');
+        return { imText: !!(s.rangeCount && td.contains(s.getRangeAt(0).startContainer)),
+                 modus: S.mode,
+                 punkte: (S.strokeHistory[S.activePgId] || []).length }; })()`);
+      pruefe('Auch mit gewähltem Stift (Finger-Malen ' + (malen ? 'an' : 'aus') + ')',
+        imStift.imText === true && imStift.modus === 'cursor',
+        JSON.stringify(imStift));
+      pruefe('  und es bleibt kein Punkt liegen', imStift.punkte === vorher,
+        'aus dem Tipp wurde ein Strich: ' + vorher + ' auf ' + imStift.punkte);
+    }
+    await js(`S.touchDraw = true; true`);
 
     /* ══════════════════════════════════════════════════════════════════
        DAS TABELLEN-RASTER MIT DEM FINGER
