@@ -35,7 +35,8 @@
   const ZUGABE = 5;          // Seiten-Pixel Zugabe um die Linie herum
   const MIN_LAENGE = 6;      // kürzer wird keine Linie gezogen
 
-  let _sel = null;           // { pageId, strokes[], pageEl, huelle, griffe[] }
+  // { pageId, strokes[], objekte[], pageEl, huelle, griffe[] }
+  let _sel = null;
 
   /* ── Treffer suchen ──────────────────────────────────────────────── */
 
@@ -67,33 +68,49 @@
   }
 
   /** Ist das eine einzelne gerade Linie? Dann hat sie genau zwei Punkte. */
-  function istGerade(strokes) {
-    return strokes.length === 1 && strokes[0].path && strokes[0].path.length === 2;
+  function istGerade(strokes, objekte) {
+    return !(objekte && objekte.length)
+      && strokes.length === 1 && strokes[0].path && strokes[0].path.length === 2;
+  }
+
+  /** Das Rechteck eines Bildes, einer Form oder einer Formel. */
+  function objRechteck(o) {
+    return { minX: o.x || 0, minY: o.y || 0,
+             maxX: (o.x || 0) + (o.w || 0), maxY: (o.y || 0) + (o.h || 0) };
   }
 
   /** Das umschliessende Rechteck – nackt, ohne Zugabe für die Strichbreite. */
-  function rohRechteck(strokes) {
+  function rohRechteck(strokes, objekte) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const stroke of strokes) {
-      for (const p of stroke.path) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
+    const dazu = (x, y) => {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    };
+    for (const stroke of (strokes || [])) for (const p of stroke.path) dazu(p.x, p.y);
+    for (const o of (objekte || [])) {
+      const r = objRechteck(o);
+      dazu(r.minX, r.minY);
+      dazu(r.maxX, r.maxY);
     }
     return { minX, minY, maxX, maxY };
   }
 
   /** Dasselbe Rechteck als Lage und Grösse, mit Platz für die Strichbreite. */
-  function rechteck(strokes) {
-    const r = rohRechteck(strokes);
-    const dick = strokes.reduce((m, s) => Math.max(m, s.width || 2), 2);
+  function rechteck(strokes, objekte) {
+    const r = rohRechteck(strokes, objekte);
+    const dick = (strokes || []).reduce((m, s) => Math.max(m, s.width || 2), 2);
     const rand = Math.max(3, dick / 2) + 3;
     return {
       x: r.minX - rand, y: r.minY - rand,
       w: (r.maxX - r.minX) + rand * 2, h: (r.maxY - r.minY) + rand * 2
     };
+  }
+
+  /** Der Rahmen im DOM, in dem dieses Objekt steckt. */
+  function objHuelle(pageEl, o) {
+    return pageEl.querySelector('.obj-wrap[data-objid="' + CSS.escape(String(o.id)) + '"]');
   }
 
   /** Breite und Höhe der Seite – für die Grenzen beim Verschieben. */
@@ -129,14 +146,14 @@
      ══════════════════════════════════════════════════════════════════ */
   function zeichneHuelle() {
     if (!_sel) return;
-    const r = rechteck(_sel.strokes);
+    const r = rechteck(_sel.strokes, _sel.objekte);
     const h = _sel.huelle;
     h.style.left = r.x + 'px';
     h.style.top = r.y + 'px';
     h.style.width = r.w + 'px';
     h.style.height = r.h + 'px';
 
-    if (istGerade(_sel.strokes)) {
+    if (istGerade(_sel.strokes, _sel.objekte)) {
       // Die Griffe sitzen an den ENDEN, nicht an den Ecken des Rechtecks
       _sel.griffe.forEach((g, i) => {
         const p = _sel.strokes[0].path[i];
@@ -146,18 +163,20 @@
     }
   }
 
-  function baueHuelle(pageEl, pageId, strokes) {
-    if (!strokes || !strokes.length) return;
+  function baueHuelle(pageEl, pageId, strokes, objekte) {
+    strokes = strokes || [];
+    objekte = objekte || [];
+    if (!strokes.length && !objekte.length) return;
     const huelle = document.createElement('div');
     huelle.className = 'ink-sel';
     pageEl.appendChild(huelle);
 
     const griffe = [];
-    _sel = { pageId, strokes, pageEl, huelle, griffe };
+    _sel = { pageId, strokes, objekte, pageEl, huelle, griffe };
     const mass = seitenMass(pageId);
 
     /* ── Gerade Linie: ein Griff je Ende ──────────────────────────── */
-    if (istGerade(strokes)) {
+    if (istGerade(strokes, objekte)) {
       const stroke = strokes[0];
       huelle.classList.add('gerade');
       [0, 1].forEach(nr => {
@@ -228,6 +247,7 @@
 
       const sx = e.clientX, sy = e.clientY;
       const anfang = strokes.map(s => s.path.map(p => ({ x: p.x, y: p.y })));
+      const objAnfang = objekte.map(o => ({ x: o.x || 0, y: o.y || 0 }));
       const zoom = typeof getZoom === 'function' ? getZoom() : 1;
 
       /* ══════════════════════════════════════════════════════════
@@ -245,7 +265,7 @@
          klemme() steht in canvas/objects.js – dort gilt dieselbe
          Grenze für Bilder, Formen und Formeln.
          ══════════════════════════════════════════════════════════ */
-      const box = rohRechteck(strokes);
+      const box = rohRechteck(strokes, objekte);
 
       const mv = ev => {
         let dx = (ev.clientX - sx) / zoom, dy = (ev.clientY - sy) / zoom;
@@ -253,6 +273,12 @@
         dy = klemme(dy, CFG.HDR - box.minY, mass.h - box.maxY);
         strokes.forEach((s, i) => {
           s.path.forEach((p, k) => { p.x = anfang[i][k].x + dx; p.y = anfang[i][k].y + dy; });
+        });
+        objekte.forEach((o, i) => {
+          o.x = objAnfang[i].x + dx;
+          o.y = objAnfang[i].y + dy;
+          const w = objHuelle(pageEl, o);
+          if (w) { w.style.left = o.x + 'px'; w.style.top = o.y + 'px'; }
         });
         notiere(pageId, false);
         zeichneHuelle();
@@ -263,6 +289,7 @@
         huelle.removeEventListener('pointermove', mv);
         huelle.removeEventListener('pointerup', up);
         notiere(pageId, true);
+        if (objekte.length && typeof noteObjectChanged === 'function') noteObjectChanged();
       };
       huelle.addEventListener('pointermove', mv);
       huelle.addEventListener('pointerup', up);
@@ -334,10 +361,21 @@
   /* ── Handgriffe der Leiste ───────────────────────────────────────── */
   function loeschen() {
     if (!_sel) return;
-    const { pageId, strokes } = _sel;
+    const { pageId, strokes, objekte, pageEl } = _sel;
     const info = getPage(pageId);
     if (info) pushPageHistory(info.page);
+
     S.strokeHistory[pageId] = (S.strokeHistory[pageId] || []).filter(s => !strokes.includes(s));
+
+    if (objekte.length && info) {
+      const weg = new Set(objekte.map(o => String(o.id)));
+      info.page.objects = (info.page.objects || []).filter(o => !weg.has(String(o.id)));
+      objekte.forEach(o => { const w = objHuelle(pageEl, o); if (w) w.remove(); });
+      const layer = pageEl.querySelector('.j-objects');
+      if (layer && typeof restackObjects === 'function') restackObjects(layer, info.page);
+      if (typeof noteObjectChanged === 'function') noteObjectChanged();
+    }
+
     abwaehlen();
     versteckeLeiste();
     notiere(pageId, true);
@@ -345,7 +383,7 @@
 
   function verdoppeln() {
     if (!_sel) return;
-    const { pageId, strokes, pageEl } = _sel;
+    const { pageId, strokes, objekte, pageEl } = _sel;
     const info = getPage(pageId);
     if (info) pushPageHistory(info.page);
 
@@ -354,11 +392,26 @@
       k.path.forEach(p => { p.x += 14; p.y += 14; });
       return k;
     });
-    S.strokeHistory[pageId].push(...kopien);
+    if (kopien.length) S.strokeHistory[pageId].push(...kopien);
+
+    const objKopien = [];
+    if (objekte.length && info) {
+      const layer = pageEl.querySelector('.j-objects');
+      const liste = info.page.objects || (info.page.objects = []);
+      for (const o of objekte) {
+        const k = { ...o, id: uid(), x: (o.x || 0) + 14, y: (o.y || 0) + 14 };
+        if (typeof haltAufBlatt === 'function') haltAufBlatt(k, info.page);
+        liste.push(k);
+        objKopien.push(k);
+        if (layer && typeof placeObject === 'function') placeObject(layer, k, info.page);
+      }
+      if (typeof noteObjectChanged === 'function') noteObjectChanged();
+    }
 
     abwaehlen();
     notiere(pageId, true);
-    baueHuelle(pageEl, pageId, kopien);   // die Kopie ist gleich ausgewählt
+    // Die Kopie ist gleich ausgewählt
+    baueHuelle(pageEl, pageId, kopien, objKopien);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -437,6 +490,106 @@
   }
 
   /**
+   * Alle Objekte der Seite, die in der Schlinge liegen.
+   *
+   * Gefragt wird die MITTE und die vier Ecken: ein Bild gilt als
+   * eingekreist, wenn seine Mitte drin liegt und mindestens zwei Ecken.
+   * Alle vier zu verlangen hiesse, dass man um jedes Bild großzügig
+   * herumfahren muss – gemeint ist aber „das da", und dafür zieht man
+   * eine Schlinge grob darum.
+   */
+  function objekteImKreis(pageId, schlinge) {
+    const info = typeof getPage === 'function' ? getPage(pageId) : null;
+    const liste = (info && info.page.objects) || [];
+    return liste.filter(o => {
+      const r = objRechteck(o);
+      const mx = (r.minX + r.maxX) / 2, my = (r.minY + r.maxY) / 2;
+      if (!imVieleck(schlinge, mx, my)) return false;
+      const ecken = [[r.minX, r.minY], [r.maxX, r.minY], [r.minX, r.maxY], [r.maxX, r.maxY]];
+      return ecken.filter(([x, y]) => imVieleck(schlinge, x, y)).length >= 2;
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND DER TEXT
+
+     Text lässt sich nicht in dieselbe Hülle packen: er wird nicht
+     verschoben, sondern markiert – das ist eine Auswahl anderer Art, und
+     zwei gleichzeitig gäbe es in keinem Programm.
+
+     Deshalb die Reihenfolge: liegt Gezeichnetes oder ein Objekt in der
+     Schlinge, gilt die Hülle. Liegt darin NUR Text, wird er markiert –
+     dann greifen Fett, Kursiv, Farbe und Kopieren wie gewohnt.
+
+     Markiert wird von der ersten bis zur letzten eingeschlossenen
+     Stelle, nicht Zeichen für Zeichen: eine Auswahl im Text ist immer
+     zusammenhängend, und alles andere liesse sich gar nicht darstellen.
+     ══════════════════════════════════════════════════════════════════ */
+  function markiereTextImKreis(pageEl, schlinge) {
+    const textDiv = pageEl.querySelector('.j-text');
+    if (!textDiv || !schlinge.length) return false;
+
+    const canvas = pageEl.querySelector('.j-canvas:not(.live-canvas)');
+    const r = canvas && canvas.getBoundingClientRect();
+    if (!r || !r.width) return false;
+    const info = typeof getPage === 'function' ? getPage(pageEl.dataset.pgid) : null;
+    const pw = (info && info.page.w) || CFG.PAGE_W;
+    const ph = (info && info.page.h) || CFG.PAGE_H;
+
+    // Bildschirm → Seite, dieselbe Rechnung wie canvas/input.js coords()
+    const aufSeiteX = sx => (sx - r.left) * (pw / r.width);
+    const aufSeiteY = sy => (sy - r.top) * (ph / r.height);
+
+    const kasten = rohRechteck([{ path: schlinge }], null);
+
+    let ersteStelle = null, letzteStelle = null;
+
+    const walker = document.createTreeWalker(textDiv, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const laenge = (n.textContent || '').length;
+      if (!laenge) continue;
+
+      /* Erst grob: liegt der ganze Knoten neben der Schlinge, muss kein
+         einziges Zeichen einzeln gemessen werden. Auf einer vollen Seite
+         sind das ein paar tausend Rechtecke, die so gar nicht anfallen. */
+      const grob = document.createRange();
+      grob.selectNodeContents(n);
+      const gr = grob.getBoundingClientRect();
+      if (aufSeiteX(gr.right) < kasten.minX || aufSeiteX(gr.left) > kasten.maxX
+          || aufSeiteY(gr.bottom) < kasten.minY || aufSeiteY(gr.top) > kasten.maxY) continue;
+
+      for (let i = 0; i < laenge; i++) {
+        const probe = document.createRange();
+        probe.setStart(n, i);
+        probe.setEnd(n, i + 1);
+        const rect = probe.getBoundingClientRect();
+        if (!rect.width && !rect.height) continue;
+        const mx = aufSeiteX(rect.left + rect.width / 2);
+        const my = aufSeiteY(rect.top + rect.height / 2);
+        if (!imVieleck(schlinge, mx, my)) continue;
+        if (!ersteStelle) ersteStelle = { node: n, offset: i };
+        letzteStelle = { node: n, offset: i + 1 };
+      }
+    }
+
+    if (!ersteStelle || !letzteStelle) return false;
+
+    try {
+      const bereich = document.createRange();
+      bereich.setStart(ersteStelle.node, ersteStelle.offset);
+      bereich.setEnd(letzteStelle.node, letzteStelle.offset);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(bereich);
+    } catch (err) {
+      return false;
+    }
+    // Damit die Textwerkzeuge greifen, gehört das Werkzeug auf den Zeiger
+    if (S.mode !== 'cursor' && typeof switchMode === 'function') switchMode('cursor');
+    return true;
+  }
+
+  /**
    * Wählt aus, was in dieser Schlinge liegt – ohne jede Prüfung, ob sie
    * schnell oder rund genug war.
    *
@@ -446,22 +599,28 @@
    *
    * @returns {boolean} ob etwas gefunden wurde
    */
-  function waehleEingekreiste(pageId, schlinge) {
+  function waehleEingekreiste(pageId, schlinge, ausser) {
     if (!schlinge || schlinge.length < 3) return false;
-    const gefunden = imKreisGefangen(pageId, schlinge, null);
-    if (!gefunden.length) {
-      abwaehlen(); versteckeLeiste();
-      return false;
-    }
-    return waehleStriche(pageId, gefunden);
+    const pageEl = document.querySelector('[data-pgid="' + CSS.escape(pageId) + '"]');
+    if (!pageEl) return false;
+
+    const striche = imKreisGefangen(pageId, schlinge, ausser || null);
+    const objekte = objekteImKreis(pageId, schlinge);
+
+    if (striche.length || objekte.length) return waehleStriche(pageId, striche, objekte);
+
+    // Nichts Gezeichnetes drin? Dann vielleicht Text (siehe oben)
+    abwaehlen(); versteckeLeiste();
+    return markiereTextImKreis(pageEl, schlinge);
   }
 
-  /** Legt den Auswahlrahmen um diese Striche. */
-  function waehleStriche(pageId, strokes) {
+  /** Legt den Auswahlrahmen um diese Striche und Objekte. */
+  function waehleStriche(pageId, strokes, objekte) {
     const pageEl = document.querySelector('[data-pgid="' + CSS.escape(pageId) + '"]');
-    if (!pageEl || !strokes || !strokes.length) return false;
+    if (!pageEl) return false;
+    if (!(strokes && strokes.length) && !(objekte && objekte.length)) return false;
     abwaehlen();
-    baueHuelle(pageEl, pageId, strokes);
+    baueHuelle(pageEl, pageId, strokes, objekte);
     return true;
   }
 
@@ -496,13 +655,14 @@
     const umfang = weg + luecke;
     if ((4 * Math.PI * flaeche(pts)) / (umfang * umfang) < LASSO_RUNDHEIT) return false;
 
-    const gefunden = imKreisGefangen(pageId, pts, stroke);
-    if (!gefunden.length) return false;
+    /* Liegt nichts darin, bleibt es ein Strich – das ist die wichtigste
+       Bremse gegen ein versehentliches Auswählen. Gezeichnetes, Bilder
+       und Text zählen gleichermassen; was davon gilt, entscheidet
+       waehleEingekreiste(). */
+    if (!waehleEingekreiste(pageId, pts, stroke)) return false;
 
     // Die Schlinge selbst ist nur die Geste – sie bleibt nicht stehen
     S.strokeHistory[pageId] = (S.strokeHistory[pageId] || []).filter(s => s !== stroke);
-
-    waehleStriche(pageId, gefunden);
     return true;
   }
 
@@ -546,7 +706,8 @@
     if (!treffer) { abwaehlen(); versteckeLeiste(); return; }
 
     // Denselben noch einmal angetippt: stehen lassen
-    if (_sel && _sel.strokes.length === 1 && _sel.strokes[0] === treffer) return;
+    if (_sel && !_sel.objekte.length && _sel.strokes.length === 1
+        && _sel.strokes[0] === treffer) return;
 
     e.preventDefault();
     e.stopPropagation();

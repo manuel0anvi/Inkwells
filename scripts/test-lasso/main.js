@@ -82,7 +82,11 @@ app.on('ready', async () => {
       return true;
     })()`);
     await warte(900);
-    await js(`switchMode('pen1')`);
+    await js(`switchMode('pen1');
+      window.__fehler = [];
+      window.addEventListener('error', ev => window.__fehler.push(
+        (ev.message || '') + ' @ ' + (ev.filename || '').split('/').pop() + ':' + ev.lineno));
+      true`);
     await warte(200);
 
     /* ── Der Stift ────────────────────────────────────────────────────
@@ -106,7 +110,15 @@ app.on('ready', async () => {
       await warte(250);
     }
 
-    /** Ein Kreis aus 16 Punkten um eine Stelle des Bildschirms. */
+    /* Ein Kreis aus 16 Punkten um eine Stelle des Bildschirms.
+
+       >>> Warum er gross ist <<<
+       Ob die Geste erkannt wird, haengt am Tempo, und das Tempo haengt
+       hier daran, wie schnell das DevTools-Protokoll die sechzehn
+       Ereignisse durchreicht – auf einem beschaeftigten Rechner sind das
+       schnell ein paar hundert Millisekunden mehr. Ein grosser Kreis legt
+       in derselben Zeit mehr Weg zurueck und haelt Abstand zur Schwelle;
+       mit 110 px Radius kippte die Pruefung gelegentlich. */
     const kreis = (mx, my, r) => {
       const p = [];
       for (let i = 0; i <= 16; i++) {
@@ -147,11 +159,12 @@ app.on('ready', async () => {
     abschnitt('Schnell einkreisen wählt aus');
     let m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 110), 0);
+    await stiftZieht(kreis(m.x, m.y, 130), 0);
 
     let z = await zustand();
     pruefe('Die Schlinge bleibt nicht als Strich stehen (' + z.striche + ' Striche)',
-      z.striche === 2, 'sie wurde gezeichnet statt verstanden');
+      z.striche === 2, 'sie wurde gezeichnet statt verstanden; '
+      + (await js(`(window.__fehler || []).join(' | ') || 'kein Fehler gemeldet'`)));
     pruefe('Stattdessen steht ein Auswahlrahmen da', z.auswahl === 1, 'kein .ink-sel');
     pruefe('Und die kleine Leiste dazu', z.leiste === true, 'sie fehlt');
 
@@ -174,7 +187,7 @@ app.on('ready', async () => {
     await js(`deselectStroke()`);
     m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 110), 100);
+    await stiftZieht(kreis(m.x, m.y, 130), 100);
 
     z = await zustand();
     pruefe('Der Kreis steht als dritter Strich da (' + z.striche + ')',
@@ -188,7 +201,7 @@ app.on('ready', async () => {
     await js(`deselectStroke()`);
     m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 110), 0);
+    await stiftZieht(kreis(m.x, m.y, 130), 0);
     pruefe('Zum Verschieben liegt wieder eine Auswahl bereit',
       (await zustand()).auswahl === 1, 'keine Auswahl');
 
@@ -224,7 +237,7 @@ app.on('ready', async () => {
     await js(`deselectStroke()`);
     m = await stelle();
     await legeStricheHin(m);
-    await stiftZieht(kreis(m.x, m.y, 110), 0);
+    await stiftZieht(kreis(m.x, m.y, 130), 0);
     await stiftZieht([
       { x: m.x, y: m.y },
       { x: m.x - 350, y: m.y - 250 },
@@ -320,6 +333,83 @@ app.on('ready', async () => {
       verteilt.erste === 0 && verteilt.zweite === 1, JSON.stringify(verteilt));
     pruefe('Und fängt dort unter dem Seitenkopf an (y ' + verteilt.y + ')',
       verteilt.y >= verteilt.hdr - 1, JSON.stringify(verteilt));
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIE SCHLINGE FÄNGT AUCH BILDER UND TEXT
+
+       Sie kannte nur Gezeichnetes. Ein Bild mitten im Kreis blieb liegen,
+       und Text ebenso – gemeldet als „beim Einkreisen sollten auch Bilder
+       ausgewählt werden (und auch Text)".
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Die Schlinge fängt auch Bilder und Text');
+    /* Auf der ERSTEN Seite: die Bild-Prüfung oben hat eine zweite
+       angelegt, und gerechnet wird hier mit der ersten. */
+    await js(`deselectStroke(); switchMode('pen1');
+      document.getElementById('pg-scroll').scrollTop = 0;
+      setActivePg(document.querySelector('.j-page').dataset.pgid); true`);
+    await warte(400);
+    m = await stelle(300);
+    await js(`(() => {
+      const info = getPage(S.activePgId);
+      const pg = document.querySelector('.j-page');
+      const r = pg.getBoundingClientRect(), z = getZoom();
+      const cx = (${m.x} - r.left) / z, cy = (${m.y} - r.top) / z;
+      S.strokeHistory[S.activePgId] = [];
+      info.page.inkStrokes = [];
+      const obj = { id: 'probe-bild2', kind: 'image', layer: 'front',
+        x: Math.round(cx - 40), y: Math.round(cy - 30), w: 80, h: 60,
+        src: 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==' };
+      info.page.objects = [obj];
+      const el = pg.querySelector('.j-objects');
+      el.innerHTML = ''; placeObject(el, obj, info.page);
+      return true; })()`);
+    await warte(300);
+    await stiftZieht(kreis(m.x, m.y, 130), 0);
+
+    const mitBild = await js(`(() => ({
+      auswahl: document.querySelectorAll('.ink-sel').length,
+      striche: (S.strokeHistory[S.activePgId] || []).length,
+      objekte: (getPage(S.activePgId).page.objects || []).length,
+      imBaum: document.querySelectorAll('.obj-wrap').length,
+      modus: S.mode }))()`);
+    pruefe('Ein eingekreistes Bild wird ausgewählt', mitBild.auswahl === 1,
+      JSON.stringify(mitBild));
+    pruefe('Und die Schlinge bleibt nicht liegen', mitBild.striche === 0,
+      JSON.stringify(mitBild));
+
+    // Verschieben nimmt das Bild mit
+    const vorZug = await js(`Math.round(getPage(S.activePgId).page.objects[0].x)`);
+    const huelle2 = await js(`(() => { const r = document.querySelector('.ink-sel').getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    await stiftZieht([huelle2, { x: huelle2.x - 60, y: huelle2.y }, { x: huelle2.x - 120, y: huelle2.y }], 40);
+    const nachZug = await js(`Math.round(getPage(S.activePgId).page.objects[0].x)`);
+    pruefe('Und lässt sich mitverschieben (' + vorZug + ' auf ' + nachZug + ')',
+      nachZug < vorZug - 40, 'es blieb liegen');
+
+    /* Nur Text in der Schlinge: dann wird er markiert, denn verschieben
+       lässt sich Text nicht – das ist eine Auswahl anderer Art. */
+    await js(`(() => {
+      deselectStroke();
+      const info = getPage(S.activePgId);
+      info.page.objects = [];
+      document.querySelector('.j-objects').innerHTML = '';
+      const td = document.querySelector('.j-text');
+      td.innerHTML = '<p>Ein Satz zum Einkreisen hier.</p>';
+      switchMode('pen1');
+      return true; })()`);
+    await warte(300);
+    const wort = await js(`(() => { const p = document.querySelector('.j-text p');
+      const r = p.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+               b: Math.round(r.width) }; })()`);
+    await stiftZieht(kreis(wort.x, wort.y, Math.max(60, Math.round(wort.b / 2))), 0);
+    const markiert = await js(`(() => { const s = getSelection();
+      return { text: s.rangeCount ? s.getRangeAt(0).toString().trim() : '',
+               modus: S.mode }; })()`);
+    pruefe('Eingekreister Text wird markiert („' + markiert.text.slice(0, 24) + '")',
+      markiert.text.length > 3, JSON.stringify(markiert));
+    pruefe('Und das Werkzeug steht dafür auf dem Zeiger',
+      markiert.modus === 'cursor', 'es blieb auf ' + markiert.modus);
 
     /* ══════════════════════════════════════════════════════════════════
        DAS LINEAL BEIM ZOOMEN
