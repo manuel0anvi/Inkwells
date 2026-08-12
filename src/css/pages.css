@@ -694,6 +694,21 @@ body.touch-draw .j-canvas {
   height: 100%
 }
 
+/* ── Ausrichtung eines Absatzes ───────────────────────────────────────
+   Die Klasse setzt ui/toolbar.js, erlaubt wird sie in core/sanitize.js.
+   Ohne Klasse bleibt es links – deshalb gibt es für „linksbündig" auch
+   keine Regel: das ist schlicht der Zustand ohne Auszeichnung.
+
+   Am .j-text festgemacht, damit die Regel nicht in fremde Bereiche der
+   Seite hineinwirkt. Das !important ist kein Vorrat, sondern nötig: zwei
+   Regeln weiter unten richten selbst aus und sind genauer als eine
+   einzelne Klasse – die Kopfzelle einer Tabelle (linksbündig) und die
+   Block-Formel (zentriert). Eine aus Word übernommene, zentrierte
+   Kopfzelle bliebe sonst links stehen. */
+.j-text .j-align-center { text-align: center !important }
+.j-text .j-align-right { text-align: right !important }
+.j-text .j-align-justify { text-align: justify !important }
+
 .j-text h1,
 .j-text p.j-title-1 {
   font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;

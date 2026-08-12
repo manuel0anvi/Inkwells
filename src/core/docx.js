@@ -586,6 +586,22 @@
   }
 
   /**
+   * Die Ausrichtung eines Absatzes, als Wert für w:jc.
+   *
+   * Sie steht als Klasse am Block (ui/toolbar.js) und nicht als style:
+   * von einem style bleibt beim Bereinigen allein die Farbe stehen
+   * (core/sanitize.js). Linksbündig hat keine Klasse – das ist der
+   * Zustand ohne Auszeichnung – und braucht in Word auch kein w:jc.
+   */
+  function ausrichtungVon(el) {
+    const cls = typeof el.className === 'string' ? el.className : '';
+    if (cls.includes('j-align-center')) return 'center';
+    if (cls.includes('j-align-right')) return 'right';
+    if (cls.includes('j-align-justify')) return 'both';   // so heißt Blocksatz in OOXML
+    return null;
+  }
+
+  /**
    * @param {string} html Inhalt von page.textContent
    * @returns {Array<{style: string, runs: Array}>}
    */
@@ -656,6 +672,7 @@
 
         if (BLOCK_TAGS.has(tag)) {
           const absatz = openParagraph(paragraphStyleOf(child));
+          absatz.align = ausrichtungVon(child);
 
           if (tag === 'LI' && liste) {
             liste.n++;
@@ -798,7 +815,8 @@
   function paragraphXml(paragraph, lh, options = {}) {
     const spec = styleSpec(paragraph.style, lh);
 
-    // Reihenfolge nach CT_PPr: pBdr, tabs, spacing, ind, sectPr
+    // Reihenfolge nach CT_PPr: pBdr, tabs, spacing, ind, jc, sectPr.
+    // Word ist da streng – steht jc vor ind, öffnet die Datei gar nicht.
     const props = [];
     if (spec.border) {
       props.push(`<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="${PAPER_LINE.slice(1).toUpperCase()}"/></w:pBdr>`);
@@ -815,6 +833,7 @@
     props.push(einzug
       ? `<w:ind w:left="${einzug}" w:right="0" w:hanging="${Math.round(LIST_HANGING_PX * TWIPS_PER_PX)}"/>`
       : '<w:ind w:left="0" w:right="0" w:firstLine="0"/>');
+    if (paragraph.align) props.push(`<w:jc w:val="${paragraph.align}"/>`);
     if (options.sectPr) props.push(options.sectPr);
 
     const runs = (options.leadingXml || '')

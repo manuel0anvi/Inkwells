@@ -747,6 +747,7 @@ E('pg-scroll').addEventListener('scroll', () => {
   if (E('txt-color-dropdown').style.display !== 'none') positionTextColorDropdown();
   if (E('custom-color-pop').style.display !== 'none' && _customColorAnchor) positionCustomColorPopover(_customColorAnchor);
   if (_listPopOffen) positionListStylePop();
+  if (_alignPopOffen) positionAlignPop();
 }, { passive: true });
 
 /* Heading toggles */
@@ -834,6 +835,7 @@ function updateHdrBtns() {
   E('fmt-italic').classList.toggle('active', document.queryCommandState('italic'));
   E('fmt-under').classList.toggle('active', document.queryCommandState('underline'));
   updateListBtns();
+  updateAlignBtns();
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -971,6 +973,208 @@ document.addEventListener('pointerdown', e => {
 });
 window.addEventListener('resize', () => {
   if (_listPopOffen) positionListStylePop();
+}, { passive: true });
+
+/* ══════════════════════════════════════════════════════════════════════
+   AUSRICHTUNG – DERSELBE GETEILTE KNOPF
+
+   Vier Möglichkeiten, von denen immer genau eine gilt. Als vier einzelne
+   Knöpfe wären das vier Trefferflächen für eine Entscheidung – in einer
+   Leiste, die im Hochformat ohnehin blättern muss, ist das der falsche
+   Handel. Also gebaut wie der Listen-Knopf daneben: die breite Hälfte
+   legt die GEZEIGTE Ausrichtung an und wieder ab, der Pfeil öffnet die
+   Auswahl.
+
+   >>> Warum eine Klasse und kein execCommand <<<
+   document.execCommand('justifyCenter') erzeugt je nach Browser mal ein
+   style="text-align", mal ein <div align>. Von einem style bleibt beim
+   Bereinigen allein die Farbe stehen (core/sanitize.js) – die
+   Ausrichtung wäre beim ersten Cloud-Abgleich weg. Die Klasse steht
+   dort ausdrücklich in der Erlaubnisliste.
+
+   >>> Warum links keine Klasse bekommt <<<
+   Linksbündig IST der Zustand ohne Auszeichnung. Eine eigene Klasse
+   dafür wäre eine zweite Schreibweise für dasselbe, und beim Öffnen
+   fremder Hefte müsste man beide kennen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const AUSRICHTUNGEN = [
+  { id: 'left', klasse: null, labelKey: 'alignLeft', probe: [13, 9, 13, 9], anker: 'start' },
+  { id: 'center', klasse: 'j-align-center', labelKey: 'alignCenter', probe: [13, 9, 13, 9], anker: 'mitte' },
+  { id: 'right', klasse: 'j-align-right', labelKey: 'alignRight', probe: [13, 9, 13, 9], anker: 'ende' },
+  { id: 'justify', klasse: 'j-align-justify', labelKey: 'alignJustify', probe: [13, 13, 13, 13], anker: 'start' }
+];
+
+let _alignPopOffen = false;
+let _letzteAusrichtung = 'center';   // was die breite Hälfte anlegt
+
+/** Die Ausrichtung des Absatzes, in dem die Schreibmarke steht. */
+function aktiveAusrichtung() {
+  const block = curBlockTag();
+  if (!block || !block.classList) return 'left';
+  for (const a of AUSRICHTUNGEN) {
+    if (a.klasse && block.classList.contains(a.klasse)) return a.id;
+  }
+  return 'left';
+}
+
+/** Zeichnet die vier Striche so, wie der Absatz danach stünde. */
+function maleAusrichtungsIcon(svgOderPfad, id) {
+  const art = AUSRICHTUNGEN.find(a => a.id === id) || AUSRICHTUNGEN[0];
+  const zeilen = art.probe.map((breite, i) => {
+    const y = 3 + i * 3.5;
+    let x1 = 1.5;
+    if (art.anker === 'mitte') x1 = 1.5 + (13 - breite) / 2;
+    else if (art.anker === 'ende') x1 = 1.5 + (13 - breite);
+    return `M${x1} ${y}h${breite}`;
+  }).join('');
+  svgOderPfad.setAttribute('d', zeilen);
+}
+
+function updateAlignBtns() {
+  const wrap = E('fmt-align-wrap');
+  const pfad = E('align-icon-lines');
+  if (!wrap || !pfad) return;
+  const aktiv = aktiveAusrichtung();
+  wrap.classList.toggle('active', aktiv !== 'left');
+  /* Steht die Marke in einem ausgerichteten Absatz, zeigt der Knopf
+     DESSEN Ausrichtung – sonst die zuletzt benutzte. Ein Druck heißt
+     damit immer sichtbar „so" bzw. „das wieder weg". */
+  maleAusrichtungsIcon(pfad, aktiv !== 'left' ? aktiv : _letzteAusrichtung);
+}
+
+/**
+ * Legt eine Ausrichtung an – auf allen Absätzen, die die Auswahl berührt.
+ *
+ * Über die berührten Blöcke und nicht nur über den einen an der Marke:
+ * wer drei Absätze markiert und zentriert drückt, meint alle drei.
+ */
+function setzeAusrichtung(id) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+
+  const feld = curBlockTag()?.closest('.j-text');
+  if (!feld || feld.isContentEditable === false) return;
+  if (typeof S !== 'undefined' && S.readOnly) return;
+
+  const pgEl = feld.closest('[data-pgid]');
+  const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+  if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
+
+  const bereich = sel.getRangeAt(0);
+  const bloecke = [...feld.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6,li,td,th')]
+    .filter(el => bereich.intersectsNode(el)
+      // Nur der innerste Block je Stelle – sonst bekäme ein <td> die
+      // Klasse zusätzlich zu dem <p> darin, und beide richteten aus.
+      && !el.querySelector('p,div,h1,h2,h3,h4,h5,h6,li'));
+  if (!bloecke.length) {
+    const einzeln = curBlockTag();
+    if (einzeln) bloecke.push(einzeln);
+  }
+
+  for (const block of bloecke) {
+    for (const a of AUSRICHTUNGEN) if (a.klasse) block.classList.remove(a.klasse);
+    const art = AUSRICHTUNGEN.find(a => a.id === id);
+    if (art && art.klasse) block.classList.add(art.klasse);
+  }
+
+  if (id !== 'left') _letzteAusrichtung = id;
+  updateAlignBtns();
+
+  // Der Umbau von Hand feuert kein 'input' – das Sichern muss also selbst
+  // angestoßen werden, sonst wäre die Ausrichtung nach dem Neustart weg.
+  if (info) {
+    info.page.textContent = typeof ohneGriffe === 'function' ? ohneGriffe(feld) : feld.innerHTML;
+    if (window.Collab) Collab.noteTextChange(info.page.id, info.page.textContent);
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  }
+  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+}
+
+function buildAlignRow() {
+  const reihe = E('align-row');
+  if (!reihe) return;
+  const aktiv = aktiveAusrichtung();
+  reihe.innerHTML = '';
+
+  for (const art of AUSRICHTUNGEN) {
+    const zelle = document.createElement('button');
+    zelle.type = 'button';
+    zelle.className = 'list-style-cell align-cell' + (art.id === aktiv ? ' active' : '');
+    zelle.title = (typeof t === 'function' && art.labelKey) ? t(art.labelKey) : art.id;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '18');
+    svg.setAttribute('height', '18');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    const pfad = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pfad.setAttribute('stroke', 'currentColor');
+    pfad.setAttribute('stroke-width', '1.4');
+    pfad.setAttribute('stroke-linecap', 'round');
+    maleAusrichtungsIcon(pfad, art.id);
+    svg.appendChild(pfad);
+    zelle.appendChild(svg);
+
+    zelle.addEventListener('mousedown', e => e.preventDefault());
+    zelle.addEventListener('click', () => {
+      setzeAusrichtung(art.id);
+      closeAlignPop();
+    });
+    reihe.appendChild(zelle);
+  }
+}
+
+function positionAlignPop() {
+  const pop = E('align-pop');
+  const anker = E('fmt-align-wrap');
+  if (!pop || !anker) return;
+  const r = anker.getBoundingClientRect();
+  pop.style.left = Math.round(r.left + r.width / 2) + 'px';
+  pop.style.top = Math.round(r.bottom + 8) + 'px';
+  pop.style.transform = 'translateX(-50%)';
+
+  // An keinem Rand aus dem Fenster laufen – wie beim Listen-Fenster
+  const box = pop.getBoundingClientRect();
+  const zuVielRechts = box.right - (window.innerWidth - 8);
+  if (zuVielRechts > 0) pop.style.left = Math.round(box.left - zuVielRechts + box.width / 2) + 'px';
+  if (pop.getBoundingClientRect().left < 8) {
+    pop.style.left = Math.round(8 + pop.getBoundingClientRect().width / 2) + 'px';
+  }
+}
+
+function openAlignPop() {
+  _alignPopOffen = true;
+  buildAlignRow();
+  E('align-pop').style.display = 'block';
+  positionAlignPop();
+}
+
+function closeAlignPop() {
+  const pop = E('align-pop');
+  if (pop) pop.style.display = 'none';
+  _alignPopOffen = false;
+}
+
+['fmt-align', 'fmt-align-more', 'align-pop'].forEach(id => listNoBlur(E(id)));
+
+/* Die breite Hälfte: die gezeigte Ausrichtung anlegen – oder wieder ab,
+   wenn sie schon gilt. Genau wie beim Listen-Knopf. */
+E('fmt-align').addEventListener('click', () => {
+  const aktiv = aktiveAusrichtung();
+  setzeAusrichtung(aktiv !== 'left' ? 'left' : _letzteAusrichtung);
+});
+
+E('fmt-align-more').addEventListener('click', e => {
+  e.stopPropagation();
+  if (_alignPopOffen) return closeAlignPop();
+  openAlignPop();
+});
+
+document.addEventListener('pointerdown', e => {
+  if (!e.target.closest('#align-pop') && !e.target.closest('.tb-split')) closeAlignPop();
+});
+window.addEventListener('resize', () => {
+  if (_alignPopOffen) positionAlignPop();
 }, { passive: true });
 
 /* Die zuletzt gewählte Form überdauert das Schließen der App. Beim Laden

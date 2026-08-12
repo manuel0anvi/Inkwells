@@ -75,8 +75,14 @@
      Schreiben – ein style="list-style-type" waere keine Alternative, von
      einem style bleibt unten allein die Farbe stehen. Das Muster ist
      bewusst allgemein gehalten, damit eine neue Form nicht an zwei
-     Stellen nachgetragen werden muss. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?|comment-mark|resolved)$/;
+     Stellen nachgetragen werden muss.
+
+     `j-align-…` traegt die Ausrichtung eines Absatzes (ui/toolbar.js).
+     Auch sie MUSS hier stehen: ein style="text-align" waere keine
+     Alternative, von einem style bleibt unten allein die Farbe uebrig.
+     Gebraucht wird sie vor allem beim Oeffnen von Word-Dokumenten –
+     dort ist eine zentrierte Ueberschrift der Normalfall. */
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved)$/;
 
   /* KaTeX erzeugt beim Rendern eine Vielzahl innerer Elemente mit eigenen
      Klassen. Sie alle aufzuzählen wäre brüchig – jede neue KaTeX-Version

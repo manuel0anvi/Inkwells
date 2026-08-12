@@ -928,3 +928,20 @@
 /* Der Speicher-Knopf und seine Zustände sind entfallen – die Auskunft
    gibt jetzt der Sync-Knopf in der Titelleiste (css/titlebar.css). */
 
+
+/* ── Die Ausrichtung zur Auswahl (ui/toolbar.js) ──────────────────────
+   Dasselbe Fenster wie bei den Listenformen – .list-style-pop trägt
+   Rahmen, Schatten und Lage –, nur mit einer Reihe statt eines Rasters.
+   Vier Möglichkeiten passen nebeneinander; ein Raster wäre eine Zeile
+   mit drei leeren Feldern daneben. */
+.align-row {
+  display: flex;
+  gap: 6px
+}
+
+.align-cell {
+  width: 40px;
+  align-items: center;
+  justify-content: center;
+  color: var(--hi)
+}

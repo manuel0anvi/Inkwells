@@ -548,6 +548,13 @@ function buildPdf(nb, options = {}) {
      dafuer, dass die Zellenlinien aus einem box-shadow kommen und nicht
      aus einem border: ein Rand nimmt Platz ein und schoebe den Text
      unter der Tabelle neben die Linien des Papiers. */
+  /* Ausrichtung. Dieselben Klassen wie in css/pages.css, samt !important
+     aus demselben Grund: Kopfzelle und Block-Formel richten selbst aus
+     und sind genauer als eine einzelne Klasse. */
+  .tx .j-align-center { text-align: center !important }
+  .tx .j-align-right { text-align: right !important }
+  .tx .j-align-justify { text-align: justify !important }
+
   .tx ul, .tx ol { margin: 0; padding: 0 0 0 32px; line-height: inherit }
   .tx li { margin: 0; padding: 0; line-height: inherit }
   .tx ul.j-list-disc { list-style-type: disc }
