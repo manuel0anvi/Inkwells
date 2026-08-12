@@ -405,6 +405,19 @@
     return true;
   }
 
+  /**
+   * Auf dem Tablet den Fokus im Seitentext wieder abgeben.
+   *
+   * Die Stelle wird gebraucht (dorthin kommt die Formel), der Fokus nicht:
+   * mit ihm steht die Bildschirmtastatur im Bild, obwohl gerade niemand
+   * schreiben will. Gemerkt ist die Stelle da längst (merkeStelle).
+   */
+  function fingerFokusLoesen() {
+    if (!document.body.classList.contains('touch-input')) return;
+    const a = document.activeElement;
+    if (a && a.classList && a.classList.contains('j-text')) a.blur();
+  }
+
   /* ── Öffnen / Schließen ─────────────────────────────────────────── */
   function schliessen() {
     overlay.style.display = 'none';
@@ -472,6 +485,8 @@
     // Neue Formel
     stelleWiederher();
     if (typeof window.insertFormula === 'function') window.insertFormula(latex, displayMode);
+    // Die Formel liegt jetzt da – die Tastatur hat nichts mehr zu tun
+    fingerFokusLoesen();
     schliessen();
   }
 
@@ -486,6 +501,8 @@
     _editSpan = editSpan || null;
     _editObj = editObj || null;
     merkeStelle();
+    // Erst merken, dann loslassen: die Stelle bleibt, die Tastatur geht
+    fingerFokusLoesen();
     latexFeld.value = latex || '';
 
     /* Beim Bearbeiten einer bestehenden Formel steht dort fertiges LaTeX.
@@ -507,7 +524,19 @@
     zeigeGruppe(_paletteGruppe);
 
     overlay.style.display = 'flex';
-    latexFeld.focus();
+    /* ══════════════════════════════════════════════════════════════
+       DIE SCHREIBMARKE NICHT INS FELD SETZEN, SOLANGE GETIPPT WIRD
+
+       Mit der Maus ist das Feld der richtige Ort: wer LaTeX kann,
+       schreibt sofort los. Mit dem Finger fährt dadurch die
+       Bildschirmtastatur heraus und deckt das halbe Fenster zu –
+       ausgerechnet die Palette, die für den Finger da ist. Genau so
+       wurde es gemeldet.
+
+       Wer dann doch tippen will, tippt ins Feld; die Tastatur kommt
+       von selbst.
+       ══════════════════════════════════════════════════════════════ */
+    if (!document.body.classList.contains('touch-input')) latexFeld.focus();
     aktualisiereVorschau();
   }
 
