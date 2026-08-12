@@ -248,13 +248,17 @@ body.touch-draw .j-canvas {
    Linie wäre doppelt so dick.
    ══════════════════════════════════════════════════════════════════════ */
 .j-text table.j-table {
+  /* Der obere und der linke Rand der ganzen Tabelle. Als eigener Wert,
+     weil box-shadow ERSETZT und nicht ergänzt: wer der Tabelle sonst
+     einen Schatten gibt, nimmt ihr damit zwei Ränder. Genau so ist es
+     der frei gesetzten Tabelle ergangen (siehe unten). */
+  --tbl-rand: inset 1px 1px 0 0 rgba(28, 20, 10, .72);
   border-collapse: collapse;
   table-layout: auto;
   max-width: 100%;
   margin: 0;
   font-size: inherit;
-  /* Der obere und der linke Rand der ganzen Tabelle */
-  box-shadow: inset 1px 1px 0 0 rgba(28, 20, 10, .72)
+  box-shadow: var(--tbl-rand)
 }
 
 /* >>> Sobald Spaltenbreiten gesetzt sind, gilt fest <<<
@@ -300,12 +304,15 @@ body.touch-draw .j-canvas {
   z-index: 2;
   /* Sie deckt den Text darunter zu, wie ein Bild „vor dem Text" */
   background: var(--paper);
-  box-shadow: 0 1px 8px rgba(28, 20, 10, .12)
+  /* Der eigene Rand MUSS mitstehen: hier stand nur der Schatten, und
+     damit verlor eine verschobene Tabelle ihre obere und ihre linke
+     Linie – „beim Verschieben verliert sie die Linien am Rand". */
+  box-shadow: var(--tbl-rand), 0 1px 8px rgba(28, 20, 10, .12)
 }
 
 /* Solange sie in der Luft ist */
 .j-tbl-zieht .j-text table.j-table[x] {
-  box-shadow: 0 8px 26px rgba(0, 0, 0, .3);
+  box-shadow: var(--tbl-rand), 0 8px 26px rgba(0, 0, 0, .3);
   opacity: .95
 }
 

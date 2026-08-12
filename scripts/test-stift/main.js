@@ -641,8 +641,9 @@ app.on('ready', async () => {
 
       const frei = await js(`(() => {
         const t = document.querySelector('.j-text table');
+        const s = getComputedStyle(t);
         return { x: t.getAttribute('x'), y: t.getAttribute('y'),
-                 wie: getComputedStyle(t).position }; })()`);
+                 wie: s.position, rand: /inset/.test(s.boxShadow) }; })()`);
       pruefe('Sie steht frei auf der Seite (' + frei.wie + ', x=' + frei.x + ')',
         frei.wie === 'absolute' && frei.x !== null && frei.y !== null,
         'sie hängt weiter im Textfluss');
@@ -654,6 +655,12 @@ app.on('ready', async () => {
         + ' → ' + nachher.w + '×' + nachher.h + ')',
         Math.abs(nachher.w - vorher.w) <= 2 && Math.abs(nachher.h - vorher.h) <= 2,
         'sie ist beim Anfassen zusammengeschrumpft');
+
+      /* Ihre obere und ihre linke Linie sind ein box-shadow: inset – und
+         box-shadow ersetzt, es ergänzt nicht. Ein Schatten fürs Schweben
+         nahm ihr damit zwei Ränder. */
+      pruefe('Und ihre Ränder oben und links', frei.rand === true,
+        'der Rahmen der Tabelle ist beim Verschieben verschwunden');
 
       /* Die Lage muss den Neuaufbau der Seite überleben – dort wird der
          gespeicherte Text durchs Bereinigen geschickt, und ein style
