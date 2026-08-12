@@ -21,6 +21,7 @@
     "test:lists": "electron scripts/test-lists",
     "test:touch": "electron scripts/test-touch",
     "test:caret": "electron scripts/test-caret-geometry",
+    "test:lasso": "electron scripts/test-lasso",
     "test:live": "electron scripts/test-collab-live"
   },
   "dependencies": {
