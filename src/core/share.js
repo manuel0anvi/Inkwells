@@ -2502,15 +2502,59 @@ async function joinDocRoom(docId, options = {}) {
     }, wait);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     EIN BEOBACHTER, DER NICHT AUFGIBT
+
+     Firebase KÜNDIGT einen Beobachter, sobald die Regeln ihn einmal
+     abweisen – von selbst kommt er nie wieder. In einem fremden Raum ist
+     das keine Ausnahme, sondern der Normalfall: geht der Besitzer kurz
+     weg, ist der Zugang für einen Augenblick zu (siehe leave weiter
+     unten), und danach blieb es für immer still. Die Eingeladenen sahen
+     nichts mehr, blieben im Lesemodus und mussten das Dokument zumachen
+     und neu öffnen.
+
+     Deshalb wird nach einem Abbruch neu angemeldet, mit wachsendem
+     Abstand bis höchstens einer halben Minute.
+
+     @param {(gut: Function, weg: Function) => Function} anmelden
+     @param {string} was  Name für die Konsole
+     ══════════════════════════════════════════════════════════════════ */
+  function beharrlich(anmelden, was) {
+    let beendet = false, uhr = null, pause = 800, aus = null;
+
+    const versuch = () => {
+      if (beendet) return;
+      aus = anmelden(
+        () => { pause = 800; },        // es kommt wieder etwas an
+        (err) => {
+          aus = null;
+          if (beendet) return;
+          console.warn('[Share] Beobachter abgebrochen (' + was + '), neuer Versuch in '
+            + pause + ' ms:', err?.message || err);
+          uhr = setTimeout(versuch, pause);
+          pause = Math.min(pause * 2, 30000);
+        });
+    };
+    versuch();
+
+    const stop = () => {
+      beendet = true;
+      clearTimeout(uhr);
+      if (aus) { try { aus(); } catch (e) {} }
+      aus = null;
+    };
+    stops.push(stop);
+    return stop;
+  }
+
   function onPresence(callback) {
-    const stop = onValue(ref(rtdb, `presence/${docId}`), (snap) => {
+    return beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${docId}`), (snap) => {
+      gut();
       const all = snap.val() || {};
       // lost = die stehen gebliebene Marke eines Besitzers, dem die
       // Leitung abgerissen ist. Anwesend ist er damit gerade nicht.
       callback(Object.values(all).filter(p => p && p.uid !== me.uid && !p.lost));
-    }, () => callback([]));
-    stops.push(stop);
-    return stop;
+    }, (err) => { callback([]); weg(err); }), 'Anwesenheit');
   }
 
   /**
@@ -2559,7 +2603,8 @@ async function joinDocRoom(docId, options = {}) {
       report();
     }, () => { connected = false; report(); });
 
-    const stopOwner = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+    const stopOwner = beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+      gut();
       /* >>> Kein Eintrag zählt schon als weg <<<
          Ob der Besitzer abgestürzt ist oder ordentlich zugemacht hat,
          macht für die Gefahr keinen Unterschied: in beiden Fällen kann
@@ -2575,9 +2620,9 @@ async function joinDocRoom(docId, options = {}) {
       const eintrag = snap.val();
       ownerHere = snap.exists() && !eintrag?.lost;
       report();
-    }, () => { ownerHere = false; report(); });
+    }, (err) => { ownerHere = false; report(); weg(err); }), 'Besitzer');
 
-    stops.push(stopConn, stopOwner);
+    stops.push(stopConn);
     return () => { stopConn(); stopOwner(); };
   }
 
@@ -2638,18 +2683,22 @@ async function joinDocRoom(docId, options = {}) {
     });
   }
 
+  /* Auch dieser Strom meldet sich nach einem Abbruch wieder an – ohne das
+     war er nach dem ersten „permission_denied" für immer tot. Dass dabei
+     die letzten Meldungen ein zweites Mal hereinkommen, macht nichts: es
+     ist genau das, was auch beim Betreten passiert, und eine Yjs-Änderung
+     zweimal einzuarbeiten ändert nichts. */
   function onOp(callback) {
-    const stop = onChildAdded(
+    return beharrlich((gut, weg) => onChildAdded(
       rtQuery(opsRef, limitToLast(OP_BACKLOG)),
       (snap) => {
+        gut();
         const op = snap.val();
         if (!op || op.by === me.uid) return;   // eigene Änderungen nicht doppelt
         callback(op);
       },
-      (err) => console.warn('[Share] Änderungsstrom beendet:', err?.message || err)
-    );
-    stops.push(stop);
-    return stop;
+      (err) => weg(err)
+    ), 'Änderungsstrom');
   }
 
   /** Alte Einträge wegräumen – sonst wächst der Strom endlos. */
@@ -2674,12 +2723,34 @@ async function joinDocRoom(docId, options = {}) {
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
 
-    /* Der Besitzer nimmt die Rollenliste wieder mit. Sie gilt nur,
-       solange er da ist – wer eingeladen ist, darf ohne ihn ohnehin nur
-       lesen. Bleibt sie stehen, behielte ein später Entfernter seinen
-       Zugang zum Raum bis zum nächsten Betreten des Besitzers. */
+    /* ══════════════════════════════════════════════════════════════════
+       DER BESITZER NIMMT NUR DAS SCHREIBRECHT MIT, NICHT DIE GANZE LISTE
+
+       Hier stand remove(rolesRef) – die Rollenliste verschwand ganz,
+       sobald der Besitzer den Raum verliess. Die Regeln hängen aber ALLES
+       daran: presence/$docId und ops/$docId sind nur lesbar, wenn
+       roles/$docId/r/$uid gesetzt ist (website/database.rules.json).
+
+       In dem Augenblick verloren deshalb alle anderen Anwesenheit UND
+       Änderungsstrom auf einen Schlag – und zwar endgültig: Firebase
+       KÜNDIGT einen Beobachter, den die Regeln einmal abgewiesen haben.
+       Kam der Besitzer zurück, blieben sie taub im Lesemodus sitzen und
+       sahen von seiner Arbeit nichts. Es half nur, das Dokument zuzumachen
+       und neu zu öffnen. Genau so wurde es zweimal gemeldet.
+
+       Genommen wird jetzt nur das SCHREIBRECHT. Das deckt den Grund, aus
+       dem die Liste überhaupt weggeräumt wurde – niemand soll ohne den
+       Besitzer in den Raum schreiben –, und lässt das Mitlesen stehen.
+       Ohne ihn darf ohnehin niemand bearbeiten (onOwnerAway).
+
+       Was bleibt: wer später aus dem Dokument entfernt wird, kann bis zum
+       nächsten Betreten des Besitzers noch mitlesen. Das ist der kleinere
+       Schaden – an den Inhalt selbst kommt er über Firestore nicht mehr
+       heran, und die Freigabe ist dort sofort weg.
+       ══════════════════════════════════════════════════════════════════ */
     if (options.isOwner) {
-      try { await remove(rolesRef); } catch (e) { /* dann beim nächsten Mal */ }
+      try { await set(child(rolesRef, 'w'), { [me.uid]: true }); }
+      catch (e) { /* dann beim nächsten Mal */ }
     }
   }
 

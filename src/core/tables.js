@@ -429,15 +429,109 @@ function versteckeTableBar() {
   tblBar._zelle = null;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE FREI GESETZTE TABELLE
+
+   >>> Warum sie den Textfluss verlässt <<<
+   Verschoben wurde bisher IM Text: beim Loslassen wurde die Stelle
+   gesucht, an der man losgelassen hat, und die Tabelle davor oder
+   dahinter einsortiert. Das ging zweimal schief.
+
+     · Fand sich keine solche Stelle – und auf einer Seite, deren Text
+       über placeCaretAnywhere entstanden ist, findet sie sich meistens
+       nicht –, landete die Tabelle am Ende der Seite. Da stand sie
+       vorher auch schon. Es sah aus, als ginge das Verschieben gar
+       nicht: „man lässt los und sie geht einfach zurück."
+     · Und selbst wenn es klappte, konnte sie nur ZWISCHEN zwei Absätzen
+       stehen. „Genau dort, wo man sie fallen lässt" ist im Textfluss
+       nicht zu haben.
+
+   Deshalb: einmal angefasst, steht sie frei auf der Seite – wie ein
+   Bild. Damit ist sie an keine Zeile mehr gebunden, und ihr Inhalt
+   ebenso wenig: die Zeilen der Zellen richten sich nach der Zelle statt
+   nach dem Linienraster des Papiers (css/pages.css). Genau darum ging
+   die Rückmeldung.
+
+   >>> Warum x/y als Attribut und nicht als style <<<
+   Aus demselben Grund wie die Spaltenbreite an <col>: von einem style
+   bleibt beim Bereinigen allein die Farbe stehen (core/sanitize.js). Die
+   Lage stünde nach dem ersten Abgleich nicht mehr da. Auf left/top
+   übertragen wird sie in stelleTabellenAus() – einmal beim Aufbau jeder
+   Seite, danach beim Ziehen.
+
+   Eine Tabelle OHNE x steht weiter im Text, genau wie bisher. Frei wird
+   sie erst, wenn man sie das erste Mal anfasst.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Wie weit darf sie? In Seitenmaßen, bezogen auf das Textfeld. */
+function tabellenGrenzen(table) {
+  const textDiv = table.closest('.j-text');
+  const zoom = (typeof getZoom === 'function' ? getZoom() : 1) || 1;
+  if (!textDiv) return { maxX: 0, maxY: 0 };
+  const r = textDiv.getBoundingClientRect();
+  return {
+    maxX: Math.max(0, Math.round(r.width / zoom - table.offsetWidth)),
+    maxY: Math.max(0, Math.round(r.height / zoom - table.offsetHeight))
+  };
+}
+
+/** Setzt die Tabelle an eine feste Stelle – und aufs Blatt geklemmt. */
+function setzeTabellenLage(table, x, y) {
+  const g = tabellenGrenzen(table);
+  const nx = Math.round(Math.max(0, Math.min(g.maxX, x)));
+  const ny = Math.round(Math.max(0, Math.min(g.maxY, y)));
+  table.setAttribute('x', String(nx));
+  table.setAttribute('y', String(ny));
+  table.style.left = nx + 'px';
+  table.style.top = ny + 'px';
+  return { x: nx, y: ny };
+}
+
 /**
- * Wählt die Tabelle aus und lässt sie mit der Maus oder dem Finger über
- * die Seite ziehen. Beim Loslassen wird sie in den Text zurückgesetzt.
+ * Überträgt x/y auf left/top – für jede frei gesetzte Tabelle im Baum.
  *
- * >>> Warum ein Klon und nicht die echte Tabelle <<<
- * Die echte Tabelle steckt im contenteditable – sie kann nicht
- * position:fixed folgen, ohne aus dem Textfluss zu fallen. Der Klon
- * sieht genauso aus und folgt dem Zeiger; die echte Tabelle bleibt
- * unsichtbar an ihrem Platz, bis der Klon losgelassen wird.
+ * Muss nach JEDEM Aufbau eines Textfelds laufen: der gespeicherte Text
+ * trägt nur die Attribute, das Bereinigen wirft den style weg.
+ */
+function stelleTabellenAus(wurzel) {
+  const wo = (wurzel && wurzel.querySelectorAll) ? wurzel : document;
+  wo.querySelectorAll('table.j-table[x]').forEach(t => {
+    t.style.left = (parseInt(t.getAttribute('x'), 10) || 0) + 'px';
+    t.style.top = (parseInt(t.getAttribute('y'), 10) || 0) + 'px';
+  });
+}
+window.stelleTabellenAus = stelleTabellenAus;
+
+/* Der Aufbau einer Seite geschieht an einem halben Dutzend Stellen –
+   beim Öffnen, beim Zurücknehmen, beim Eintreffen einer fremden
+   Änderung, beim Seitenumbruch. Statt sie alle zu kennen, wird
+   zugesehen: was neu in den Baum kommt, wird ausgerichtet. */
+if (typeof MutationObserver === 'function') {
+  const aufpasser = new MutationObserver(saetze => {
+    for (const satz of saetze) {
+      for (const knoten of satz.addedNodes) {
+        if (knoten.nodeType !== 1) continue;
+        if (knoten.matches && knoten.matches('table.j-table[x]')) stelleTabellenAus(knoten.parentNode);
+        else if (knoten.querySelector && knoten.querySelector('table.j-table[x]')) stelleTabellenAus(knoten);
+      }
+    }
+  });
+  const beobachte = () => {
+    const ziel = document.getElementById('pg-scroll') || document.body;
+    if (ziel) aufpasser.observe(ziel, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', beobachte);
+  else beobachte();
+}
+
+/**
+ * Nimmt die Tabelle auf und lässt sie mit Maus oder Finger über die Seite
+ * ziehen. Beim Loslassen bleibt sie genau dort liegen.
+ *
+ * Wer nur auf den Knopf TIPPT, statt zu ziehen, trägt sie weiter: sie
+ * folgt dem Zeiger, bis irgendwo abgesetzt wird. Das ist der Weg für den
+ * Finger, bei dem zwischen Knopf und Ziehen kein durchgehender Zeiger
+ * liegt.
  */
 function starteTabelleVerschieben(table, pos, startEv) {
   if (!table || !table.isConnected) return;
@@ -453,149 +547,64 @@ function starteTabelleVerschieben(table, pos, startEv) {
   const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
   if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
 
-  // Tabelle + leeren Folgeabsatz merken (wie insertTable ihn anlegt)
-  const beide = [table];
-  const naechster = table.nextElementSibling;
-  if (naechster && naechster.tagName === 'P' && !naechster.textContent.trim()) {
-    beide.push(naechster);
-  }
+  const zoom = (typeof getZoom === 'function' ? getZoom() : 1) || 1;
 
-  // Echte Tabelle unsichtbar, aber im Fluss lassen – sonst springt der Text
-  beide.forEach(el => { el.style.visibility = 'hidden'; });
+  /* Beim ersten Anfassen genau dort festmachen, wo sie gerade steht –
+     sonst spränge sie im Augenblick des Griffs in die linke obere Ecke. */
+  const tr = table.getBoundingClientRect();
+  const dr = textDiv.getBoundingClientRect();
+  let lage = setzeTabellenLage(table, (tr.left - dr.left) / zoom, (tr.top - dr.top) / zoom);
 
-  /* ══════════════════════════════════════════════════════════════════
-     DAS SCHATTENBILD HAT DIE GRÖSSE DER TABELLE
+  let startX = lage.x, startY = lage.y;
+  let griffX = startEv ? startEv.clientX : 0;
+  let griffY = startEv ? startEv.clientY : 0;
+  let zeiger = startEv ? startEv.pointerId : null;
+  let gezogen = !startEv;
 
-     Der Klon hängt am body und damit AUSSERHALB der Seitenhülle, die der
-     Zoom skaliert. Mit den Layout-Massen der Tabelle war er deshalb bei
-     120 % ein Fünftel zu klein und bei 200 % halb so gross wie das, was
-     man gerade anfasst – gemeldet als „das weisse Rechteck hat nicht die
-     Grösse der Tabelle". Die Masse bleiben, der Zoom kommt als eigene
-     Skalierung dazu; so stimmt beides zusammen wieder.
-     ══════════════════════════════════════════════════════════════════ */
-  const zoom = typeof getZoom === 'function' ? getZoom() : 1;
-  const klon = table.cloneNode(true);
-  klon.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;'
-    + 'box-shadow:0 4px 20px rgba(0,0,0,.25);border-radius:4px;'
-    + 'background:var(--page-bg,#fdfbf7);'
-    + 'transform-origin:top left;transform:scale(' + zoom + ');';
-  klon.style.width = table.offsetWidth + 'px';
-  klon.style.height = table.offsetHeight + 'px';
-
-  const r = table.getBoundingClientRect();
-  klon.style.left = r.left + 'px';
-  klon.style.top = r.top + 'px';
-
-  document.body.appendChild(klon);
-
-  /* ══════════════════════════════════════════════════════════════════
-     ER SPRINGT NICHT UNTER DEN ZEIGER
-
-     Hier stand `ev.clientX - r.width / 2`: die Tabelle sprang mit ihrer
-     Mitte unter die Maus, egal wo sie vorher lag. Sie folgt jetzt der
-     Bewegung, statt sich anzusaugen – der Abstand zwischen Zeiger und
-     Tabelle bleibt der, den er beim Anfassen hatte.
-     ══════════════════════════════════════════════════════════════════ */
-  let ankerX = startEv ? r.left - startEv.clientX : -r.width / 2;
-  let ankerY = startEv ? r.top - startEv.clientY : -20;
-
-  /* ══════════════════════════════════════════════════════════════════
-     UND MIT DEM FINGER
-
-     Zwei Dinge kamen dazwischen: der Browser machte aus der Bewegung ein
-     Scrollen, und die Berührung auf dem Text setzte die Schreibmarke –
-     die Bildschirmtastatur fuhr mitten im Ziehen heraus. Solange die
-     Tabelle in der Luft ist, nimmt der Text deshalb weder Bewegung noch
-     Marke an.
-     ══════════════════════════════════════════════════════════════════ */
+  /* Solange sie in der Luft ist, gehört die Bewegung ihr: kein Scrollen,
+     keine Schreibmarke, keine Bildschirmtastatur. */
   const alteAction = textDiv.style.touchAction;
   textDiv.style.touchAction = 'none';
   textDiv.contentEditable = 'false';
   document.body.classList.add('j-tbl-zieht');
 
-  /* Beim Tippen auf den Knopf – ohne Ziehen – bleibt die Tabelle in der
-     Luft und wird erst mit dem nächsten Druck abgesetzt. Beim Ziehen
-     dagegen entscheidet das Loslassen. Unterschieden wird an der Strecke,
-     die der Zeiger seit dem Knopfdruck zurückgelegt hat. */
-  const griffX = startEv ? startEv.clientX : 0;
-  const griffY = startEv ? startEv.clientY : 0;
-  let gezogen = !startEv;
-
   const zieh = ev => {
     if (ev.cancelable) ev.preventDefault();
-    if (Math.abs(ev.clientX - griffX) + Math.abs(ev.clientY - griffY) > 8) gezogen = true;
-    /* Der erste Finger, der nach dem Knopfdruck aufsetzt, übernimmt: bei
-       einer Berührung gibt es zwischen Knopf und Ziehen keinen
-       durchgehenden Zeiger, an dem der Abstand hinge. */
-    if (ev.pointerType === 'touch' && !zieh._hat) {
-      zieh._hat = true;
-      ankerX = klon.getBoundingClientRect().left - ev.clientX;
-      ankerY = klon.getBoundingClientRect().top - ev.clientY;
+
+    /* Ein anderer Finger hat übernommen (getippt statt gezogen): der
+       Abstand wird neu genommen, sonst spränge die Tabelle um die
+       Strecke zwischen Knopf und Finger. */
+    if (ev.pointerId !== zeiger) {
+      zeiger = ev.pointerId;
+      griffX = ev.clientX; griffY = ev.clientY;
+      startX = lage.x; startY = lage.y;
     }
-    klon.style.left = (ev.clientX + ankerX) + 'px';
-    klon.style.top = (ev.clientY + ankerY) + 'px';
+
+    if (Math.abs(ev.clientX - griffX) + Math.abs(ev.clientY - griffY) > 8) gezogen = true;
+    lage = setzeTabellenLage(table,
+      startX + (ev.clientX - griffX) / zoom,
+      startY + (ev.clientY - griffY) / zoom);
   };
 
-  const los = ev => {
+  const los = () => {
     // Nur getippt: die Tabelle schwebt weiter und wartet auf das Absetzen
     if (!gezogen) { gezogen = true; return; }
 
     document.removeEventListener('pointermove', zieh);
     document.removeEventListener('pointerup', los);
     document.removeEventListener('pointercancel', los);
-    klon.remove();
     textDiv.style.touchAction = alteAction;
     textDiv.contentEditable = S.readOnly ? 'false' : 'true';
     document.body.classList.remove('j-tbl-zieht');
 
-    // Tabelle wieder sichtbar
-    beide.forEach(el => { el.style.visibility = ''; });
-
-    /* ══════════════════════════════════════════════════════════════
-       SIE LANDET DA, WO LOSGELASSEN WURDE
-
-       Eine Tabelle steht im Textfluss – „an dieser Stelle" heisst also
-       „vor oder hinter diesem Absatz". Bisher immer davor; wer unter
-       den letzten Absatz zog, bekam sie darüber. Jetzt entscheidet die
-       Hälfte, in der man loslässt.
-       ══════════════════════════════════════════════════════════════ */
-    let eingesetzt = false;
-    if (document.caretRangeFromPoint) {
-      const cr = document.caretRangeFromPoint(ev.clientX, ev.clientY);
-      if (cr && textDiv.contains(cr.startContainer)) {
-        let block = cr.startContainer;
-        if (block.nodeType === Node.TEXT_NODE) block = block.parentNode;
-        while (block && block !== textDiv && !/^(P|H[1-6]|DIV|TABLE|UL|OL|BLOCKQUOTE)$/i.test(block.tagName)) {
-          block = block.parentNode;
-        }
-        if (block && block !== textDiv && block !== table && !table.contains(block)) {
-          const br = block.getBoundingClientRect();
-          if (ev.clientY > br.top + br.height / 2) block.after(...beide);
-          else block.before(...beide);
-          eingesetzt = true;
-        }
-      }
-    }
-    if (!eingesetzt) {
-      // Ans Ende, wenn nichts getroffen wurde
-      textDiv.appendChild(table);
-      if (beide.length > 1 && beide[1] !== table) textDiv.appendChild(beide[1]);
-    }
-
     notiereText(textDiv);
     if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
 
-    // Schreibmarke in die erste Zelle – die Tabelle ist wieder editierbar
+    // Schreibmarke zurück in die erste Zelle – die Tabelle ist wieder editierbar
     setTimeout(() => {
-      if (table.isConnected) {
-        const ersteZelle = table.querySelector('th, td');
-        if (ersteZelle) {
-          focusCell(ersteZelle);
-          positionTableBar(ersteZelle);
-        }
-      } else {
-        versteckeTableBar();
-      }
+      if (!table.isConnected) { versteckeTableBar(); return; }
+      const ersteZelle = table.querySelector('th, td');
+      if (ersteZelle) { focusCell(ersteZelle); positionTableBar(ersteZelle); }
     }, 20);
   };
 

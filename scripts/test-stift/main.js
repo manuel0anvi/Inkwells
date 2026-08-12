@@ -51,7 +51,11 @@ function fertig(code) {
   app.exit(fehl ? 1 : code);
 }
 
-setTimeout(() => { zeilen.push('ABBRUCH: Zeitgrenze erreicht'); fertig(2); }, 150000);
+/* Die Zeitgrenze war 150 s und reichte nicht mehr: der Prüfstand ist um
+   die Tabellen und das Bild über die Seitengrenze gewachsen, und jedes
+   Ereignis geht einzeln durchs DevTools-Protokoll. Auf einem beschäftigten
+   Rechner kostet eine Bewegung dort schnell eine Sekunde. */
+setTimeout(() => { zeilen.push('ABBRUCH: Zeitgrenze erreicht'); fertig(2); }, 420000);
 const warte = ms => new Promise(r => setTimeout(r, ms));
 
 app.on('ready', async () => {
@@ -620,20 +624,50 @@ app.on('ready', async () => {
     await tabelleAufbauen();
     await warte(400);
     const bewegKnopf = await kasten('.j-table-bar .j-table-btn');
-    const unten = await kasten('.j-text p:last-child');
-    if (!bewegKnopf || !unten) {
+    const vorher = await kasten('.j-text table');
+    if (!bewegKnopf || !vorher) {
       pruefe('Die Leiste an der Tabelle steht da', false, 'kein Knopf gefunden');
     } else {
       /* Drücken, ziehen, loslassen – in EINER Bewegung. Genau die kam nie
-         an, weil ein click Druck und Loslassen am selben Element braucht. */
-      await mausZieht(bewegKnopf, { x: unten.x, y: unten.y + Math.round(unten.h / 3) });
-      const platz = await js(`(() => {
+         an, weil ein click Druck und Loslassen am selben Element braucht.
+         Und sie muss LIEGEN BLEIBEN: einsortiert in den Textfluss landete
+         sie wieder da, wo sie vorher stand. */
+      await mausZieht(bewegKnopf, { x: bewegKnopf.x + 60, y: bewegKnopf.y + 180 });
+      const nachher = await kasten('.j-text table');
+      const dx = nachher.x - vorher.x, dy = nachher.y - vorher.y;
+      pruefe('Drücken und Ziehen setzt die Tabelle um (' + dx + '/' + dy + ' px)',
+        Math.abs(dx - 60) <= 14 && Math.abs(dy - 180) <= 14,
+        'sie ist nicht dorthin gegangen, wo losgelassen wurde');
+
+      const frei = await js(`(() => {
+        const t = document.querySelector('.j-text table');
+        return { x: t.getAttribute('x'), y: t.getAttribute('y'),
+                 wie: getComputedStyle(t).position,
+                 zeile: getComputedStyle(t.querySelector('td')).lineHeight }; })()`);
+      pruefe('Sie steht frei auf der Seite (' + frei.wie + ', x=' + frei.x + ')',
+        frei.wie === 'absolute' && frei.x !== null && frei.y !== null,
+        'sie hängt weiter im Textfluss');
+      pruefe('Und ihr Inhalt hängt nicht mehr am Linienraster (' + frei.zeile + ')',
+        parseFloat(frei.zeile) < 30, 'die Zelle rechnet weiter in Papierzeilen');
+
+      /* Die Lage muss den Neuaufbau der Seite überleben – dort wird der
+         gespeicherte Text durchs Bereinigen geschickt, und ein style
+         überlebt das nicht. Deshalb steht sie als Attribut da. */
+      const nachAufbau = await js(`(() => {
         const td = document.querySelector('.j-text');
-        const t = td.querySelector('table');
-        return { stelle: [...td.children].indexOf(t), von: td.children.length }; })()`);
-      pruefe('Drücken und Ziehen setzt die Tabelle um (Stelle ' + platz.stelle
-        + ' von ' + platz.von + ')',
-        platz.stelle > 1, 'sie blieb an ihrem Platz stehen');
+        const pg = td.closest('[data-pgid]');
+        const info = getPage(pg.dataset.pgid);
+        td.innerHTML = sanitizePageHtml(info.page.textContent);
+        return true; })()`);
+      await warte(300);
+      const wieder = await js(`(() => {
+        const t = document.querySelector('.j-text table');
+        if (!t) return null;
+        return { x: t.getAttribute('x'), links: t.style.left, oben: t.style.top }; })()`);
+      pruefe('Und sie überlebt den Neuaufbau der Seite ('
+        + (wieder ? wieder.x + ' → ' + wieder.oben : 'weg') + ')',
+        !!nachAufbau && !!wieder && wieder.x !== null && !!wieder.oben,
+        'nach dem Bereinigen steht sie wieder irgendwo');
     }
 
     /* Und die Spalten: nur die angefasste darf sich ändern. */

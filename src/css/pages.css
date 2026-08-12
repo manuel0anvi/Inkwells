@@ -271,6 +271,47 @@ body.touch-draw .j-canvas {
   table-layout: fixed
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE FREI GESETZTE TABELLE
+
+   Sie steht nicht mehr IM Text, sondern auf ihm – dort, wo man sie
+   losgelassen hat. Gemeldet wurde beides: „beim Loslassen geht sie
+   einfach zurück" und „sie sollte nicht mit Zeilen eingeschränkt sein,
+   das gleiche gilt für den Text in der Tabelle".
+
+   Erkannt wird sie am Attribut x. Die Lage steht dort und nicht im
+   style: von einem style bliebe beim Bereinigen allein die Farbe stehen
+   (core/sanitize.js). Auf left/top überträgt sie core/tables.js.
+
+   Eine Tabelle OHNE x bleibt im Textfluss, mit allem, was weiter unten
+   dafür steht – frei wird sie erst beim ersten Verschieben.
+   ══════════════════════════════════════════════════════════════════════ */
+.j-text table.j-table[x] {
+  position: absolute;
+  z-index: 2;
+  max-width: none;
+  /* Sie deckt den Text darunter zu, wie ein Bild „vor dem Text" */
+  background: var(--paper);
+  box-shadow: 0 1px 8px rgba(28, 20, 10, .12)
+}
+
+/* Und ihr Inhalt gehört der ZELLE, nicht dem Linienraster des Papiers.
+   Im Textfluss geht das nicht: dort muss die Höhe ein Vielfaches der
+   Zeilenhöhe sein, sonst sitzt alles darunter neben den Linien. Frei
+   gesetzt schiebt sie nichts mehr, also darf sie eng sein. */
+.j-text table.j-table[x] td,
+.j-text table.j-table[x] th {
+  height: auto;
+  line-height: 1.45;
+  padding: 4px 8px
+}
+
+/* Solange sie in der Luft ist */
+.j-tbl-zieht .j-text table.j-table[x] {
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .3);
+  opacity: .95
+}
+
 /* Die Greifzone an der Spaltengrenze. Ein paar Pixel breit reichen der
    Maus, dem Finger nicht – deshalb ein eigener, unsichtbarer Streifen
    statt eines Zeigerwechsels am Rand (core/tables.js). */

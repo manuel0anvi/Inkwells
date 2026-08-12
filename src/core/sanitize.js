@@ -105,6 +105,11 @@
      Erlaubt ist eine nackte Zahl, nichts weiter. */
   const istMass = (wert) => /^[1-9]\d{0,3}$/.test(String(wert).trim());
 
+  /* Die Stelle einer frei gesetzten Tabelle (core/tables.js). Sie steht
+     aus demselben Grund als Attribut da wie Breite und Hoehe – und darf,
+     anders als ein Mass, auch 0 sein: links oben ist eine gueltige Lage. */
+  const istStelle = (wert) => /^\d{1,4}$/.test(String(wert).trim());
+
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {
     return typeof wert === 'string'
@@ -150,6 +155,9 @@
       // Gezogene Spaltenbreite und Zeilenhoehe, siehe istMass
       if (name === 'width' && el.tagName === 'COL' && istMass(wert)) continue;
       if (name === 'height' && el.tagName === 'TR' && istMass(wert)) continue;
+
+      // Die Stelle einer frei gesetzten Tabelle, siehe istStelle
+      if ((name === 'x' || name === 'y') && el.tagName === 'TABLE' && istStelle(wert)) continue;
 
       // data-latex auf Formel-Spans: der LaTeX-Quelltext, aus dem KaTeX rendert.
       // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.

@@ -542,6 +542,42 @@ function headData(overrides = {}) {
         { p: 'p1', by: READER.uid, at: Date.now(), k: 'y', u: 'AAAA' }));
   await ok('Mitlesen darf er', get(ref(rtOf(READER), 'ops/dok1')));
 
+  /* ── Der Besitzer geht kurz weg ────────────────────────────────────
+     Beim Verlassen hat er die ganze Rollenliste mitgenommen. Anwesenheit
+     und Änderungsstrom hängen aber daran (roles/$docId/r) – in dem
+     Augenblick verloren also ALLE anderen beides auf einen Schlag, und
+     zwar endgültig: Firebase kündigt einen Beobachter, den die Regeln
+     einmal abgewiesen haben. Kam der Besitzer zurück, sassen sie taub im
+     Lesemodus. Zweimal gemeldet.
+
+     Jetzt nimmt er nur noch das SCHREIBRECHT mit (leave in
+     core/share.js). Was das für die Regeln heisst, steht hier. */
+  section('Realtime Database: der Besitzer geht kurz weg');
+
+  await ok('Er nimmt nur das Schreibrecht mit',
+    set(ref(rtOf(OWNER), 'roles/dok1/w'), { [OWNER.uid]: true }));
+
+  await ok('Der Leser liest die Anwesenheit weiter mit',
+    get(ref(rtOf(READER), 'presence/dok1')));
+  await ok('Und den Änderungsstrom auch',
+    get(ref(rtOf(READER), 'ops/dok1')));
+  await ok('Der Bearbeiter ebenso',
+    get(ref(rtOf(EDITOR), 'ops/dok1')));
+  await ok('Und meldet sich weiter als anwesend',
+    set(ref(rtOf(EDITOR), 'presence/dok1/' + EDITOR.uid), card));
+
+  /* Aber schreiben darf ohne ihn niemand mehr – genau der Grund, aus dem
+     die Liste ueberhaupt weggeraeumt wurde. */
+  await denied('Schreiben geht ohne den Besitzer nicht mehr',
+    set(ref(rtOf(EDITOR), 'ops/dok1/oWeg'),
+        { p: 'p1', by: EDITOR.uid, at: Date.now(), k: 'y', u: 'AAAA' }));
+
+  await ok('Und wenn er zurückkommt, gilt wieder alles',
+    set(ref(rtOf(OWNER), 'roles/dok1'), rollen));
+  await ok('Der Bearbeiter schreibt wieder',
+    set(ref(rtOf(EDITOR), 'ops/dok1/oZurueck'),
+        { p: 'p1', by: EDITOR.uid, at: Date.now(), k: 'y', u: 'AAAA' }));
+
   await denied('Ein Fremder liest den Strom nicht mit',
     get(ref(rtOf(STRANGER), 'ops/dok1')));
   await denied('Und schreibt erst recht nicht hinein',

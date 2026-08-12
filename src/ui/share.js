@@ -129,6 +129,8 @@
     const msg = err.message || '';
     if (msg === 'SHARE_NOT_OWNED') return t('shareNotOwned');
     if (msg === 'SHARE_OFFLINE') return t('shareOffline');
+    // Jede andere Gestalt derselben Sache – Firestore hat ein Dutzend davon
+    if (istNetzfehler(err)) return t('shareOffline');
     if (msg === 'NEEDS_ACCOUNT') return t('shareNeedsAccount');
     if (msg === 'BAD_EMAIL') return t('shareBadEmail');
     if (msg === 'OWN_EMAIL') return t('shareOwnEmail');
@@ -401,6 +403,41 @@
     return navigator.onLine === false;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WIRKLICH NACHSEHEN, STATT DEM BROWSER ZU GLAUBEN
+
+     navigator.onLine und Electrons net.isOnline() sagen nur, ob ein
+     Netzwerk anliegt. Ein WLAN ohne Internet gilt dort als „online" – und
+     genau dann stand im Fenster wieder etwas über das Konto statt über
+     die Leitung. Auch die Anmeldung half nicht weiter: Firebase merkt
+     sich die Sitzung, ensureFirebaseIdentity() sagt also ohne jeden
+     Netzverkehr „angemeldet", und erst der nächste Griff nach Firestore
+     scheiterte – irgendwo weiter unten, mit einer Meldung, die niemand
+     als „kein Internet" liest.
+
+     Gefragt wird deshalb der Rechner, um den es geht. Eine Antwort
+     genügt, auch eine abweisende: sie beweist, dass die Leitung steht.
+     Der Aufruf kostet nichts Zusätzliches – das Freigeben spricht
+     ohnehin mit genau diesem Dienst.
+     ══════════════════════════════════════════════════════════════════ */
+  async function netzErreichbar() {
+    if (isOffline()) return false;
+    if (typeof fetch !== 'function' || typeof AbortController !== 'function') return true;
+
+    const abbruch = new AbortController();
+    const uhr = setTimeout(() => abbruch.abort(), 4000);
+    try {
+      await fetch('https://firestore.googleapis.com/', {
+        method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: abbruch.signal
+      });
+      return true;
+    } catch (err) {
+      return false;
+    } finally {
+      clearTimeout(uhr);
+    }
+  }
+
   async function openShareDialog(nb) {
     if (!nb) return;
 
@@ -445,6 +482,12 @@
 
     // Ohne Netz sofort Bescheid geben, statt in eine Zeitgrenze zu laufen
     if (isOffline()) { ohneNetz(); return; }
+
+    statusEl.textContent = t('shareCheckingAccount');
+    if (!(await netzErreichbar())) {
+      if (shareNb && shareNb.id === nb.id) ohneNetz();
+      return;
+    }
 
     /* Ohne echte Anmeldung bei Firebase geht nichts davon. Vorher aber
        einen Versuch, sie nachzuholen: das ID-Token wird beim Anmelden
