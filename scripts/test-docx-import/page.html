@@ -1,0 +1,296 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Die echte Darstellung: der Seitenumbruch misst gerenderten Text, und
+     ohne pages.css bekäme er die Abstände des Browsers statt die des
+     Hefts. base.css muss mit, dort steht `* { margin: 0 }`. -->
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+</head>
+<body>
+
+<script>
+/* Was docxImport.js aus der App erwartet. Mehr braucht es nicht – das
+   Modul ist bewusst ohne Zugriff auf Zustand oder Oberfläche gebaut. */
+const CFG = { PAGE_W: 794, PAGE_H: 1123, HDR: 58 };
+function uid() { return 'x' + Math.random().toString(36).slice(2, 10); }
+function makePage(bg) {
+  return { id: uid(), date: new Date().toISOString(), bg: bg,
+           textContent: '', inkStrokes: [], objects: [] };
+}
+</script>
+
+<script src="../../src/core/sanitize.js"></script>
+<script src="../../src/core/docx.js"></script>
+<script src="../../src/core/docxImport.js"></script>
+
+<script>
+const zeilen = [];
+function abschnitt(name) { zeilen.push(''); zeilen.push(name); }
+function pruefe(was, bedingung, hinweis) {
+  zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
+}
+
+const I = InkwellDocxImport.__intern;
+const utf8 = (s) => new TextEncoder().encode(s);
+
+/* ── Ein Archiv bauen, wie Word es schreibt ─────────────────────────
+   core/docx.js legt alles ungepackt ab (Verfahren 0). Word packt
+   (Verfahren 8). Der Leser muss beides können, also wird hier beides
+   erzeugt – deflate über CompressionStream, das Gegenstück zu dem, was
+   der Leser benutzt. */
+function crc32(bytes) {
+  let c, tabelle = [];
+  for (let n = 0; n < 256; n++) {
+    c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    tabelle[n] = c;
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = tabelle[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+async function packe(eintraege, gepackt) {
+  const teile = [];
+  const verzeichnis = [];
+  let versatz = 0;
+
+  for (const e of eintraege) {
+    const name = utf8(e.name);
+    const roh = e.data;
+    const daten = gepackt
+      ? new Uint8Array(await new Response(
+          new Blob([roh]).stream().pipeThrough(new CompressionStream('deflate-raw'))
+        ).arrayBuffer())
+      : roh;
+    const verfahren = gepackt ? 8 : 0;
+    const crc = crc32(roh);
+
+    const lokal = new Uint8Array(30 + name.length);
+    const lv = new DataView(lokal.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, verfahren, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, daten.length, true);
+    lv.setUint32(22, roh.length, true);
+    lv.setUint16(26, name.length, true);
+    lokal.set(name, 30);
+
+    const zentral = new Uint8Array(46 + name.length);
+    const zv = new DataView(zentral.buffer);
+    zv.setUint32(0, 0x02014b50, true);
+    zv.setUint16(4, 20, true);
+    zv.setUint16(6, 20, true);
+    zv.setUint16(8, 0x0800, true);
+    zv.setUint16(10, verfahren, true);
+    zv.setUint32(16, crc, true);
+    zv.setUint32(20, daten.length, true);
+    zv.setUint32(24, roh.length, true);
+    zv.setUint16(28, name.length, true);
+    zv.setUint32(42, versatz, true);
+    zentral.set(name, 46);
+
+    teile.push(lokal, daten);
+    verzeichnis.push(zentral);
+    versatz += lokal.length + daten.length;
+  }
+
+  const vzAnfang = versatz;
+  let vzLaenge = 0;
+  for (const z of verzeichnis) vzLaenge += z.length;
+
+  const ende = new Uint8Array(22);
+  const ev = new DataView(ende.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, verzeichnis.length, true);
+  ev.setUint16(10, verzeichnis.length, true);
+  ev.setUint32(12, vzLaenge, true);
+  ev.setUint32(16, vzAnfang, true);
+
+  let gesamt = 0;
+  for (const t of [...teile, ...verzeichnis, ende]) gesamt += t.length;
+  const aus = new Uint8Array(gesamt);
+  let p = 0;
+  for (const t of [...teile, ...verzeichnis, ende]) { aus.set(t, p); p += t.length; }
+  return aus;
+}
+
+window.__fertig = (async function () {
+  try {
+
+    /* ══ 1. DAS ARCHIV ══════════════════════════════════════════════ */
+    abschnitt('Das Archiv');
+
+    const inhalt = '<w:p><w:r><w:t>Hallo</w:t></w:r></w:p>'.repeat(40);
+    const eintraege = [
+      { name: 'word/document.xml', data: utf8(inhalt) },
+      { name: 'word/styles.xml', data: utf8('<styles/>') }
+    ];
+
+    for (const [name, gepackt] of [['gespeichert', false], ['deflate', true]]) {
+      const archiv = await packe(eintraege, gepackt);
+      const dateien = await I.entpacke(archiv);
+      pruefe('Verfahren ' + name + ': beide Dateien da',
+        dateien.size === 2 && dateien.has('word/document.xml'),
+        [...dateien.keys()].join(','));
+      pruefe('Verfahren ' + name + ': Inhalt unveraendert',
+        I.alsText(dateien.get('word/document.xml')) === inhalt,
+        I.alsText(dateien.get('word/document.xml')).slice(0, 40));
+    }
+
+    /* Ein Archiv mit Ordnereintrag – der hat keinen Inhalt und darf
+       nicht als Datei auftauchen. */
+    const mitOrdner = await packe([
+      { name: 'word/', data: new Uint8Array(0) },
+      { name: 'word/document.xml', data: utf8('<a/>') }
+    ], true);
+    const ohneOrdner = await I.entpacke(mitOrdner);
+    pruefe('Ordnereintraege fallen weg', ohneOrdner.size === 1, [...ohneOrdner.keys()].join(','));
+
+    /* Etwas, das kein ZIP ist, muss sauber scheitern statt Unsinn zu
+       liefern – sonst sucht man den Fehler später im XML. */
+    let sauberGescheitert = false;
+    try { await I.entpacke(utf8('das ist kein Archiv')); }
+    catch (e) { sauberGescheitert = e.message === 'NO_ZIP'; }
+    pruefe('Eine Nicht-ZIP-Datei scheitert mit NO_ZIP', sauberGescheitert);
+
+    /* ══ 2. DIE ÜBERSETZUNG ═════════════════════════════════════════ */
+    abschnitt('Word-Bausteine');
+
+    /* Ein Dokument bauen, wie Word es schreibt. Bewusst von Hand und
+       nicht über core/docx.js: hier sollen gerade die Formen geprüft
+       werden, die Inkwell selbst NIE erzeugt – ausdrückliches „nicht
+       fett", Nummerierung über zwei Ecken, verbundene Zellen. */
+    const NS = 'xmlns:w="' + I.W + '" xmlns:r="' + I.R + '"';
+
+    async function lies(bodyXml, extra) {
+      const teile = [
+        { name: 'word/document.xml',
+          data: utf8('<?xml version="1.0"?><w:document ' + NS + '><w:body>' + bodyXml + '</w:body></w:document>') }
+      ];
+      for (const [name, text] of Object.entries(extra || {})) {
+        teile.push({ name, data: typeof text === 'string' ? utf8(text) : text });
+      }
+      return InkwellDocxImport.lese(await packe(teile, true));
+    }
+
+    const htmlVon = (erg) => erg.bloecke.map(b => b.html).join('');
+
+    // Überschriften über die Gliederungsebene, nicht über den Namen
+    const vorlagen = '<?xml version="1.0"?><w:styles ' + NS + '>'
+      + '<w:style w:type="paragraph" w:styleId="berschrift1">'
+      + '<w:pPr><w:outlineLvl w:val="0"/></w:pPr></w:style>'
+      + '<w:style w:type="paragraph" w:styleId="berschrift2">'
+      + '<w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>'
+      + '<w:style w:type="paragraph" w:styleId="berschrift7">'
+      + '<w:pPr><w:outlineLvl w:val="6"/></w:pPr></w:style></w:styles>';
+
+    let e = await lies(
+      '<w:p><w:pPr><w:pStyle w:val="berschrift1"/></w:pPr><w:r><w:t>Gross</w:t></w:r></w:p>'
+      + '<w:p><w:pPr><w:pStyle w:val="berschrift2"/></w:pPr><w:r><w:t>Mittel</w:t></w:r></w:p>'
+      + '<w:p><w:pPr><w:pStyle w:val="berschrift7"/></w:pPr><w:r><w:t>Tief</w:t></w:r></w:p>'
+      + '<w:p><w:r><w:t>Normal</w:t></w:r></w:p>',
+      { 'word/styles.xml': vorlagen });
+    pruefe('Deutsche Vorlagennamen ergeben Ueberschriften',
+      htmlVon(e) === '<h1>Gross</h1><h2>Mittel</h2><h3>Tief</h3><p>Normal</p>', htmlVon(e));
+    pruefe('Tiefe Ebenen werden gemeldet', e.bericht.verloren.includes('tiefeUeberschriften'),
+      e.bericht.verloren.join(','));
+
+    // Auszeichnungen, samt ausdruecklichem "nicht fett"
+    e = await lies(
+      '<w:p><w:r><w:rPr><w:b/><w:i/></w:rPr><w:t>beides</w:t></w:r>'
+      + '<w:r><w:rPr><w:b w:val="0"/></w:rPr><w:t>nicht fett</w:t></w:r>'
+      + '<w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t>unter</w:t></w:r>'
+      + '<w:r><w:rPr><w:u w:val="none"/></w:rPr><w:t>ohne</w:t></w:r>'
+      + '<w:r><w:rPr><w:strike/></w:rPr><w:t>durch</w:t></w:r>'
+      + '<w:r><w:rPr><w:color w:val="C04040"/></w:rPr><w:t>rot</w:t></w:r>'
+      + '<w:r><w:rPr><w:color w:val="auto"/></w:rPr><w:t>auto</w:t></w:r></w:p>');
+    pruefe('Auszeichnungen und Farben',
+      htmlVon(e) === '<p><b><i>beides</i></b>nicht fett<u>unter</u>ohne<s>durch</s>'
+        + '<font color="#c04040">rot</font>auto</p>', htmlVon(e));
+
+    // Ausrichtung
+    e = await lies('<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>M</w:t></w:r></w:p>'
+      + '<w:p><w:pPr><w:jc w:val="both"/></w:pPr><w:r><w:t>B</w:t></w:r></w:p>');
+    pruefe('Ausrichtung kommt an',
+      htmlVon(e) === '<p class="j-align-center">M</p><p class="j-align-justify">B</p>', htmlVon(e));
+
+    // Listen ueber zwei Ecken, mit Unterebene
+    const nummerierung = '<?xml version="1.0"?><w:numbering ' + NS + '>'
+      + '<w:abstractNum w:abstractNumId="7">'
+      + '<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl>'
+      + '<w:lvl w:ilvl="1"><w:numFmt w:val="lowerLetter"/></w:lvl></w:abstractNum>'
+      + '<w:num w:numId="3"><w:abstractNumId w:val="7"/></w:num></w:numbering>';
+    const punkt = (txt, lvl) => '<w:p><w:pPr><w:numPr><w:ilvl w:val="' + lvl + '"/>'
+      + '<w:numId w:val="3"/></w:numPr></w:pPr><w:r><w:t>' + txt + '</w:t></w:r></w:p>';
+
+    e = await lies(punkt('eins', 0) + punkt('unter', 1) + punkt('zwei', 0),
+      { 'word/numbering.xml': nummerierung });
+    pruefe('Nummerierung mit Unterebene',
+      htmlVon(e) === '<ol class="j-list-decimal"><li>eins<ol class="j-list-lower-alpha">'
+        + '<li>unter</li></ol></li><li>zwei</li></ol>', htmlVon(e));
+    pruefe('Eine Liste bleibt EIN Block', e.bloecke.length === 1, e.bloecke.length);
+
+    // Tabelle mit verbundenen Zellen und Spaltenbreiten
+    const zelle = (txt, extra) => '<w:tc><w:tcPr>' + (extra || '') + '</w:tcPr>'
+      + '<w:p><w:r><w:t>' + txt + '</w:t></w:r></w:p></w:tc>';
+    e = await lies('<w:tbl>'
+      + '<w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="3000"/></w:tblGrid>'
+      + '<w:tr><w:trPr><w:tblHeader/></w:trPr>' + zelle('A') + zelle('B') + '</w:tr>'
+      + '<w:tr>' + zelle('hoch', '<w:vMerge w:val="restart"/>') + zelle('x') + '</w:tr>'
+      + '<w:tr>' + zelle('', '<w:vMerge/>') + zelle('y') + '</w:tr>'
+      + '<w:tr>' + zelle('breit', '<w:gridSpan w:val="2"/>') + '</w:tr></w:tbl>');
+    const tHtml = htmlVon(e);
+    pruefe('Spaltenbreiten als col width',
+      tHtml.includes('<colgroup><col width="100"><col width="200"></colgroup>'), tHtml.slice(0, 90));
+    pruefe('Kopfzeile wird th', tHtml.includes('<th>A</th><th>B</th>'), tHtml.slice(0, 160));
+    pruefe('Zellen bleiben inline, ohne Absatz', !tHtml.includes('<p>'), tHtml.slice(0, 160));
+    pruefe('Verbund ueber Zeilen wird rowspan', tHtml.includes('<td rowspan="2">hoch</td>'), tHtml);
+    pruefe('Die Fortsetzung faellt weg',
+      (tHtml.match(/<tr>/g) || []).length === 4 && !tHtml.includes('<td></td>'), tHtml);
+    pruefe('Verbund ueber Spalten wird colspan', tHtml.includes('<td colspan="2">'), tHtml);
+
+    // Leerzeilen bleiben stehen – in Word sind sie das Mittel fuer Abstand
+    e = await lies('<w:p><w:r><w:t>a</w:t></w:r></w:p><w:p/><w:p><w:r><w:t>b</w:t></w:r></w:p>');
+    pruefe('Leerzeilen bleiben', htmlVon(e) === '<p>a</p><p><br></p><p>b</p>', htmlVon(e));
+
+    // Ein Link behaelt seinen Text, verliert aber die Adresse
+    e = await lies('<w:p><w:hyperlink r:id="rId9"><w:r><w:t>Inkwell</w:t></w:r></w:hyperlink></w:p>');
+    pruefe('Linktext bleibt, Adresse geht', htmlVon(e) === '<p>Inkwell</p>'
+      && e.bericht.verloren.includes('links'), htmlVon(e));
+
+    /* ══ 3. DER SANITIZER ═══════════════════════════════════════════ */
+    abschnitt('Der Sanitizer');
+
+    /* Alles, was hier erzeugt wird, muss ihn UNVERAENDERT ueberstehen.
+       Sonst faellt es beim ersten Cloud-Abgleich weg – unbemerkt, denn
+       auf dem eigenen Rechner sieht man es weiter. */
+    const alles = await lies(
+      '<w:p><w:pPr><w:pStyle w:val="berschrift1"/><w:jc w:val="center"/></w:pPr>'
+      + '<w:r><w:t>Titel</w:t></w:r></w:p>'
+      + '<w:p><w:r><w:rPr><w:b/><w:i/><w:u w:val="single"/><w:strike/>'
+      + '<w:color w:val="2A5FA8"/></w:rPr><w:t>alles</w:t></w:r></w:p>'
+      + punkt('Punkt', 0) + punkt('Unterpunkt', 1)
+      + '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/></w:tblGrid>'
+      + '<w:tr>' + zelle('Z') + '</w:tr></w:tbl>',
+      { 'word/styles.xml': vorlagen, 'word/numbering.xml': nummerierung });
+
+    for (const block of alles.bloecke) {
+      const nachher = sanitizePageHtml(block.html);
+      pruefe('Ueberlebt den Sanitizer: ' + block.html.slice(0, 34).replace(/</g, '‹'),
+        nachher === block.html, 'wurde zu: ' + nachher);
+    }
+
+  } catch (err) {
+    zeilen.push('ABBRUCH ' + err.message + ' | ' + String(err.stack).split('\n')[1]);
+  }
+
+  window.__ergebnis = zeilen.join('\n');
+})();
+</script>
+</body>
+</html>

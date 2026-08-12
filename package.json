@@ -19,6 +19,7 @@
     "test:objects": "electron scripts/test-object-layers",
     "test:sanitize": "electron scripts/test-sanitize",
     "test:lists": "electron scripts/test-lists",
+    "test:docx": "electron scripts/test-docx-import",
     "test:touch": "electron scripts/test-touch",
     "test:caret": "electron scripts/test-caret-geometry",
     "test:lasso": "electron scripts/test-lasso",
