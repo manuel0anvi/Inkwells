@@ -269,20 +269,52 @@
     if (info && info.page) pushPageHistory(info.page);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WO DIE MARKE NACHHER STEHT
+
+     Gemerkt wird sie zweifach: als Stelle im ganzen Textfeld und – wenn
+     sie in einem Punkt steht – noch einmal als Stelle IN DIESEM PUNKT.
+
+     >>> Warum die Stelle im Textfeld allein nicht reicht <<<
+     Sie ist eine Zeichenposition im flachgeklopften Text, und jeder
+     Blockwechsel zählt darin als Zeilenumbruch mit. Beim Einrücken kommt
+     eine Verschachtelungsebene dazu, also auch ein Umbruch – dieselbe
+     sichtbare Stelle hat danach eine um eins höhere Nummer, und die
+     Marke landete eine Zeile weiter. Genau so wurde es gemeldet: „Tab
+     macht den Unterpunkt, aber der Cursor springt in die nächste Zeile."
+
+     Der PUNKT selbst überlebt das Umhängen (er wird verschoben, nicht
+     neu gebaut), und in ihm zählt niemand anders mit.
+     ══════════════════════════════════════════════════════════════════ */
   function markeSichern(textDiv) {
     if (typeof flatPosOfPoint !== 'function') return null;
     const sel = global.getSelection ? global.getSelection() : null;
     if (!sel || !sel.rangeCount) return null;
     const r = sel.getRangeAt(0);
     if (!textDiv.contains(r.startContainer)) return null;
+
+    let knoten = r.startContainer;
+    if (knoten.nodeType === Node.TEXT_NODE) knoten = knoten.parentNode;
+    const li = knoten && knoten.closest ? knoten.closest('li') : null;
+
     return {
       von: flatPosOfPoint(textDiv, r.startContainer, r.startOffset),
-      bis: r.collapsed ? null : flatPosOfPoint(textDiv, r.endContainer, r.endOffset)
+      bis: r.collapsed ? null : flatPosOfPoint(textDiv, r.endContainer, r.endOffset),
+      li,
+      imPunkt: li ? flatPosOfPoint(li, r.startContainer, r.startOffset) : null
     };
   }
 
   function markeSetzen(textDiv, gemerkt) {
-    if (!gemerkt || gemerkt.von === null || typeof setFlatCaret !== 'function') return;
+    if (!gemerkt || typeof setFlatCaret !== 'function') return;
+
+    // Steht sie in einem Punkt und ist nichts markiert: dort festmachen
+    if (gemerkt.li && gemerkt.li.isConnected && gemerkt.bis === null
+        && gemerkt.imPunkt !== null && gemerkt.imPunkt !== undefined) {
+      if (setFlatCaret(gemerkt.li, gemerkt.imPunkt)) return;
+    }
+
+    if (gemerkt.von === null) return;
     if (gemerkt.bis === null || gemerkt.bis === undefined || typeof flatRangeAt !== 'function') {
       setFlatCaret(textDiv, gemerkt.von);
       return;

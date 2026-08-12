@@ -430,6 +430,33 @@ body.touch-input .nb-card-edit-btn {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   STUFE 3 – DER ENGSTE FALL ÜBERHAUPT
+
+   Schmales Hochformat UND offene Navigation: dort bleiben der Leiste
+   rund 500 px, und siebzehn Knöpfe zu je 36 px sind 610. Gemessen fehlten
+   zuletzt 29 px (scripts/test-touch, „hoch 700 + Navigation").
+
+   Weichen kann nichts mehr: Zurückgehen und Vorgehen sollen ausdrücklich
+   BLEIBEN – „die Knöpfe, die verloren gehen müssten, sind die letzten" –,
+   und Zoom, Teilen und Exportieren sind schon weggeblättert.
+
+   Also 30 statt 32 px Kante. Das ist eine bewusste Ausnahme von der
+   Fingerregel weiter oben: die Alternative wäre eine Leiste, die seitlich
+   rollt, und was rechts heraussteht, findet mit dem Finger niemand.
+   Zwei Pixel weniger trifft man noch, eine unsichtbare Schaltfläche nie.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width:760px) {
+
+  .journal-layout:has(#side-panel.open) .tb-opt,
+  .journal-layout:has(#side-panel.open) .tb-mode,
+  .journal-layout:has(#side-panel.open) .sz-btn {
+    min-width: 30px;
+    min-height: 30px;
+    padding: 4px 1px
+  }
+}
+
 /* Mit dem Finger gilt sonst min-width: 36px (ganz oben) und der engere
    Abstand liefe ins Leere. 32 px trifft der Finger noch zuverlässig –
    dieselbe Zahl, die dort schon für die offene Navigation gilt. */
@@ -518,7 +545,11 @@ body.touch-input .nb-card-edit-btn {
 @media (orientation: portrait) {
 
   .tb-insert-all {
-    display: block
+    display: block;
+    /* Vier Pixel Luft nach links, mehr nicht: sein Rahmen im gedrückten
+       Zustand stiess sonst an den Farbring daneben, und die beiden sahen
+       aus wie ein Knopf. */
+    margin-left: 4px
   }
 
   #btn-shape,

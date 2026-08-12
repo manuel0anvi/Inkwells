@@ -124,7 +124,11 @@
     if (!gewaehlt) return;
     const { r, c } = gewaehlt;
     schliessen();
-    if (!stelleWiederher()) return;
+    /* Ohne gemerkte Marke wird trotzdem eingesetzt: insertTable() legt
+       sie dann in die Mitte der Seite (core/tables.js). Hier stand ein
+       „return" – wer vorher nirgends geklickt hatte, drückte auf das
+       Raster und es passierte einfach nichts. */
+    stelleWiederher();
     insertTable(r, c);
   });
 
@@ -137,7 +141,7 @@
     if (!antwort) return;
     const m = /^\s*(\d+)\s*[x×*,\s]\s*(\d+)\s*$/.exec(antwort);
     if (!m) { toast((typeof t === 'function' && t('insertTableBad')) || 'Bitte etwas wie 8x3.', true); return; }
-    if (!stelleWiederher()) return;
+    stelleWiederher();
     insertTable(+m[1], +m[2]);
   });
 

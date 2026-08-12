@@ -426,6 +426,84 @@ app.on('ready', async () => {
     await js(`S.touchDraw = true; true`);
 
     /* ══════════════════════════════════════════════════════════════════
+       EINE FORM MIT DEM FINGER ANFASSEN
+
+       Gemeldet als „entweder male ich die ganze Zeit, oder ich muss ganz
+       genau den Rand der Form treffen". Beides: mit gewähltem Stift
+       nehmen Objekte keine Zeiger an, und eine Ellipse ohne Füllung
+       besteht nur aus ihrem Umriss.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Eine Form mit dem Finger anfassen');
+    await js(`deselectStroke(); switchMode('pen1'); true`);
+    await warte(200);
+    await js(`(() => {
+      const info = getPage(S.activePgId);
+      const obj = { id: 'probe-form', kind: 'shape', shapeType: 'ellipse',
+                    x: 260, y: 300, w: 220, h: 150, layer: 'front',
+                    fill: 'none', stroke: '#1a1510', strokeWidth: 2 };
+      info.page.objects = [obj];
+      const el = document.querySelector('[data-pgid="' + info.page.id + '"] .j-objects');
+      el.innerHTML = ''; placeObject(el, obj, info.page);
+      return true; })()`);
+    await warte(300);
+
+    // Mitten in die Ellipse, wo nichts als Luft ist
+    const inDerForm = await js(`(() => {
+      const r = document.querySelector('.obj-wrap').getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const vorForm = await zahl(`(S.strokeHistory[S.activePgId] || []).length`);
+    await fingerTippt(inDerForm.x, inDerForm.y);
+
+    const formLage = await js(`(() => ({
+      gewaehlt: !!document.querySelector('.obj-wrap.selected'),
+      modus: S.mode,
+      striche: (S.strokeHistory[S.activePgId] || []).length }))()`);
+    pruefe('Ein Tipp in die Fläche wählt die Form aus',
+      formLage.gewaehlt === true, JSON.stringify(formLage));
+    pruefe('Und stellt dafür auf den Zeiger um (' + formLage.modus + ')',
+      formLage.modus === 'cursor', 'das Werkzeug blieb auf ' + formLage.modus);
+    pruefe('Statt darauf zu malen', formLage.striche === vorForm,
+      'es kam ein Strich dazu');
+
+    /* ══════════════════════════════════════════════════════════════════
+       TAB IM STICHPUNKT
+
+       Der Unterpunkt entstand, aber die Marke sprang in die nächste
+       Zeile: die gemerkte Stelle ist eine Zeichenposition im flachen
+       Text, und eine Verschachtelungsebene mehr heisst dort ein
+       Zeilenumbruch mehr (core/lists.js).
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Tab im Stichpunkt');
+    await js(`(() => {
+      switchMode('cursor');
+      const td = document.querySelector('.j-text');
+      td.innerHTML = '<ul class="j-list-disc"><li>Erster</li><li>Zweiter</li></ul>';
+      td.focus();
+      const li = td.querySelectorAll('li')[1];
+      const r = document.createRange();
+      r.selectNodeContents(li); r.collapse(false);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      return true; })()`);
+    await warte(250);
+    await dbg.sendCommand('Input.dispatchKeyEvent', {
+      type: 'rawKeyDown', windowsVirtualKeyCode: 9, key: 'Tab', code: 'Tab' });
+    await dbg.sendCommand('Input.dispatchKeyEvent', {
+      type: 'keyUp', windowsVirtualKeyCode: 9, key: 'Tab', code: 'Tab' });
+    await warte(350);
+
+    const nachTab = await js(`(() => {
+      const td = document.querySelector('.j-text');
+      const s = getSelection();
+      let k = s.rangeCount ? s.getRangeAt(0).startContainer : null;
+      if (k && k.nodeType === 3) k = k.parentNode;
+      const li = k && k.closest ? k.closest('li') : null;
+      return { tiefe: td.querySelectorAll('ul ul').length,
+               imPunkt: li ? (li.textContent || '').trim() : null }; })()`);
+    pruefe('Tab macht einen Unterpunkt', nachTab.tiefe >= 1, JSON.stringify(nachTab));
+    pruefe('Und die Marke bleibt in dieser Zeile („' + nachTab.imPunkt + '")',
+      nachTab.imPunkt === 'Zweiter', 'sie ist woanders gelandet');
+
+    /* ══════════════════════════════════════════════════════════════════
        DAS TABELLEN-RASTER MIT DEM FINGER
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Das Tabellen-Raster mit dem Finger');
@@ -474,6 +552,24 @@ app.on('ready', async () => {
         !!tab && tab.zeilen === 3 && tab.spalten === 4,
         'es kam ' + JSON.stringify(tab) + ' statt 3×4');
     }
+
+    /* Und ohne Schreibmarke? Dann kam gar nichts – „erst in den Text
+       klicken" ist eine Absage, kein Ergebnis. Jetzt geht sie in die
+       Mitte der Seite (core/tables.js). */
+    await js(`(() => {
+      const td = document.querySelector('.j-text');
+      td.innerHTML = '<p>Text</p>';
+      getSelection().removeAllRanges();
+      td.blur();
+      switchMode('pen1');
+      return true; })()`);
+    await warte(250);
+    const ohneMarke = await js(`(() => {
+      const vorher = document.querySelectorAll('.j-text table').length;
+      insertTable(2, 2);
+      return { vorher, nachher: document.querySelectorAll('.j-text table').length }; })()`);
+    pruefe('Ohne Schreibmarke landet die Tabelle trotzdem auf der Seite',
+      ohneMarke.nachher === ohneMarke.vorher + 1, JSON.stringify(ohneMarke));
 
     /* ══════════════════════════════════════════════════════════════════
        DAS FORMEL-FENSTER ZIEHT KEINE TASTATUR HOCH

@@ -131,20 +131,33 @@ document.addEventListener('pointerdown', e => { if (!e.target.closest('.obj-wrap
    zählen dadurch als „kein Text".
    ══════════════════════════════════════════════════════════════════════ */
 
-/** Das oberste Bild unter dem Zeiger, das hinter dem Text liegt. */
-function backObjectAt(pageEl, x, y) {
-  const layer = pageEl.querySelector('.j-objects');
+/**
+ * Das oberste Objekt an dieser Bildschirmstelle – oder null.
+ *
+ * Gefragt wird das RECHTECK und nicht die Form darin: eine Ellipse ohne
+ * Füllung hat sonst nur ihren Umriss, und den trifft mit dem Finger
+ * niemand. Genau so wurde es gemeldet.
+ *
+ * @param {string} [band] 'back' oder 'front' – ohne Angabe zählt jedes
+ */
+function objectAt(pageEl, x, y, band) {
+  const layer = pageEl && pageEl.querySelector('.j-objects');
   if (!layer) return null;
 
   // Von vorn nach hinten: das zuletzt gezeichnete liegt oben
   const wraps = [...layer.querySelectorAll('.obj-wrap')].reverse();
   for (const wrap of wraps) {
-    if (wrap.dataset.layer !== 'back') continue;
+    if (band && wrap.dataset.layer !== band) continue;
     if (typeof wrap._beginObjInteraction !== 'function') continue;
     const r = wrap.getBoundingClientRect();
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return wrap;
   }
   return null;
+}
+
+/** Das oberste Bild unter dem Zeiger, das hinter dem Text liegt. */
+function backObjectAt(pageEl, x, y) {
+  return objectAt(pageEl, x, y, 'back');
 }
 
 /** Die Einfügemarke an einer Bildschirmstelle – über beide Schreibweisen. */

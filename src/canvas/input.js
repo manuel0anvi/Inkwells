@@ -254,6 +254,29 @@ function attachInput(canvas, textDiv, objLayer, page) {
   }
 
   /**
+   * Ein Fingertipp auf ein Bild, eine Form oder eine Formel: auswählen.
+   *
+   * Mit gewähltem Zeichenwerkzeug nehmen Objekte keine Zeiger an
+   * (ui/toolbar.js, applyMode) – der Finger malte also über sie hinweg.
+   * „Entweder male ich die ganze Zeit, oder ich muss ganz genau den Rand
+   * der Form treffen": das Zweite galt in der Zeigerstellung, wo eine
+   * Ellipse ohne Füllung nur aus ihrem Umriss besteht. Beides erledigt
+   * sich hier – gefragt wird das Rechteck des Objekts (canvas/objects.js,
+   * objectAt), und danach steht das Werkzeug auf dem Zeiger.
+   *
+   * @returns {boolean} ob der Tipp als Auswahl verbraucht wurde
+   */
+  function tippAufObjekt(e) {
+    if (S.readOnly || typeof window.objectAt !== 'function') return false;
+    const wrap = window.objectAt(div, e.clientX, e.clientY);
+    if (!wrap) return false;
+    if (S.mode !== 'cursor') switchMode('cursor');
+    wrap._beginObjInteraction(e);
+    unterdrueckeTextTipp();
+    return true;
+  }
+
+  /**
    * Ein Fingertipp auf geschriebenen Text: dorthin gehört die Marke.
    *
    * >>> Warum das hier stehen muss <<<
@@ -467,7 +490,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
     const c = coords(e);
     const treffer = window.strichBeiPunkt(page.id, c.x, c.y, null);
-    if (!treffer) { tippAufText(e); return; }
+    if (!treffer) { if (!tippAufObjekt(e)) tippAufText(e); return; }
     if (S.mode !== 'cursor') switchMode('cursor');
     if (typeof window.waehleStriche === 'function') window.waehleStriche(page.id, [treffer]);
     unterdrueckeTextTipp();
@@ -578,8 +601,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
         // Der Tipp darf nicht gleich noch die Schreibmarke setzen
         unterdrueckeTextTipp();
         alsAuswahl = true;
-      } else if (tippAufText(e)) {
-        // Kein Punkt, sondern ein Tipp in eine Zeile – der Punkt kommt weg
+      } else if (tippAufObjekt(e) || tippAufText(e)) {
+        // Kein Punkt, sondern ein Tipp auf etwas – der Punkt kommt weg
         nimmStrichZurueck(finished);
         alsAuswahl = true;
       }

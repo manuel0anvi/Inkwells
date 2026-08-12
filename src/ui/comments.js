@@ -353,10 +353,21 @@
     const liste = E('comment-panel-list');
     stelleGriff();
     if (!liste) return;
-    // Kein Platz im Rand mehr? Dann ist die Leiste der einzige Weg.
-    if (!kommentare.length) { setzeLeiste(false); liste.innerHTML = ''; return; }
 
     liste.innerHTML = '';
+
+    /* >>> Leer heisst leer, nicht zu <<<
+       Hier stand setzeLeiste(false): eine Seite ohne Kommentare machte
+       die Leiste zu. Wer sie aufwischte, sah sie aufgehen und sofort
+       wieder zurückschnappen – genau so wurde es gemeldet. Wer sie
+       aufmacht, will nachsehen, und „hier ist nichts" ist eine Antwort. */
+    if (!kommentare.length) {
+      const leer = document.createElement('div');
+      leer.className = 'comment-panel-leer';
+      leer.textContent = txt('noComments', 'Text auswählen und auf „Kommentieren" drücken.');
+      liste.appendChild(leer);
+      return;
+    }
     for (const c of kommentare) {
       const karte = baueKarte(c);
       if (_hervor && String(c.id) === String(_hervor)) karte.classList.add('aktiv');
@@ -576,6 +587,7 @@
   }
 
   let _wahlTimer = 0;
+  let _aufraeumTimer = 0;
   document.addEventListener('selectionchange', () => {
     clearTimeout(_wahlTimer);
     _wahlTimer = setTimeout(pruefeAuswahl, 180);
@@ -589,6 +601,19 @@
      abzuwarten. */
   document.addEventListener('input', e => {
     if (!e.target || !e.target.closest || !e.target.closest('.j-text')) return;
+
+    /* Wer die kommentierte Stelle löscht, löscht den Kommentar mit
+       (core/comments.js). Verzögert, weil ein Tastendruck mitten im Wort
+       die Markierung kurz zerlegen kann – erst wenn es ruhig ist, gilt
+       das DOM als Wahrheit. */
+    const pgEl = e.target.closest('[data-pgid]');
+    if (pgEl && typeof pruneComments === 'function') {
+      clearTimeout(_aufraeumTimer);
+      _aufraeumTimer = setTimeout(() => {
+        if (pruneComments(pgEl.dataset.pgid)) planeNeu();
+      }, 700);
+    }
+
     clearTimeout(_wahlTimer);
     // Erst verstecken, dann neu prüfen: nach einer Löschung ist die
     // alte Auswahl nicht mehr gültig, und der Knopf muss sofort weg,

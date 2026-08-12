@@ -1505,6 +1505,14 @@ body.touch-draw .j-canvas {
   box-shadow: none
 }
 
+.comment-panel-leer {
+  color: var(--md);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 4px;
+  opacity: .7
+}
+
 /* Der Griff an der Kante. Fest am Fenster: so kostet er keine
    Blattbreite und bleibt beim Rollen liegen, wo der Daumen ihn sucht. */
 .comment-tab {

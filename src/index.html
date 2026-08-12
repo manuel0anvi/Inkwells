@@ -220,11 +220,13 @@
                liegt keine Tastatur dabei, und ohne sie war ein Versehen
                mit dem Stift nicht mehr zurückzunehmen.
 
-               data-tb-more="4" heisst: von allem Entbehrlichen weichen sie
-               ZULETZT. Ganz unentbehrlich zu sein ging nicht – im
-               Hochformat mit offener Navigation stand die Leiste sonst
-               96 px über den Rand hinaus (scripts/test-touch). -->
-          <div class="tb-grp" data-tb-more="4">
+               Sie tragen KEIN data-tb-more und weichen deshalb nie. Sie
+               hatten einmal eines und wichen im Hochformat mit offener
+               Navigation als Erstes – „die Knöpfe, die verloren gehen
+               müssten, sind die letzten": was rechts aussen steht
+               (Teilen, Exportieren, Zoom) darf gehen, das Werkzeug ganz
+               links nicht. -->
+          <div class="tb-grp">
             <button class="tb-opt" id="btn-undo" data-i18n-title="undoTitle" title="Rückgängig (Strg+Z)">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -436,12 +438,15 @@
                was man am Zoom ueberhaupt tut – dafuer zwei Klicks zu
                verlangen, war ein Umweg um nichts.
 
-               Die Gruppe traegt deshalb KEIN data-tb-more mehr: sie ist
-               unentbehrlich und wird nie weggeblaettert (ui/toolbar.js).
-               Den Platz dafuer holt sich die Leiste, indem alle Knoepfe
-               ab einer gewissen Enge schmaler werden – die Stufen dazu
-               stehen in css/responsive.css. -->
-          <div class="tb-grp tb-zoom">
+               >>> Aber sie weicht als LETZTE, wenn es eng wird <<<
+               Sie trug einmal gar kein data-tb-more und war damit
+               unweigerlich. Im Hochformat mit offener Navigation ging
+               das nicht auf: dann stand die Leiste ueber den Rand
+               hinaus, und was stattdessen wich, waren Rueckgaengig und
+               Vor – also ausgerechnet das, was man dort am dringendsten
+               braucht. Mit Rang 3 geht der Zoom vor ihnen, und ueber ▶
+               ist er weiter erreichbar. -->
+          <div class="tb-grp tb-zoom" data-tb-more="3">
             <button class="tb-opt tb-zoom-btn" id="btn-zoom-out" data-i18n-title="zoomOut" title="Verkleinern">−</button>
             <button class="tb-opt tb-zoom-val" id="btn-zoom-reset" data-i18n-title="zoomReset" title="Zoom">100%</button>
             <button class="tb-opt tb-zoom-btn" id="btn-zoom-in" data-i18n-title="zoomIn" title="Vergrößern">+</button>

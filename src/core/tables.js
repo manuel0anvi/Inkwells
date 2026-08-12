@@ -546,11 +546,49 @@ function notiereTabelle(table) {
  *
  * @returns {boolean} ob es geklappt hat
  */
+/**
+ * Wohin die Tabelle soll, wenn die Schreibmarke nirgends steht.
+ *
+ * Sie kam dann gar nicht – „erst in den Text klicken" ist eine Absage,
+ * kein Ergebnis, und mit dem Finger hat man die Marke sowieso ständig
+ * verloren. Stattdessen wird sie in die Mitte der sichtbaren Seite
+ * gesetzt, so als hätte man dorthin geklickt (canvas/text.js macht aus
+ * einem Klick ins Leere die nötigen Zeilen).
+ *
+ * @returns {HTMLElement|null} das Textfeld, in dem die Marke jetzt steht
+ */
+function tabelleOhneMarke() {
+  /* Erst zum Zeiger: mit gewähltem Stift ist der Text gar nicht
+     beschreibbar (ui/toolbar.js setzt contentEditable), und dann nimmt
+     er weder Fokus noch Schreibmarke an. Eine Tabelle ist Text – wer
+     eine einsetzt, will an ihr schreiben. */
+  if (S.mode !== 'cursor' && typeof switchMode === 'function') switchMode('cursor');
+
+  const pgEl = S.activePgId
+    ? document.querySelector('[data-pgid="' + CSS.escape(S.activePgId) + '"]')
+    : document.querySelector('.j-page');
+  const textDiv = pgEl && pgEl.querySelector('.j-text');
+  if (!textDiv) return null;
+
+  const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+  const r = textDiv.getBoundingClientRect();
+  if (typeof placeCaretAnywhere === 'function') {
+    placeCaretAnywhere(textDiv, r.left + r.width / 2, r.top + r.height / 2,
+      true, info && info.page);
+  } else {
+    textDiv.focus();
+  }
+  return document.activeElement === textDiv ? textDiv : null;
+}
+
 function insertTable(zeilen, spalten) {
-  const textDiv = document.activeElement;
+  let textDiv = document.activeElement;
   if (!textDiv || !textDiv.classList || !textDiv.classList.contains('j-text')) {
-    if (typeof toast === 'function') toast(t('tableNeedsCaret') || 'Erst in den Text klicken.', true);
-    return false;
+    textDiv = tabelleOhneMarke();
+    if (!textDiv) {
+      if (typeof toast === 'function') toast(t('tableNeedsCaret') || 'Erst in den Text klicken.', true);
+      return false;
+    }
   }
   if (S.readOnly) { if (typeof toast === 'function') toast(t('sharedNoRight'), true); return false; }
 

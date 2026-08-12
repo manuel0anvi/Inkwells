@@ -288,6 +288,44 @@ function entferneMarke(commentId) {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   KOMMENTARE OHNE STELLE
+
+   Wird der kommentierte Text gelöscht, geht die Markierung mit ihm –
+   der Kommentar blieb aber stehen und zeigte auf nichts mehr. In der
+   Leiste stand dann eine Bemerkung zu einem Satz, den es nicht gibt.
+
+   >>> Warum nur nach EIGENEN Änderungen <<<
+   Aufgerufen wird das aus dem input-Ereignis der Seite (ui/comments.js),
+   also genau dann, wenn hier jemand geschrieben hat. Beim Empfangen
+   fremden Textes gilt es nicht: dort kann die Markierung kurz fehlen,
+   weil das Heft mit den Kommentardaten noch unterwegs ist – dafür gibt
+   es ensureCommentsFromMarkers() weiter unten.
+
+   >>> Und fremde Kommentare? <<<
+   Die verschwinden mit. deleteComment() lässt das aus gutem Grund nicht
+   zu, hier ist es aber keine Entscheidung mehr: die Stelle ist weg, und
+   ein Kommentar ohne Stelle ist kein Kommentar.
+   ══════════════════════════════════════════════════════════════════════ */
+function pruneComments(pageId) {
+  const nb = typeof getNb === 'function' ? getNb() : null;
+  if (!nb || !nb.comments || !nb.comments.length || !pageId) return false;
+
+  const pgEl = document.querySelector('[data-pgid="' + CSS.escape(String(pageId)) + '"]');
+  if (!pgEl) return false;
+
+  const daIds = new Set([...pgEl.querySelectorAll('.j-comment-mark[data-cid]')]
+    .map(m => m.dataset.cid));
+
+  const vorher = nb.comments.length;
+  nb.comments = nb.comments.filter(c =>
+    String(c.pageId) !== String(pageId) || daIds.has(String(c.id)));
+
+  if (nb.comments.length === vorher) return false;
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  return true;
+}
+
 /**
  * Markierungen im HTML wiederfinden, deren Kommentar noch fehlt.
  *
