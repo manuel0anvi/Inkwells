@@ -29,6 +29,60 @@ async function parsePdfToImages(pdfDataUrl) {
   return images;
 }
 
+/**
+ * Baut aus einem Seitenbild eine Heftseite.
+ *
+ * Die Rechnung stand zweimal fast gleich da – einmal fuers PDF, einmal
+ * fuers Bild. Sie ist nicht offensichtlich: die Breite wird auf das
+ * Heftmass gezogen, die Hoehe folgt dem Seitenverhaeltnis, und der Platz
+ * des Seitenkopfs kommt obendrauf. Ohne ihn saesse das Bild unter dem
+ * Kopf und waere unten abgeschnitten.
+ *
+ * >>> Warum 56 und nicht CFG.HDR (58) <<<
+ * Weil das Bild selbst bei 56 px anfaengt und `calc(100% - 56px)` hoch
+ * ist (app.js, beim Aufbau der Seite). CFG.HDR zaehlt die 2 px Trennlinie
+ * mit – die richtige Zahl dort, wo es um den freizuhaltenden Kopfbereich
+ * geht, hier aber 2 px Luft unter dem Bild. Die beiden Zahlen meinen
+ * verschiedene Dinge und duerfen nicht zusammengelegt werden.
+ *
+ * Papier: immer 'blank'. Ein Linienraster hinter einem fertigen
+ * Seitenbild ergibt kein Bild, sondern ein Durcheinander.
+ */
+const BILD_KOPF_PX = 56;
+
+function makeImagePage(dataUrl, breite, hoehe) {
+  const pg = makePage('blank');
+  pg.bgImg = dataUrl;
+  pg.w = CFG.PAGE_W;
+  pg.h = Math.round(CFG.PAGE_W * (hoehe / (breite || 1))) + BILD_KOPF_PX;
+  return pg;
+}
+window.makeImagePage = makeImagePage;
+
+/* ══════════════════════════════════════════════════════════════════════
+   EIN PDF ALS NEUES HEFT
+
+   Derselbe Weg wie beim Einfuegen – parsePdfToImages malt jede Seite in
+   ein Bild –, nur landen die Seiten in einem frischen Heft statt in
+   einem offenen. Aufgerufen aus ui/homeGrid.js, wenn in der Uebersicht
+   „Dokument oeffnen" gewaehlt wurde.
+
+   @param {object} nb        das frische Heft; seine Seiten werden ersetzt
+   @param {string} dataUrl   die PDF-Datei
+   @returns {Promise<{seiten:number}>}
+   ══════════════════════════════════════════════════════════════════════ */
+async function fillNotebookFromPdf(nb, dataUrl) {
+  const bilder = await parsePdfToImages(dataUrl);
+  if (!bilder.length) throw new Error(t('pdfNoPages') || 'Das PDF hat keine Seiten.');
+
+  /* Die leere Startseite faellt weg – sie stuende sonst vor der ersten
+     Seite des Dokuments, und niemand hat sie bestellt. */
+  nb.pages = bilder.map(b => makeImagePage(b.url, b.w, b.h));
+  nb.sections = [];
+  return { seiten: nb.pages.length };
+}
+window.fillNotebookFromPdf = fillNotebookFromPdf;
+
 /* ── INSERT ── */
 /* Aufgerufen aus dem Einfügen-Menü (ui/insert.js). Hier hing bis dahin
    der Knopf selbst; seit es dort auch Tabellen gibt, ist der Knopf ein
@@ -68,10 +122,7 @@ async function insertFilesFlow() {
           const insertIdx = pageNumberOf(nb, info.page.id);
 
           pdfImageUrls.forEach((imgObj, i) => {
-            const newPg = makePage('blank'); // better default for full page images
-            newPg.bgImg = imgObj.url;
-            newPg.w = CFG.PAGE_W; // normalize width to standard A4 (approx 840)
-            newPg.h = Math.round(CFG.PAGE_W * (imgObj.h / (imgObj.w || 1))) + 56;
+            const newPg = makeImagePage(imgObj.url, imgObj.w, imgObj.h);
             insertPageInto(nb, sec, newPg, insertIdx + i);
             if (!firstNewPageId) firstNewPageId = newPg.id;
           });
@@ -126,13 +177,10 @@ async function insertFilesFlow() {
       }
     } else if (f.kind === 'image') {
       if (insertType === 'page') {
-        const newPg = makePage('blank');
-        newPg.bgImg = f.dataUrl;
         const tmpImg = new Image();
         tmpImg.src = f.dataUrl;
         await new Promise(r => tmpImg.onload = r);
-        newPg.w = CFG.PAGE_W; // normalize to roughly standard page
-        newPg.h = Math.round(CFG.PAGE_W * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1))) + 56;
+        const newPg = makeImagePage(f.dataUrl, tmpImg.naturalWidth, tmpImg.naturalHeight);
         insertPageInto(nb, sec, newPg, pageNumberOf(nb, info.page.id));
         if (!firstNewPageId) firstNewPageId = newPg.id;
         addedPages = true;

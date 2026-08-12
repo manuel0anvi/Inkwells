@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('api', {
   maximize:  ()  => ipcRenderer.send('win-max'),
   close:     ()  => ipcRenderer.send('win-close'),
   pickFiles: ()  => ipcRenderer.invoke('pick-files'),
+  // Eine .docx oder .pdf, aus der ein neues Heft wird (ui/homeGrid.js)
+  pickDocument: () => ipcRenderer.invoke('pick-document'),
   exportPdf: (h, defaultName) => ipcRenderer.invoke('export-pdf', h, defaultName),
   // Fertige Binärdatei speichern (Word-Export)
   saveBinary: (payload) => ipcRenderer.invoke('save-binary', payload),

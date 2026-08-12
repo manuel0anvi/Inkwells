@@ -1001,6 +1001,45 @@ ipcMain.handle('pick-files', async () => {
   });
 });
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN DOKUMENT ZUM ÖFFNEN WÄHLEN
+
+   Getrennt von 'pick-files', obwohl beide eine Datei aussuchen. Der
+   Unterschied ist die Absicht, und die steckt schon im Fenster: dort
+   sucht man EINE Vorlage für ein neues Heft, hier mehrere Dateien zum
+   Einfügen in ein offenes. Ein gemeinsamer Aufruf müsste beide Fälle
+   über eine Fahne auseinanderhalten und böte im Öffnen-Fenster
+   Bilddateien an, aus denen gar kein Heft entsteht.
+
+   .doc fehlt mit Absicht: das alte Binärformat ist etwas ganz anderes
+   als .docx und lässt sich nicht nebenbei lesen. Es hier anzubieten
+   hiesse, ein Versprechen zu geben, das erst beim Öffnen bricht.
+   ══════════════════════════════════════════════════════════════════════ */
+ipcMain.handle('pick-document', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Word & PDF', extensions: ['docx', 'pdf'] },
+      { name: 'Word-Dokument', extensions: ['docx'] },
+      { name: 'PDF', extensions: ['pdf'] }
+    ]
+  });
+  if (r.canceled || !r.filePaths.length) return null;
+
+  const p = r.filePaths[0];
+  const ext = path.extname(p).toLowerCase();
+  const name = path.basename(p, path.extname(p));   // ohne Endung: der Heftname
+  const mime = ext === '.pdf'
+    ? 'application/pdf'
+    : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+  return {
+    kind: ext === '.pdf' ? 'pdf' : 'docx',
+    name,
+    dataUrl: `data:${mime};base64,${fs.readFileSync(p).toString('base64')}`
+  };
+});
+
 ipcMain.handle('export-pdf', async (_, html, defaultName) => {
   const r = await dialog.showSaveDialog(win, {
     // Der Heftname als Vorschlag – „inkwell.pdf" für jedes Heft war beim

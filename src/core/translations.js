@@ -5,6 +5,12 @@ const TRANSLATIONS = {
     // Home view
     myNotebooks: 'Meine Hefte',
     newNotebook: 'Neues Heft',
+    openDocument: 'Dokument öffnen',
+    openDocReading: 'Dokument wird gelesen …',
+    openDocDonePdf: '{n} Seiten übernommen.',
+    openDocFailed: 'Das Dokument ließ sich nicht öffnen: {msg}',
+    openDocNoWordYet: 'Word-Dokumente kommen noch.',
+    pdfNoPages: 'Das PDF hat keine Seiten.',
     open: 'Öffnen',
     
     // Notebook modal
@@ -707,6 +713,12 @@ const TRANSLATIONS = {
     // Home view
     myNotebooks: 'My Notebooks',
     newNotebook: 'New Notebook',
+    openDocument: 'Open document',
+    openDocReading: 'Reading document …',
+    openDocDonePdf: '{n} pages imported.',
+    openDocFailed: 'The document could not be opened: {msg}',
+    openDocNoWordYet: 'Word documents are still to come.',
+    pdfNoPages: 'The PDF has no pages.',
     open: 'Open',
     
     // Notebook modal
@@ -1393,6 +1405,12 @@ const TRANSLATIONS = {
     // Home view
     myNotebooks: 'I Miei Quaderni',
     newNotebook: 'Nuovo Quaderno',
+    openDocument: 'Apri documento',
+    openDocReading: 'Lettura del documento …',
+    openDocDonePdf: '{n} pagine importate.',
+    openDocFailed: 'Non è stato possibile aprire il documento: {msg}',
+    openDocNoWordYet: 'I documenti Word arriveranno.',
+    pdfNoPages: 'Il PDF non ha pagine.',
     open: 'Apri',
     
     // Notebook modal

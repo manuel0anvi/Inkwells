@@ -66,6 +66,40 @@ function renderHomeGrid() {
 // New notebook button click handler
 E('btn-new-nb').addEventListener('click', () => openNbModal(null));
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN DOKUMENT ÖFFNEN
+
+   Word oder PDF aussuchen, dann das gewohnte Heft-Fenster: Name (schon
+   mit dem Dateinamen gefüllt), Farbe, Papier. Beim Anlegen füllt der
+   Rückruf die Seiten.
+
+   >>> Warum erst die Datei und dann das Fenster <<<
+   Andersherum müsste man Name und Farbe für ein Heft aussuchen, das
+   vielleicht nie entsteht, weil im Dateiwähler doch abgebrochen wird.
+   ══════════════════════════════════════════════════════════════════════ */
+E('btn-open-doc').addEventListener('click', async () => {
+  if (!window.api || !window.api.pickDocument) { toast(t('electronOnly'), true); return; }
+
+  const datei = await window.api.pickDocument();
+  if (!datei) return;
+
+  openNbModal(null, {
+    name: datei.name,
+    onCreate: async (nb) => {
+      toast(t('openDocReading') || 'Dokument wird gelesen …');
+
+      if (datei.kind === 'pdf') {
+        const bericht = await fillNotebookFromPdf(nb, datei.dataUrl);
+        toast((t('openDocDonePdf') || '{n} Seiten übernommen.')
+          .replace('{n}', bericht.seiten));
+        return;
+      }
+
+      throw new Error(t('openDocNoWordYet') || 'Word-Dokumente kommen noch.');
+    }
+  });
+});
+
 /* ── DRAG & DROP (Mouse + Touch) ── */
 function handleDragStart(e) {
   // Ignore if clicking edit button
@@ -291,11 +325,35 @@ E('ctx-delete').addEventListener('click', async () => {
 
 /* ── NB MODAL ── */
 let _nbEditId = null, _nbColor = NB_COLORS[0], _nbBg = 'ruled';
-function openNbModal(editId) {
+/* ══════════════════════════════════════════════════════════════════════
+   WER DAS HEFT FÜLLT, WENN ES NICHT LEER BLEIBEN SOLL
+
+   Beim Öffnen eines Word- oder PDF-Dokuments entsteht ein ganz normales
+   Heft – nur eben mit Inhalt. Statt dafür ein zweites Fenster zu bauen,
+   bekommt dieses hier einen Rückruf: er wird aufgerufen, sobald Name,
+   Farbe und Papier feststehen, und darf nb.pages ersetzen.
+
+   >>> Warum nicht ein eigenes Fenster <<<
+   Namensprüfung, Doppelnamen-Schutz, die Frage nach dem Speicherort und
+   die Prüfung auf eine schon vorhandene Datei stecken alle im
+   OK-Knopf unten. Ein zweites Fenster müsste jede davon noch einmal
+   haben, und beim nächsten Nachbessern ginge eine davon vergessen.
+   ══════════════════════════════════════════════════════════════════════ */
+let _nbOnCreate = null;
+
+/**
+ * @param {string|null} editId  Heft zum Ändern, sonst null für ein neues
+ * @param {object} [optionen]
+ * @param {string} [optionen.name]      Vorschlag für den Namen
+ * @param {Function} [optionen.onCreate] bekommt das frische Heft und darf
+ *   es füllen; wirft er, entsteht gar kein Heft.
+ */
+function openNbModal(editId, optionen = {}) {
   _nbEditId = editId; const nb = editId ? getNb(editId) : null;
-  E('nb-modal-title').textContent = nb ? t('editNotebookTitle') : t('newNotebookTitle'); 
+  _nbOnCreate = optionen.onCreate || null;
+  E('nb-modal-title').textContent = nb ? t('editNotebookTitle') : t('newNotebookTitle');
   E('nb-modal-ok').textContent = nb ? t('save') : t('create');
-  E('nb-name-in').value = nb ? nb.name : ''; 
+  E('nb-name-in').value = nb ? nb.name : (optionen.name || '');
   E('nb-name-in').placeholder = t('notebookNamePlaceholder');
   _nbColor = nb ? nb.color : NB_COLORS[S.notebooks.length % NB_COLORS.length]; _nbBg = nb ? nb.defaultBg : 'ruled';
   const pal = E('nb-color-palette'); pal.innerHTML = '';
@@ -303,7 +361,12 @@ function openNbModal(editId) {
   buildBgRow(E('nb-bg-row'), _nbBg, id => { _nbBg = id; });
   E('ov-nb').style.display = 'flex'; setTimeout(() => E('nb-name-in').focus(), 30);
 }
-E('nb-modal-cancel').addEventListener('click', () => E('ov-nb').style.display = 'none');
+E('nb-modal-cancel').addEventListener('click', () => {
+  // Ohne das bliebe der Rückruf stehen und das nächste „Neues Heft"
+  // bekäme ungefragt den Inhalt des abgebrochenen Dokuments.
+  _nbOnCreate = null;
+  E('ov-nb').style.display = 'none';
+});
 E('nb-modal-ok').addEventListener('click', async () => {
   const name = E('nb-name-in').value.trim(); 
   if (!name) { toast(t('enterName'), true); return; }
@@ -362,11 +425,31 @@ E('nb-modal-ok').addEventListener('click', async () => {
       }
     }
     
-    const nb = { id: uid(), name, color: _nbColor, defaultBg: _nbBg, pages: [], sections: [] }; 
-    const pg = makePage(nb.defaultBg); 
-    nb.pages.push(pg); 
+    const nb = { id: uid(), name, color: _nbColor, defaultBg: _nbBg, pages: [], sections: [] };
+    const pg = makePage(nb.defaultBg);
+    nb.pages.push(pg);
     // Ein neues Heft startet ohne Abschnitte: "alle Seiten" zeigt ohnehin alles
-    nb.sections = []; 
+    nb.sections = [];
+
+    /* Kommt der Inhalt aus einem Dokument, füllt ihn der Rückruf – erst
+       danach ist das Heft fertig. Das Fenster geht vorher zu, sonst
+       stünde es minutenlang offen über einem Vorgang, der nicht dazu
+       gehört. Schlägt das Einlesen fehl, entsteht gar kein Heft: ein
+       halbes wäre schlimmer als keines. */
+    if (_nbOnCreate) {
+      const fuellen = _nbOnCreate;
+      _nbOnCreate = null;
+      E('ov-nb').style.display = 'none';
+      try {
+        await fuellen(nb);
+      } catch (err) {
+        console.error('[HomeGrid] Dokument einlesen fehlgeschlagen:', err);
+        toast((t('openDocFailed') || 'Das Dokument liess sich nicht oeffnen: {msg}')
+          .replace('{msg}', err && err.message ? err.message : String(err)), true);
+        return;
+      }
+    }
+
     S.notebooks.push(nb);
     // Refresh home grid so new notebook appears immediately in overview
     try { renderHomeGrid(); } catch (err) { console.error('[HomeGrid] renderHomeGrid after create failed:', err); }
@@ -383,7 +466,7 @@ E('nb-modal-ok').addEventListener('click', async () => {
     openNotebook(nb.id); 
   }
 });
-document.addEventListener('keydown', e => { if (E('ov-nb').style.display !== 'none' && e.key === 'Enter') E('nb-modal-ok').click(); if (E('ov-nb').style.display !== 'none' && e.key === 'Escape') E('ov-nb').style.display = 'none'; });
+document.addEventListener('keydown', e => { if (E('ov-nb').style.display !== 'none' && e.key === 'Enter') E('nb-modal-ok').click(); if (E('ov-nb').style.display !== 'none' && e.key === 'Escape') E('nb-modal-cancel').click(); });
 
 /* ── Scroll-Erkennung für Karten-Knöpfe ──────────────────────────────
    Die drei Punkte (⋯) auf den Heft-Karten sollen nur beim Scrollen oder
