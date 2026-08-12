@@ -286,7 +286,12 @@ body.touch-draw .j-canvas {
   right: -4px;
   width: 9px;
   cursor: col-resize;
-  z-index: 3;
+  /* Über dem waagerechten Streifen: die beiden kreuzen sich an jeder
+     Ecke, und dort muss einer gewinnen. Die Spaltenbreite wird öfter
+     gezogen als die Zeilenhöhe – und ohne diese Entscheidung griff man
+     an der halben Spaltengrenze eines zweizeiligen Rasters immer die
+     Zeile, obwohl der Zeiger den Doppelpfeil zur Seite zeigte. */
+  z-index: 4;
   /* >>> Der Streifen gehoert dem Finger ────────────────────────────
      .j-text traegt touch-action: pan-y, damit sich ueber dem Text
      scrollen laesst. Genau das nahm dem Ziehen aber den Finger weg: der
@@ -297,25 +302,22 @@ body.touch-draw .j-canvas {
      kostet none hier auch nichts. */
   touch-action: none;
   /* ══════════════════════════════════════════════════════════════════
-     ZU SEHEN, SOBALD MAN IN DER TABELLE STEHT
+     MAN SIEHT IHN NICHT – MAN MERKT IHN AM ZEIGER
 
-     Der Streifen war unsichtbar und zeigte sich erst beim Überfahren.
-     Mit dem Finger schwebt niemand: dort war das Ziehen zwar da, aber
-     nicht zu erraten – gemeldet als „Zeilen und Spalten soll man ziehen
-     können", obwohl man es konnte. Die Streifen gibt es ohnehin nur in
-     der Tabelle, in der die Schreibmarke steht (core/tables.js), also
-     stehen sie dort auch blass da. Beim Anfassen werden sie deutlich.
+     Hier standen goldene Striche an jeder Grenze, damit man das Ziehen
+     auch mit dem Finger findet. Sie sahen aus wie Knöpfe, die zur
+     Tabelle gehören, und genau so wurden sie gemeldet („diese gelben
+     Buttons sollte es nicht geben"). Wie in Word gibt es deshalb nur
+     noch den Zeigerwechsel beim Darüberfahren; beim Ziehen selbst zeigt
+     eine dünne Linie, welche Kante gerade wandert.
      ══════════════════════════════════════════════════════════════════ */
-  background: linear-gradient(to right,
-      transparent 3px, rgba(201, 162, 39, .38) 3px,
-      rgba(201, 162, 39, .38) 6px, transparent 6px)
+  background: transparent
 }
 
-.j-tbl-griff:hover,
 .j-tbl-griff.j-zieht {
   background: linear-gradient(to right,
-      transparent 3px, var(--gold, #c9a227) 3px,
-      var(--gold, #c9a227) 6px, transparent 6px)
+      transparent 4px, var(--gold, #c9a227) 4px,
+      var(--gold, #c9a227) 5px, transparent 5px)
 }
 
 /* Und derselbe Streifen waagerecht, an der Unterkante jeder Zeile
@@ -334,17 +336,13 @@ body.touch-draw .j-canvas {
      wird nach oben und unten, also genau in die Richtung, in die
      .j-text sonst scrollt. */
   touch-action: none;
-  /* Blass sichtbar wie der senkrechte Streifen – siehe dort */
-  background: linear-gradient(to bottom,
-      transparent 3px, rgba(201, 162, 39, .38) 3px,
-      rgba(201, 162, 39, .38) 6px, transparent 6px)
+  background: transparent
 }
 
-.j-tbl-zeilengriff:hover,
 .j-tbl-zeilengriff.j-zieht {
   background: linear-gradient(to bottom,
-      transparent 3px, var(--gold, #c9a227) 3px,
-      var(--gold, #c9a227) 6px, transparent 6px)
+      transparent 4px, var(--gold, #c9a227) 4px,
+      var(--gold, #c9a227) 5px, transparent 5px)
 }
 
 @media (any-pointer: coarse) {

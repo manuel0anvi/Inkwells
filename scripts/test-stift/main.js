@@ -572,6 +572,113 @@ app.on('ready', async () => {
       ohneMarke.nachher === ohneMarke.vorher + 1, JSON.stringify(ohneMarke));
 
     /* ══════════════════════════════════════════════════════════════════
+       DIE TABELLE ANFASSEN
+
+       Zwei Meldungen in einem: „das Verschieben geht überhaupt nicht"
+       und „wenn man an einer Spalte zieht, skaliert sich alles auf
+       einmal". Beides ist eine Zeigerfrage und deshalb nur mit echten
+       Ereignissen zu messen.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Die Tabelle anfassen');
+
+    const tabelleAufbauen = () => js(`(() => {
+      switchMode('cursor');
+      const td = document.querySelector('.j-text');
+      td.innerHTML = '<p>oben</p>'
+        + '<table class="j-table"><tbody>'
+        + '<tr><td>a</td><td>b</td><td>c</td></tr>'
+        + '<tr><td>d</td><td>e</td><td>f</td></tr>'
+        + '</tbody></table><p>mitte</p><p>unten</p>';
+      td.focus();
+      const zelle = td.querySelector('td');
+      const r = document.createRange();
+      r.selectNodeContents(zelle); r.collapse(true);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      return true; })()`);
+
+    const kasten = (wahl) => js(`(() => {
+      const el = document.querySelector('${wahl}');
+      if (!el) return null; const b = el.getBoundingClientRect();
+      return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2),
+               w: Math.round(b.width), h: Math.round(b.height) }; })()`);
+
+    async function mausZieht(von, nach, schritte = 6) {
+      await dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed', button: 'left', buttons: 1, clickCount: 1, x: von.x, y: von.y });
+      for (let i = 1; i <= schritte; i++) {
+        await warte(30);
+        await dbg.sendCommand('Input.dispatchMouseEvent', {
+          type: 'mouseMoved', button: 'left', buttons: 1,
+          x: Math.round(von.x + (nach.x - von.x) * i / schritte),
+          y: Math.round(von.y + (nach.y - von.y) * i / schritte) });
+      }
+      await dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased', button: 'left', buttons: 0, clickCount: 1, x: nach.x, y: nach.y });
+      await warte(300);
+    }
+
+    await tabelleAufbauen();
+    await warte(400);
+    const bewegKnopf = await kasten('.j-table-bar .j-table-btn');
+    const unten = await kasten('.j-text p:last-child');
+    if (!bewegKnopf || !unten) {
+      pruefe('Die Leiste an der Tabelle steht da', false, 'kein Knopf gefunden');
+    } else {
+      /* Drücken, ziehen, loslassen – in EINER Bewegung. Genau die kam nie
+         an, weil ein click Druck und Loslassen am selben Element braucht. */
+      await mausZieht(bewegKnopf, { x: unten.x, y: unten.y + Math.round(unten.h / 3) });
+      const platz = await js(`(() => {
+        const td = document.querySelector('.j-text');
+        const t = td.querySelector('table');
+        return { stelle: [...td.children].indexOf(t), von: td.children.length }; })()`);
+      pruefe('Drücken und Ziehen setzt die Tabelle um (Stelle ' + platz.stelle
+        + ' von ' + platz.von + ')',
+        platz.stelle > 1, 'sie blieb an ihrem Platz stehen');
+    }
+
+    /* Und die Spalten: nur die angefasste darf sich ändern. */
+    await tabelleAufbauen();
+    await warte(400);
+    const griff0 = await kasten('.j-tbl-griff[data-spalte="0"]');
+    const letzterGriff = await kasten('.j-tbl-griff[data-spalte="2"]');
+    pruefe('Auch die letzte Spalte hat einen Greifstreifen',
+      !!letzterGriff, 'an der rechten Kante lässt sich nichts fassen');
+
+    if (!griff0) {
+      pruefe('Die Spaltengrenze lässt sich fassen', false, 'kein Streifen gefunden');
+    } else {
+      const vorher = await js(`(() => [...document.querySelectorAll('.j-text table tr:first-child > *')]
+        .map(z => Math.round(z.getBoundingClientRect().width)))()`);
+      await mausZieht(griff0, { x: griff0.x + 70, y: griff0.y });
+      const nachher = await js(`(() => [...document.querySelectorAll('.j-text table tr:first-child > *')]
+        .map(z => Math.round(z.getBoundingClientRect().width)))()`);
+      pruefe('Ziehen verbreitert die angefasste Spalte ('
+        + vorher[0] + ' auf ' + nachher[0] + ')',
+        nachher[0] > vorher[0] + 40, 'sie ist nicht mitgegangen');
+      pruefe('Und die daneben bleibt, wie sie war ('
+        + vorher[1] + ' / ' + nachher[1] + ')',
+        Math.abs(nachher[1] - vorher[1]) <= 2,
+        'die ganze Tabelle hat sich neu verteilt');
+    }
+
+    /* Die Streifen sind da, sobald der Zeiger über der Tabelle steht –
+       ohne dass man erst hineinklicken muss. */
+    await js(`(() => { const td = document.querySelector('.j-text');
+      getSelection().removeAllRanges(); td.blur();
+      document.querySelectorAll('.j-tbl-griff,.j-tbl-zeilengriff').forEach(g => g.remove());
+      return true; })()`);
+    await warte(200);
+    const zelleB = await kasten('.j-text table tr:first-child td:nth-child(2)');
+    if (zelleB) {
+      await dbg.sendCommand('Input.dispatchMouseEvent',
+        { type: 'mouseMoved', button: 'none', buttons: 0, x: zelleB.x, y: zelleB.y });
+      await warte(250);
+    }
+    const beimSchweben = await zahl(`document.querySelectorAll('.j-tbl-griff').length`);
+    pruefe('Beim Darüberfahren stehen die Greifzonen bereit (' + beimSchweben + ')',
+      beimSchweben >= 3, 'ohne Klick in die Tabelle gibt es nichts zu fassen');
+
+    /* ══════════════════════════════════════════════════════════════════
        DAS FORMEL-FENSTER ZIEHT KEINE TASTATUR HOCH
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Das Formel-Fenster mit dem Finger');

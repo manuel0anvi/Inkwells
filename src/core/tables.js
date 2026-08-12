@@ -250,7 +250,11 @@ function tableBar() {
   tblBar.className = 'j-table-bar';
   tblBar.style.display = 'none';
 
-  const knopf = (icon, titel, tun) => {
+  /**
+   * @param {boolean} [aufDruck] auf pointerdown statt auf click hören –
+   *   für den Bewegen-Knopf, siehe dort.
+   */
+  const knopf = (icon, titel, tun, aufDruck) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'j-table-btn';
@@ -259,7 +263,15 @@ function tableBar() {
     b.setAttribute('aria-label', titel);
     // Die Marke darf beim Klick nicht aus der Tabelle fallen
     b.addEventListener('mousedown', ev => ev.preventDefault());
-    b.addEventListener('click', ev => { ev.stopPropagation(); tun(ev); });
+    if (aufDruck) {
+      b.addEventListener('pointerdown', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        tun(ev);
+      });
+    } else {
+      b.addEventListener('click', ev => { ev.stopPropagation(); tun(ev); });
+    }
     tblBar.appendChild(b);
     return b;
   };
@@ -323,7 +335,18 @@ function tableBar() {
 
   /* Der Bewegen-Knopf umgeht mitZelle, weil der Ziehvorgang asynchron
      läuft. mitZelle würde sofort nach dem Start notiereText() und
-     positionTableBar() aufrufen – auf einer schon versteckten Tabelle. */
+     positionTableBar() aufrufen – auf einer schon versteckten Tabelle.
+
+     >>> Warum pointerdown und nicht click <<<
+     Am Knopf DRÜCKEN UND ZIEHEN ist die Bewegung, die jeder zuerst
+     versucht – und genau die kam nie an: ein click entsteht nur, wenn
+     Druck und Loslassen dasselbe Element treffen. Wer den Finger vom
+     Knopf wegzog, löste gar nichts aus, und das Verschieben sah aus, als
+     gäbe es es nicht. Genau so wurde es gemeldet.
+
+     Jetzt fängt es beim Aufsetzen an. Wer nur tippt, statt zu ziehen,
+     bekommt weiterhin den alten Weg: die Tabelle bleibt in der Luft und
+     wird mit dem nächsten Druck abgesetzt. */
   const startMove = (ev) => {
     const cell = tblBar._zelle;
     if (!cell || !cell.isConnected) { versteckeTableBar(); return; }
@@ -336,7 +359,7 @@ function tableBar() {
     versteckeTableBar();
     starteTabelleVerschieben(pos.table, pos, ev);
   };
-  knopf(TBL_ICONS.bewegen, txt('tableMove', 'Tabelle verschieben'), startMove);
+  knopf(TBL_ICONS.bewegen, txt('tableMove', 'Tabelle verschieben'), startMove, true);
 
   knopf(TBL_ICONS.zeilePlus, txt('tableRowAdd', 'Zeile darunter'),
     mitZelle(pos => {
@@ -490,8 +513,17 @@ function starteTabelleVerschieben(table, pos, startEv) {
   textDiv.contentEditable = 'false';
   document.body.classList.add('j-tbl-zieht');
 
+  /* Beim Tippen auf den Knopf – ohne Ziehen – bleibt die Tabelle in der
+     Luft und wird erst mit dem nächsten Druck abgesetzt. Beim Ziehen
+     dagegen entscheidet das Loslassen. Unterschieden wird an der Strecke,
+     die der Zeiger seit dem Knopfdruck zurückgelegt hat. */
+  const griffX = startEv ? startEv.clientX : 0;
+  const griffY = startEv ? startEv.clientY : 0;
+  let gezogen = !startEv;
+
   const zieh = ev => {
     if (ev.cancelable) ev.preventDefault();
+    if (Math.abs(ev.clientX - griffX) + Math.abs(ev.clientY - griffY) > 8) gezogen = true;
     /* Der erste Finger, der nach dem Knopfdruck aufsetzt, übernimmt: bei
        einer Berührung gibt es zwischen Knopf und Ziehen keinen
        durchgehenden Zeiger, an dem der Abstand hinge. */
@@ -505,6 +537,9 @@ function starteTabelleVerschieben(table, pos, startEv) {
   };
 
   const los = ev => {
+    // Nur getippt: die Tabelle schwebt weiter und wartet auf das Absetzen
+    if (!gezogen) { gezogen = true; return; }
+
     document.removeEventListener('pointermove', zieh);
     document.removeEventListener('pointerup', los);
     document.removeEventListener('pointercancel', los);
@@ -720,32 +755,33 @@ function sichereColgroup(table) {
   while (grp.children.length > spalten) grp.lastElementChild.remove();
 
   if (frisch) {
-    /* >>> Warum die gemessenen Breiten nicht genügen <<<
-       Eine leere Tabelle ist nur so breit wie ihr Inhalt – bei leeren
-       Zellen also 28 px je Spalte, das Mindestmaß. Schriebe man das als
-       feste Breite fest, hätte beim ersten Ziehen KEIN Nachbar etwas
-       abzugeben (er stünde selbst schon am Mindestmaß), und die Spalte
-       bewegte sich um keinen Pixel. Genau das war der Fall.
+    /* >>> Die Breiten bleiben, wie sie sind <<<
+       Hier wurde beim ersten Anfassen auf die volle Textbreite verteilt.
+       Damit sprang die ganze Tabelle auf, sobald man EINE Grenze
+       berührte – gemeldet als „wenn man draufdrückt, skaliert sich alles
+       auf einmal". Festgehalten wird deshalb genau das, was man sieht.
 
-       Deshalb wird beim ersten Anfassen auf die volle Breite des
-       Textbereichs verteilt – unter Beibehaltung der Verhältnisse, die
-       der Inhalt bisher ergeben hat. */
-    const textDiv = table.closest('.j-text');
-    const platz = textDiv
-      ? Math.max(120, textDiv.getBoundingClientRect().width / zoom - 4)
-      : 640;
-    const summe = istBreiten.reduce((a, b) => a + b, 0);
-
+       Dass eine leere Spalte damit am Mindestmaß steht, macht nichts
+       mehr: gezogen wird seither nur noch die angefasste Spalte, ihr
+       Nachbar muss nichts abgeben (siehe pointermove weiter unten). */
     [...grp.children].forEach((col, i) => {
-      const anteil = summe > 0 ? (istBreiten[i] / summe) : (1 / spalten);
-      col.setAttribute('width', Math.max(TBL_MIN_SPALTE, Math.round(platz * anteil)));
+      col.setAttribute('width', Math.max(TBL_MIN_SPALTE, Math.round(istBreiten[i] || TBL_MIN_SPALTE)));
     });
   }
   return grp;
 }
 
+/** Wie breit der Text auf der Seite sein darf – die Grenze der Tabelle. */
+function platzFuerTabelle(table) {
+  const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+  const textDiv = table.closest('.j-text');
+  return textDiv
+    ? Math.max(120, textDiv.getBoundingClientRect().width / zoom - 4)
+    : 640;
+}
+
 /**
- * Die Greifstreifen an den Spaltengrenzen setzen.
+ * Die Greifstreifen an den Spalten- und Zeilengrenzen setzen.
  *
  * >>> Warum eigene Elemente und nicht die Kante messen <<<
  * Vorher wurde bei jeder Bewegung der Abstand zur Zellkante gerechnet und
@@ -753,6 +789,19 @@ function sichereColgroup(table) {
  * Finger gar nicht, und bei jedem Mausweg lief ein elementFromPoint mit.
  * Ein eigener Streifen ist ein echtes Ziel: breit genug, mit eigenem
  * Zeiger, und er kostet nichts, solange niemand ihn anfasst.
+ *
+ * >>> Warum man sie nicht sieht <<<
+ * Sie waren als goldene Striche gezeichnet und sahen aus wie Knoepfe, die
+ * zur Tabelle gehoeren – genau so wurde es gemeldet. Wie in Word gibt es
+ * jetzt nur den Zeigerwechsel beim Darueberfahren (css/pages.css).
+ *
+ * >>> Warum sie ueber die GANZE Kante gehen <<<
+ * Der senkrechte Streifen sitzt in der ersten ZEILE, der waagerechte in
+ * der ersten SPALTE – ein Streifen je Zelle waere ein Element je Zelle im
+ * beschreibbaren Text und damit eine Stelle mehr, an der die Schreibmarke
+ * haengen bleibt. Damit man trotzdem ueberall an der Kante greifen kann,
+ * wird er ueber die volle Hoehe bzw. Breite der Tabelle gezogen; ein
+ * absolut gesetztes Kind darf aus seiner Zelle herausragen.
  *
  * Die Streifen stehen NICHT im gespeicherten Text: sie werden hier
  * angelegt und vor dem Sichern wieder entfernt (siehe notiereText).
@@ -762,36 +811,36 @@ function setzeGriffe(table) {
   const erste = table.querySelector('tr');
   if (!erste) return;
 
-  // In jede Zelle der ERSTEN Zeile einen Streifen, ausser in die letzte
-  [...erste.children].forEach((zelle, i) => {
-    if (i >= erste.children.length - 1) return;
-    if (zelle.querySelector(':scope > .j-tbl-griff')) return;
+  const hoch = table.offsetHeight;
+  const breit = table.offsetWidth;
 
-    const griff = document.createElement('span');
-    griff.className = 'j-tbl-griff';
-    griff.contentEditable = 'false';
+  /* In JEDE Zelle der ersten Zeile einen Streifen, auch in die letzte:
+     die letzte Spalte breiter zu machen ist genauso naheliegend wie jede
+     andere, und sie ging bisher als einzige nicht. */
+  [...erste.children].forEach((zelle, i) => {
+    let griff = zelle.querySelector(':scope > .j-tbl-griff');
+    if (!griff) {
+      griff = document.createElement('span');
+      griff.className = 'j-tbl-griff';
+      griff.contentEditable = 'false';
+      zelle.appendChild(griff);
+    }
     griff.dataset.spalte = String(i);
-    zelle.appendChild(griff);
+    if (hoch) griff.style.height = hoch + 'px';
   });
 
-  /* ── Und ein waagerechter Streifen je Zeile ──────────────────────
-     Er liegt an der UNTERKANTE, auch bei der letzten Zeile: die tiefer
-     zu machen ist genauso naheliegend wie jede andere.
-
-     >>> Warum nur in der ersten Spalte <<<
-     Genau wie die senkrechten Streifen nur in der ersten ZEILE stehen.
-     Ein Streifen in jeder Zelle waere ein Element je Zelle, das im
-     beschreibbaren Text mitliegt – und mit ihm eine Stelle mehr, an der
-     die Schreibmarke haengen bleiben kann. Die linke Kante ist die,
-     an der auch Word den Zeiger anbietet. */
+  // Und ein waagerechter Streifen an der Unterkante jeder Zeile
   [...table.querySelectorAll('tr')].forEach(zeile => {
     const zelle = zeile.firstElementChild;
-    if (!zelle || zelle.querySelector(':scope > .j-tbl-zeilengriff')) return;
-
-    const griff = document.createElement('span');
-    griff.className = 'j-tbl-zeilengriff';
-    griff.contentEditable = 'false';
-    zelle.appendChild(griff);
+    if (!zelle) return;
+    let griff = zelle.querySelector(':scope > .j-tbl-zeilengriff');
+    if (!griff) {
+      griff = document.createElement('span');
+      griff.className = 'j-tbl-zeilengriff';
+      griff.contentEditable = 'false';
+      zelle.appendChild(griff);
+    }
+    if (breit) griff.style.width = breit + 'px';
   });
 }
 
@@ -801,14 +850,31 @@ function entferneGriffe(wurzel) {
   wurzel.querySelectorAll('.j-tbl-griff, .j-tbl-zeilengriff').forEach(g => g.remove());
 }
 
-/* Die Streifen kommen und gehen mit der Schreibmarke: nur die Tabelle,
-   in der man gerade steht, zeigt sie. */
-function aktualisiereGriffe(cell) {
-  document.querySelectorAll('.j-tbl-griff, .j-tbl-zeilengriff').forEach(g => {
-    if (!cell || g.closest('table') !== cell.closest('table')) g.remove();
-  });
-  if (cell) setzeGriffe(cell.closest('table.j-table'));
+/* Genau eine Tabelle traegt Streifen: die, ueber der der Zeiger steht –
+   und wenn er ueber keiner steht, die mit der Schreibmarke. Mehr braucht
+   es nicht, und weniger Elemente im beschreibbaren Text ist besser. */
+let griffTabelle = null;
+
+function griffeFuer(table) {
+  if (griffTabelle && griffTabelle !== table) entferneGriffe(griffTabelle);
+  griffTabelle = table || null;
+  if (table) setzeGriffe(table);
 }
+
+function aktualisiereGriffe(cell) {
+  griffeFuer(cell ? cell.closest('table.j-table') : null);
+}
+
+/* Wie in Word: an die Kante fahren, der Zeiger wird zum Doppelpfeil.
+   Dafuer muessen die Streifen schon dasein, bevor jemand in die Tabelle
+   geklickt hat – mit der Schreibmarke allein waeren sie erst nach einem
+   Klick da, und ein Klick ist genau das, was man sich sparen will. */
+document.addEventListener('pointerover', e => {
+  if (tblZieh || zeilenZieh) return;
+  const ziel = e.target && e.target.closest ? e.target.closest('table.j-table') : null;
+  if (ziel && ziel.closest('.j-text')) { griffeFuer(ziel); return; }
+  aktualisiereGriffe(currentCell());
+});
 
 /* ══════════════════════════════════════════════════════════════════════
    ZEILENHÖHE ZIEHEN
@@ -873,7 +939,6 @@ document.addEventListener('pointerdown', e => {
   if (!grp) return;
   const index = +griff.dataset.spalte;
   const col = grp.children[index];
-  const nachbar = grp.children[index + 1];
   if (!col) return;
 
   e.preventDefault();
@@ -886,11 +951,16 @@ document.addEventListener('pointerdown', e => {
   const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
   if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
 
+  const breiten = [...grp.children].map(c => parseFloat(c.getAttribute('width')) || TBL_MIN_SPALTE);
+  const summe = breiten.reduce((a, b) => a + b, 0);
+
   tblZieh = {
-    table, grp, griff, index, col, nachbar,
+    table, grp, griff, index, col,
     startX: e.clientX,
-    startBreite: parseFloat(col.getAttribute('width')) || 100,
-    nachbarBreite: nachbar ? (parseFloat(nachbar.getAttribute('width')) || 100) : 0,
+    startBreite: breiten[index],
+    // So breit darf die angefasste Spalte hoechstens werden, ohne dass die
+    // Tabelle ueber den Textrand hinauslaeuft
+    maxBreite: Math.max(TBL_MIN_SPALTE, platzFuerTabelle(table) - (summe - breiten[index])),
     zoom: typeof getZoom === 'function' ? getZoom() : 1,
     textDiv
   };
@@ -912,18 +982,18 @@ document.addEventListener('pointermove', e => {
 
   /* In Seiten-Koordinaten rechnen: der Zoom ist ein CSS-transform, ein
      Pixel auf dem Schirm ist also nicht ein Pixel auf dem Papier. */
-  let dx = (e.clientX - tblZieh.startX) / (tblZieh.zoom || 1);
+  const dx = (e.clientX - tblZieh.startX) / (tblZieh.zoom || 1);
 
-  // Was die eine Spalte gewinnt, verliert die daneben – sonst wuechse die
-  // Tabelle ueber den Blattrand hinaus
-  if (tblZieh.nachbar) {
-    dx = Math.max(TBL_MIN_SPALTE - tblZieh.startBreite,
-         Math.min(tblZieh.nachbarBreite - TBL_MIN_SPALTE, dx));
-    tblZieh.nachbar.setAttribute('width', Math.round(tblZieh.nachbarBreite - dx));
-  } else {
-    dx = Math.max(TBL_MIN_SPALTE - tblZieh.startBreite, dx);
-  }
-  tblZieh.col.setAttribute('width', Math.round(tblZieh.startBreite + dx));
+  /* >>> Nur die angefasste Spalte <<<
+     Vorher gab der Nachbar ab, was diese Spalte gewann. Wer eine Spalte
+     breiter zog, machte damit unweigerlich die daneben schmaler – zwei
+     Aenderungen fuer einen Handgriff, und die Tabelle sah danach ueberall
+     anders aus. Jetzt wandert nur diese eine Kante, alles rechts davon
+     rueckt mit; die Tabelle wird dabei breiter oder schmaler, aber nie
+     breiter als der Text auf der Seite. */
+  const breite = Math.max(TBL_MIN_SPALTE,
+    Math.min(tblZieh.maxBreite, tblZieh.startBreite + dx));
+  tblZieh.col.setAttribute('width', Math.round(breite));
 }, { passive: false });
 
 function beendeZiehen() {
@@ -932,6 +1002,8 @@ function beendeZiehen() {
     notiereText(zeilenZieh.textDiv);
     if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
     zeilenZieh = null;
+    // Die Tabelle ist jetzt anders hoch – die Streifen gehen sonst daneben
+    setzeGriffe(griffTabelle);
     return;
   }
   if (!tblZieh) return;
@@ -939,6 +1011,7 @@ function beendeZiehen() {
   notiereText(tblZieh.textDiv);
   if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   tblZieh = null;
+  setzeGriffe(griffTabelle);
 }
 
 document.addEventListener('pointerup', beendeZiehen);
