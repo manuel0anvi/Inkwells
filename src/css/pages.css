@@ -286,24 +286,21 @@ body.touch-draw .j-canvas {
    Eine Tabelle OHNE x bleibt im Textfluss, mit allem, was weiter unten
    dafür steht – frei wird sie erst beim ersten Verschieben.
    ══════════════════════════════════════════════════════════════════════ */
+/* >>> Nur die STELLE ändert sich, sonst nichts <<<
+   Hier standen zusätzlich eigene Zeilenhöhen und Abstände für die Zellen
+   („der Inhalt gehört der Zelle, nicht dem Papier"). Damit schrumpfte die
+   Tabelle im Augenblick des Anfassens sichtbar zusammen – gemeldet als
+   „wenn ich sie verschiebe, wird sie kleiner". Inhalt, Maßstab und Größe
+   bleiben jetzt genau, wie sie waren; frei ist allein die Lage.
+
+   Auch kein max-width: none – die Deckelung auf die Textbreite gilt im
+   Fluss wie hier, sonst wäre sie danach anders breit. */
 .j-text table.j-table[x] {
   position: absolute;
   z-index: 2;
-  max-width: none;
   /* Sie deckt den Text darunter zu, wie ein Bild „vor dem Text" */
   background: var(--paper);
   box-shadow: 0 1px 8px rgba(28, 20, 10, .12)
-}
-
-/* Und ihr Inhalt gehört der ZELLE, nicht dem Linienraster des Papiers.
-   Im Textfluss geht das nicht: dort muss die Höhe ein Vielfaches der
-   Zeilenhöhe sein, sonst sitzt alles darunter neben den Linien. Frei
-   gesetzt schiebt sie nichts mehr, also darf sie eng sein. */
-.j-text table.j-table[x] td,
-.j-text table.j-table[x] th {
-  height: auto;
-  line-height: 1.45;
-  padding: 4px 8px
 }
 
 /* Solange sie in der Luft ist */

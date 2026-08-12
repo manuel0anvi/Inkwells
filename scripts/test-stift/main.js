@@ -642,13 +642,18 @@ app.on('ready', async () => {
       const frei = await js(`(() => {
         const t = document.querySelector('.j-text table');
         return { x: t.getAttribute('x'), y: t.getAttribute('y'),
-                 wie: getComputedStyle(t).position,
-                 zeile: getComputedStyle(t.querySelector('td')).lineHeight }; })()`);
+                 wie: getComputedStyle(t).position }; })()`);
       pruefe('Sie steht frei auf der Seite (' + frei.wie + ', x=' + frei.x + ')',
         frei.wie === 'absolute' && frei.x !== null && frei.y !== null,
         'sie hängt weiter im Textfluss');
-      pruefe('Und ihr Inhalt hängt nicht mehr am Linienraster (' + frei.zeile + ')',
-        parseFloat(frei.zeile) < 30, 'die Zelle rechnet weiter in Papierzeilen');
+
+      /* Und dabei bleibt sie GENAU so gross. Beim Freistellen bekam sie
+         eigene Zeilenhöhen und Abstände und schrumpfte sichtbar zusammen –
+         „wenn ich sie verschiebe, wird sie kleiner". */
+      pruefe('Und behält ihre Größe (' + vorher.w + '×' + vorher.h
+        + ' → ' + nachher.w + '×' + nachher.h + ')',
+        Math.abs(nachher.w - vorher.w) <= 2 && Math.abs(nachher.h - vorher.h) <= 2,
+        'sie ist beim Anfassen zusammengeschrumpft');
 
       /* Die Lage muss den Neuaufbau der Seite überleben – dort wird der
          gespeicherte Text durchs Bereinigen geschickt, und ein style
