@@ -504,24 +504,34 @@
 
   einfacheBewegung(ln.canvas, lineal, aktualisiereLinealPos);
 
-  /* ── Neumalen bei Zoom-Änderung ────────────────────────────────────── */
+  /* ══════════════════════════════════════════════════════════════════
+     NEU MALEN BEI ZOOM-ÄNDERUNG
+
+     Das Lineal liegt fest am Fenster und wird vom Zoom NICHT mitgezogen.
+     Beides hängt aber am Zoom: seine Länge (so lang wie die Seite breit
+     ist) und seine Teilung (pxJeMm). Ohne Nachrechnen zeigte es nach dem
+     Vergrößern Millimeter, die keine mehr waren.
+
+     >>> Warum nicht mehr per ResizeObserver <<<
+     Der hing auf #pages-wrap und sollte die Zoom-Änderung erraten. Ein
+     transform:scale() ändert die Layout-Größe aber nicht – der Beobachter
+     feuerte beim Zoomen kein einziges Mal. Jetzt sagt core/zoom.js selbst
+     Bescheid.
+     ══════════════════════════════════════════════════════════════════ */
   function beimZoomen() {
     if (!lineal.an) return;
-    passeGroesseAn();   // Seitenbreite hat sich mit dem Zoom geändert
+    const vorher = linealBreite;
+    if (passeGroesseAn()) {
+      /* Die MITTE bleibt liegen, wo sie lag. Bliebe stattdessen die linke
+         Ecke stehen, wanderte das Lineal beim Vergrößern nach rechts aus
+         dem Blick – und es soll da bleiben, wo man hinsieht. */
+      lineal.rohX -= (linealBreite - vorher) / 2;
+    }
     maleLineal();
+    aktualisiereLinealPos();   // holt es nötigenfalls ins Sichtfeld zurück
   }
 
-  // Die App feuert kein eigenes Zoom-Ereignis. Der sicherste Weg ist,
-  // einen ResizeObserver auf den Seiten-Umschlag zu setzen und bei jeder
-  // Größenänderung neu zu malen.
-  const wrap = E('pages-wrap');
-  if (wrap && typeof ResizeObserver !== 'undefined') {
-    let zoomTimer = 0;
-    new ResizeObserver(() => {
-      clearTimeout(zoomTimer);
-      zoomTimer = setTimeout(beimZoomen, 150);
-    }).observe(wrap);
-  }
+  window.addEventListener('inkwell:zoom', beimZoomen);
 
   /* ── Knöpfe in der Leiste ──────────────────────────────────────────── */
 

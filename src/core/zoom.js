@@ -111,6 +111,26 @@ function _applyZoom() {
   rerenderCanvasesForZoom();
   updateAddPageBtnVisibility();
   if (typeof updateCursor === 'function') updateCursor();
+  meldeZoom();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WER SONST NOCH VOM ZOOM WISSEN MUSS
+
+   Alles, was fest am Fenster hängt statt in #pages-wrap zu liegen, wird
+   vom transform:scale() nicht mitskaliert und muss selbst nachrechnen –
+   zurzeit ist das das Lineal (ui/ruler.js).
+
+   >>> Warum ein Ereignis und kein ResizeObserver <<<
+   Das Lineal hing an einem ResizeObserver auf #pages-wrap. Der meldet
+   aber die LAYOUT-Größe, und die ändert ein transform nicht: beim Zoomen
+   feuerte er nie. Das Lineal behielt seine Breite und seine
+   Millimeter-Teilung, war also bei jedem anderen Zoom als dem, bei dem
+   man es eingeschaltet hatte, schlicht falsch. Genau so wurde es
+   gemeldet.
+   ══════════════════════════════════════════════════════════════════════ */
+function meldeZoom() {
+  window.dispatchEvent(new CustomEvent('inkwell:zoom', { detail: { zoom: _zoom } }));
 }
 
 function rerenderCanvasesForZoom() {
