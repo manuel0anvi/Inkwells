@@ -426,6 +426,10 @@ function setActivePg(pgId) {
   if (typeof rememberNotebookView === 'function') {
     rememberNotebookView(S.activeNbId, { pageId: pgId });
   }
+  /* Der Verlauf wird je Seite gefuehrt – auf einer anderen Seite gibt es
+     also etwas anderes rueckgaengig zu machen, und die beiden Knoepfe in
+     der Leiste muessen das zeigen (app.js, updateUndoRedoUI). */
+  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
 }
 
 /* Die Nummer kommt aus dem HEFT, nicht aus der Bildschirmposition.

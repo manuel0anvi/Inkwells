@@ -215,6 +215,32 @@
       </div>
       <div class="toolbar" id="toolbar">
         <div class="tb-zone tb-left">
+          <!-- Rückgängig und Vor. Es gab sie schon einmal und sie wurden
+               entfernt, weil Strg+Z jeder kennt – auf einem Tablet aber
+               liegt keine Tastatur dabei, und ohne sie war ein Versehen
+               mit dem Stift nicht mehr zurückzunehmen.
+
+               data-tb-more="4" heisst: von allem Entbehrlichen weichen sie
+               ZULETZT. Ganz unentbehrlich zu sein ging nicht – im
+               Hochformat mit offener Navigation stand die Leiste sonst
+               96 px über den Rand hinaus (scripts/test-touch). -->
+          <div class="tb-grp" data-tb-more="4">
+            <button class="tb-opt" id="btn-undo" data-i18n-title="undoTitle" title="Rückgängig (Strg+Z)">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2.6 5.4h6.6a3.8 3.8 0 0 1 0 7.6H5.4"/>
+                <path d="M5.2 2.4 2.4 5.4l2.8 3"/>
+              </svg>
+            </button>
+            <button class="tb-opt" id="btn-redo" data-i18n-title="redoTitle" title="Vor (Strg+Y)">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                   stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13.4 5.4H6.8a3.8 3.8 0 0 0 0 7.6h3.8"/>
+                <path d="M10.8 2.4l2.8 3-2.8 3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="tb-sep"></div>
           <div class="tb-grp">
           <button class="tb-mode active" data-mode="cursor">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 1l9 5.5-4.5 1.5-1.5 5L2 1z" fill="currentColor"/></svg>
