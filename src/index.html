@@ -1568,6 +1568,10 @@
        der Format und Seitenumfang auswählt -->
   <script src="core/docx.js"></script>
   <script src="ui/export.js"></script>
+  <!-- Der Rückweg: eine .docx lesen und daraus ein Heft machen. Zwei
+       Dateien, weil nur der Umbruch ein Fenster zum Messen braucht. -->
+  <script src="core/docxImport.js"></script>
+  <script src="core/docxPaginate.js"></script>
   <!-- Freigabe: Firestore-Zugriff als Modul, Oberfläche als klassisches Script.
        Das Modul läuft nach den klassischen Scripts und meldet sich über
        das Ereignis "inkwell-share-ready". -->

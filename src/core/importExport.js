@@ -83,6 +83,73 @@ async function fillNotebookFromPdf(nb, dataUrl) {
 }
 window.fillNotebookFromPdf = fillNotebookFromPdf;
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN WORD-DOKUMENT ALS NEUES HEFT
+
+   Drei Schritte, jeder in seiner eigenen Datei:
+     1. core/docxImport.js   liest die .docx und macht Bloecke daraus
+     2. core/docxPaginate.js misst und verteilt sie auf Seiten
+     3. hier                 baut daraus Heftseiten samt Bild-Objekten
+
+   Getrennt, weil nur der mittlere Schritt ein Fenster zum Messen
+   braucht und nur der letzte das Datenmodell kennt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** data:-Adresse → Bytes. */
+function dataUrlZuBytes(dataUrl) {
+  const roh = atob(String(dataUrl).split(',')[1] || '');
+  const bytes = new Uint8Array(roh.length);
+  for (let i = 0; i < roh.length; i++) bytes[i] = roh.charCodeAt(i);
+  return bytes;
+}
+
+async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
+  if (typeof InkwellDocxImport === 'undefined' || typeof InkwellDocxPaginate === 'undefined') {
+    throw new Error('NO_DOCX_MODULE');
+  }
+
+  const bg = nb.defaultBg || 'ruled';
+  const zeilenhoehe = InkwellDocxPaginate.zeilenhoeheFuer(bg);
+  const nutz = InkwellDocxPaginate.nutzhoehe(CFG.PAGE_H);
+
+  const { bloecke, bericht } = await InkwellDocxImport.lese(dataUrlZuBytes(dataUrl), {
+    zeilenhoehe,
+    maxBildHoehe: nutz
+  });
+
+  if (!bloecke.length) throw new Error(t('docxEmpty') || 'Das Dokument ist leer.');
+
+  const seiten = InkwellDocxPaginate.verteile(bloecke, {
+    breite: CFG.PAGE_W,
+    hoehe: CFG.PAGE_H,
+    bg,
+    onFortschritt
+  });
+
+  nb.pages = seiten.map(s => {
+    const pg = makePage(bg);
+    /* Durch den Sanitizer, obwohl der Text aus dem eigenen Umwandler
+       kommt: er ist aus einer FREMDEN Datei gebaut, und deren Inhalt
+       hat niemand geprueft. Derselbe Riegel wie bei geteilten Heften. */
+    pg.textContent = typeof sanitizePageHtml === 'function'
+      ? sanitizePageHtml(s.html) : s.html;
+    pg.objects = (s.bilder || []).map(b => ({
+      id: uid(), kind: 'image', src: b.src, name: '',
+      x: b.x, y: b.y, w: b.w, h: b.h, rot: 0
+    }));
+    return pg;
+  });
+  nb.sections = [];
+
+  return {
+    seiten: nb.pages.length,
+    bilder: bericht.bilder,
+    tabellen: bericht.tabellen,
+    verloren: bericht.verloren
+  };
+}
+window.fillNotebookFromDocx = fillNotebookFromDocx;
+
 /* ── INSERT ── */
 /* Aufgerufen aus dem Einfügen-Menü (ui/insert.js). Hier hing bis dahin
    der Knopf selbst; seit es dort auch Tabellen gibt, ist der Knopf ein

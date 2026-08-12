@@ -755,11 +755,19 @@
   function platzhalterFuer(bild, ctx) {
     // Zu breite Bilder verhältnistreu auf die Textbreite ziehen
     let { w, h } = bild;
-    if (w > 0 && w > TEXT_BREITE) {
+    if (!w || !h) { w = w || 200; h = h || 150; }
+    if (w > TEXT_BREITE) {
       h = Math.round(h * (TEXT_BREITE / w));
       w = TEXT_BREITE;
     }
-    if (!w || !h) { w = w || 200; h = h || 150; }
+    /* Und was höher ist als eine Seite, wird ebenfalls kleiner. Sonst
+       stünde der Platzhalter allein schon über die Seite hinaus – und
+       weil ein Bild nicht geteilt werden darf (core/docxPaginate.js),
+       ragte es unten hinaus und wäre abgeschnitten. */
+    if (ctx.maxBildHoehe && h > ctx.maxBildHoehe) {
+      w = Math.round(w * (ctx.maxBildHoehe / h));
+      h = ctx.maxBildHoehe;
+    }
 
     const zeilen = Math.max(1, Math.ceil(h / ctx.zeilenhoehe));
     ctx.bilder++;
@@ -795,6 +803,7 @@
       nummerierung: leseNummerierung(dateien),
       vorlagen: leseVorlagen(dateien),
       zeilenhoehe: optionen.zeilenhoehe || 32,
+      maxBildHoehe: optionen.maxBildHoehe || 0,
       verloren: new Set(),
       bilder: 0,
       tabellen: 0

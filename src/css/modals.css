@@ -899,7 +899,11 @@
   font-size: 15px;
   color: var(--hi);
   line-height: 1.6;
-  margin-bottom: 4px
+  margin-bottom: 4px;
+  /* Der Text kommt ueber textContent hinein (core/dialogs.js), ein <br>
+     waere dort nur Zeichen. Eine Aufzaehlung wie der Bericht nach dem
+     Oeffnen eines Word-Dokuments braucht aber echte Zeilen. */
+  white-space: pre-line
 }
 
 /* Nachgeordneter Satz unter .confirm-msg – erklärt den Grund, ohne der

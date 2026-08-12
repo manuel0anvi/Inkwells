@@ -834,6 +834,21 @@
       ? `<w:ind w:left="${einzug}" w:right="0" w:hanging="${Math.round(LIST_HANGING_PX * TWIPS_PER_PX)}"/>`
       : '<w:ind w:left="0" w:right="0" w:firstLine="0"/>');
     if (paragraph.align) props.push(`<w:jc w:val="${paragraph.align}"/>`);
+
+    /* ── Eine Überschrift ist auch in Word eine Überschrift ───────────
+       Bisher wurde nur ihr Aussehen geschrieben – größer, kursiv, mit
+       Strich darunter. Für Word war das ein gewöhnlicher Absatz, der
+       zufällig groß aussieht: nicht im Navigationsbereich, nicht im
+       Inhaltsverzeichnis, und beim Zurücklesen nicht wiederzuerkennen
+       (core/docxImport.js). Die Gliederungsebene sagt es ausdrücklich.
+
+       Direkt am Absatz und nicht über eine Formatvorlage: eine Vorlage
+       müsste in styles.xml angelegt und benannt werden, und ihr Name
+       ist in jeder Word-Sprache ein anderer. w:outlineLvl ist eine
+       Zahl und überall dieselbe. */
+    const ebene = { h1: 0, h2: 1, h3: 2 }[paragraph.style];
+    if (ebene !== undefined) props.push(`<w:outlineLvl w:val="${ebene}"/>`);
+
     if (options.sectPr) props.push(options.sectPr);
 
     const runs = (options.leadingXml || '')

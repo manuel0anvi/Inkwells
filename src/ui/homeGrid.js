@@ -67,6 +67,51 @@ function renderHomeGrid() {
 E('btn-new-nb').addEventListener('click', () => openNbModal(null));
 
 /* ══════════════════════════════════════════════════════════════════════
+   WAS ANGEKOMMEN IST – UND WAS NICHT
+
+   Ein Word-Dokument bringt Dinge mit, die Inkwell nicht kennt:
+   Schriftgrößen, Zeilenabstände, Kopfzeilen. Die gehen verloren, und
+   das ist keine Nachlässigkeit, sondern die Bauart – Inkwell schreibt
+   auf liniertes Papier mit fester Zeilenhöhe.
+
+   Ohne diesen Hinweis sucht man den verlorenen Zeilenabstand für einen
+   Fehler und meldet ihn als solchen. Deshalb steht am Ende, was
+   übernommen wurde und was nicht.
+
+   Ein Fenster und keine Kurznachricht: eine Aufzählung von fünf Punkten
+   ist in einem Toast nicht zu lesen, und weg ist er auch schon.
+   ══════════════════════════════════════════════════════════════════════ */
+function zeigeImportBericht(bericht) {
+  const teile = [];
+  teile.push((t('importPages') || '{n} Seiten').replace('{n}', bericht.seiten));
+  if (bericht.bilder) teile.push((t('importImages') || '{n} Bilder').replace('{n}', bericht.bilder));
+  if (bericht.tabellen) teile.push((t('importTables') || '{n} Tabellen').replace('{n}', bericht.tabellen));
+
+  /* Immer genannt, auch wenn das Dokument sie gar nicht benutzt hat:
+     man kann von außen nicht sehen, ob eine fehlende Schriftgröße
+     verloren ging oder nie da war. Die Liste sagt, worauf man sich
+     NICHT verlassen darf. */
+  const verloren = [t('importLostAlways') || 'Schriftarten, Schriftgrößen und Zeilenabstände'];
+  const nach = {
+    links: t('importLostLinks') || 'Verknüpfungen (der Text bleibt)',
+    tiefeUeberschriften: t('importLostDeepHeadings') || 'Überschriften unterhalb der dritten Ebene',
+    bilderInTabellen: t('importLostImagesInTables') || 'Bilder in Tabellenzellen',
+    listenInTabellen: t('importLostListsInTables') || 'Aufzählungszeichen in Tabellenzellen',
+    tabellenInTabellen: t('importLostNestedTables') || 'Tabellen in Tabellen (der Text bleibt)'
+  };
+  for (const schluessel of (bericht.verloren || [])) {
+    if (nach[schluessel]) verloren.push(nach[schluessel]);
+  }
+
+  const text = (t('importSummary') || 'Übernommen: {was}.').replace('{was}', teile.join(', '))
+    + '\n\n' + (t('importLostTitle') || 'Nicht übernommen:') + '\n'
+    + verloren.map(v => '· ' + v).join('\n');
+
+  if (typeof showAlert === 'function') showAlert(text);
+  else toast(text.replace(/\n+/g, ' '));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    EIN DOKUMENT ÖFFNEN
 
    Word oder PDF aussuchen, dann das gewohnte Heft-Fenster: Name (schon
@@ -95,7 +140,13 @@ E('btn-open-doc').addEventListener('click', async () => {
         return;
       }
 
-      throw new Error(t('openDocNoWordYet') || 'Word-Dokumente kommen noch.');
+      const bericht = await fillNotebookFromDocx(nb, datei.dataUrl, (getan, gesamt) => {
+        /* Ein langes Dokument braucht spürbar Zeit – das Messen ist der
+           teure Schritt. Ohne Zeichen steht die App scheinbar still. */
+        toast((t('openDocProgress') || 'Seite {n} von {m} …')
+          .replace('{n}', getan).replace('{m}', gesamt));
+      });
+      zeigeImportBericht(bericht);
     }
   });
 });

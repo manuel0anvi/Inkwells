@@ -24,6 +24,7 @@ function makePage(bg) {
 <script src="../../src/core/sanitize.js"></script>
 <script src="../../src/core/docx.js"></script>
 <script src="../../src/core/docxImport.js"></script>
+<script src="../../src/core/docxPaginate.js"></script>
 
 <script>
 const zeilen = [];
@@ -284,6 +285,162 @@ window.__fertig = (async function () {
       pruefe('Ueberlebt den Sanitizer: ' + block.html.slice(0, 34).replace(/</g, '‹'),
         nachher === block.html, 'wurde zu: ' + nachher);
     }
+
+    /* ══ 4. DER SEITENUMBRUCH ═══════════════════════════════════════ */
+    abschnitt('Der Seitenumbruch');
+
+    const P = InkwellDocxPaginate;
+    const NUTZ = P.nutzhoehe(1123);
+
+    /** Wie hoch wird dieser Seiteninhalt wirklich? Mit echtem Satz. */
+    function misstHoehe(html) {
+      const { seite, feld } = P.__intern.baueMessplatz(794, 'ruled');
+      feld.innerHTML = html;
+      const h = feld.getBoundingClientRect().height;
+      seite.remove();
+      return h;
+    }
+
+    // 200 Absätze müssen auf mehrere Seiten gehen, ohne dass etwas fehlt
+    const viele = [];
+    for (let i = 1; i <= 200; i++) viele.push({ html: '<p>Absatz Nummer ' + i + '</p>' });
+    let seitenListe = P.verteile(viele.slice(), { breite: 794, hoehe: 1123, bg: 'ruled' });
+
+    pruefe('200 Absaetze ergeben mehrere Seiten', seitenListe.length > 1, seitenListe.length);
+    pruefe('Keine Seite laeuft ueber',
+      seitenListe.every(s => misstHoehe(s.html) <= NUTZ + 1),
+      seitenListe.map(s => Math.round(misstHoehe(s.html))).join(','));
+
+    const alleNummern = seitenListe.map(s => s.html).join('')
+      .match(/Absatz Nummer (\d+)/g) || [];
+    pruefe('Kein Absatz geht verloren', alleNummern.length === 200, alleNummern.length);
+    pruefe('Die Reihenfolge stimmt',
+      alleNummern[0] === 'Absatz Nummer 1' && alleNummern[199] === 'Absatz Nummer 200',
+      alleNummern[0] + ' … ' + alleNummern[199]);
+
+    // Ein ausdruecklicher Seitenumbruch schliesst die Seite sofort
+    seitenListe = P.verteile([
+      { html: '<p>vorn</p>' },
+      { html: '<p>hinten</p>', umbruchDavor: true }
+    ], { breite: 794, hoehe: 1123, bg: 'ruled' });
+    pruefe('Ausdruecklicher Umbruch trennt',
+      seitenListe.length === 2 && seitenListe[0].html.includes('vorn')
+      && seitenListe[1].html.includes('hinten'),
+      seitenListe.map(s => s.html).join(' || '));
+
+    // Ein einzelner Absatz, der laenger ist als eine Seite, wird geteilt
+    const langerText = 'Wort '.repeat(3000);
+    seitenListe = P.verteile([{ html: '<p>' + langerText + '</p>' }],
+      { breite: 794, hoehe: 1123, bg: 'ruled' });
+    pruefe('Ein zu langer Absatz wird geteilt', seitenListe.length > 1, seitenListe.length);
+    pruefe('Auch geteilt laeuft keine Seite ueber',
+      seitenListe.every(s => misstHoehe(s.html) <= NUTZ + 1),
+      seitenListe.map(s => Math.round(misstHoehe(s.html))).join(','));
+    const woerterNachher = seitenListe.map(s => s.html).join(' ')
+      .replace(/<[^>]+>/g, ' ').trim().split(/\s+/).length;
+    pruefe('Beim Teilen geht kein Wort verloren', woerterNachher === 3000, woerterNachher);
+
+    // Auszeichnung ueberlebt das Teilen
+    seitenListe = P.verteile([{ html: '<p><b>' + langerText + '</b></p>' }],
+      { breite: 794, hoehe: 1123, bg: 'ruled' });
+    pruefe('Fett bleibt auf beiden Haelften',
+      seitenListe.every(s => s.html.includes('<b>')),
+      seitenListe.map(s => s.html.slice(0, 30)).join(' || '));
+
+    // Eine lange Tabelle wird nach Zeilen geteilt, mit Kopf auf beiden
+    let tblHtml = '<table class="j-table"><tbody><tr><th>Nr</th><th>Wert</th></tr>';
+    for (let i = 1; i <= 120; i++) tblHtml += '<tr><td>' + i + '</td><td>x</td></tr>';
+    tblHtml += '</tbody></table>';
+    seitenListe = P.verteile([{ html: tblHtml }], { breite: 794, hoehe: 1123, bg: 'ruled' });
+    pruefe('Eine lange Tabelle wird geteilt', seitenListe.length > 1, seitenListe.length);
+    pruefe('Die Kopfzeile steht auf jeder Seite',
+      seitenListe.every(s => s.html.includes('<th>Nr</th>')),
+      seitenListe.map(s => s.html.includes('<th>Nr</th>')).join(','));
+    const zeilenNachher = (seitenListe.map(s => s.html).join('').match(/<td>\d+<\/td>/g) || []).length;
+    pruefe('Keine Tabellenzeile geht verloren', zeilenNachher === 120, zeilenNachher);
+
+    // Ein Bild-Platzhalter: die Stelle muss gemessen herauskommen
+    seitenListe = P.verteile([
+      { html: '<p>davor</p>' },
+      { html: '<p><br></p>'.repeat(4), bild: { src: 'data:image/png;base64,x', w: 200, h: 120 } },
+      { html: '<p>danach</p>' }
+    ], { breite: 794, hoehe: 1123, bg: 'ruled' });
+    const bild = seitenListe[0].bilder[0];
+    pruefe('Das Bild bekommt eine Stelle', !!bild && bild.y > 0, JSON.stringify(bild));
+    /* Eine Zeile „davor", dann der Platzhalter: das Bild gehoert unter
+       die erste Zeile, also 64 (Textanfang) + 19 (Innenabstand) + 32. */
+    pruefe('Die Stelle sitzt unter der ersten Zeile', bild && bild.y === 115, bild && bild.y);
+    pruefe('Es steht am linken Textrand', bild && bild.x === 72, bild && bild.x);
+
+    /* ══ 5. DER RUNDLAUF ════════════════════════════════════════════
+       Ein Heft durch den eigenen Word-Export und wieder zurück. Das ist
+       der schaerfste Test ohne Word: beide Seiten sind im Haus, also
+       muss herauskommen, was hineinging.
+
+       Was der Rundlauf NICHT beweist: dass echte Word-Dateien gelesen
+       werden. Der Export schreibt nur die Formen, die Inkwell selbst
+       kennt. Dafuer stehen die Bausteine oben, von Hand gebaut.
+       ═══════════════════════════════════════════════════════════════ */
+    abschnitt('Rundlauf gegen den eigenen Export');
+
+    const heft = {
+      name: 'Rundlauf',
+      pages: [{
+        id: 'p1', bg: 'ruled', w: 794, h: 1123, inkStrokes: [], objects: [],
+        textContent:
+          '<h1>Erste Ueberschrift</h1>'
+          + '<p>Ein gewoehnlicher Absatz.</p>'
+          + '<p><b>fett</b> und <i>kursiv</i> und <u>unterstrichen</u></p>'
+          + '<p><font color="#c04040">rot</font></p>'
+          + '<p class="j-align-center">zentriert</p>'
+          + '<ul class="j-list-disc"><li>eins</li><li>zwei</li></ul>'
+          + '<ol class="j-list-decimal"><li>erstens</li><li>zweitens</li></ol>'
+      }]
+    };
+
+    const datei = await InkwellDocx.build([{ page: heft.pages[0], bg: 'ruled' }], { scale: 1 });
+    const zurueck = await InkwellDocxImport.lese(datei);
+    const rundHtml = zurueck.bloecke.map(b => b.html).join('');
+
+    /* Der Export malt die Listenmarke als Text davor und setzt einen
+       Tabulator – er kennt keine echten Listen. Beim Zurueckkommen ist
+       daraus wieder ein Absatz geworden. Geprueft wird deshalb der
+       TEXT, nicht die Bauform. */
+    const nurText = (html) => html.replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+    for (const [was, text] of [
+      ['Ueberschrift', 'Erste Ueberschrift'],
+      ['Absatz', 'Ein gewoehnlicher Absatz.'],
+      ['Listenpunkte', 'eins'],
+      ['Nummerierung', 'erstens']
+    ]) {
+      pruefe('Rundlauf behaelt: ' + was, nurText(rundHtml).includes(text), nurText(rundHtml).slice(0, 120));
+    }
+
+    /* Der Text steckt in <font> und <i>: der Export schreibt das
+       AUSSEHEN der Ueberschrift als Auszeichnung an den Laeufen (gross,
+       kursiv, eigene Farbe), und der Import bringt sie treu zurueck.
+       Das ist richtig so – aus einer echten Word-Datei waere eine
+       kursive Ueberschrift ebenfalls gemeint. Geprueft wird deshalb die
+       Huelle und der Text, nicht die Zeichenkette als Ganzes. */
+    const h1Auf = rundHtml.indexOf('<h1');
+    const h1Zu = rundHtml.indexOf('</h1>');
+    pruefe('Rundlauf behaelt die Ueberschrift als h1',
+      h1Auf === 0 && h1Zu > 0
+      && nurText(rundHtml.slice(h1Auf, h1Zu)) === 'Erste Ueberschrift',
+      rundHtml.slice(0, 120));
+    pruefe('Rundlauf behaelt fett und kursiv',
+      rundHtml.includes('<b>fett</b>') && rundHtml.includes('<i>kursiv</i>'), rundHtml.slice(0, 200));
+    pruefe('Rundlauf behaelt die Farbe', rundHtml.includes('<font color="#c04040">rot</font>'),
+      rundHtml.slice(0, 260));
+    pruefe('Rundlauf behaelt die Ausrichtung', rundHtml.includes('class="j-align-center"'),
+      rundHtml.slice(0, 300));
+
+    // Und auch der Rundlauf muss den Sanitizer unveraendert ueberstehen
+    pruefe('Rundlauf ueberlebt den Sanitizer',
+      zurueck.bloecke.every(b => sanitizePageHtml(b.html) === b.html),
+      zurueck.bloecke.map(b => b.html).find(h => sanitizePageHtml(h) !== h) || '');
 
   } catch (err) {
     zeilen.push('ABBRUCH ' + err.message + ' | ' + String(err.stack).split('\n')[1]);
