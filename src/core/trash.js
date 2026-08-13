@@ -638,6 +638,18 @@ const Trash = {
 
     const cloudFertig = await this._destroy(entry);
 
+    /* Der oertliche Versionsverlauf gehoert zu diesem Heft und hat ohne
+       es keinen Sinn mehr. Wuerde er liegen bleiben, wuechse der Ordner
+       „Versionen" mit jedem geloeschten Heft weiter - unsichtbar, denn
+       in der Uebersicht steht davon nichts.
+
+       Auch dann, wenn die Cloud-Seite noch aussteht: oertlich ist die
+       Datei schon weg, und um die geht es hier. */
+    if (typeof Versions !== 'undefined' && Versions) {
+      try { await Versions.entferneHeft(id); }
+      catch (err) { console.warn('[Trash] Versionsstaende blieben liegen:', err); }
+    }
+
     if (cloudFertig) {
       this._entries = this._entries.filter(e => e.id !== id);
 

@@ -1779,6 +1779,30 @@ class CloudSyncManager {
     const remoteTime = this._toTime(remoteNotebook.updatedAt);
     const localTime = this._toTime(existing?.updatedAt);
 
+    /* ── Ist das ein Konflikt? ────────────────────────────────────────
+       Beide Seiten haben sich seit dem letzten Abgleich geändert. Das
+       wird ZUERST geprüft, und zwar vor jedem Rücksprung darunter.
+
+       >>> Warum das vorher falsch stand <<<
+       Die Prüfung saß ganz unten, hinter drei Ausstiegen. Der erste war
+       „hier ist noch etwas offen" (isDirty) – und genau das ist beim
+       Konflikt IMMER der Fall, denn örtlich wurde ja gerade getippt. Die
+       fremde Fassung wurde also verworfen, ohne Kopie und ohne einen
+       Hinweis, und der spätere Upload hat sie endgültig überschrieben.
+       Wer auf zwei Geräten arbeitet, verlor damit stillschweigend die
+       Arbeit vom anderen.
+
+       Jetzt wird der Konflikt gemeldet, bevor irgendetwas entschieden
+       ist. Was damit geschieht, entscheidet der Nutzer (core/conflicts.js);
+       der Abgleich selbst bleibt danach so vorsichtig wie bisher. */
+    if (existing) {
+      const syncedTime = this._toTime(existing.syncedAt);
+      const beideGeaendert = localTime > syncedTime && remoteTime > syncedTime;
+      if (beideGeaendert && typeof Conflicts !== 'undefined' && Conflicts) {
+        await Conflicts.melde(existing, remoteNotebook);
+      }
+    }
+
     if (existing && AutoSave?.isDirty?.(existing.id)) return;
 
     if (existing && this._shouldKeepLocalNotebook(existing, remoteNotebook)) {
@@ -1788,13 +1812,9 @@ class CloudSyncManager {
 
     if (existing && localTime >= remoteTime) return;
 
-    // Konflikt: seit dem letzten Abgleich wurde hier und anderswo geändert
-    if (existing) {
-      const syncedTime = this._toTime(existing.syncedAt);
-      if (localTime > syncedTime && remoteTime > syncedTime) {
-        await this._saveConflictCopy(existing);
-      }
-    }
+    /* Der örtliche Stand wird gleich überschrieben. Ist er ein Konflikt,
+       liegt er zu diesem Zeitpunkt schon in der Konfliktablage – melde()
+       oben hat ihn dorthin gelegt, samt der fremden Fassung. */
 
     const normalized = this._normalizeNotebook(remoteNotebook);
     normalized.updatedAt = remoteNotebook.updatedAt || normalized.updatedAt || new Date().toISOString();
@@ -1813,27 +1833,19 @@ class CloudSyncManager {
     }
   }
 
-  async _saveConflictCopy(localNotebook) {
-    try {
-      const copy = JSON.parse(JSON.stringify(localNotebook));
-      copy.id = uid();
-      copy.name = `${localNotebook.name} (${t('conflictSuffix') || 'Konflikt'} ${fmt(new Date().toISOString())})`;
-      copy.updatedAt = new Date().toISOString();
-      delete copy.syncedAt;
+  /* >>> Die stille Konfliktkopie stand hier <<<
+     Sie legte ein zweites Heft mit „(Konflikt …)" im Namen an und zeigte
+     einen Toast. Zwei Dinge sprachen dagegen, und beide wurden gemeldet:
 
-      S.notebooks.push(copy);
-      await FileManager_.saveNotebook(copy, { touch: false, immediateCloud: true });
+       · Die Übersicht füllte sich mit Kopien, die niemand wollte, und
+         von denen keine sagte, was denn nun anders ist.
+       · Sie kam meistens gar nicht dazu – der Rücksprung bei offenen
+         Änderungen lag davor, und genau der trifft beim Konflikt immer.
 
-      console.warn('[CloudSync] Konfliktkopie angelegt:', copy.name);
-      if (typeof toast === 'function') {
-        toast((t('conflictCreated') || 'Ein Heft wurde auf einem anderen Gerät geändert. Deine Fassung wurde als „{name}“ gesichert.')
-          .replace('{name}', copy.name), true);
-      }
-      if (typeof renderHomeGrid === 'function') renderHomeGrid();
-    } catch (err) {
-      console.error('[CloudSync] Konfliktkopie fehlgeschlagen:', err);
-    }
-  }
+     An ihre Stelle ist core/conflicts.js getreten: beide Fassungen
+     wandern als Stand in den Versionsverlauf, und der Nutzer entscheidet
+     mit einem Klick, welche gilt. Die Meldung geschieht jetzt AM ANFANG
+     von _mergeRemoteNotebook, vor jedem Rücksprung. */
 
   /* ══════════════════════════════════════════════════════════════════
      PAPIERKORB IN DER CLOUD

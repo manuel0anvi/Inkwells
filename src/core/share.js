@@ -1246,9 +1246,11 @@ async function clearDocContent(docId) {
 function fingerprintNotebook(notebook) {
   const pages = {};
   for (const page of (notebook.pages || [])) {
+    const strokes = page.inkStrokes || [];
     pages[String(page.id)] = {
       sig: signatureOf(page),
-      strokes: (page.inkStrokes || []).length
+      strokes: strokes.length,
+      inkSig: inkSignatureOf(strokes)
     };
   }
   return {
@@ -1261,20 +1263,96 @@ function fingerprintNotebook(notebook) {
   };
 }
 
-/** Kurze, stabile Unterschrift über den änderbaren Teil einer Seite. */
-function signatureOf(page) {
-  const objects = (page.objects || []).map(o => ({ ...o, src: isInlineData(o.src) ? o.src.length : o.src }));
-  const text = page.textContent || '';
-  const raw = JSON.stringify([text, objects, page.bg ?? null, (page.bgImg || '').length]);
-
-  // Einfacher Hash (FNV-1a). Es geht nur um „gleich oder nicht", nicht um
-  // Fälschungssicherheit – die Unterschrift verlässt das Gerät nie.
+/** Einfacher Hash (FNV-1a) über eine Zeichenkette. */
+function kurzhash(raw) {
   let hash = 0x811c9dc5;
   for (let i = 0; i < raw.length; i++) {
     hash ^= raw.charCodeAt(i);
     hash = (hash * 0x01000193) >>> 0;
   }
   return hash.toString(36) + ':' + raw.length;
+}
+
+/** Kurze, stabile Unterschrift über den änderbaren Teil einer Seite. */
+function signatureOf(page) {
+  const objects = (page.objects || []).map(o => ({ ...o, src: isInlineData(o.src) ? o.src.length : o.src }));
+  const text = page.textContent || '';
+  // Es geht nur um „gleich oder nicht", nicht um Fälschungssicherheit –
+  // die Unterschrift verlässt das Gerät nie.
+  return kurzhash(JSON.stringify([text, objects, page.bg ?? null, (page.bgImg || '').length]));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE UNTERSCHRIFT ÜBER DIE HANDSCHRIFT EINER SEITE
+
+   >>> Was hier vorher stand, und warum es falsch war <<<
+   Im Merkzettel lag allein die ANZAHL der Striche, und saveDocumentContent
+   entschied daraus, was zu tun ist. Das ging in zwei Fällen schief, und
+   beide kommen im Alltag vor – die Wartezeit bis zum Sichern sind zwei
+   Sekunden, in denen man leicht beides tut:
+
+     1. Einen Strich wegradieren und einen neuen ziehen. Die Anzahl ist
+        danach dieselbe, also galt die Seite als unverändert. Die Änderung
+        erreichte die anderen NIE und war nach dem nächsten Laden auch beim
+        Urheber wieder weg.
+
+     2. Einen alten Strich wegradieren und zwei neue ziehen. Die Anzahl
+        wächst von 5 auf 6, also wurde „ab Stelle 5 anhängen" gerechnet –
+        aber die ersten fünf sind nicht mehr dieselben fünf. Es ging der
+        falsche Strich hinaus, und einer fehlte.
+
+   Jetzt liegt eine Unterschrift über die GANZE Strichliste im Merkzettel.
+   Der Trick beim Anhängen: die gespeicherte Unterschrift ist genau die
+   Unterschrift über die ersten `before` Striche, so wie sie damals waren.
+   Man kann also nachrechnen, ob der Anfang wirklich unverändert
+   geblieben ist – und nur dann anhängen.
+   ══════════════════════════════════════════════════════════════════════ */
+function inkSignatureOf(strokes) {
+  return kurzhash(JSON.stringify(strokes || []));
+}
+
+/**
+ * Was mit der Handschrift einer Seite zu geschehen hat.
+ *
+ * Bewusst eine reine Funktion neben saveDocumentContent und nicht darin:
+ * nur so lässt sich die Entscheidung prüfen, ohne Firestore zu befragen
+ * (scripts/test-ink-diff.js). Genau hier saß der Fehler, und er war von
+ * außen nicht zu sehen – er zeigte sich erst beim anderen, Tage später.
+ *
+ * @param {object[]} strokes  die Striche, wie sie jetzt sind
+ * @param {object|null} merk  der Eintrag dieser Seite im Merkzettel
+ * @param {string} jetzt      inkSignatureOf(strokes), schon gerechnet
+ * @returns {{was:'neu'|'anhaengen'|'nichts', ab:number}}
+ *   `ab` gilt nur bei 'anhaengen' und sagt, ab welchem Strich.
+ */
+function inkPlan(strokes, merk, jetzt) {
+  const liste = strokes || [];
+
+  // Seite ist neu: ihre Striche gab es im Raum noch nie
+  if (!merk || merk.strokes === undefined) {
+    return { was: liste.length ? 'neu' : 'nichts', ab: 0 };
+  }
+
+  const before = merk.strokes;
+
+  /* Merkzettel aus der Zeit vor der Unterschrift. Für diese eine Runde
+     das alte Verhalten – siehe die Begründung bei inkSignatureOf. */
+  if (!merk.inkSig) {
+    if (liste.length === before) return { was: 'nichts', ab: 0 };
+    if (liste.length > before) return { was: 'anhaengen', ab: before };
+    return { was: 'neu', ab: 0 };
+  }
+
+  if (jetzt === merk.inkSig) return { was: 'nichts', ab: 0 };
+
+  /* Nur angehängt? Dann muss der Anfang unverändert sein – und die
+     gespeicherte Unterschrift IST die Unterschrift genau dieses Anfangs.
+     Stimmt sie nicht, ist mittendrin etwas passiert (radiert,
+     verschoben), und die Seite wird neu geschrieben. */
+  if (liste.length > before && inkSignatureOf(liste.slice(0, before)) === merk.inkSig) {
+    return { was: 'anhaengen', ab: before };
+  }
+  return { was: 'neu', ab: 0 };
 }
 
 /**
@@ -1366,26 +1444,20 @@ async function saveDocumentContent(docId, notebook, options = {}) {
     written++;
   }
 
-  // Handschrift: dazugekommene Striche anhängen, sonst nichts anfassen.
+  /* Handschrift. Was zu tun ist, entscheidet inkPlan() – siehe dort,
+     warum das eine eigene Funktion ist. */
   for (const page of (notebook.pages || [])) {
     const pageId = String(page.id);
     const strokes = page.inkStrokes || [];
-    const before = base.pages[pageId]?.strokes;
+    const plan = inkPlan(strokes, base.pages[pageId], fingerprint.pages[pageId]?.inkSig);
 
-    // Seite ist neu: ihre Striche gab es im Raum noch nie. Ohne diesen Fall
-    // käme eine frisch angelegte Seite ohne Handschrift beim anderen an.
-    if (before === undefined) {
-      if (strokes.length) await rewritePageInk(docId, pageId, strokes, me.uid);
-      continue;
-    }
+    if (plan.was === 'nichts') continue;
 
-    if (strokes.length === before) continue;
-
-    if (strokes.length > before) {
-      await appendStrokes(docId, pageId, strokes.slice(before), me.uid);
+    if (plan.was === 'anhaengen') {
+      await appendStrokes(docId, pageId, strokes.slice(plan.ab), me.uid);
     } else {
-      // Radiert: die Bögen dieser Seite neu schreiben. Nur hier wird
-      // überschrieben – Radieren IST nun einmal ein Entfernen.
+      // Radiert oder mittendrin geändert: die Bögen dieser Seite neu
+      // schreiben. Nur hier wird überschrieben.
       await rewritePageInk(docId, pageId, strokes, me.uid);
     }
     written++;

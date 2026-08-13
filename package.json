@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "web": "node scripts/serve-website.js",
-    "test": "node scripts/test-doc-split.js && node scripts/test-page-transfer.js && node scripts/test-account-switch.js && node scripts/test-collab-text.js && node scripts/test-collab-caret.js && node scripts/test-collab-sync.js && node scripts/test-shared-save.js && node scripts/test-cloud-match.js && node scripts/test-cloud-flush.js && node scripts/test-csp-rtdb.js && node scripts/test-cloud-trash-move.js && node scripts/test-trash-sync.js && node scripts/test-view-state.js && node scripts/sync-share.js --check",
+    "test": "node scripts/test-doc-split.js && node scripts/test-ink-diff.js && node scripts/test-page-transfer.js && node scripts/test-account-switch.js && node scripts/test-collab-text.js && node scripts/test-collab-caret.js && node scripts/test-collab-sync.js && node scripts/test-shared-save.js && node scripts/test-cloud-match.js && node scripts/test-cloud-flush.js && node scripts/test-csp-rtdb.js && node scripts/test-cloud-trash-move.js && node scripts/test-trash-sync.js && node scripts/test-view-state.js && node scripts/test-versions.js && node scripts/sync-share.js --check",
     "build": "npm test && node scripts/build-release.js",
     "sync-share": "node scripts/sync-share.js",
     "check-share": "node scripts/sync-share.js --check",

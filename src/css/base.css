@@ -36,7 +36,14 @@
   --sync-warn: #c87a2a;
   --sync-wait-bg: rgba(91, 143, 212, .16);
   --sync-bad: #cc5b56;
-  --sync-bad-bg: rgba(204, 91, 86, .16)
+  --sync-bad-bg: rgba(204, 91, 86, .16);
+  /* Fehlte, wurde aber schon an mehreren Stellen benutzt (die Zeilen im
+     Papierkorb und in „Fruehere Fassungen", modals.css). Eine undefinierte
+     Variable faellt lautlos auf durchsichtig zurueck – die Zeilen hatten
+     deshalb gar keinen Grund und standen frei im Fenster. */
+  --sidebar-bg: #17171f;
+  /* Gegenstueck zu --sync-warn, wie ok/wait/bad ihres schon hatten */
+  --sync-warn-bg: rgba(200, 122, 42, .16)
 }
 
 *,

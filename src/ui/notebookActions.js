@@ -82,20 +82,116 @@
     return p;
   }
 
+  /** Eine Überschrift zwischen zwei Gruppen. */
+  function gruppenkopf(text) {
+    const h = document.createElement('div');
+    h.style.cssText = 'font-size:11px;letter-spacing:.06em;text-transform:uppercase;'
+      + 'color:var(--md);margin:14px 0 4px;';
+    h.textContent = text;
+    return h;
+  }
+
+  function zeitText(wert) {
+    const d = new Date(wert);
+    return Number.isNaN(d.getTime())
+      ? '–'
+      : d.toLocaleString(typeof getLanguage === 'function' ? getLanguage() : 'de');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE STÄNDE AUF DIESEM GERÄT
+
+     Sie standen hier bisher gar nicht: „Frühere Fassungen" zeigte
+     ausschließlich, was Google Drive von sich aus mitschreibt. Das setzt
+     eine Anmeldung, eine Leitung und ausgerechnet diesen einen Anbieter
+     voraus – wer ohne Konto arbeitet, hatte überhaupt keinen Verlauf.
+
+     Der örtliche Verlauf (core/versions.js) steht deshalb oben und
+     immer. Die Cloud-Fassungen kommen darunter, wenn es sie gibt.
+     ══════════════════════════════════════════════════════════════════ */
+  async function zeigeOertliche(nb) {
+    if (typeof Versions === 'undefined' || !Versions) return;
+
+    const staende = await Versions.liste(nb.id);
+    versionsList.appendChild(gruppenkopf(t('versionLocalTitle') || 'Auf diesem Gerät'));
+
+    if (!staende.length) {
+      versionsList.appendChild(infoRow(t('versionLocalNone')
+        || 'Noch keine Stände. Sie entstehen beim Arbeiten von selbst.'));
+      return;
+    }
+
+    for (const stand of staende) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;'
+        + 'padding:10px 12px;background:var(--sidebar-bg);border-radius:6px;margin-bottom:6px;';
+
+      const info = document.createElement('div');
+      info.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-width:0;';
+
+      const when = document.createElement('span');
+      when.style.cssText = 'font-size:13px;';
+      when.textContent = zeitText(stand.wann);
+
+      const meta = document.createElement('span');
+      meta.style.cssText = 'font-size:11px;color:var(--md);';
+      const grundText = {
+        vorher: t('versionReasonBefore') || 'vor dem Zurückholen',
+        konflikt: t('versionReasonConflict') || 'eigene Fassung beim Konflikt',
+        fremd: t('versionReasonRemote') || 'Fassung aus der Cloud beim Konflikt'
+      }[stand.grund] || (t('versionReasonAuto') || 'beim Arbeiten');
+      meta.textContent = `${(t('versionPages') || '{n} Seiten').replace('{n}', stand.seiten)} · ${grundText}`;
+
+      info.append(when, meta);
+      row.appendChild(info);
+
+      const restore = document.createElement('button');
+      restore.className = 'settings-btn';
+      restore.style.cssText = 'flex-shrink:0;padding:6px 12px;font-size:12px;';
+      restore.textContent = t('versionRestore') || 'Zurückholen';
+      restore.addEventListener('click', async () => {
+        const ok = await showConfirm(t('versionConfirm')
+          || 'Diese Fassung zurückholen? Der aktuelle Stand wird vorher als Kopie gesichert.');
+        if (!ok) return;
+        toast(t('versionRestoring') || 'Fassung wird zurückgeholt…');
+        const res = await Versions.stelleHer(stand);
+        if (!res.success) {
+          toast((t('versionFailed') || 'Fehler: {msg}').replace('{msg}', res.error || ''), true);
+          return;
+        }
+        versionsOverlay.style.display = 'none';
+        renderHomeGrid();
+        if (S.activeNbId === nb.id) openNotebook(nb.id);
+        toast(t('versionRestored') || 'Frühere Fassung wiederhergestellt.');
+      });
+      row.appendChild(restore);
+
+      versionsList.appendChild(row);
+    }
+  }
+
   async function openVersions(nb) {
     versionsOverlay.style.display = 'flex';
     versionsList.innerHTML = '';
     versionsList.appendChild(infoRow(t('versionLoading') || 'Fassungen werden geladen…'));
 
+    versionsList.innerHTML = '';
+    try {
+      await zeigeOertliche(nb);
+    } catch (err) {
+      versionsList.appendChild(infoRow((t('versionFailed') || 'Fehler: {msg}')
+        .replace('{msg}', err.message)));
+    }
+
     if (!CloudSync_.isConfigured() || !CloudSync_.isAuthenticated()) {
-      versionsList.innerHTML = '';
+      versionsList.appendChild(gruppenkopf(t('versionCloudTitle') || 'In der Cloud'));
       versionsList.appendChild(infoRow(t('versionNeedsLogin')));
       return;
     }
 
     try {
       const versions = await CloudSync_.listVersions(nb.id);
-      versionsList.innerHTML = '';
+      versionsList.appendChild(gruppenkopf(t('versionCloudTitle') || 'In der Cloud'));
 
       if (!versions.length) {
         versionsList.appendChild(infoRow(t('versionNone')));
@@ -105,17 +201,14 @@
       versions.forEach((v, idx) => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;'
-          + 'padding:10px 12px;background:var(--sidebar-bg);border-radius:6px;';
+          + 'padding:10px 12px;background:var(--sidebar-bg);border-radius:6px;margin-bottom:6px;';
 
         const info = document.createElement('div');
         info.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-width:0;';
 
         const when = document.createElement('span');
         when.style.cssText = 'font-size:13px;';
-        const d = new Date(v.modifiedTime);
-        when.textContent = Number.isNaN(d.getTime())
-          ? '–'
-          : d.toLocaleString(typeof getLanguage === 'function' ? getLanguage() : 'de');
+        when.textContent = zeitText(v.modifiedTime);
 
         const meta = document.createElement('span');
         meta.style.cssText = 'font-size:11px;color:var(--md);';

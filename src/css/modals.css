@@ -1934,3 +1934,138 @@
   color: var(--md);
   max-width: 300px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ZWEI FASSUNGEN DESSELBEN HEFTS
+
+   Das Band unter der Titelleiste und die Ansicht dahinter. Farbe wie die
+   Warnung des Abgleichs (--sync-warn): es ist kein Fehler, aber etwas,
+   das eine Antwort braucht.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.conflict-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  background: var(--sync-warn-bg, rgba(200, 122, 42, .16));
+  border-bottom: 1px solid rgba(200, 122, 42, .35);
+  font-size: 13px;
+  color: var(--hi);
+  /* Ueber dem Inhalt, aber unter jedem Fenster – sonst stuende es vor
+     der Ansicht, die es selbst aufmacht. */
+  position: relative;
+  z-index: 40;
+}
+
+.conflict-bar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sync-warn);
+  flex-shrink: 0;
+}
+
+.conflict-bar-text { flex: 1; min-width: 0; }
+
+.conflict-bar-btns {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.conflict-bar-ghost,
+.conflict-bar-main {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 13px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .12s, border-color .12s;
+}
+
+.conflict-bar-ghost {
+  background: transparent;
+  border-color: var(--sb2);
+  color: var(--md);
+}
+.conflict-bar-ghost:hover { background: var(--sh2); color: var(--hi); }
+
+.conflict-bar-main {
+  background: var(--gold);
+  color: var(--sh);
+  font-weight: 500;
+}
+.conflict-bar-main:hover { background: var(--gb); }
+
+.conflict-nb-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  color: var(--hi);
+}
+
+/* Zwei Karten nebeneinander. Untereinander, sobald es eng wird – bei
+   zwei Textbloecken nebeneinander liest man sonst gar nichts mehr. */
+.conflict-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 620px) {
+  .conflict-sides { grid-template-columns: 1fr; }
+}
+
+.conflict-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--sidebar-bg, var(--sc));
+  border: 1px solid var(--sb);
+  border-radius: 8px;
+}
+
+.conflict-side-title {
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--md);
+}
+
+.conflict-side-when {
+  font-size: 14px;
+  color: var(--hi);
+}
+
+.conflict-side-meta {
+  font-size: 12px;
+  color: var(--md);
+  line-height: 1.6;
+}
+
+/* Der Unterschied in Zahlen. Sichtbar hervorgehoben, wo eine Seite mehr
+   hat – das ist die Auskunft, nach der man wirklich sucht. */
+.conflict-side-meta b {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.conflict-side-pick {
+  margin-top: auto;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--sb2);
+  background: var(--sh2);
+  color: var(--hi);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.conflict-side-pick:hover {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--sh);
+}

@@ -118,6 +118,17 @@ class FileManager {
       this.notebookPaths.set(notebook.id, filePath);
       await Registry.add(notebook, filePath);
 
+      /* Ein Stand für den örtlichen Verlauf – höchstens alle zwanzig
+         Minuten und nur bei wirklicher Änderung, die Bremsen stehen
+         dort (core/versions.js). Bewusst ohne await und mit eigenem
+         Auffangnetz: der Verlauf ist eine Bequemlichkeit, das Speichern
+         des Hefts ist es nicht. Scheitert er, darf das Speichern
+         trotzdem als gelungen gelten. */
+      if (typeof Versions !== 'undefined' && Versions) {
+        Versions.vielleichtSichern(notebook).catch(err =>
+          console.warn('[FileManager] Versionsstand übersprungen:', err));
+      }
+
       if (syncCloud) {
         try {
           if (typeof CloudSync_ !== 'undefined' && CloudSync_) {

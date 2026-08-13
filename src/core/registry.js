@@ -24,12 +24,23 @@ const Registry = {
     return this._entries;
   },
 
-  // Übersicht und Papierkorb stehen in derselben Datei. Würde hier nur
-  // `notebooks` geschrieben, wäre der Papierkorb bei jedem Speichern weg.
+  /* Übersicht, Papierkorb UND Versionsverlauf stehen in derselben Datei.
+     Hier stand eine Aufzählung der Felder – und die musste bei jedem
+     neuen Feld mitwachsen, sonst wäre es beim nächsten Speichern weg.
+     Genau das ist mit `versions` beinahe passiert.
+
+     Deshalb andersherum: die Datei wird frisch gelesen und nur das
+     ersetzt, was dieser Datei wirklich gehört. Was ein anderer Teil
+     hineingeschrieben hat, bleibt unangetastet, auch wenn hier niemand
+     davon weiß. */
   async save() {
     try {
-      const trash = (typeof Trash !== 'undefined' && Trash._loaded) ? Trash._entries : this._rawTrash;
-      await window.api.saveRegistry({ notebooks: this._entries, trash });
+      const vorhanden = (await window.api.loadRegistry()) || {};
+      const trash = (typeof Trash !== 'undefined' && Trash._loaded)
+        ? Trash._entries
+        : (Array.isArray(vorhanden.trash) ? vorhanden.trash : this._rawTrash);
+
+      await window.api.saveRegistry({ ...vorhanden, notebooks: this._entries, trash });
       this._rawTrash = trash;
       console.log('[Registry] Saved', this._entries.length, 'entries,', trash.length, 'im Papierkorb');
     } catch (err) {

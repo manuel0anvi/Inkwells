@@ -49,7 +49,10 @@ const NAMES = [
   'splitNotebook', 'assembleNotebook', 'fingerprintNotebook',
   'signatureOf', 'isInlineData', 'splitIntoChunks',
   // Baut die Heft-Reihenfolge; splitNotebook hängt daran
-  'pagesInOrder'
+  'pagesInOrder',
+  // Die Unterschriften. kurzhash traegt beide anderen – ohne sie hier
+  // scheitert der Aufbau mit „kurzhash is not defined".
+  'kurzhash', 'inkSignatureOf'
 ];
 
 const sandbox = { INK_SHEET_LIMIT: 600000, CHUNK_SIZE: 700000, console };

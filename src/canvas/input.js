@@ -922,6 +922,37 @@ function strokeErase(c, page, canvas) {
   }
 }
 
-function buildStroke(c) { const m = S.mode; if (m === 'pen1') return { path: [{ x: c.x, y: c.y, p: c.p }], color: S.pen1.color, width: PEN_SIZES[S.pen1.szIdx], isHL: false }; if (m === 'pen2') return { path: [{ x: c.x, y: c.y, p: c.p }], color: S.pen2.color, width: PEN_SIZES[S.pen2.szIdx], isHL: false }; if (m === 'hl') return { path: [{ x: c.x, y: c.y, p: c.p }], color: S.hl.color, width: HL_SIZES[S.hl.szIdx], isHL: true }; return { path: [{ x: c.x, y: c.y, p: c.p }], color: '#000', width: 4, isHL: false }; }
+/* ══════════════════════════════════════════════════════════════════════
+   JEDER STRICH BEKOMMT EINE KENNUNG
+
+   >>> Warum das noetig ist <<<
+   Ein Strich geht ueber Firestore mit arrayUnion hinaus (appendStrokes in
+   core/share.js), und arrayUnion nimmt nur auf, was noch nicht drinsteht –
+   bei TIEFEM Vergleich. Zwei wirklich gleiche Striche galten damit als
+   einer: zweimal derselbe Punkt an derselben Stelle, ein Doppeltipp mit
+   dem Stift, zwei kurze Striche im Raster. Der zweite kam beim anderen nie
+   an und war nach dem naechsten Laden auch beim Urheber weg.
+
+   Mit einer Kennung sind zwei gleich AUSSEHENDE Striche verschieden. Der
+   Schutz gegen den Doppelversand bleibt trotzdem: derselbe Strich, zweimal
+   geschickt, traegt beide Male dieselbe Kennung.
+
+   Alte Hefte haben sie nicht. Das ist in Ordnung – die Kennung wird
+   nirgends vorausgesetzt, sie geht nur in den Vergleich ein.
+   ══════════════════════════════════════════════════════════════════════ */
+function strichKennung() {
+  return (typeof uid === 'function')
+    ? uid()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function buildStroke(c) {
+  const m = S.mode;
+  const start = { path: [{ x: c.x, y: c.y, p: c.p }], id: strichKennung() };
+  if (m === 'pen1') return { ...start, color: S.pen1.color, width: PEN_SIZES[S.pen1.szIdx], isHL: false };
+  if (m === 'pen2') return { ...start, color: S.pen2.color, width: PEN_SIZES[S.pen2.szIdx], isHL: false };
+  if (m === 'hl')   return { ...start, color: S.hl.color,   width: HL_SIZES[S.hl.szIdx],   isHL: true };
+  return { ...start, color: '#000', width: 4, isHL: false };
+}
 function liveDrawIncr(ctx, c) { const s = S._cur; if (!s) return; const pts = s.path; if (pts.length < 2) return; const prev = pts[pts.length - 2], cur = pts[pts.length - 1]; ctx.save(); ctx.strokeStyle = s.color; ctx.lineWidth = s.isEraser ? s.width : s.width * (0.5 + cur.p); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; if (s.isHL) ctx.globalAlpha = 0.38; if (s.isEraser) ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); if (pts.length >= 3) { const pp = pts[pts.length - 3]; ctx.moveTo((pp.x + prev.x) / 2, (pp.y + prev.y) / 2); ctx.quadraticCurveTo(prev.x, prev.y, (prev.x + cur.x) / 2, (prev.y + cur.y) / 2); } else { ctx.moveTo(prev.x, prev.y); ctx.lineTo(cur.x, cur.y); } ctx.stroke(); ctx.restore(); }
 
