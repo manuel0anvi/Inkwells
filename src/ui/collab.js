@@ -1957,9 +1957,26 @@
         name: nb.name || '',
         color: nb.color || '',
         defaultBg: nb.defaultBg || '',
-        comments: nb.comments || []
+        comments: echteKommentare(nb)
       })
     };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     NUR ECHTE KOMMENTARE GEHEN HINAUS
+
+     Ein Platzhalter ist kein Inhalt, sondern das Eingeständnis, dass uns
+     einer fehlt (core/comments.js). Ihn zu verschicken kann nur schaden:
+     beim anderen liegt das Original, und unser leerer Eintrag würde es
+     überschreiben.
+
+     Er wird auch nicht in den Vergleich aufgenommen – sonst löste allein
+     sein Entstehen einen Struktur-Takt aus, der nichts überträgt.
+     ══════════════════════════════════════════════════════════════════ */
+  function echteKommentare(nb) {
+    const alle = Array.isArray(nb && nb.comments) ? nb.comments : [];
+    if (typeof istPlatzhalterKommentar !== 'function') return alle;
+    return alle.filter(c => !istPlatzhalterKommentar(c));
   }
 
   function takeSnapshot() {
@@ -2146,7 +2163,8 @@
         name: liveNb.name || '',
         color: liveNb.color || '',
         defaultBg: liveNb.defaultBg || '',
-        comments: liveNb.comments || []
+        // Ohne Platzhalter – siehe echteKommentare()
+        comments: echteKommentare(liveNb)
       });
     }
 
@@ -2333,19 +2351,49 @@
        Listen zu vereinen hiesse, Gelöschtes wiederauferstehen zu lassen.
        ══════════════════════════════════════════════════════════════ */
     if (Array.isArray(data.comments)) {
-      liveNb.comments = data.comments.map(c => ({
-        id: String(c.id),
-        pageId: String(c.pageId || ''),
-        text: String(c.text || ''),
-        zitat: String(c.zitat || ''),
-        author: c.author && typeof c.author === 'object'
-          ? { uid: String(c.author.uid || ''), name: String(c.author.name || '') }
-          : { uid: '', name: '' },
-        created: Number(c.created) || Date.now(),
-        edited: Number(c.edited) || 0,
-        resolved: !!c.resolved,
-        replies: Array.isArray(c.replies) ? c.replies : []
-      }));
+      const meine = new Map((liveNb.comments || []).map(c => [String(c.id), c]));
+
+      liveNb.comments = data.comments.map(c => {
+        const id = String(c.id);
+        const fremd = {
+          id,
+          pageId: String(c.pageId || ''),
+          text: String(c.text || ''),
+          zitat: String(c.zitat || ''),
+          author: c.author && typeof c.author === 'object'
+            ? { uid: String(c.author.uid || ''), name: String(c.author.name || '') }
+            : { uid: '', name: '' },
+          created: Number(c.created) || Date.now(),
+          edited: Number(c.edited) || 0,
+          resolved: !!c.resolved,
+          replies: Array.isArray(c.replies) ? c.replies : []
+        };
+
+        /* ── Ein Platzhalter darf ein Original NICHT verdrängen ──────
+           >>> Der Fehler, den das behebt <<<
+           Beide Seiten schicken die GANZE Kommentarliste, und hier wurde
+           sie eins zu eins übernommen. Der Ablauf war:
+
+             1. Ich schreibe einen Kommentar. Die Markierung geht sofort
+                über Yjs hinaus, die Kommentardaten erst mit dem nächsten
+                Struktur-Takt.
+             2. Der andere sieht die Markierung ohne Kommentar und baut
+                sich einen Platzhalter: ohne Text, ohne Autor.
+             3. SEIN Struktur-Takt läuft ab und schickt mir seine Liste –
+                mit dem Platzhalter darin.
+             4. Meine Liste wird dadurch ersetzt. Mein eigener Kommentar
+                stand ab da bei MIR als „Unbekannt" da, ohne Text und
+                ohne Bearbeiten-Knopf, während der andere längst meinen
+                Namen sah.
+
+           Genau so wurde es gemeldet. Deshalb: hat der Absender nur
+           einen Platzhalter und ich das Original, behalte ich meins. */
+        const alt = meine.get(id);
+        if (alt && istPlatzhalterKommentar(fremd) && !istPlatzhalterKommentar(alt)) {
+          return alt;
+        }
+        return fremd;
+      });
       if (typeof window.refreshComments === 'function') window.refreshComments();
     }
 

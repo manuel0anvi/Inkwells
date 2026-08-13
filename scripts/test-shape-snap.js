@@ -160,6 +160,46 @@ console.log('\nDie eingerastete Form sitzt richtig');
   check('Genug Punkte auf den Kanten', form.path.length > 40, true);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER KASTEN IST DAS, WORAUS DAS OBJEKT ENTSTEHT
+
+   Seit eine erkannte Form ein echtes Form-Objekt wird (canvas/input.js,
+   machDarausEinObjekt) und kein glattgezogener Strich mehr, ist der
+   umschliessende Kasten die eigentliche Ausgabe: daraus werden x, y,
+   Breite und Hoehe. Sitzt er falsch, sitzt die Form falsch.
+   ══════════════════════════════════════════════════════════════════════ */
+console.log('\nDer Kasten stimmt');
+
+{
+  const form = erkenneForm(vieleck([
+    { x: 60, y: 40 }, { x: 360, y: 42 }, { x: 358, y: 240 }, { x: 62, y: 238 }
+  ]));
+  const k = form.kasten;
+  check('Er ist da', !!k, true);
+  check('Linke Kante', Math.abs(k.x1 - 60) < 12, true);
+  check('Obere Kante', Math.abs(k.y1 - 40) < 12, true);
+  check('Breite', Math.abs(k.b - 300) < 16, true);
+  check('Hoehe', Math.abs(k.h - 200) < 16, true);
+}
+
+{
+  const form = erkenneForm(kreis(250, 180, 70));
+  const k = form.kasten;
+  check('Der Kreis-Kasten ist quadratisch', Math.abs(k.b - k.h) < 14, true);
+  check('Und sitzt um seine Mitte',
+    Math.abs((k.x1 + k.b / 2) - 250) < 10 && Math.abs((k.y1 + k.h / 2) - 180) < 10, true);
+}
+
+{
+  const form = erkenneForm(vieleck([
+    { x: 200, y: 40 }, { x: 350, y: 300 }, { x: 50, y: 300 }
+  ]));
+  check('Auch das Dreieck bringt einen Kasten mit', !!form.kasten, true);
+  check('Und es heisst dreieck', form.art, 'dreieck');
+}
+
+console.log('\nDie geglaettete Linie taugt weiterhin als Rueckfall');
+
 {
   const form = erkenneForm(kreis(200, 200, 90));
   const mitte = form.path.reduce((s, p) => ({ x: s.x + p.x, y: s.y + p.y }), { x: 0, y: 0 });

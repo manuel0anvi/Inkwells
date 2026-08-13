@@ -76,6 +76,19 @@ function buildShapeSvg(type, w, h, fill, stroke, strokeWidth, obj) {
     case 'ellipse':
       form = '<rect ' + inner + ' fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + strokeWidth + '" rx="50%"/>';
       break;
+    /* Dazugekommen mit dem Glattziehen freihändig gemalter Formen
+       (canvas/shapeSnap.js): ein gemaltes Dreieck wird ein Dreieck, und
+       das braucht hier ein Gegenstück. Die Spitze zeigt nach oben – wie
+       bei jedem Dreieck, das man von Hand aufs Blatt setzt.
+       stroke-linejoin: round, sonst stehen bei dickem Strich spitze
+       Zacken über die Ecken hinaus. */
+    case 'triangle':
+      form = '<polygon points="' + (pw / 2) + ',' + pad
+        + ' ' + (pw - pad) + ',' + (ph - pad)
+        + ' ' + pad + ',' + (ph - pad) + '"'
+        + ' fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + strokeWidth
+        + '" stroke-linejoin="round"/>';
+      break;
     case 'line':
       form = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + stroke + '" stroke-width="' + strokeWidth + '" stroke-linecap="round"/>';
       break;

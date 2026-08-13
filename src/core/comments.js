@@ -332,6 +332,23 @@ function pruneComments(pageId) {
  * Das kommt vor, wenn der Text eines anderen Bearbeiters ankommt, bevor
  * das Heft mit seinen Kommentardaten da ist.
  */
+/* ══════════════════════════════════════════════════════════════════════
+   PLATZHALTER ODER ECHTER KOMMENTAR?
+
+   Ein Platzhalter entsteht aus einer Markierung, deren Kommentar noch
+   fehlt (ensureCommentsFromMarkers weiter unten). Er hat keinen Text und
+   keine Autorenkennung – und daran ist er zu erkennen: getCommentAuthor()
+   liefert IMMER eine Kennung, mindestens 'local'.
+
+   Warum das eine eigene Funktion wert ist: der Live-Abgleich schickt die
+   ganze Kommentarliste, und beide Seiten tun das. Wer einen Platzhalter
+   hält und ihn zurückschickt, überschreibt damit das Original beim
+   anderen. Genau das ist passiert – siehe ui/collab.js.
+   ══════════════════════════════════════════════════════════════════════ */
+function istPlatzhalterKommentar(c) {
+  return !!c && (!c.author || !c.author.uid);
+}
+
 function ensureCommentsFromMarkers(pageEl) {
   const nb = typeof getNb === 'function' ? getNb() : null;
   if (!nb || !pageEl) return;

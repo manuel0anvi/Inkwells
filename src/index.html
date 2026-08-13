@@ -848,10 +848,22 @@
         <span data-i18n="linkTextLabel">Text</span>
         <input type="text" id="link-text" autocomplete="off" spellcheck="false">
       </label>
-      <label class="link-field">
+      <!-- Zwei Arten von Verweis. Getrennt und nicht in EIN Feld, weil
+           „12" sonst eine Adresse sein könnte und man raten müsste. -->
+      <div class="link-kind" id="link-kind">
+        <button type="button" class="link-kind-btn active" id="link-kind-url"
+                data-i18n="linkKindUrl">Adresse</button>
+        <button type="button" class="link-kind-btn" id="link-kind-page"
+                data-i18n="linkKindPage">Seite im Heft</button>
+      </div>
+      <label class="link-field" id="link-url-row">
         <span data-i18n="linkUrlLabel">Adresse</span>
         <input type="text" id="link-url" autocomplete="off" spellcheck="false"
                placeholder="https://">
+      </label>
+      <label class="link-field" id="link-page-row" style="display:none">
+        <span data-i18n="linkPageLabel">Seitenzahl</span>
+        <input type="number" id="link-page" min="1" step="1" autocomplete="off">
       </label>
       <p class="link-error" id="link-error" style="display:none"></p>
       <div class="modal-btns">
@@ -861,6 +873,17 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- WOHIN EIN VERWEIS FÜHRT
+     Erscheint unten links, sobald der Zeiger auf einem Verweis steht –
+     wie die Statuszeile eines Browsers. Ohne sie klickt man auf gut Glück,
+     und ein Verweis öffnet sich im Standardbrowser: das will man vorher
+     wissen. Mit dem Finger ist derselbe Streifen der erste Schritt: einmal
+     tippen zeigt ihn, ein zweiter Tipp öffnet (ui/links.js). -->
+<div class="link-peek" id="link-peek" style="display:none">
+  <span class="link-peek-ziel" id="link-peek-ziel"></span>
+  <span class="link-peek-hinweis" id="link-peek-hinweis"></span>
 </div>
 
 <!-- ZWEI FASSUNGEN NEBENEINANDER

@@ -945,6 +945,14 @@ function commentsForPage(notebook, pageId) {
   const alle = Array.isArray(notebook?.comments) ? notebook.comments : [];
   return alle
     .filter(c => c && String(c.pageId) === String(pageId))
+    /* Platzhalter bleiben hier. Sie entstehen aus einer Markierung,
+       deren Kommentar noch fehlt (core/comments.js), und haben deshalb
+       keine Autorenkennung. Sie zu sichern hiesse, den leeren Ersatz
+       dauerhaft an die Stelle des Originals zu setzen – und danach kaeme
+       das Original nie wieder. Die Pruefung steht hier ausgeschrieben
+       und nicht als Aufruf: diese Datei laeuft auch auf der Website,
+       und dort gibt es core/comments.js nicht. */
+    .filter(c => !!(c.author && c.author.uid))
     .map(c => ({
       id: String(c.id),
       pageId: String(pageId),

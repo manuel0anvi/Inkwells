@@ -36,12 +36,21 @@
    und die entsteht beim Schreiben ständig. Lieber gar nicht als oft
    falsch.
 
-   ── Was hier NICHT geschieht ────────────────────────────────────────
-   Die Form wird zu einem gewöhnlichen Strich mit vielen Punkten und
-   NICHT zu einem Objekt (canvas/shapes.js). Das ist Absicht: sie soll
-   sich radieren, verschieben und auswählen lassen wie alles andere von
-   Hand Gezeichnete. Ein Objekt hätte Griffe und eine eigene Leiste – für
-   einen Kreis in einer Skizze wäre das mehr Bedienteil als Inhalt.
+   ── Was daraus wird: ein OBJEKT ─────────────────────────────────────
+   Hier stand zuerst das Gegenteil – die Form wurde ein gewöhnlicher
+   Strich mit vielen Punkten, damit sie sich radieren und auswählen lässt
+   wie alles andere von Hand Gezeichnete.
+
+   Das war die falsche Entscheidung, und sie wurde als solche gemeldet:
+   „wenn man Formen mit dem Stift zeichnet, verhalten sie sich wie
+   Linien, sie sollten sich aber wie Formen verhalten." Genau so ist es.
+   Wer einen Kreis malt und dafür extra die Geste macht, will einen
+   Kreis – und dann auch alles, was ein Kreis kann: Füllfarbe,
+   Linienfarbe, Linienstärke, an den Ecken ziehen, drehen. Ein Strich
+   kann nichts davon.
+
+   Diese Datei erkennt deshalb nur noch die Form und ihren Kasten; was
+   daraus wird, baut canvas/input.js als Objekt (canvas/shapes.js).
    ══════════════════════════════════════════════════════════════════════ */
 
 (function (global) {
@@ -197,7 +206,13 @@
    * Versucht, aus einem gemalten Strich eine Form zu machen.
    *
    * @param {object} stroke  der Strich, unverändert
-   * @returns {{art:string, path:object[]}|null} null = keine Form erkannt
+   * @returns {{art:string, kasten:object, path:object[]}|null}
+   *   `art` ist 'ellipse' | 'viereck' | 'dreieck'.
+   *   `kasten` ist der umschließende Kasten – daraus baut
+   *   canvas/input.js das Objekt.
+   *   `path` ist die geglättete Linie. Sie wird nicht mehr in die Seite
+   *   gelegt, taugt aber weiterhin zum Prüfen (scripts/test-shape-snap.js)
+   *   und als Rückfall, sollte es einmal kein Objekt geben können.
    */
   function erkenneForm(stroke) {
     const pts = stroke && stroke.path;
@@ -217,7 +232,7 @@
     // Der Druck des Originals, damit die Form aussieht wie das Gemalte
     const druck = pts.reduce((s, p) => s + (p.p ?? 0.5), 0) / pts.length;
 
-    if (istEllipse(pts, k)) return { art: 'ellipse', path: ellipsePfad(k, druck) };
+    if (istEllipse(pts, k)) return { art: 'ellipse', kasten: k, path: ellipsePfad(k, druck) };
 
     /* Für das Vieleck wird der Umriss GESCHLOSSEN vereinfacht: der Anfang
        muss auch das Ende sein, sonst zählt die Stelle, an der man
@@ -232,10 +247,10 @@
     }
 
     if (ecken.length === 4) {
-      return { art: 'viereck', path: vieleckPfad(viereckEcken(ecken, k), druck) };
+      return { art: 'viereck', kasten: k, path: vieleckPfad(viereckEcken(ecken, k), druck) };
     }
     if (ecken.length === 3) {
-      return { art: 'dreieck', path: vieleckPfad(ecken, druck) };
+      return { art: 'dreieck', kasten: k, path: vieleckPfad(ecken, druck) };
     }
 
     return null;

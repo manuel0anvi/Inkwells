@@ -160,29 +160,28 @@ function attachInput(canvas, textDiv, objLayer, page) {
       if (pts.length <= 1) return;
 
       /* ── Erst nach einer FORM sehen, dann die Gerade ────────────────
-         Dieselbe Geste trägt jetzt beides: wer am Ende stehen bleibt,
-         bekommt aus einem gemalten Kreis einen Kreis und aus allem
-         anderen die Gerade, die es hier schon immer gab.
+         Dieselbe Geste trägt beides: wer am Ende stehen bleibt, bekommt
+         aus einem gemalten Kreis einen Kreis und aus allem anderen die
+         Gerade, die es hier schon immer gab.
 
          Die Reihenfolge muss so sein. Eine geschlossene Rundung würde
          als Gerade zu einem Strich zwischen Anfang und Ende zusammen-
          fallen – also fast zu nichts, denn bei einer Form liegen die
          beiden aufeinander. Genau deshalb prüft erkenneForm() als
          Erstes, ob der Strich überhaupt geschlossen ist
-         (canvas/shapeSnap.js). */
-      const form = (typeof InkwellShapeSnap !== 'undefined')
+         (canvas/shapeSnap.js).
+
+         Ein Marker wird nie zur Form: mit ihm fährt man um Wörter
+         herum, um sie hervorzuheben, nicht um einen Kreis zu malen. */
+      const form = (!stroke.isHL && typeof InkwellShapeSnap !== 'undefined')
         ? InkwellShapeSnap.erkenneForm(stroke) : null;
 
-      if (form) {
-        stroke._shapeDetected = true;
-        stroke.isGeometric = true;
-        stroke.path = form.path;
-      } else {
-        stroke._shapeDetected = false;
-        stroke.isGeometric = false;
-        const start = pts[0], end = pts[pts.length - 1];
-        stroke.path = [start, end];
-      }
+      if (form && machDarausEinObjekt(stroke, form)) return;
+
+      stroke._shapeDetected = false;
+      stroke.isGeometric = false;
+      const start = pts[0], end = pts[pts.length - 1];
+      stroke.path = [start, end];
 
       clearLiveCanvas();
       redrawStrokes(canvas, S.strokeHistory[page.id]);
@@ -193,6 +192,72 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (!stroke) return;
     clearTimeout(stroke._lineTimer);
     stroke._lineTimer = null;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     AUS DEM GEMALTEN STRICH WIRD EIN FORM-OBJEKT
+
+     >>> Warum ein Objekt und nicht ein glattgezogener Strich <<<
+     Zuerst blieb es ein Strich mit sauberen Punkten – das schien
+     bescheidener, und man konnte ihn radieren wie jedes Gekritzel.
+     Gemeldet wurde genau das als Fehler: „Formen verhalten sich wie
+     Linien, sie sollten sich wie Formen verhalten." Stimmt. Wer die
+     Geste macht, will einen Kreis und alles, was dazugehört –
+     Füllfarbe, Linienfarbe, Linienstärke, an den Ecken ziehen, drehen.
+     Nichts davon kann ein Strich.
+
+     Farbe und Strichstärke kommen aus dem STIFT, mit dem gemalt wurde.
+     Alles andere wäre eine Überraschung: man hat gerade rot gezeichnet,
+     und plötzlich steht dort etwas Schwarzes. Die Füllung bleibt leer –
+     gemalt hat man einen Umriss.
+
+     @returns {boolean} true, wenn daraus wirklich ein Objekt wurde
+     ══════════════════════════════════════════════════════════════════ */
+  const FORM_ART = { ellipse: 'ellipse', viereck: 'rect', dreieck: 'triangle' };
+
+  function machDarausEinObjekt(stroke, form) {
+    if (typeof placeObject !== 'function' || typeof uid !== 'function') return false;
+    const art = FORM_ART[form.art];
+    if (!art || !form.kasten) return false;
+
+    const k = form.kasten;
+    const obj = {
+      id: uid(),
+      kind: 'shape',
+      shapeType: art,
+      x: Math.round(k.x1),
+      y: Math.round(k.y1),
+      w: Math.max(12, Math.round(k.b)),
+      h: Math.max(12, Math.round(k.h)),
+      rot: 0,
+      fill: 'none',
+      stroke: stroke.color || '#1a1510',
+      strokeWidth: Math.max(1, Math.round((stroke.width || 2) * 10) / 10),
+      layer: 'front'
+    };
+
+    // Der Strich selbst hat ausgedient – an seine Stelle tritt die Form
+    S.strokeHistory[page.id] = (S.strokeHistory[page.id] || []).filter(s => s !== stroke);
+    stroke._wurdeForm = true;
+
+    /* Nur S._cur weg, S.isDrawing NICHT anfassen: pointerup steigt sonst
+       gleich in der ersten Zeile aus und lässt den gefangenen Zeiger und
+       den vorübergehend gewechselten Modus stehen. Mit S._cur = null
+       läuft es normal durch und überspringt alles, was einen Strich
+       bräuchte – gezeichnet wird ab jetzt trotzdem nichts mehr, denn
+       jede Bewegung fragt vorher nach S._cur. */
+    S._cur = null;
+
+    (page.objects || (page.objects = [])).push(obj);
+    page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
+
+    clearLiveCanvas();
+    redrawStrokes(canvas, S.strokeHistory[page.id]);
+    placeObject(objLayer, obj, page);
+
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+    return true;
   }
 
   function coords(e) {
