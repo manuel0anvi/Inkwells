@@ -452,17 +452,22 @@ class CloudSyncManager {
       redirectUri = await window.api.startOAuthServer();
     }
 
+    const state = this._neuerState();
+
     const request = await provider.buildAuthRequest(redirectUri, {
       prompt: options.prompt || 'select_account',
-      loginHint: options.loginHint || Settings.get('cloudEmail') || ''
+      loginHint: options.loginHint || Settings.get('cloudEmail') || '',
+      state
     });
 
     // Für den Abschluss der Anmeldung gebraucht (PKCE-Prüfwert, Adresse,
-    // bei Microsoft zusätzlich die nonce für das ID-Token)
+    // bei Microsoft zusätzlich die nonce für das ID-Token, und der state
+    // zum Wiedererkennen der eigenen Anfrage)
     this._pendingAuth = {
       redirectUri,
       verifier: request.verifier,
       nonce: request.nonce || '',
+      state,
       providerId: provider.id
     };
 
@@ -476,15 +481,52 @@ class CloudSyncManager {
       return { started: true, mode: 'external-browser' };
     }
 
-    // Website: der Prüfwert muss den Seitenwechsel überleben
+    /* Website: alles, was den Seitenwechsel überleben muss.
+       Der state gehört ausdrücklich dazu und steht deshalb VOR der
+       Abfrage auf den Prüfwert – im Implicit-Flow gibt es gar keinen
+       Prüfwert, und ohne diese Trennung wäre die Anmeldung genau dort
+       ungeschützt geblieben, wo sie es am nötigsten hat. */
+    try { sessionStorage.setItem('inkwell_auth_state', state); } catch (e) {}
+    try { sessionStorage.setItem('inkwell_pkce_redirect', redirectUri); } catch (e) {}
     if (request.verifier) {
       try { sessionStorage.setItem('inkwell_pkce_verifier', request.verifier); } catch (e) {}
-      try { sessionStorage.setItem('inkwell_pkce_redirect', redirectUri); } catch (e) {}
       try { sessionStorage.setItem('inkwell_auth_nonce', request.nonce || ''); } catch (e) {}
     }
 
     window.location.href = request.url;
     return { started: true, mode: 'redirect' };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE EIGENE ANMELDEANFRAGE WIEDERERKENNEN
+
+     Ein zufälliger Wert geht mit der Anfrage hinaus und muss unverändert
+     zurückkommen. Kommt er nicht oder kommt ein anderer, wird die
+     Rückleitung verworfen.
+
+     >>> Warum das nicht bloss Ordnung ist <<<
+     Auf dem Rechner hört waehrend der Anmeldung ein kleiner Server
+     (main.js, start-oauth-server). Der nahm bisher JEDE Rückleitung an –
+     auch eine, die gar nicht von unserer Anfrage stammt. Eine beliebige
+     Seite im Browser des Nutzers konnte also einen eigenen Anmeldecode
+     hineinschicken, und die App tauschte ihn ein: sie waere danach beim
+     KONTO DES ANGREIFERS angemeldet, und die naechste Sicherung haette
+     die Hefte in dessen Drive geladen.
+
+     PKCE hilft dagegen nicht. Es schuetzt die andere Richtung – dass ein
+     abgefangener Code von jemand anderem eingeloest wird. Gegen einen
+     UNTERGESCHOBENEN Code hilft nur dieser Wert.
+
+     Zweite Haelfte derselben Absicherung: der Server nimmt seit dieser
+     Fassung nur noch einen Pfad an, der bei jedem Start neu gewuerfelt
+     wird (main.js).
+     ══════════════════════════════════════════════════════════════════ */
+  _neuerState() {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    let binary = '';
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
   async signOut() {
@@ -546,10 +588,38 @@ class CloudSyncManager {
 
       const params = new URLSearchParams(paramStr);
 
+      const pending = this._pendingAuth || {};
+
+      /* ── Ist das ueberhaupt unsere Rueckleitung? ──────────────────
+         Vor allem anderen, und ZWAR AUCH VOR DEM FEHLERFALL: eine
+         untergeschobene Fehlermeldung wuerde sonst eine laufende, echte
+         Anmeldung mit einem Fehlertoast abbrechen. Siehe _neuerState(). */
+      const erwartet = pending.state
+        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwell_auth_state') : '');
+      const gekommen = params.get('state') || '';
+
+      if (erwartet && gekommen !== erwartet) {
+        console.warn('[Sicherheit] Anmelde-Rueckleitung verworfen: fremder state');
+        return;
+      }
+
+      /* Kein erwarteter Wert heisst: hier laeuft gar keine Anmeldung.
+         Das trifft auch den Fall, dass die App zwischen dem Aufruf und
+         der Rueckkehr neu gestartet wurde – dann ist der Pruefwert
+         ohnehin weg und der Tausch scheiterte schon vorher an
+         „PKCE-Pruefwert fehlt". Hier bekommt der Nutzer wenigstens einen
+         Satz zu lesen, statt dass gar nichts geschieht. */
+      if (!erwartet) {
+        console.warn('[Sicherheit] Anmelde-Rueckleitung ohne laufende Anfrage verworfen');
+        if (typeof toast === 'function') {
+          toast(t('authStaleCallback') || 'Die Anmeldung ist abgelaufen. Bitte noch einmal anmelden.', true);
+        }
+        return;
+      }
+
       const oauthError = params.get('error');
       if (oauthError) throw new Error(provider.describeAuthError(oauthError));
 
-      const pending = this._pendingAuth || {};
       const verifier = pending.verifier
         || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwell_pkce_verifier') : null);
       const redirectUri = pending.redirectUri
@@ -565,6 +635,7 @@ class CloudSyncManager {
         sessionStorage.removeItem('inkwell_pkce_verifier');
         sessionStorage.removeItem('inkwell_pkce_redirect');
         sessionStorage.removeItem('inkwell_auth_nonce');
+        sessionStorage.removeItem('inkwell_auth_state');
       } catch (e) {}
 
       await this._applyTokens(tokens);

@@ -112,10 +112,26 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
   const zeilenhoehe = InkwellDocxPaginate.zeilenhoeheFuer(bg);
   const nutz = InkwellDocxPaginate.nutzhoehe(CFG.PAGE_H);
 
-  const { bloecke, bericht } = await InkwellDocxImport.lese(dataUrlZuBytes(dataUrl), {
-    zeilenhoehe,
-    maxBildHoehe: nutz
-  });
+  /* Die Kennungen aus dem Auspacker in etwas uebersetzen, das man lesen
+     kann. Sie kamen bisher roh bis in die Meldung durch – „ZIP_BROKEN"
+     sagt niemandem etwas, und bei ZIP_TOO_BIG (der Grenze gegen eine
+     aufgeblasene Datei, siehe core/docxImport.js) waere es sogar
+     irrefuehrend: die Datei ist ja klein, nur ihr Inhalt nicht. */
+  let gelesen;
+  try {
+    gelesen = await InkwellDocxImport.lese(dataUrlZuBytes(dataUrl), {
+      zeilenhoehe,
+      maxBildHoehe: nutz
+    });
+  } catch (err) {
+    const kennung = String(err && err.message || '');
+    if (kennung === 'ZIP_TOO_BIG') throw new Error(t('docxTooBig') || 'Das Dokument ist zu groß zum Öffnen.');
+    if (kennung === 'ZIP_BROKEN' || kennung === 'NO_ZIP' || kennung === 'BAD_XML') {
+      throw new Error(t('docxBroken') || 'Die Datei ist beschädigt und lässt sich nicht lesen.');
+    }
+    throw err;
+  }
+  const { bloecke, bericht } = gelesen;
 
   if (!bloecke.length) throw new Error(t('docxEmpty') || 'Das Dokument ist leer.');
 

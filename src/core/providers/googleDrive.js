@@ -58,6 +58,12 @@ const GoogleDriveProvider = {
     });
     if (options.loginHint) params.set('login_hint', options.loginHint);
 
+    /* Die Wiedererkennung der eigenen Anfrage. Google gibt sie unverändert
+       zurück, cloudSync.js vergleicht sie – siehe dort die lange
+       Begründung bei _neuerState(). Fehlt sie, ist jede Rückleitung
+       gleich glaubwürdig, auch eine untergeschobene. */
+    if (options.state) params.set('state', options.state);
+
     if (!GOOGLE_CONFIG.CAN_REFRESH) {
       params.set('response_type', 'token');
       return { url: `${GOOGLE_CONFIG.AUTH_ENDPOINT}?${params.toString()}`, verifier: null };

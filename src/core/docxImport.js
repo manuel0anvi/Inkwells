@@ -62,6 +62,24 @@
   const EOCD_SIG = 0x06054b50;      // Ende des Zentralverzeichnisses
   const CEN_SIG = 0x02014b50;       // ein Eintrag darin
 
+  /* ── Wie gross ein Archiv werden darf ──────────────────────────────
+     Ein ZIP sagt in seinem Verzeichnis, wie gross ein Eintrag AUSGEPACKT
+     wird – und diese Angabe wurde bisher nicht angesehen. Damit liess
+     sich eine .docx von wenigen hundert Kilobyte bauen, die beim Oeffnen
+     Gigabyte ergibt: das Fenster friert ein oder stirbt, ohne dass man
+     saehe, warum.
+
+     Word-Dateien kommen von aussen – aus einer E-Mail, aus einem
+     Klassenchat. Sie sind damit dieselbe Art Quelle wie ein fremdes
+     geteiltes Heft, und die wird seit core/sanitize.js geprueft.
+
+     Die Grenzen sind grosszuegig: ein Dokument mit hundert Fotos bleibt
+     weit darunter. Es geht nicht darum, grosse Dateien abzuweisen,
+     sondern das offene Ende zu schliessen. */
+  const MAX_EINTRAG_BYTES = 80 * 1024 * 1024;    // je Datei im Archiv
+  const MAX_GESAMT_BYTES = 250 * 1024 * 1024;    // alles zusammen
+  const MAX_EINTRAEGE = 5000;
+
   /** Das Ende des Zentralverzeichnisses suchen – von hinten. */
   function findeEocd(view, laenge) {
     /* Der Kommentar am Schluss darf bis 65535 Bytes lang sein; weiter
@@ -88,7 +106,10 @@
     const anzahl = view.getUint16(eocd + 10, true);
     let stelle = view.getUint32(eocd + 16, true);
 
+    if (anzahl > MAX_EINTRAEGE) throw new Error('ZIP_TOO_BIG');
+
     const dateien = new Map();
+    let gesamt = 0;
 
     for (let i = 0; i < anzahl; i++) {
       if (stelle + 46 > bytes.byteLength) throw new Error('ZIP_BROKEN');
@@ -96,6 +117,7 @@
 
       const verfahren = view.getUint16(stelle + 10, true);
       const gepackt = view.getUint32(stelle + 20, true);
+      const entpackt = view.getUint32(stelle + 24, true);
       const namenLaenge = view.getUint16(stelle + 28, true);
       const extraLaenge = view.getUint16(stelle + 30, true);
       const kommentarLaenge = view.getUint16(stelle + 32, true);
@@ -106,7 +128,14 @@
 
       /* Die Daten fangen erst NACH dem lokalen Kopf an, und dessen Name
          und Extrafeld sind nicht zwingend so lang wie hier im
-         Verzeichnis – deshalb wird dort noch einmal nachgesehen. */
+         Verzeichnis – deshalb wird dort noch einmal nachgesehen.
+
+         Der lokale Kopf ist 30 Bytes lang; liegt sein Anfang schon
+         ausserhalb der Datei, ist das Verzeichnis kaputt. Ohne diese
+         Pruefung kam an dieser Stelle ein RangeError aus dem DataView –
+         eine technische Meldung, wo ein schlichtes „Datei beschaedigt"
+         hingehoert. */
+      if (lokal + 30 > bytes.byteLength) throw new Error('ZIP_BROKEN');
       const lokalNameLaenge = view.getUint16(lokal + 26, true);
       const lokalExtraLaenge = view.getUint16(lokal + 28, true);
       const von = lokal + 30 + lokalNameLaenge + lokalExtraLaenge;
@@ -114,7 +143,23 @@
 
       // Ordnereinträge enden auf / und haben keinen Inhalt
       if (!name.endsWith('/')) {
-        dateien.set(name, verfahren === 0 ? roh : await blase(roh));
+        /* Erst nachsehen, DANN auspacken. Andersherum waere die Grenze
+           wirkungslos: der Speicher ist schon voll, wenn man sie prueft. */
+        if (entpackt > MAX_EINTRAG_BYTES) throw new Error('ZIP_TOO_BIG');
+        gesamt += entpackt;
+        if (gesamt > MAX_GESAMT_BYTES) throw new Error('ZIP_TOO_BIG');
+
+        const inhalt = verfahren === 0 ? roh : await blase(roh);
+
+        /* Und noch einmal danach. Die Angabe im Verzeichnis ist nur eine
+           BEHAUPTUNG des Schreibers – wer eine Bombe baut, schreibt dort
+           eine kleine Zahl hinein. Was wirklich herauskam, weiss man erst
+           jetzt. */
+        if (inhalt.byteLength > MAX_EINTRAG_BYTES) throw new Error('ZIP_TOO_BIG');
+        gesamt += Math.max(0, inhalt.byteLength - entpackt);
+        if (gesamt > MAX_GESAMT_BYTES) throw new Error('ZIP_TOO_BIG');
+
+        dateien.set(name, inhalt);
       }
 
       stelle += 46 + namenLaenge + extraLaenge + kommentarLaenge;

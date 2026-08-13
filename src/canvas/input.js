@@ -875,10 +875,27 @@ function unterdrueckeTextTipp() {
   if (a && a.classList && a.classList.contains('j-text')) a.blur();
 }
 
-// Helper: distance from point to line segment
+/**
+ * Abstand eines Punktes von einer Strecke.
+ *
+ * >>> Warum die Laenge abgefangen wird <<<
+ * Liegen Anfang und Ende einer Strecke aufeinander – der Stift hat
+ * zweimal dieselbe Stelle gemeldet, das kommt bei langsamem Aufsetzen
+ * regelmaessig vor –, dann ist dx*dx + dy*dy null. Die Rechnung darunter
+ * teilte dadurch durch null, t wurde NaN und das Ergebnis ebenfalls. Und
+ * ein Vergleich MIT NaN ist immer falsch: der Strich galt an dieser
+ * Stelle als „weit weg" und liess sich weder anwaehlen (strokeSelect.js)
+ * noch als ganze Linie wegnehmen (geradeGanzWeg). Ohne Fehlermeldung,
+ * es tat einfach nichts.
+ *
+ * Bei einer Strecke ohne Laenge ist der Abstand schlicht der Abstand zum
+ * Punkt selbst.
+ */
 function pointToLineDistance(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
+  const laenge2 = dx * dx + dy * dy;
+  if (laenge2 === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / laenge2));
   const cx = x1 + t * dx, cy = y1 + t * dy;
   return Math.hypot(px - cx, py - cy);
 }

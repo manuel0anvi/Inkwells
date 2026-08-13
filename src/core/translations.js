@@ -24,6 +24,8 @@ const TRANSLATIONS = {
     openDocFailed: 'Das Dokument ließ sich nicht öffnen: {msg}',
     openDocNoWordYet: 'Word-Dokumente kommen noch.',
     pdfNoPages: 'Das PDF hat keine Seiten.',
+    docxTooBig: 'Das Dokument ist zu groß zum Öffnen.',
+    docxBroken: 'Die Datei ist beschädigt und lässt sich nicht lesen.',
     open: 'Öffnen',
     
     // Notebook modal
@@ -326,6 +328,7 @@ const TRANSLATIONS = {
     updateDownloaded: 'Neustart & Update',
     updateUpToDate: 'Aktuell',
     updateError: 'Fehler!',
+    authStaleCallback: 'Die Anmeldung ist abgelaufen. Bitte noch einmal anmelden.',
     updateIdle: 'Update',
     
     // Auth & Profile
@@ -745,6 +748,8 @@ const TRANSLATIONS = {
     openDocFailed: 'The document could not be opened: {msg}',
     openDocNoWordYet: 'Word documents are still to come.',
     pdfNoPages: 'The PDF has no pages.',
+    docxTooBig: 'The document is too large to open.',
+    docxBroken: 'The file is damaged and cannot be read.',
     open: 'Open',
     
     // Notebook modal
@@ -1043,6 +1048,7 @@ const TRANSLATIONS = {
     updateDownloaded: 'Restart to update',
     updateUpToDate: 'Up to date',
     updateError: 'Error!',
+    authStaleCallback: 'The sign-in has expired. Please sign in again.',
     updateIdle: 'Update',
     
     // Auth & Profile
@@ -1450,6 +1456,8 @@ const TRANSLATIONS = {
     openDocFailed: 'Non è stato possibile aprire il documento: {msg}',
     openDocNoWordYet: 'I documenti Word arriveranno.',
     pdfNoPages: 'Il PDF non ha pagine.',
+    docxTooBig: 'Il documento è troppo grande da aprire.',
+    docxBroken: 'Il file è danneggiato e non può essere letto.',
     open: 'Apri',
     
     // Notebook modal
@@ -1748,6 +1756,7 @@ const TRANSLATIONS = {
     updateDownloaded: 'Riavvia & agg.',
     updateUpToDate: 'Aggiornato',
     updateError: 'Errore!',
+    authStaleCallback: 'L\'accesso è scaduto. Effettua di nuovo l\'accesso.',
     updateIdle: 'Aggiorna',
 
     // Auth & Profile

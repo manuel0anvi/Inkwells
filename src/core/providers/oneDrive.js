@@ -97,6 +97,11 @@ const OneDriveProvider = {
     });
     if (options.loginHint) params.set('login_hint', options.loginHint);
 
+    /* Die Wiedererkennung der eigenen Anfrage. Microsoft gibt sie
+       unverändert zurück, cloudSync.js vergleicht sie – siehe dort
+       _neuerState(). */
+    if (options.state) params.set('state', options.state);
+
     return {
       url: `${MICROSOFT_CONFIG.AUTH_ENDPOINT}?${params.toString()}`,
       verifier,

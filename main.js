@@ -13,21 +13,44 @@ let isDownloadPaused = false;
 function normalizeVersion(v) {
   return String(v).replace(/^v/i, '').trim();
 }
+
+/* Ein Versionsteil als Zahl.
+   Hier stand nur Number(), und das ergibt fuer "0-beta" NaN. Weiter unten
+   wurde daraus mit `|| 0` eine Null – "1.2.0-beta" und "1.2.0" galten
+   damit als GLEICH, eine Vorabversion wurde also nie angeboten und beim
+   Zurueckgehen auch nicht erkannt. parseInt liest die Ziffern vorn und
+   laesst den Rest liegen, was hier genau das Richtige ist. */
+function versionsTeil(wert) {
+  const n = Number.parseInt(wert, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function compareVersions(v1, v2) {
-  const p1 = v1.split('.').map(Number);
-  const p2 = v2.split('.').map(Number);
+  const p1 = String(v1).split('.');
+  const p2 = String(v2).split('.');
   for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
-    const n1 = p1[i] || 0, n2 = p2[i] || 0;
+    const n1 = versionsTeil(p1[i]), n2 = versionsTeil(p2[i]);
     if (n1 > n2) return 1;
     if (n1 < n2) return -1;
   }
   return 0;
 }
-function fetchJson(url) {
+
+/* Wie oft einer Weiterleitung gefolgt wird. Ohne Grenze laeuft ein Server,
+   der im Kreis verweist, bis zum Stapelueberlauf – beide Funktionen unten
+   riefen sich dafuer selbst auf. */
+const MAX_REDIRECTS = 5;
+
+function fetchJson(url, rest = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'Inkwell-Updater' } }, res => {
       let data = '';
-      if (res.statusCode === 301 || res.statusCode === 302) return fetchJson(res.headers.location).then(resolve).catch(reject);
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        res.resume();   // sonst bleibt die Verbindung offen
+        if (rest <= 0) return reject(new Error('Zu viele Weiterleitungen'));
+        if (!res.headers.location) return reject(new Error('Weiterleitung ohne Ziel'));
+        return fetchJson(res.headers.location, rest - 1).then(resolve).catch(reject);
+      }
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
@@ -35,32 +58,93 @@ function fetchJson(url) {
     }).on('error', reject);
   });
 }
-function downloadFile(url, dest) {
+
+/**
+ * Laedt die Installationsdatei herunter.
+ *
+ * >>> Warum hier so viel Sorgfalt steckt <<<
+ * Was hier herauskommt, wird spaeter als Programm GESTARTET
+ * (install-and-restart). Eine halb geladene Datei ist deshalb nicht bloss
+ * unbrauchbar, sie ist gefaehrlich. Vorher fehlte dreierlei:
+ *
+ *   · kein Griff fuer Fehler beim SCHREIBEN – ging die Platte voll,
+ *     wurde nichts davon gemeldet,
+ *   · resolve() lief los, bevor file.close() fertig war, das Ende der
+ *     Datei stand also womoeglich noch gar nicht auf der Platte,
+ *   · niemand verglich die geladene Groesse mit der angekuendigten. Riss
+ *     die Leitung mitten im Laden ab, galt der Abbruch als Erfolg.
+ *
+ * Geschrieben wird jetzt in eine Nebendatei und erst am Ende umbenannt –
+ * dasselbe Vorgehen wie beim Sichern eines Hefts (save-to-path).
+ */
+function downloadFile(url, dest, rest = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
+    const tmp = `${dest}.part`;
+
     https.get(url, res => {
-      if (res.statusCode === 301 || res.statusCode === 302) return downloadFile(res.headers.location, dest).then(resolve).catch(reject);
-      if (res.statusCode !== 200) return reject(new Error(`Status ${res.statusCode}`));
-      
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        res.resume();
+        if (rest <= 0) return reject(new Error('Zu viele Weiterleitungen'));
+        if (!res.headers.location) return reject(new Error('Weiterleitung ohne Ziel'));
+        return downloadFile(res.headers.location, dest, rest - 1).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`Status ${res.statusCode}`));
+      }
+
       activeDownloadRes = res;
       isDownloadPaused = false;
-      
-      const file = fs.createWriteStream(dest);
+
+      const file = fs.createWriteStream(tmp);
       const total = parseInt(res.headers['content-length'], 10) || 0;
       let downloaded = 0;
+      let erledigt = false;
+
+      const abbrechen = (err) => {
+        if (erledigt) return;
+        erledigt = true;
+        activeDownloadRes = null;
+        try { res.destroy(); } catch (e) { /* egal */ }
+        file.destroy();
+        fs.unlink(tmp, () => {});
+        reject(err);
+      };
+
       res.on('data', chunk => {
         downloaded += chunk.length;
-        if (total > 0 && win) {
+        if (total > 0 && win && !win.isDestroyed()) {
           try { win.webContents.send('download-progress', { percent: (downloaded / total) * 100, paused: isDownloadPaused }); } catch (e) {}
         }
       });
+      res.on('error', abbrechen);
+      file.on('error', abbrechen);
+
       res.pipe(file);
-      file.on('finish', () => { 
+
+      file.on('close', () => {
+        if (erledigt) return;
         activeDownloadRes = null;
-        file.close(); resolve(); 
+
+        // Abgerissen: dann ist die Datei kuerzer als angekuendigt
+        if (total > 0 && downloaded !== total) {
+          erledigt = true;
+          fs.unlink(tmp, () => {});
+          reject(new Error(`Abgebrochen bei ${downloaded} von ${total} Bytes`));
+          return;
+        }
+
+        try {
+          fs.renameSync(tmp, dest);
+          erledigt = true;
+          resolve();
+        } catch (err) {
+          abbrechen(err);
+        }
       });
-    }).on('error', err => { 
+    }).on('error', err => {
       activeDownloadRes = null;
-      fs.unlink(dest, () => {}); reject(err); 
+      fs.unlink(tmp, () => {}); reject(err);
     });
   });
 }
@@ -624,8 +708,24 @@ ipcMain.on('silent-auth', (_, an) => {
   stilleAnmeldungBis = an ? Date.now() + SILENT_AUTH_MS : 0;
 });
 
+/* Nur das Netz, nichts von der Platte.
+   shell.openExternal reicht ALLES an das Betriebssystem weiter – auch
+   file:///…, einen Netzpfad oder ein fremdes Protokoll. Hier kommt zwar
+   nur die Anmeldeadresse an (core/cloudSync.js), aber die Bruecke selbst
+   nahm bisher jeden Wert. Das ist dieselbe zweite Schicht, die es fuer
+   die Dateizugriffe schon gibt: die Oberflaeche soll auch dann nichts
+   anrichten koennen, wenn in ihr einmal fremder Code laeuft. */
 ipcMain.handle('open-external', (_, url) => {
-  shell.openExternal(url);
+  let ziel;
+  try { ziel = new URL(String(url)); }
+  catch (err) { console.error('[Extern] Keine gueltige Adresse:', url); return false; }
+
+  if (ziel.protocol !== 'https:' && ziel.protocol !== 'http:') {
+    console.error('[Sicherheit] Nur http/https – abgelehnt:', ziel.protocol);
+    return false;
+  }
+
+  shell.openExternal(ziel.href);
   return true;
 });
 
@@ -742,6 +842,30 @@ function routeDeepLink(urlStr, { buffer = true } = {}) {
 
 let oauthServer = null;
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER RÜCKWEG DER POST-ANTWORT
+
+   Der Server hört auf 127.0.0.1:3000/callback. Diese Adresse MUSS so
+   bleiben – sie ist bei Google und Microsoft zeichengenau hinterlegt,
+   jede Abweichung endet in „redirect_uri_mismatch".
+
+   Der zweite Schritt ist aber unserer: die ausgelieferte Seite liest das
+   Fragment aus und schickt es per POST zurück. Dieser Pfad war ebenfalls
+   fest „/callback", und die Antwort trug „Access-Control-Allow-Origin: *".
+   Damit konnte JEDE Seite im Browser des Nutzers einen eigenen
+   Anmeldecode hineinschicken, solange der Server lief – die App haette
+   ihn eingetauscht und waere beim Konto des Angreifers gelandet.
+
+   Jetzt wird der POST-Pfad bei jedem Start gewuerfelt und steht nur in
+   der Seite, die wir selbst ausgeliefert haben. Der CORS-Kopf faellt weg;
+   gebraucht wurde er nie, die Seite hat dieselbe Herkunft.
+
+   Zweite Haelfte derselben Absicherung: der `state`-Wert in
+   core/cloudSync.js. Beide zusammen, weil jede fuer sich eine Luecke
+   laesst – der Pfad schuetzt den Kanal, der state die Anfrage.
+   ══════════════════════════════════════════════════════════════════════ */
+let oauthPostPath = null;
+
 ipcMain.handle('start-oauth-server', async () => {
   return new Promise((resolve, reject) => {
     if (oauthServer) {
@@ -749,13 +873,24 @@ ipcMain.handle('start-oauth-server', async () => {
       oauthServer = null;
     }
 
+    oauthPostPath = '/r-' + require('crypto').randomBytes(18).toString('hex');
+    const postPfad = oauthPostPath;
+    let schonBenutzt = false;
+
     oauthServer = http.createServer((req, res) => {
-      console.log(`[OAuthServer] Received request: ${req.method} ${req.url}`);
+      let pfad = '/';
+      try { pfad = new URL(req.url, 'http://127.0.0.1').pathname; } catch (e) { /* bleibt / */ }
+      console.log(`[OAuthServer] Received request: ${req.method} ${pfad}`);
+
       // Google liefert den Access-Token im URL-Fragment (#access_token=...).
       // Fragmente erreichen den Server nie, deshalb wird eine kleine HTML-Seite
       // ausgeliefert, die das Fragment per JS ausliest und zurück-POSTet.
       if (req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          // Die Seite traegt gleich den Anmeldecode – nichts davon in einen Zwischenspeicher
+          'Cache-Control': 'no-store'
+        });
         res.end(`
           <!DOCTYPE html>
           <html lang="de">
@@ -777,20 +912,22 @@ ipcMain.handle('start-oauth-server', async () => {
                 const msg = document.getElementById('msg');
                 const hash = window.location.hash;
                 const search = window.location.search;
+                // Nur diese Seite kennt den Pfad – siehe oauthPostPath in main.js
+                const ZURUECK = ${JSON.stringify(postPfad)};
 
                 // 1. Fall: Ein Fehler wurde übergeben (egal ob Google oder Microsoft)
                 if (search && search.includes('error=')) {
-                  fetch('/callback', {
+                  fetch(ZURUECK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: search.substring(1)
                   }).finally(() => {
                     msg.innerHTML = 'Anmeldung abgebrochen. Du kannst dieses Fenster schlie&szlig;en.';
                   });
-                } 
+                }
                 // 2. Fall: Erfolgreicher Microsoft-Login (liefert ?code=...)
                 else if (search) {
-                  fetch('/callback', {
+                  fetch(ZURUECK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: search.substring(1)
@@ -804,7 +941,7 @@ ipcMain.handle('start-oauth-server', async () => {
                 } 
                 // 3. Fall: Erfolgreicher Google-Login (liefert #access_token=...)
                 else if (hash) {
-                  fetch('/callback', {
+                  fetch(ZURUECK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: hash.substring(1)
@@ -825,18 +962,34 @@ ipcMain.handle('start-oauth-server', async () => {
           </html>
         `);
       } else if (req.method === 'POST') {
+        /* Nur der gewuerfelte Pfad, und nur einmal. Alles andere ist
+           nicht von unserer eigenen Seite gekommen. */
+        if (pfad !== postPfad || schonBenutzt) {
+          console.warn('[Sicherheit] Fremder POST am Anmelde-Server abgewiesen:', pfad);
+          res.writeHead(404); res.end('Nicht gefunden');
+          return;
+        }
+        schonBenutzt = true;
+
         let body = '';
-        req.on('data', chunk => body += chunk.toString());
+        let zuLang = false;
+        req.on('data', chunk => {
+          body += chunk.toString();
+          // Ein Anmeldecode ist wenige Kilobyte gross. Alles darueber ist
+          // kein Anmeldecode, sondern jemand, der Speicher fuellen will.
+          if (body.length > 64 * 1024) { zuLang = true; req.destroy(); }
+        });
         req.on('end', () => {
+          if (zuLang) { res.writeHead(413); res.end('Zu lang'); return; }
           console.log(`[OAuthServer] Received POST with token length: ${body.length}`);
-          res.writeHead(200, { 'Access-Control-Allow-Origin': '*' });
+          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('ok');
-          
-          if (win) {
+
+          if (win && !win.isDestroyed()) {
              console.log(`[OAuthServer] Sending token to window`);
              win.webContents.send('oauth-callback', 'http://localhost/#' + body);
           }
-          
+
           // Close server shortly after
           setTimeout(() => {
             if (oauthServer) {
@@ -846,6 +999,8 @@ ipcMain.handle('start-oauth-server', async () => {
             }
           }, 2000);
         });
+      } else {
+        res.writeHead(405); res.end('Nicht erlaubt');
       }
     });
 
@@ -971,9 +1126,17 @@ app.on('activate', () => {
   });
 });
 
-ipcMain.on('win-min',   () => win.minimize());
-ipcMain.on('win-max',   () => win.isMaximized() ? win.unmaximize() : win.maximize());
-ipcMain.on('win-close', () => win.close());
+/* Die drei Knoepfe der eigenen Titelleiste. Ueber `win` und nicht ueber
+   den Absender, weil es nur dieses eine Hauptfenster gibt – aber es kann
+   schon zerstoert sein, wenn eine Nachricht noch unterwegs ist. Ohne die
+   Pruefung wirft der Hauptprozess dann eine Ausnahme. */
+function amFenster(tu) {
+  if (!win || win.isDestroyed()) return;
+  try { tu(win); } catch (err) { console.warn('[Fenster]', err.message); }
+}
+ipcMain.on('win-min',   () => amFenster(w => w.minimize()));
+ipcMain.on('win-max',   () => amFenster(w => w.isMaximized() ? w.unmaximize() : w.maximize()));
+ipcMain.on('win-close', () => amFenster(w => w.close()));
 
 ipcMain.handle('pick-files', async () => {
   const r = await dialog.showOpenDialog(win, {

@@ -129,6 +129,12 @@ class AutoSaveEngine {
       if (currentVersion === versionAtStart) {
         this.markClean(nbId);
       } else {
+        /* Waehrend des Speicherns kam etwas Neues dazu – das Heft bleibt
+           also schmutzig. Die Zahl der Fehlversuche gehoert trotzdem
+           zurueckgesetzt: dieser Anlauf hat GEKLAPPT. Ohne die Zeile
+           blieb der Zaehler stehen, und der naechste echte Fehlschlag
+           gab nach ein, zwei Anlaeufen auf statt nach dreien. */
+        this._retries.delete(nbId);
         this._notifyStateChange();
       }
       return { success: true, path: result.path };
@@ -205,13 +211,19 @@ class AutoSaveEngine {
     };
   }
 
+  /* Jeder Zuhoerer fuer sich. Vorher lief das ohne Absicherung: warf
+     EINER – etwa weil seine Anzeige gerade abgebaut wird –, bekamen alle
+     danach nichts mehr mit, und die Speicheranzeige in der Leiste blieb
+     auf „ungesichert" stehen, obwohl laengst geschrieben war. */
   _notifyStateChange() {
-    this._listeners.forEach(cb => {
-      cb({
-        dirty: Array.from(this.dirtyNotebooks),
-        lastSave: Object.fromEntries(this.lastSaveTime)
-      });
-    });
+    const stand = {
+      dirty: Array.from(this.dirtyNotebooks),
+      lastSave: Object.fromEntries(this.lastSaveTime)
+    };
+    for (const cb of this._listeners) {
+      try { cb(stand); }
+      catch (err) { console.error('[AutoSave] Zuhoerer hat geworfen:', err); }
+    }
   }
 
   /** Alles Ausstehende abbrechen – es laeuft kein Taktgeber mehr mit. */

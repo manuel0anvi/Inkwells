@@ -1753,10 +1753,26 @@
    * (OP_BACKLOG in core/share.js) – darin stehen auch Striche, die längst
    * in Firestore gesichert und damit beim Laden schon angekommen sind.
    */
+  /* Ein kurzer Fingerabdruck statt des ganzen Strichs.
+     Hier lag vorher die volle JSON-Zeichenkette jedes Strichs im Set –
+     bei einer langen Sitzung mit viel Handschrift sind das schnell
+     einige Megabyte, die bis zum Verlassen des Raums liegen bleiben.
+     Gebraucht wird aber nur „schon gesehen oder nicht", und dafuer
+     genuegt eine Zahl. FNV-1a, dieselbe Rechnung wie in core/share.js. */
+  function strichAbdruck(stroke) {
+    const roh = JSON.stringify(stroke);
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < roh.length; i++) {
+      hash ^= roh.charCodeAt(i);
+      hash = (hash * 0x01000193) >>> 0;
+    }
+    return hash.toString(36) + ':' + roh.length;
+  }
+
   function inkSignatures(pageId) {
     let set = inkSeen.get(pageId);
     if (!set) {
-      set = new Set((S.strokeHistory[pageId] || []).map(s => JSON.stringify(s)));
+      set = new Set((S.strokeHistory[pageId] || []).map(strichAbdruck));
       inkSeen.set(pageId, set);
     }
     return set;
@@ -1779,7 +1795,7 @@
 
     // Schon da? Dann nicht ein zweites Mal auf die Seite legen.
     const seen = inkSignatures(pageId);
-    const key = JSON.stringify(stroke);
+    const key = strichAbdruck(stroke);
     if (seen.has(key)) return;
     seen.add(key);
 
@@ -2262,7 +2278,7 @@
     const strokes = Array.isArray(data.strokes) ? data.strokes : [];
     info.page.inkStrokes = JSON.parse(JSON.stringify(strokes));
     S.strokeHistory[pageId] = JSON.parse(JSON.stringify(strokes));
-    inkSeen.set(pageId, new Set(strokes.map(s => JSON.stringify(s))));
+    inkSeen.set(pageId, new Set(strokes.map(strichAbdruck)));
 
     const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
     const canvas = pgEl ? pgEl.querySelector('.j-canvas:not(.live-canvas)') : null;
