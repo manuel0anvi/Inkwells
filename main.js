@@ -715,7 +715,7 @@ ipcMain.on('silent-auth', (_, an) => {
    nahm bisher jeden Wert. Das ist dieselbe zweite Schicht, die es fuer
    die Dateizugriffe schon gibt: die Oberflaeche soll auch dann nichts
    anrichten koennen, wenn in ihr einmal fremder Code laeuft. */
-ipcMain.handle('open-external', (_, url) => {
+ipcMain.handle('open-external', async (_, url) => {
   let ziel;
   try { ziel = new URL(String(url)); }
   catch (err) { console.error('[Extern] Keine gueltige Adresse:', url); return false; }
@@ -725,7 +725,30 @@ ipcMain.handle('open-external', (_, url) => {
     return false;
   }
 
-  shell.openExternal(ziel.href);
+  /* ── Der Browser soll auch nach VORN kommen ───────────────────────
+     shell.openExternal öffnet die Seite verlässlich, aber unter Windows
+     blieb Inkwell im Vordergrund: der Verweis ging auf, und man sah
+     davon nichts. Gemeldet als „macht den Link zwar auf, geht aber
+     nicht zum Browser hin".
+
+     Der Grund ist eine Regel von Windows: nur das Programm, das gerade
+     vorne ist, darf ein anderes nach vorne holen. Ein frisch geöffneter
+     Reiter in einem schon laufenden Browser bekommt das nicht von
+     selbst. Wer den Vordergrund ABGIBT, macht ihn dagegen frei – und
+     der Browser nimmt ihn.
+
+     Erst öffnen, dann abgeben: andersherum wäre das Fenster schon weg,
+     bevor die Seite überhaupt angefordert wurde. */
+  try {
+    await shell.openExternal(ziel.href);
+  } catch (err) {
+    console.error('[Extern] Konnte nicht geoeffnet werden:', err.message);
+    return false;
+  }
+
+  if (process.platform === 'win32' && win && !win.isDestroyed()) {
+    try { win.blur(); } catch (err) { /* dann bleibt es eben vorne */ }
+  }
   return true;
 });
 

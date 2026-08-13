@@ -503,18 +503,104 @@ function openCustomColorPopover(target, anchorEl, onApply) {
  * zuletzt Gewählte. queryCommandValue liefert rgb(…), das muss noch in
  * die Schreibweise mit dem Doppelkreuz umgerechnet werden.
  */
+/* ══════════════════════════════════════════════════════════════════════
+   DIE FARBE EINES VERWEISES IST KEINE TEXTFARBE
+
+   >>> Der Fehler, den das behebt <<<
+   Wer hinter einem Verweis weitertippte, schrieb in Blau weiter statt in
+   seiner eigenen Farbe. Gemeldet als „die blaue Farbe wurde einfach
+   mitgegeben".
+
+   queryCommandValue('foreColor') liefert die BERECHNETE Farbe an der
+   Marke. Steht sie an einem Verweis, ist das dessen Blau – und das kommt
+   aus einer Stilregel (css/pages.css), nicht aus dem Text. Die App hielt
+   es trotzdem für die gewählte Textfarbe: der Farbpunkt in der Leiste
+   sprang auf Blau, das Farbfenster ging mit Blau auf, und die
+   Sticky-Farbe verglich dagegen.
+
+   Deshalb wird der Verweis übersprungen und die Farbe seiner Umgebung
+   genommen – ausser der Verweis trägt eine eigene, ausdrücklich gesetzte
+   Farbe. Dann ist sie gewollt und gilt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Das Element, in dem die Schreibmarke steht. */
+function elementUnterMarke() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  let k = sel.getRangeAt(0).startContainer;
+  if (k && k.nodeType === 3) k = k.parentNode;
+  return (k && k.nodeType === 1) ? k : null;
+}
+
+/**
+ * Der Verweis, dessen Farbe die Marke gerade abbekommt – oder null.
+ *
+ * Zwei Stellen zählen, und die zweite ist die wichtigere:
+ *
+ *   · MITTEN im Verweis. Klar.
+ *   · Direkt DAHINTER. Chromium meldet dort weiterhin die Farbe des
+ *     Verweises, obwohl getippter Text schon ausserhalb landet. Und
+ *     genau dort steht die Marke, nachdem man einen Verweis eingefügt
+ *     hat (ui/links.js setzt sie hinter das Element) – das ist der Fall
+ *     aus der Meldung.
+ */
+function verweisAnDerMarke() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+
+  const el = elementUnterMarke();
+  const drin = (el && el.closest) ? el.closest('a[href]') : null;
+  if (drin) return drin;
+
+  // Steht direkt davor ein Verweis?
+  const r = sel.getRangeAt(0);
+  if (!r.collapsed) return null;
+
+  const k = r.startContainer;
+  let davor = null;
+  if (k.nodeType === 1) davor = k.childNodes[r.startOffset - 1] || null;
+  else if (k.nodeType === 3 && r.startOffset === 0) davor = k.previousSibling;
+
+  return (davor && davor.nodeType === 1 && davor.matches && davor.matches('a[href]'))
+    ? davor : null;
+}
+
+/**
+ * Hat dieser Verweis eine eigene Farbe bekommen?
+ *
+ * Zwei Wege gibt es dafür: ein style="color:…" am Verweis selbst, oder
+ * ein <font color> darin – so legt Chromium foreColor ab.
+ */
+function verweisHatEigeneFarbe(a) {
+  if (!a) return false;
+  if (a.style && a.style.color) return true;
+  return !!a.querySelector('font[color], [style*="color"]');
+}
+
 function farbeUnterMarke() {
-  const a = document.activeElement;
-  if (!a || !a.classList || !a.classList.contains('j-text')) return null;
+  const feld = document.activeElement;
+  if (!feld || !feld.classList || !feld.classList.contains('j-text')) return null;
+
+  const hexAus = (wert) => {
+    const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(String(wert || ''));
+    if (m) {
+      const hex = n => ('0' + (+n).toString(16)).slice(-2);
+      return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+    }
+    return normalizeHexColor(wert);
+  };
+
+  /* Steht die Marke an einem Verweis ohne eigene Farbe, gilt die Farbe
+     der UMGEBUNG. Sie wird direkt am Elternteil abgelesen und nicht über
+     queryCommandValue – das kennt den Unterschied nicht. */
+  const verweis = verweisAnDerMarke();
+  if (verweis && !verweisHatEigeneFarbe(verweis) && verweis.parentElement) {
+    return hexAus(getComputedStyle(verweis.parentElement).color);
+  }
+
   let wert = '';
   try { wert = document.queryCommandValue('foreColor') || ''; } catch (e) { return null; }
-
-  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(wert);
-  if (m) {
-    const hex = n => ('0' + (+n).toString(16)).slice(-2);
-    return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
-  }
-  return normalizeHexColor(wert);
+  return hexAus(wert);
 }
 
 /**

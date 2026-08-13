@@ -1835,18 +1835,21 @@ body.touch-draw .j-canvas {
    tut, waere ein Versprechen, das keiner einloest.
    ══════════════════════════════════════════════════════════════════════ */
 
-/* ── Die Schrift bleibt schwarz ──────────────────────────────────────
-   Hier stand das Blau aus dem Web. Auf einem Blatt ist das falsch: ein
-   Heft ist mit einem Stift geschrieben, und ein Wort wechselt nicht die
-   Farbe, weil etwas dahinterliegt. Ausserdem war es nicht mehr von
-   einer selbst gesetzten Textfarbe zu unterscheiden.
+/* ── Ein Verweis ist blau ────────────────────────────────────────────
+   Das kennt jeder, und es soll auch so bleiben.
 
-   `color: inherit` und nicht eine feste Farbe: wer einen Verweis rot
-   einfaerbt, soll ihn rot bekommen. Erkennbar bleibt er an der
-   Unterstreichung – und beim Zeigen sagt es der Streifen darueber
-   (ui/links.js). */
+   >>> Was daran einmal falsch war, und wo es behoben ist <<<
+   Nicht die Farbe – das Weiterschreiben. Wer hinter einem Verweis
+   weitertippte, schrieb in Blau weiter statt in seiner eigenen Farbe.
+   Der Grund lag nicht hier, sondern in ui/toolbar.js: queryCommandValue
+   liefert die BERECHNETE Farbe an der Marke, und die ist neben einem
+   Verweis eben dieses Blau. Die App hielt es fuer die gewaehlte
+   Textfarbe und schrieb damit weiter.
+
+   Kurz: die Farbe hier ist Darstellung, keine Textfarbe. Wer sie
+   ausliest, muss den Verweis ueberspringen – siehe farbeUnterMarke(). */
 .j-text a[href] {
-  color: inherit;
+  color: #2a5fa8;
   text-decoration: underline;
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
@@ -1854,10 +1857,9 @@ body.touch-draw .j-canvas {
 }
 
 /* Mit gedruecktem Strg tut ein Klick etwas – dann darf man es auch
-   sehen. Der Grund ist neutral gehalten, damit er nicht wie eine
-   Textfarbe aussieht. */
+   sehen. */
 .links-aktiv .j-text a[href] {
   cursor: pointer;
-  background: rgba(26, 21, 16, .09);
+  background: rgba(42, 95, 168, .12);
   border-radius: 2px;
 }
