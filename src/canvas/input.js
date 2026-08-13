@@ -82,16 +82,79 @@ function attachInput(canvas, textDiv, objLayer, page) {
    * @param {object} stroke
    * @param {{x:number,y:number}} [punkt]  wo der Stift gerade steht
    */
+  /* ══════════════════════════════════════════════════════════════════
+     WIE WEIT EIN STRICH GEKOMMEN SEIN MUSS, BEVOR ER EINRASTEN DARF
+
+     >>> Warum es diese Grenze gibt <<<
+     Ohne sie rastete JEDER Strich ein, der lange genug stillstand – auch
+     ein winziger. Und beim sorgfältigen Schreiben steht der Stift oft
+     still: der Punkt auf dem i, der Querstrich am t, ein Komma, das
+     Ansetzen einer kleinen Schleife. Sobald die Uhr dabei ablief, fiel
+     der ganze bisherige Strich auf eine gerade Linie zwischen Anfang und
+     jetziger Stelle zusammen – alles dazwischen war weg, und ab da wurde
+     nichts mehr aufgezeichnet, denn der Strich blieb festgestellt.
+
+     Von aussen sieht das aus wie „manchmal verschwindet, was ich
+     zeichne" und „manchmal zeichnet es nicht alles". Genau so ist es
+     gemeldet worden.
+
+     Wer eine Gerade WILL, zieht sie über eine ordentliche Strecke. Ein
+     Buchstabe kommt nie über diese Grenze.
+     ══════════════════════════════════════════════════════════════════ */
+  const LINIE_MIN_WEG = 46;      // gelaufene Strecke, Seiten-Pixel
+  const LINIE_MIN_SPANNE = 30;   // Abstand Anfang ↔ Ende
+
+  function langGenugFuerLinie(stroke) {
+    const pts = stroke && stroke.path;
+    if (!pts || pts.length < 2) return false;
+
+    let weg = 0;
+    for (let i = 1; i < pts.length; i++) {
+      weg += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    }
+    if (weg < LINIE_MIN_WEG) return false;
+
+    const a = pts[0], b = pts[pts.length - 1];
+    /* Bei einer FORM liegen Anfang und Ende dicht beieinander – die
+       Spanne darf sie deshalb nicht ausschliessen. Sie wird nur
+       verlangt, wenn keine Form erkannt wird; das entscheidet die Uhr
+       selbst, hier zählt allein die gelaufene Strecke, sobald der Strich
+       geschlossen ist. */
+    const geschlossen = Math.hypot(b.x - a.x, b.y - a.y) < weg * 0.3;
+    if (geschlossen) return true;
+
+    return Math.hypot(b.x - a.x, b.y - a.y) >= LINIE_MIN_SPANNE;
+  }
+
   function armLineTimer(stroke, punkt) {
     if (!stroke || stroke.isEraser || stroke._lasso) return;
+
+    /* Die Uhr wird zoomabhängig gemessen: HALTE_ZITTERN sind
+       Seiten-Pixel, und bei starker Vergrösserung entspricht das einer
+       viel grösseren Strecke auf dem Schirm. Ein zoomender Nutzer stand
+       dadurch fast immer „still", und die Uhr lief bei jedem zweiten
+       Strich ab. */
+    const zoom = (typeof getZoom === 'function' ? getZoom() : 1) || 1;
+    const zittern = HALTE_ZITTERN / zoom;
+
     if (punkt && _halteBei && stroke._lineTimer
-        && Math.hypot(punkt.x - _halteBei.x, punkt.y - _halteBei.y) < HALTE_ZITTERN) {
+        && Math.hypot(punkt.x - _halteBei.x, punkt.y - _halteBei.y) < zittern) {
       return;   // gilt noch als Stillstand – die laufende Uhr darf zu Ende gehen
     }
     clearTimeout(stroke._lineTimer);
     _halteBei = punkt ? { x: punkt.x, y: punkt.y } : null;
     stroke._lineTimer = setTimeout(() => {
       if (!S.isDrawing || S._cur !== stroke) return;
+
+      /* Zu kurz? Dann war das kein Halten, sondern Schreiben. Die Uhr
+         wird neu aufgezogen, statt aufzugeben: wer weiterzieht und DANN
+         stehen bleibt, soll seine Gerade trotzdem bekommen. */
+      if (!langGenugFuerLinie(stroke)) {
+        _halteBei = null;
+        stroke._lineTimer = null;
+        return;
+      }
+
       stroke._lineLocked = true;
       const pts = stroke.path || [];
       if (pts.length <= 1) return;
@@ -648,12 +711,50 @@ function attachInput(canvas, textDiv, objLayer, page) {
     S._cur = null; page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
     if (!alsAuswahl && window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
+  /* ══════════════════════════════════════════════════════════════════
+     ABGEBROCHEN – ABER DER STRICH IST TROTZDEM DA
+
+     Ein pointercancel kommt, wenn das System den Zeiger an sich nimmt:
+     der Handballen wird erkannt, das Blatt fängt an zu scrollen, ein
+     Systemfenster geht auf. Das passiert auf einem Tablet regelmässig.
+
+     >>> Warum hier Striche verschwunden sind <<<
+     Es wurde nur aufgeräumt: S._cur auf null, fertig. Der Strich lag zu
+     diesem Zeitpunkt aber SCHON in S.strokeHistory – dorthin kommt er
+     beim Aufsetzen (handleDrawStart). Was fehlte, war der zweite Teil,
+     den sonst pointerup erledigt: ihn nach page.inkStrokes zu
+     übernehmen.
+
+     Und genau daraus wird gelesen, wenn eine Seite neu aufgebaut wird
+     (app.js: strokeHistory = page.inkStrokes). Beim nächsten Blättern,
+     Zoomen oder Abschnittswechsel war der Strich damit weg – sichtbar
+     gezeichnet, und dann ohne Zutun verschwunden. Genau so gemeldet.
+
+     Der Strich BLEIBT deshalb. Er ist gezeichnet worden; dass das System
+     dazwischenging, ist kein Grund, die Arbeit wegzuwerfen.
+     ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointercancel', () => {
     stopLineTimer(S._cur);
+    const abgebrochen = S._cur;
     S.isDrawing = false; S._cur = null; S._drawPointerId = null;
     S._rulerKlebt = false;
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
+
+    // Die Schlinge ist kein Strich – von ihr bleibt nie etwas stehen
+    if (abgebrochen && abgebrochen._lasso) {
+      S.strokeHistory[page.id] = (S.strokeHistory[page.id] || []).filter(s => s !== abgebrochen);
+      if (typeof popPageHistory === 'function') popPageHistory(page.id);
+      redrawStrokes(canvas, S.strokeHistory[page.id]);
+      return;
+    }
+
+    if (!abgebrochen) return;
+
+    redrawStrokes(canvas, S.strokeHistory[page.id]);
+    page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
+    if (!abgebrochen.isEraser && window.Collab) Collab.noteStroke(page.id, abgebrochen);
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
 
   textDiv.addEventListener('pointerdown', e => {

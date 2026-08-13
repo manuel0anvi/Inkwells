@@ -1260,20 +1260,21 @@
 .search-hit-dot { width: 4px; border-radius: 2px; flex-shrink: 0; }
 .search-hit-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 
-/* Kommt der Treffer aus einem geteilten Dokument? Nach dem Anklicken
-   geht dort der Nur-Lese-Zustand an – ohne Marke saehe das wie ein
-   Fehler aus. */
+/* Von wem das Heft ist. Eigene Zeile unter dem Textausschnitt und kein
+   Etikett am Rand: DASS ein Treffer aus einem geteilten Dokument kommt,
+   sieht man nach dem Anklicken ohnehin – der Name des Besitzers ist die
+   Auskunft, nach der man sucht. */
 .search-hit-shared {
-  align-self: center;
-  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;
   font-family: 'DM Mono', Consolas, monospace;
-  font-size: 9px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--md);
-  border: 1px solid var(--sb2);
-  border-radius: 4px;
-  padding: 2px 6px;
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: var(--gd);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .search-hit-title {
   font-family: 'DM Mono', Consolas, monospace;
@@ -1959,11 +1960,26 @@
    das eine Antwort braucht.
    ══════════════════════════════════════════════════════════════════════ */
 
+/* ── Warum die Hoehe festgeschrieben ist ─────────────────────────────
+   Das Band steht im gewoehnlichen Fluss ueber beiden Ansichten – so ist
+   es auch in einem offenen Heft zu sehen und nicht nur in der
+   Uebersicht. Die Ansichten sind aber auf `calc(100vh - 36px)` gerechnet
+   (layout.css), also auf die Fensterhoehe minus Titelleiste. Ein Band
+   davor schiebt sie um seine eigene Hoehe nach unten, und genau so viel
+   verschwindet unten aus dem Bild – beim Heft waere das der untere Rand
+   der Seite.
+
+   Deshalb steht die Hoehe hier als Zahl und wird unten von den Ansichten
+   wieder abgezogen. Beide muessen dieselbe kennen, also gibt es sie
+   genau einmal. */
+:root { --konflikt-hoehe: 42px }
+
 .conflict-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 16px;
+  height: var(--konflikt-hoehe);
+  padding: 0 16px;
   background: var(--sync-warn-bg, rgba(200, 122, 42, .16));
   border-bottom: 1px solid rgba(200, 122, 42, .35);
   font-size: 13px;
@@ -1972,6 +1988,13 @@
      der Ansicht, die es selbst aufmacht. */
   position: relative;
   z-index: 40;
+  box-sizing: border-box;
+}
+
+/* Steht das Band, ist fuer die Ansichten weniger Platz. Die Marke setzt
+   core/conflicts.js beim Ein- und Ausblenden. */
+body.hat-konflikt .view {
+  height: calc(100vh - 36px - var(--konflikt-hoehe));
 }
 
 .conflict-bar-dot {

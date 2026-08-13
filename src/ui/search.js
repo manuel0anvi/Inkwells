@@ -17,6 +17,26 @@
   const MAX_RESULTS = 60;
   let debounceTimer = null;
 
+  /* ── Was unter der Trefferliste liegt ──────────────────────────────
+     Die Startseite hat zwei Reiter, und die Suche gilt für beide. Die
+     Trefferliste deckt den Bereich darunter zu und muss hinterher den
+     RICHTIGEN wieder aufdecken – vorher wurde blind `nb-grid` gezeigt,
+     und wer auf den geteilten Dokumenten stand, landete nach dem Leeren
+     des Feldes bei seinen eigenen Heften. */
+  function zeigeGrund(sichtbar) {
+    const reiter = (typeof window.homeActiveTab === 'function')
+      ? window.homeActiveTab() : 'own';
+    const panel = E('shared-panel');
+
+    if (!sichtbar) {
+      if (grid) grid.style.display = 'none';
+      if (panel) panel.style.display = 'none';
+      return;
+    }
+    if (grid) grid.style.display = reiter === 'own' ? '' : 'none';
+    if (panel) panel.style.display = reiter === 'shared' ? '' : 'none';
+  }
+
   function plainTextOf(page) {
     return (page.textContent || '')
       .replace(/<br\s*\/?>/gi, ' ')
@@ -115,18 +135,42 @@
       if (hits.length >= MAX_RESULTS) break;
     }
 
+    /* ── Geteilte Dokumente, die noch nie offen waren ──────────────
+       Von ihnen liegt hier nur der Kopf: Titel und Besitzer. Nach dem
+       NAMEN lassen sie sich damit trotzdem finden, und das ist der
+       häufigere Fall – man sucht „Physik", weil man weiß, dass es das
+       gibt. Im Text eines ungeöffneten kann nicht gesucht werden; dafür
+       müsste bei jedem Tastendruck jedes fremde Heft geladen werden.
+
+       Schon geöffnete stehen weiter oben mit ihrem vollen Inhalt und
+       werden hier übersprungen – sonst stünde jedes zweimal da. */
+    const heads = typeof window.sharedDocHeads === 'function' ? window.sharedDocHeads() : [];
+    const schonOffen = new Set(geteilte.map(nb => String(nb.id)));
+
+    for (const head of heads) {
+      if (hits.length >= MAX_RESULTS) break;
+      if (!head || !head.docId) continue;
+      if (schonOffen.has('shared:' + head.docId)) continue;
+
+      const titel = String(head.title || '');
+      const wer = String(head.ownerName || head.ownerEmail || '');
+      if (!titel.toLowerCase().includes(query) && !wer.toLowerCase().includes(query)) continue;
+
+      hits.push({ kind: 'sharedDoc', head, label: titel || '?', sharedBy: wer });
+    }
+
     return { query, hits };
   }
 
   function render(result) {
     if (!result) {
       results.style.display = 'none';
-      grid.style.display = '';
+      zeigeGrund(true);
       results.innerHTML = '';
       return;
     }
 
-    grid.style.display = 'none';
+    zeigeGrund(false);
     results.style.display = 'block';
     results.innerHTML = '';
 
@@ -151,7 +195,9 @@
 
       const dot = document.createElement('span');
       dot.className = 'search-hit-dot';
-      dot.style.background = hit.nb.color || 'var(--gold)';
+      /* Ein noch nie geöffnetes geteiltes Dokument hat kein Heft und
+         damit auch keine Farbe – hit.nb ist dort undefined. */
+      dot.style.background = (hit.nb && hit.nb.color) || 'var(--gold)';
       row.appendChild(dot);
 
       const body = document.createElement('span');
@@ -160,13 +206,25 @@
       const title = document.createElement('span');
       title.className = 'search-hit-title';
 
-      /* Woher der Treffer kommt. Ohne die Marke saehen ein eigenes und
+      /* Woher der Treffer kommt. Ohne den Hinweis saehen ein eigenes und
          ein geteiltes Heft gleich aus – und beim geteilten geht nach dem
          Anklicken der Nur-Lese-Zustand an, was ohne Vorwarnung wie ein
          Fehler wirkt. */
-      const geteilt = typeof isSharedNotebook === 'function' && isSharedNotebook(hit.nb);
+      const geteilt = hit.kind === 'sharedDoc'
+        || (typeof isSharedNotebook === 'function' && isSharedNotebook(hit.nb));
+      const wer = hit.kind === 'sharedDoc' ? hit.sharedBy : (hit.nb && hit.nb.sharedBy);
 
-      if (hit.kind === 'page') {
+      if (hit.kind === 'sharedDoc') {
+        /* Nur der Kopf ist bekannt. Statt eines Textausschnitts steht
+           deshalb da, warum keiner da ist – sonst sähe die Zeile aus wie
+           ein Treffer, dem der Inhalt fehlt. */
+        title.textContent = hit.label;
+        const hinweis = document.createElement('span');
+        hinweis.className = 'search-hit-snippet';
+        hinweis.textContent = t('searchSharedNotOpen')
+          || 'Zum Durchsuchen des Inhalts einmal öffnen.';
+        body.append(title, hinweis);
+      } else if (hit.kind === 'page') {
         title.textContent = `${hit.nb.name} · ${hit.sec ? hit.sec.name + ' · ' : ''}${t('page') || 'Seite'} ${hit.pageNo}`;
         const snip = document.createElement('span');
         snip.className = 'search-hit-snippet';
@@ -182,16 +240,27 @@
         body.append(title, kind);
       }
 
-      row.appendChild(body);
+      /* ── Von wem das Heft ist ─────────────────────────────────────
+         Hier stand nur „geteilt" als kleine Marke am rechten Rand. Das
+         beantwortet die falsche Frage: DASS es geteilt ist, sieht man
+         nach dem Anklicken ohnehin – wissen will man, VON WEM. Bei drei
+         Heften namens „Physik" ist der Name des Besitzers das Einzige,
+         woran man sie auseinanderhält.
 
-      /* Die Marke ganz rechts, nach dem Text – sie ist eine Beifuegung,
-         keine Ueberschrift. */
+         Deshalb steht es jetzt als eigene Zeile im Treffer und nicht
+         mehr als Etikett daneben. Fehlt der Name (ein Dokument aus einer
+         älteren Fassung, das noch keinen mitbekommen hat), bleibt es bei
+         der schlichten Auskunft. */
       if (geteilt) {
-        const marke = document.createElement('span');
-        marke.className = 'search-hit-shared';
-        marke.textContent = t('searchFromShared') || 'geteilt';
-        row.appendChild(marke);
+        const von = document.createElement('span');
+        von.className = 'search-hit-shared';
+        von.textContent = wer
+          ? (t('searchSharedBy') || 'geteiltes Heft von: {name}').replace('{name}', wer)
+          : (t('searchFromShared') || 'geteiltes Heft');
+        body.appendChild(von);
       }
+
+      row.appendChild(body);
 
       row.addEventListener('click', () => openHit(hit));
       results.appendChild(row);
@@ -216,8 +285,13 @@
        openSharedDocument. Die Seite wird dabei NICHT angesprungen – das
        Dokument wird erst geladen, und wo die Seite dann sitzt, weiss
        ui/sharedDocs.js besser als wir. */
-    if (typeof isSharedNotebook === 'function' && isSharedNotebook(hit.nb)) {
-      const docId = String(hit.nb.id).replace(/^shared:/, '');
+    const istGeteilt = hit.kind === 'sharedDoc'
+      || (typeof isSharedNotebook === 'function' && isSharedNotebook(hit.nb));
+
+    if (istGeteilt) {
+      const docId = hit.kind === 'sharedDoc'
+        ? String(hit.head.docId)
+        : String(hit.nb.id).replace(/^shared:/, '');
       if (typeof window.openSharedDocumentById === 'function') {
         window.openSharedDocumentById(docId);
       }

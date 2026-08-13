@@ -1633,6 +1633,29 @@ class CloudSyncManager {
     notebook.syncedAt = localCopy.updatedAt;
     // Ab jetzt gehört es zu diesem Konto (fremdesKonto in core/data.js)
     notebook.cloudKonto = this.kontoSchluessel() || notebook.cloudKonto || '';
+
+    /* ── syncedAt MUSS auf die Platte ─────────────────────────────────
+       Hier stand es nur im Speicher. Wurde das Heft danach nicht aus
+       einem anderen Grund noch einmal gespeichert – und das ist der
+       Normalfall, gespeichert wird ja VOR dem Hochladen –, war die Marke
+       beim nächsten Start weg.
+
+       Und ohne sie ist `syncedAt` undefined, _toTime() macht daraus 0,
+       und die Konfliktprüfung liest „seit dem Zeitpunkt 0 haben sich
+       beide Seiten geändert". Das stimmt immer. Jedes Heft, das es hier
+       UND in der Cloud gibt, wurde damit nach jedem Neustart als
+       Konflikt gemeldet, ohne dass jemand etwas angefasst hätte – genau
+       so ist es gemeldet worden.
+
+       touch:false ist wesentlich: ein neues updatedAt würde das Heft
+       sofort wieder als geändert gelten lassen und den nächsten Upload
+       auslösen. syncCloud:false aus demselben Grund. */
+    try {
+      await FileManager_.saveNotebook(notebook, { syncCloud: false, touch: false });
+    } catch (err) {
+      console.warn('[CloudSync] syncedAt konnte nicht gesichert werden:', err.message);
+    }
+
     await Settings.update({ cloudLastSync: new Date().toISOString() });
   }
 
@@ -1795,13 +1818,7 @@ class CloudSyncManager {
        Jetzt wird der Konflikt gemeldet, bevor irgendetwas entschieden
        ist. Was damit geschieht, entscheidet der Nutzer (core/conflicts.js);
        der Abgleich selbst bleibt danach so vorsichtig wie bisher. */
-    if (existing) {
-      const syncedTime = this._toTime(existing.syncedAt);
-      const beideGeaendert = localTime > syncedTime && remoteTime > syncedTime;
-      if (beideGeaendert && typeof Conflicts !== 'undefined' && Conflicts) {
-        await Conflicts.melde(existing, remoteNotebook);
-      }
-    }
+    if (existing) await this._pruefeKonflikt(existing, remoteNotebook, localTime, remoteTime);
 
     if (existing && AutoSave?.isDirty?.(existing.id)) return;
 
@@ -1831,6 +1848,58 @@ class CloudSyncManager {
     } catch (err) {
       console.warn('[CloudSync] Konnte nicht lokal gespeichert werden:', err);
     }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     IST DAS WIRKLICH EIN KONFLIKT?
+
+     Drei Bedingungen, und alle drei müssen zutreffen. Jede einzelne
+     davon fehlte einmal, und das Ergebnis war dasselbe: ein Band, das
+     nach einer Entscheidung fragt, wo es gar nichts zu entscheiden gibt.
+     Eine Warnung, die zu oft kommt, liest niemand mehr – auch dann
+     nicht, wenn sie einmal stimmt.
+
+       1. Wir müssen WISSEN, wann zuletzt abgeglichen wurde. Ohne
+          `syncedAt` macht _toTime() daraus 0, und „seit dem Zeitpunkt 0
+          hat sich beides geändert" stimmt immer.
+       2. Beide Seiten müssen sich SEITHER geändert haben.
+       3. Und sie müssen sich wirklich UNTERSCHEIDEN. Das ist die
+          eigentliche Frage, und sie wurde gar nicht gestellt: die
+          Zeitstempel sagen nur, dass geschrieben wurde – nicht, dass
+          etwas anderes dabei herauskam. Ein Heft, das hier gespeichert
+          und anderswo nur heruntergeladen wurde, trägt zwei frische
+          Zeitstempel und denselben Inhalt.
+
+     Der Vergleich läuft über denselben groben Abdruck wie der
+     Versionsverlauf (core/versions.js): Name, Abschnitte, je Seite die
+     Textlänge und die Zahl der Striche und Objekte. Er ist billig und
+     verlässt das Gerät nie.
+     ══════════════════════════════════════════════════════════════════ */
+  async _pruefeKonflikt(existing, remoteNotebook, localTime, remoteTime) {
+    if (typeof Conflicts === 'undefined' || !Conflicts) return;
+
+    const syncedTime = this._toTime(existing.syncedAt);
+    if (!syncedTime) {
+      /* Kein Merkzettel: bei einem Heft, das noch nie hochgeladen wurde,
+         ist das richtig so – dann gibt es auch keine zwei Fassungen. Bei
+         einem älteren kann er fehlen; dann wird er beim nächsten Upload
+         gesetzt und die Frage stellt sich ab da sauber. */
+      return;
+    }
+
+    if (!(localTime > syncedTime && remoteTime > syncedTime)) return;
+
+    if (typeof Versions !== 'undefined' && Versions
+        && typeof Versions._abdruck === 'function') {
+      const hier = Versions._abdruck(existing);
+      const dort = Versions._abdruck(this._normalizeNotebook(remoteNotebook));
+      if (hier === dort) {
+        console.log('[CloudSync] Beide Seiten geändert, aber gleicher Inhalt – kein Konflikt');
+        return;
+      }
+    }
+
+    await Conflicts.melde(existing, remoteNotebook);
   }
 
   /* >>> Die stille Konfliktkopie stand hier <<<

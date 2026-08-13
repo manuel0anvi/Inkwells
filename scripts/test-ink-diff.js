@@ -58,7 +58,9 @@ function extract(name) {
 }
 
 const NAMES = ['inkPlan', 'inkSignatureOf', 'kurzhash', 'fingerprintNotebook',
-  'signatureOf', 'isInlineData'];
+  'signatureOf', 'isInlineData',
+  // Die Unterschrift einer Seite zaehlt die Kommentare mit
+  'commentsForPage'];
 
 const sandbox = { console, JSON };
 vm.createContext(sandbox);

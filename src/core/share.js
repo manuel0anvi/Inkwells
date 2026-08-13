@@ -920,6 +920,56 @@ function isInlineData(value) {
   return typeof value === 'string' && value.startsWith('data:');
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   KOMMENTARE REISEN MIT DER SEITE
+
+   >>> Was hier gefehlt hat <<<
+   Gar nichts davon. Das Wort „comments" kam in dieser Datei nicht vor.
+   Der Live-Weg trug sie (ui/collab.js), der dauerhafte nicht – und der
+   ist der, der zählt: sobald ein geteiltes Dokument einmal geladen wird
+   statt live anzukommen, waren alle Kommentare weg.
+
+   Fast weg, und das war das Tückische. Die MARKIERUNG im Text überlebt
+   (sanitize.js lässt data-cid durch), also stand die Stelle weiterhin
+   farbig da. Nur der Kommentar dazu fehlte, und core/comments.js baute
+   aus der Markierung einen Ersatz: ohne Text und mit
+   `author.uid = ''`. Und weil „gehört mir" die Kennung vergleicht,
+   hatte danach NIEMAND mehr Bearbeiten und Löschen – auch der nicht,
+   der ihn geschrieben hat. Genau so wurde es gemeldet.
+
+   Sie hängen an der Seite und nicht am Kopf: eine gelöschte Seite nimmt
+   ihre Kommentare mit, und beim seitenweisen Schreiben geht nur mit,
+   was sich wirklich geändert hat.
+   ══════════════════════════════════════════════════════════════════════ */
+function commentsForPage(notebook, pageId) {
+  const alle = Array.isArray(notebook?.comments) ? notebook.comments : [];
+  return alle
+    .filter(c => c && String(c.pageId) === String(pageId))
+    .map(c => ({
+      id: String(c.id),
+      pageId: String(pageId),
+      text: String(c.text || ''),
+      zitat: String(c.zitat || '').slice(0, 160),
+      author: {
+        uid: String(c.author?.uid || ''),
+        name: String(c.author?.name || '')
+      },
+      created: Number(c.created) || 0,
+      edited: Number(c.edited) || 0,
+      resolved: !!c.resolved,
+      replies: (Array.isArray(c.replies) ? c.replies : []).map(r => ({
+        id: String(r.id || ''),
+        text: String(r.text || ''),
+        author: {
+          uid: String(r.author?.uid || ''),
+          name: String(r.author?.name || '')
+        },
+        created: Number(r.created) || 0,
+        edited: Number(r.edited) || 0
+      }))
+    }));
+}
+
 /* ── Die Seiten eines Hefts in Heft-Reihenfolge ──────────────────────
    Gegenstück zu notebookPages() in core/data.js. Bewusst hier noch einmal
    und nicht von dort geholt: diese Datei läuft auch auf der Website, und
@@ -1000,6 +1050,9 @@ function splitNotebook(notebook) {
       date: page.date || '',
       text: page.textContent || '',
       objects,
+      // Siehe commentsForPage(): ohne sie verlor jedes geteilte Dokument
+      // beim ersten Laden alle Kommentare
+      comments: commentsForPage(notebook, pageId),
       hasBg
     });
 
@@ -1119,12 +1172,24 @@ function assembleNotebook(head, pages = [], ink = [], blobs = []) {
     return out;
   });
 
+  /* Die Kommentare aller Seiten wieder zu einer Liste – so hält das Heft
+     sie (nb.comments, core/comments.js). Auf der Seite liegen sie nur für
+     den Weg durch Firestore, damit eine gelöschte Seite die ihren
+     mitnimmt. */
+  const comments = [];
+  for (const page of sorted) {
+    for (const c of (Array.isArray(page.comments) ? page.comments : [])) {
+      comments.push({ ...c, pageId: String(page.id) });
+    }
+  }
+
   const notebook = {
     id: head.notebookId || '',
     name: head.title || 'Notizbuch',
     color: head.color || '#c8a96e',
     defaultBg: head.defaultBg || 'ruled',
     pages: notebookPages,
+    comments,
     sections: Array.isArray(head.sections) ? head.sections.map(s => ({ ...s })) : []
   };
   if (head.activeSecId) notebook.activeSecId = head.activeSecId;
@@ -1267,7 +1332,7 @@ function fingerprintNotebook(notebook) {
   for (const page of (notebook.pages || [])) {
     const strokes = page.inkStrokes || [];
     pages[String(page.id)] = {
-      sig: signatureOf(page),
+      sig: signatureOf(page, commentsForPage(notebook, page.id)),
       strokes: strokes.length,
       inkSig: inkSignatureOf(strokes)
     };
@@ -1292,13 +1357,24 @@ function kurzhash(raw) {
   return hash.toString(36) + ':' + raw.length;
 }
 
-/** Kurze, stabile Unterschrift über den änderbaren Teil einer Seite. */
-function signatureOf(page) {
+/**
+ * Kurze, stabile Unterschrift über den änderbaren Teil einer Seite.
+ *
+ * @param {object} page
+ * @param {object[]} [comments] die Kommentare DIESER Seite. Sie liegen am
+ *   Heft und nicht an der Seite, müssen aber mit in die Unterschrift:
+ *   sonst gilt eine Seite, an der nur ein Kommentar geändert wurde, als
+ *   unverändert – und die Änderung ginge nie hinaus.
+ */
+function signatureOf(page, comments) {
   const objects = (page.objects || []).map(o => ({ ...o, src: isInlineData(o.src) ? o.src.length : o.src }));
   const text = page.textContent || '';
   // Es geht nur um „gleich oder nicht", nicht um Fälschungssicherheit –
   // die Unterschrift verlässt das Gerät nie.
-  return kurzhash(JSON.stringify([text, objects, page.bg ?? null, (page.bgImg || '').length]));
+  return kurzhash(JSON.stringify([
+    text, objects, page.bg ?? null, (page.bgImg || '').length,
+    Array.isArray(comments) ? comments : []
+  ]));
 }
 
 /* ══════════════════════════════════════════════════════════════════════

@@ -139,9 +139,33 @@
     return true;
   }
 
-  function merkeAenderung() {
+  /* ══════════════════════════════════════════════════════════════════
+     DIE ÄNDERUNG MUSS DENSELBEN WEG NEHMEN WIE GETIPPTER TEXT
+
+     >>> Was hier vorher stand, und warum es zu wenig war <<<
+     `markCurrentNotebookDirty()` plus `syncAll()`. Das schrieb die Seite
+     auf die Platte – und sonst nichts. Ein Verweis erreichte die anderen
+     in einer Live-Sitzung NIE. Genau so ist es gemeldet worden.
+
+     Der Grund ist, dass an einer einzigen Stelle sehr viel hängt: der
+     'input'-Griff des Textfeldes in app.js. Dort wird page.textContent
+     gesetzt, Collab.noteTextChange gerufen (das ist der Live-Weg), der
+     Seitenbaum nachgezogen, der Überlauf geprüft und die Änderung
+     vermerkt. Wer den Text von Hand ändert, geht daran vorbei — ein
+     programmatisch eingefügter Knoten löst kein 'input' aus.
+
+     Deshalb wird das Ereignis ausgelöst, statt die Liste von Dingen hier
+     noch einmal aufzuschreiben. Dieselbe Lösung nimmt app.js schon für
+     Tab und Enter in Tabellen (commitPlainTextEdit).
+     ══════════════════════════════════════════════════════════════════ */
+  function merkeAenderung(feld) {
+    const ziel = feld || gemerktesFeld;
+    if (ziel) {
+      ziel.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+    // Ohne Feld bleibt nur der kurze Weg – sollte nicht vorkommen
     if (typeof window.markCurrentNotebookDirty === 'function') window.markCurrentNotebookDirty();
-    // Der Text der Seite hat sich geändert – im Modell nachziehen
     if (typeof syncAll === 'function') { try { syncAll(); } catch (e) { /* egal */ } }
   }
 
@@ -152,16 +176,21 @@
     const text = feldText.value.trim() || adresse;
 
     if (bearbeitet) {
+      /* Das Feld VOR zu() merken – dort wird gemerktesFeld geleert, und
+         danach wüsste merkeAenderung() nicht mehr, wen es benachrichtigen
+         soll. Der Verweis ginge dann wieder nicht hinaus. */
+      const feld = gemerktesFeld || bearbeitet.closest('.j-text');
       bearbeitet.setAttribute('href', adresse);
       bearbeitet.setAttribute('target', '_blank');
       bearbeitet.setAttribute('rel', 'noopener noreferrer');
       bearbeitet.textContent = text;
       zu();
-      merkeAenderung();
+      merkeAenderung(feld);
       return;
     }
 
     if (!stelleAuswahlHer()) { zu(); return; }
+    const feld = gemerktesFeld;
 
     /* Von Hand aufgebaut und nicht ueber execCommand('createLink'):
        createLink braucht eine Auswahl und kann den Text nicht aendern –
@@ -185,16 +214,17 @@
     }
 
     zu();
-    merkeAenderung();
+    merkeAenderung(feld);
   }
 
   function entfernen() {
     if (!bearbeitet) { zu(); return; }
+    const feld = gemerktesFeld || bearbeitet.closest('.j-text');
     const eltern = bearbeitet.parentNode;
     while (bearbeitet.firstChild) eltern.insertBefore(bearbeitet.firstChild, bearbeitet);
     bearbeitet.remove();
     zu();
-    merkeAenderung();
+    merkeAenderung(feld);
   }
 
   /* ── Verdrahtung ─────────────────────────────────────────────────── */

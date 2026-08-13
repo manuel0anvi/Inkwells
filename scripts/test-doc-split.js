@@ -52,7 +52,9 @@ const NAMES = [
   'pagesInOrder',
   // Die Unterschriften. kurzhash traegt beide anderen – ohne sie hier
   // scheitert der Aufbau mit „kurzhash is not defined".
-  'kurzhash', 'inkSignatureOf'
+  'kurzhash', 'inkSignatureOf',
+  // Kommentare reisen mit der Seite; splitNotebook haengt daran
+  'commentsForPage'
 ];
 
 const sandbox = { INK_SHEET_LIMIT: 600000, CHUNK_SIZE: 700000, console };
@@ -217,6 +219,72 @@ const drawn = JSON.parse(JSON.stringify(notebook));
 drawn.pages[2].inkStrokes.push(makeStroke(5));
 const fp3 = fingerprintNotebook(drawn);
 check('Neuer Strich wird gezählt', fp3.pages.p3.strokes, fp1.pages.p3.strokes + 1);
+
+/* ══════════════════════════════════════════════════════════════════════
+   KOMMENTARE MÜSSEN MITREISEN
+
+   Sie taten es nicht: „comments" kam in share.js überhaupt nicht vor.
+   Der Live-Weg trug sie, der dauerhafte nicht – sobald ein geteiltes
+   Dokument einmal GELADEN statt live empfangen wurde, waren sie weg.
+
+   Und zwar auf die unangenehmste Art: die Markierung im Text überlebte,
+   also stand die Stelle weiterhin farbig da. core/comments.js baute
+   daraus einen Ersatz ohne Text und mit leerer Autorenkennung – und weil
+   „gehört mir" die Kennung vergleicht, konnte danach NIEMAND den
+   Kommentar mehr bearbeiten oder löschen, auch der Verfasser nicht.
+   ══════════════════════════════════════════════════════════════════════ */
+console.log('\nKommentare reisen mit');
+
+const mitKommentar = JSON.parse(JSON.stringify(notebook));
+mitKommentar.comments = [
+  {
+    id: 'k1', pageId: 'p1', text: 'Hier fehlt die Herleitung',
+    zitat: 'Erste Seite', created: 1000, resolved: false,
+    author: { uid: 'wer@example.org', name: 'Wer' },
+    replies: [
+      { id: 'r1', text: 'Kommt noch', created: 1100,
+        author: { uid: 'ich@example.org', name: 'Ich' } }
+    ]
+  },
+  { id: 'k2', pageId: 'p3', text: 'Zweiter', zitat: 'Dritte', created: 2000,
+    resolved: true, author: { uid: 'ich@example.org', name: 'Ich' }, replies: [] }
+];
+
+const kParts = splitNotebook(mitKommentar);
+const kBack = assembleNotebook({ ...kParts.head, notebookId: mitKommentar.id },
+  kParts.pages, kParts.ink, kParts.blobs);
+
+check('Beide Kommentare sind wieder da', (kBack.comments || []).length, 2);
+
+const k1 = (kBack.comments || []).find(c => c.id === 'k1');
+check('Der Text bleibt', k1 && k1.text, 'Hier fehlt die Herleitung');
+check('Die Seite bleibt', k1 && k1.pageId, 'p1');
+check('Das Zitat bleibt', k1 && k1.zitat, 'Erste Seite');
+/* Die WICHTIGSTE Zeile hier: an der Kennung des Verfassers haengt, ob
+   er seinen eigenen Kommentar noch bearbeiten darf. */
+check('Die Kennung des Verfassers bleibt', k1 && k1.author.uid, 'wer@example.org');
+check('Sein Name bleibt', k1 && k1.author.name, 'Wer');
+check('Die Antwort bleibt', k1 && k1.replies.length, 1);
+check('Mit ihrem Verfasser', k1 && k1.replies[0].author.uid, 'ich@example.org');
+
+const k2 = (kBack.comments || []).find(c => c.id === 'k2');
+check('Erledigt bleibt erledigt', k2 && k2.resolved, true);
+
+// Sie haengen an der Seite: eine geloeschte Seite nimmt ihre Kommentare mit
+const ohneP1 = assembleNotebook({ ...kParts.head, notebookId: mitKommentar.id },
+  kParts.pages.filter(p => p.id !== 'p1'), kParts.ink, kParts.blobs);
+check('Ohne die Seite ist ihr Kommentar weg',
+  (ohneP1.comments || []).map(c => c.id), ['k2']);
+
+// Und die Unterschrift muss sie kennen, sonst geht die Aenderung nie hinaus
+const fpK1 = fingerprintNotebook(mitKommentar);
+const geaendert = JSON.parse(JSON.stringify(mitKommentar));
+geaendert.comments[0].text = 'Doch nicht';
+const fpK2 = fingerprintNotebook(geaendert);
+check('Ein geaenderter Kommentar faellt auf',
+  fpK1.pages.p1.sig !== fpK2.pages.p1.sig, true);
+check('Eine fremde Seite bleibt davon unberuehrt',
+  fpK1.pages.p2.sig, fpK2.pages.p2.sig);
 
 if (failed > 0) {
   console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);

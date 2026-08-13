@@ -138,9 +138,20 @@
     tabOwn.classList.toggle('active', activeTab === 'own');
     tabShared.classList.toggle('active', activeTab === 'shared');
 
-    E('nb-grid').style.display = activeTab === 'own' ? '' : 'none';
-    E('home-search').style.display = activeTab === 'own' ? '' : 'none';
+    /* ── Die Suchleiste gilt für BEIDE Reiter ──────────────────────
+       Hier stand `activeTab === 'own' ? '' : 'none'`: auf dem Reiter mit
+       den geteilten Dokumenten war sie weg. Das war schlüssig, solange
+       die Suche geteilte Hefte gar nicht ansah – seit sie das tut, ist
+       es genau verkehrt herum: dort, wo die Treffer herkommen, konnte
+       man nicht suchen.
+
+       Eine gemeinsame Leiste und nicht zwei: gesucht wird ohnehin über
+       alles, und zwei Felder mit demselben Inhalt wären nur die Frage,
+       welches gerade gilt. */
     E('search-results').style.display = 'none';
+    if (typeof window.resetHomeSearch === 'function') window.resetHomeSearch();
+
+    E('nb-grid').style.display = activeTab === 'own' ? '' : 'none';
     if (sharedPanel) sharedPanel.style.display = activeTab === 'shared' ? '' : 'none';
 
     if (activeTab === 'shared') {
@@ -156,6 +167,26 @@
 
   tabOwn.addEventListener('click', () => switchTab('own'));
   tabShared.addEventListener('click', () => switchTab('shared'));
+
+  /* Welcher Reiter offen ist. Die Suche braucht das: sie legt ihre
+     Trefferliste über den Bereich darunter und muss danach den RICHTIGEN
+     wieder aufdecken – sonst stünden nach dem Leeren des Feldes die
+     eigenen Hefte da, obwohl man auf den geteilten war. */
+  window.homeActiveTab = () => activeTab;
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE LISTE DER GETEILTEN DOKUMENTE FÜR DIE SUCHE
+
+     Nur die Kopfdaten – Titel, Besitzer, Kennung. Der INHALT eines
+     geteilten Dokuments liegt erst dann hier, wenn es einmal geöffnet
+     wurde; er wird nicht auf Vorrat heruntergeladen.
+
+     Die Suche kommt damit trotzdem weiter, als es zunächst aussieht:
+     nach dem Namen findet sie jedes geteilte Dokument, auch ein nie
+     geöffnetes. Nur im TEXT eines ungeöffneten kann sie nicht suchen –
+     dafür müsste sie bei jedem Tastendruck jedes fremde Heft laden.
+     ══════════════════════════════════════════════════════════════════ */
+  window.sharedDocHeads = () => docs.slice();
 
   /* ── Reiter nur für Angemeldete ─────────────────────────────────────
      Ohne Anmeldung kann überhaupt nichts bei einem ankommen: die Liste
@@ -420,19 +451,57 @@
     notebook.origin = 'shared';
     notebook.id = 'shared:' + fresh.docId;
 
+    /* Von wem es stammt. Steht sonst nur in der Leiste über dem offenen
+       Dokument (applyReadOnlyChrome) und in der Kachelliste – die Suche
+       findet ihre Treffer aber quer über alles und braucht die Auskunft
+       an der Zeile selbst. „Physik" allein sagt einem nichts, wenn drei
+       Leute ein Heft so nennen. */
+    notebook.sharedBy = fresh.ownerName || fresh.ownerEmail || '';
+
     const idx = S.notebooks.findIndex(nb => nb.id === notebook.id);
     if (idx >= 0) S.notebooks[idx] = notebook; else S.notebooks.push(notebook);
 
     live = { docId: fresh.docId, nbId: notebook.id, isOwner: false, ownerUid: fresh.owner };
 
     const finalRole = myRole(fresh) || role;
-    applyReadOnlyChrome(finalRole !== 'edit', {
+
+    /* ══════════════════════════════════════════════════════════════
+       GESPERRT, BIS DER RAUM DAS GEGENTEIL SAGT
+
+       Das Recht zu bearbeiten ruht, solange der Kontakt zum Besitzer
+       nicht gesichert ist (applyOwnerHold weiter unten). Aufgehoben wird
+       die Sperre allein durch onOwnerAway(false) – eine Meldung AUS dem
+       Live-Raum.
+
+       >>> Warum hier vorher offen stand <<<
+       Es lief andersherum: offen ab dem ersten Augenblick, und erst wenn
+       der Raum „der Besitzer ist weg" meldete, wurde zugemacht. Kam
+       diese Meldung nie, blieb es offen – und sie kommt genau dann nie,
+       wenn der Live-Betrieb GAR NICHT ZUSTANDE KOMMT:
+
+         · der Besitzer hat den Raum noch nie betreten, es gibt keine
+           Rollenliste und damit keinen Einlass (ROOM_NOT_ADMITTED),
+         · die Realtime Database ist nicht erreichbar,
+         · man ist über einen Link ohne Konto drin,
+         · der Raum ist besetzt (ROOM_OWNER_MISMATCH).
+
+       In allen vier Fällen konnte man munter weiterschreiben, ohne dass
+       es irgendjemand mitbekam – und der Besitzer womöglich zugleich an
+       derselben Seite. Genau so ist es gemeldet worden: „ich kann
+       bearbeiten, obwohl der Besitzer nicht drin ist."
+
+       Die sichere Seite ist die geschlossene. Wer nur lesen darf, merkt
+       ohnehin nichts davon.
+       ══════════════════════════════════════════════════════════════ */
+    applyReadOnlyChrome(true, {
       docId: fresh.docId,
       role: finalRole,
       ownerName: fresh.ownerName,
       ownerEmail: fresh.ownerEmail,
       title: fresh.title,
-      revision: fresh.revision
+      revision: fresh.revision,
+      // Für den Streifen: das Recht besteht, es ruht nur
+      ownerAway: finalRole === 'edit'
     });
 
     openNotebook(notebook.id);
@@ -445,7 +514,17 @@
        Ohne echtes Konto (Link ohne Anmeldung) gar nicht erst versuchen:
        der Raum verlangt eine Kennung, der Versuch endete nur mit einer
        roten Warnung im Streifen, obwohl alles in Ordnung ist. */
-    if (window.Collab && api.hasRealIdentity()) {
+    /* Ohne Live-Betrieb bleibt es bei der Sperre von oben. Das ist keine
+       Störung, sondern die einzige ehrliche Auskunft: ohne Raum kann
+       niemand wissen, ob der Besitzer gerade selbst schreibt. */
+    if (!window.Collab || !api.hasRealIdentity()) {
+      if (finalRole === 'edit') {
+        console.warn('[SharedDocs] Kein Live-Betrieb – Bearbeiten ruht');
+      }
+      return;
+    }
+
+    {
       /* Die eigene Firebase-Kennung in den Kopf eintragen. Der Besitzer
          baut daraus die Rollenliste des Raums – ohne sie gibt es fuer
          diese Person keinen Live-Betrieb (core/share.js, registerMyUid).
@@ -474,7 +553,13 @@
         ownerUid: fresh.owner,
         roomKey: fresh.roomKey || '',
         onOwnerAway: applyOwnerHold
-      }).catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
+      }).catch(err => {
+        /* Kein Raum – dann bleibt die Sperre von oben stehen. Sie NICHT
+           zu lösen ist hier die ganze Arbeit: onOwnerAway wird jetzt nie
+           gerufen, und vorher hiess das „darf schreiben". */
+        console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err);
+        applyOwnerHold(true);
+      });
     }
   }
 

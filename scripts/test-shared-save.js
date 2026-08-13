@@ -187,9 +187,20 @@ function makeApp(setup = {}) {
      wird, BEVOR der Raum verlassen wird. */
   let states = { p1: 'Y1', p2: 'Y2' };
   ctx.window.Collab = {
-    start: async (docId, nb, crdt, canEdit) => {
+    /* ── Der Besitzer ist da ────────────────────────────────────────
+       Wichtig, und zwar seit dem Tag, an dem das Bearbeiten GESPERRT
+       beginnt und erst durch eine Meldung aus dem Raum aufgeht: ohne
+       onOwnerAway(false) bliebe das Dokument hier fuer immer nur
+       lesbar, und kein Test unten koennte je etwas aendern.
+
+       Genau das ist auch der Sinn der Umstellung – kommt der Raum nicht
+       zustande, meldet niemand etwas, und dann darf auch niemand
+       schreiben. Dafuer gibt es weiter unten einen eigenen Fall. */
+    start: async (docId, nb, crdt, canEdit, opts = {}) => {
       calls.collabStarts.push({ docId, nbId: nb.id, pages: nb.pages.map(p => p.id), canEdit });
+      if (typeof opts.onOwnerAway === 'function') opts.onOwnerAway(false);
     },
+    setCanWrite() {},
     stop: async (expectedDocId) => {
       if (expectedDocId && expectedDocId !== 'doc1') return;
       ctx.collabStopped = true;
@@ -415,6 +426,56 @@ function liveNb(app) {
   check('Die eigene Fassung geht hinauf', app5.calls.save[0].baseline.pages.p1.sig, 'sig:<p>Eins</p>');
   check('Der Raum übernimmt danach trotzdem, wie immer',
     overwritten.pages[0].textContent, '<p>Eins, von jemand anderem</p>');
+
+  /* ══════════════════════════════════════════════════════════════════
+     OHNE RAUM WIRD NICHT GESCHRIEBEN
+
+     Gemeldet als „ich kann bearbeiten, obwohl der Besitzer nicht drin
+     ist". Der Grund: das Bearbeiten begann OFFEN und wurde erst
+     zugemacht, wenn der Raum „der Besitzer ist weg" meldete. Kommt der
+     Raum gar nicht zustande – er wurde nie betreten, die Datenbank ist
+     nicht erreichbar, man kam über einen Link ohne Konto –, meldet
+     niemand irgendetwas, und es blieb offen.
+
+     Jetzt beginnt es gesperrt. Aufgemacht wird allein durch eine
+     Meldung AUS dem Raum. Der Fake unten liefert sie nicht.
+     ══════════════════════════════════════════════════════════════════ */
+
+  console.log('\nOhne Live-Raum bleibt das Bearbeiten gesperrt');
+
+  const app6 = makeApp();
+  // Der Raum kommt nicht zustande – wie bei ROOM_NOT_ADMITTED
+  app6.ctx.window.Collab.start = async () => { throw new Error('ROOM_NOT_ADMITTED'); };
+
+  await open(app6);
+  await wait(60);
+
+  check('Dokument ist trotzdem offen', app6.ctx.S.sharedDoc?.docId, 'doc1');
+  check('Das Recht steht weiterhin auf bearbeiten', app6.ctx.S.sharedDoc?.role, 'edit');
+  check('Aber es ruht', app6.ctx.S.readOnly, true);
+  check('Und der Streifen sagt es', app6.ctx.S.sharedDoc?.ownerAway, true);
+
+  // Eine Aenderung darf jetzt NICHT hinausgehen
+  liveNb(app6).pages[0].textContent = '<p>Heimlich geaendert</p>';
+  app6.ctx.window.markSharedDocDirty('shared:doc1');
+  app6.ctx.window.closeOpenSharedDoc();
+  await wait(120);
+
+  check('Nichts gesichert', app6.calls.save.length, 0);
+
+  console.log('\nMit Raum und anwesendem Besitzer geht es wieder');
+
+  const app7 = makeApp();
+  await open(app7);
+  await wait(20);
+  check('Nicht gesperrt', app7.ctx.S.readOnly, false);
+
+  liveNb(app7).pages[0].textContent = '<p>Ganz normal geaendert</p>';
+  app7.ctx.window.markSharedDocDirty('shared:doc1');
+  app7.ctx.window.closeOpenSharedDoc();
+  await wait(120);
+
+  check('Einmal gesichert', app7.calls.save.length, 1);
 
   if (failed > 0) {
     console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);

@@ -162,12 +162,30 @@ const Conflicts = {
 
   /* ── Das Band am oberen Rand ─────────────────────────────────────── */
 
+  /* ══════════════════════════════════════════════════════════════════
+     DAS BAND GILT ÜBERALL
+
+     Es steht im gewöhnlichen Fluss über beiden Ansichten – Übersicht wie
+     offenes Heft. Das war ausdrücklich gewünscht: die Frage betrifft ein
+     Heft, und wer gerade darin arbeitet, ist der Erste, der sie sehen
+     sollte. Vorher war es nur in der Übersicht zu sehen, weil man dorthin
+     zurück musste, um überhaupt etwas zu bemerken.
+
+     `hat-konflikt` am body nimmt den Ansichten dieselbe Höhe wieder weg,
+     die das Band ihnen nimmt. Ohne die Marke rutscht der untere Rand aus
+     dem Bild – in einem Heft wäre das der Seitenfuß.
+     ══════════════════════════════════════════════════════════════════ */
   _zeigeBand() {
     const band = document.getElementById('conflict-bar');
     if (!band) return;
 
     const offen = this.liste();
-    if (!offen.length) { band.style.display = 'none'; return; }
+    if (!offen.length) {
+      band.style.display = 'none';
+      document.body.classList.remove('hat-konflikt');
+      return;
+    }
+    document.body.classList.add('hat-konflikt');
 
     const text = band.querySelector('.conflict-bar-text');
     if (text) {
