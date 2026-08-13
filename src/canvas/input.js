@@ -94,14 +94,35 @@ function attachInput(canvas, textDiv, objLayer, page) {
       if (!S.isDrawing || S._cur !== stroke) return;
       stroke._lineLocked = true;
       const pts = stroke.path || [];
-      if (pts.length > 1) {
+      if (pts.length <= 1) return;
+
+      /* ── Erst nach einer FORM sehen, dann die Gerade ────────────────
+         Dieselbe Geste trägt jetzt beides: wer am Ende stehen bleibt,
+         bekommt aus einem gemalten Kreis einen Kreis und aus allem
+         anderen die Gerade, die es hier schon immer gab.
+
+         Die Reihenfolge muss so sein. Eine geschlossene Rundung würde
+         als Gerade zu einem Strich zwischen Anfang und Ende zusammen-
+         fallen – also fast zu nichts, denn bei einer Form liegen die
+         beiden aufeinander. Genau deshalb prüft erkenneForm() als
+         Erstes, ob der Strich überhaupt geschlossen ist
+         (canvas/shapeSnap.js). */
+      const form = (typeof InkwellShapeSnap !== 'undefined')
+        ? InkwellShapeSnap.erkenneForm(stroke) : null;
+
+      if (form) {
+        stroke._shapeDetected = true;
+        stroke.isGeometric = true;
+        stroke.path = form.path;
+      } else {
         stroke._shapeDetected = false;
         stroke.isGeometric = false;
         const start = pts[0], end = pts[pts.length - 1];
         stroke.path = [start, end];
-        clearLiveCanvas();
-        redrawStrokes(canvas, S.strokeHistory[page.id]);
       }
+
+      clearLiveCanvas();
+      redrawStrokes(canvas, S.strokeHistory[page.id]);
     }, LINE_HOLD_MS);
   }
 

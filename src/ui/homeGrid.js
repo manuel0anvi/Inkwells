@@ -122,31 +122,106 @@ function zeigeImportBericht(bericht) {
    Andersherum müsste man Name und Farbe für ein Heft aussuchen, das
    vielleicht nie entsteht, weil im Dateiwähler doch abgebrochen wird.
    ══════════════════════════════════════════════════════════════════════ */
+/* ── Wie soll das PDF hereinkommen? ─────────────────────────────────
+   Als Bild (jede Seite bleibt, wie sie ist – zum Draufschreiben) oder
+   als Text (herausgelöst, änderbar, durchsuchbar). Beides hat seinen
+   Preis; die Begründung steht bei fillNotebookFromPdfText() in
+   core/importExport.js.
+
+   @returns {Promise<'bild'|'text'|null>} null = abgebrochen */
+function fragePdfArt() {
+  const ov = E('ov-pdf-mode');
+  ov.style.display = 'flex';
+
+  return new Promise(res => {
+    const schliesse = (wahl) => {
+      ov.style.display = 'none';
+      E('pdf-mode-image').onclick = null;
+      E('pdf-mode-text').onclick = null;
+      E('pdf-mode-close').onclick = null;
+      ov.onclick = null;
+      document.removeEventListener('keydown', kd);
+      res(wahl);
+    };
+    const kd = e => { if (e.key === 'Escape') schliesse(null); };
+
+    E('pdf-mode-image').onclick = () => schliesse('bild');
+    E('pdf-mode-text').onclick = () => schliesse('text');
+    E('pdf-mode-close').onclick = () => schliesse(null);
+    ov.onclick = (e) => { if (e.target === ov) schliesse(null); };
+    document.addEventListener('keydown', kd);
+  });
+}
+
 E('btn-open-doc').addEventListener('click', async () => {
   if (!window.api || !window.api.pickDocument) { toast(t('electronOnly'), true); return; }
 
   const datei = await window.api.pickDocument();
   if (!datei) return;
 
+  /* Die Frage kommt VOR dem Heft-Fenster. Andersherum hätte man Name und
+     Farbe für ein Heft ausgesucht und danach womöglich doch abgebrochen –
+     das Heft wäre dann schon angelegt. */
+  let pdfArt = null;
+  if (datei.kind === 'pdf') {
+    pdfArt = await fragePdfArt();
+    if (!pdfArt) return;
+  }
+
   openNbModal(null, {
     name: datei.name,
     onCreate: async (nb) => {
       toast(t('openDocReading') || 'Dokument wird gelesen …');
 
-      if (datei.kind === 'pdf') {
-        const bericht = await fillNotebookFromPdf(nb, datei.dataUrl);
-        toast((t('openDocDonePdf') || '{n} Seiten übernommen.')
-          .replace('{n}', bericht.seiten));
-        return;
-      }
+      try {
+        if (datei.kind === 'pdf' && pdfArt === 'text') {
+          const bericht = await fillNotebookFromPdfText(nb, datei.dataUrl, (getan, gesamt) => {
+            toast((t('openDocProgress') || 'Seite {n} von {m} …')
+              .replace('{n}', getan).replace('{m}', gesamt));
+          });
 
-      const bericht = await fillNotebookFromDocx(nb, datei.dataUrl, (getan, gesamt) => {
-        /* Ein langes Dokument braucht spürbar Zeit – das Messen ist der
-           teure Schritt. Ohne Zeichen steht die App scheinbar still. */
-        toast((t('openDocProgress') || 'Seite {n} von {m} …')
-          .replace('{n}', getan).replace('{m}', gesamt));
-      });
-      zeigeImportBericht(bericht);
+          /* Ein eingescanntes Blatt hat keine Textebene. Ohne diesen
+             Hinweis entstünde ein leeres Heft, und niemand wüsste warum. */
+          if (bericht.leer) {
+            if (typeof showAlert === 'function') await showAlert(t('pdfNoText'));
+            else toast(t('pdfNoText'), true);
+            // Dann eben doch als Bild – besser als ein leeres Heft
+            const ersatz = await fillNotebookFromPdf(nb, datei.dataUrl);
+            toast((t('openDocDonePdf') || '{n} Seiten übernommen.').replace('{n}', ersatz.seiten));
+            return;
+          }
+
+          toast((t('pdfTextDone') || '{n} Seiten aus {m} PDF-Seiten.')
+            .replace('{n}', bericht.seiten).replace('{m}', bericht.quellseiten));
+          return;
+        }
+
+        if (datei.kind === 'pdf') {
+          const bericht = await fillNotebookFromPdf(nb, datei.dataUrl);
+          toast((t('openDocDonePdf') || '{n} Seiten übernommen.')
+            .replace('{n}', bericht.seiten));
+          return;
+        }
+
+        const bericht = await fillNotebookFromDocx(nb, datei.dataUrl, (getan, gesamt) => {
+          /* Ein langes Dokument braucht spürbar Zeit – das Messen ist der
+             teure Schritt. Ohne Zeichen steht die App scheinbar still. */
+          toast((t('openDocProgress') || 'Seite {n} von {m} …')
+            .replace('{n}', getan).replace('{m}', gesamt));
+        });
+        zeigeImportBericht(bericht);
+      } catch (err) {
+        /* Vorher fiel ein Fehler hier ins Leere: das Heft war angelegt,
+           blieb leer, und in der Konsole stand etwas, das niemand sieht.
+           Seit das Auspacken einer .docx eine Größengrenze hat
+           (core/docxImport.js) gibt es dafür auch einen gewöhnlichen
+           Grund und nicht nur den Ausnahmefall. */
+        console.error('[Import] Dokument konnte nicht geöffnet werden:', err);
+        const msg = (t('openDocFailed') || 'Das Dokument ließ sich nicht öffnen: {msg}')
+          .replace('{msg}', err.message || String(err));
+        if (typeof showAlert === 'function') await showAlert(msg);
+        else toast(msg, true);
+      }
     }
   });
 });

@@ -803,6 +803,36 @@
   </div>
 </div>
 
+<!-- WIE EIN PDF INS HEFT KOMMT
+     Zwei Wege mit sehr verschiedenen Folgen, und beide haben ihren Preis –
+     deshalb wird gefragt statt geraten. Siehe fillNotebookFromPdfText()
+     in core/importExport.js. -->
+<div class="overlay" id="ov-pdf-mode" style="display:none">
+  <div class="modal" style="width:520px; max-width:94vw;">
+    <div class="modal-head">
+      <h3 data-i18n="pdfModeTitle">PDF öffnen</h3>
+      <button class="modal-close-x" id="pdf-mode-close">✕</button>
+    </div>
+    <div style="padding:16px; display:flex; flex-direction:column; gap:10px;">
+      <button class="pdf-mode-opt" id="pdf-mode-image">
+        <span class="pdf-mode-name" data-i18n="pdfModeImage">Als Bild</span>
+        <span class="pdf-mode-hint" data-i18n="pdfModeImageHint">
+          Die Seiten bleiben, wie sie sind. Du schreibst mit dem Stift darauf.
+          Der Text lässt sich nicht ändern und die Suche findet ihn nicht.
+        </span>
+      </button>
+      <button class="pdf-mode-opt" id="pdf-mode-text">
+        <span class="pdf-mode-name" data-i18n="pdfModeText">Als Text</span>
+        <span class="pdf-mode-hint" data-i18n="pdfModeTextHint">
+          Der Inhalt wird herausgelöst und neu umbrochen – änderbar und
+          durchsuchbar. Das Aussehen geht dabei verloren: Spalten,
+          Tabellen und Bilder kommen nicht mit.
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- EINEN VERWEIS SETZEN
      Zwei Felder: der Text, der im Heft steht, und die Adresse dahinter.
      Der Text ist vorbelegt mit dem, was markiert war – das ist der
@@ -1638,6 +1668,9 @@
 <!-- Canvas & Drawing -->
 <script src="canvas/drawing.js"></script>
 <script src="canvas/shapes.js"></script>
+<!-- Erkennt einen gemalten Kreis, ein Rechteck, ein Dreieck. Muss VOR
+     input.js stehen: dessen Halte-Geste fragt hier nach. -->
+<script src="canvas/shapeSnap.js"></script>
 <script src="canvas/input.js"></script>
 <script src="canvas/strokeSelect.js"></script>
   <script src="canvas/objects.js"></script>

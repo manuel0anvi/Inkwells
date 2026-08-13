@@ -2124,3 +2124,36 @@
 /* Links neben Abbrechen/Einfuegen. „Entfernen" ist das Gegenteil der
    beiden anderen und gehoert nicht in ihre Reihe. */
 .link-remove-btn { margin-right: auto; }
+
+/* ═══ Wie ein PDF hereinkommt ═══
+   Zwei grosse Flaechen statt zweier Knoepfe: die Entscheidung hat Folgen,
+   die man erst spaeter merkt, deshalb steht der Preis gleich mit da. */
+
+.pdf-mode-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--sb);
+  background: var(--sc);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.pdf-mode-opt:hover { border-color: var(--gold); background: var(--sh2); }
+
+.pdf-mode-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 19px;
+  color: var(--hi);
+}
+
+.pdf-mode-hint {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--md);
+}

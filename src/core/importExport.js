@@ -84,6 +84,210 @@ async function fillNotebookFromPdf(nb, dataUrl) {
 window.fillNotebookFromPdf = fillNotebookFromPdf;
 
 /* ══════════════════════════════════════════════════════════════════════
+   EIN PDF ALS ÄNDERBARER TEXT
+
+   Der zweite Weg neben fillNotebookFromPdf. Der Unterschied ist kein
+   technischer, sondern was man mit dem Ergebnis vorhat:
+
+     als Bild  jede Seite bleibt, wie sie ist, und man schreibt mit dem
+               Stift darauf – Arbeitsblätter, Skripte zum Markieren.
+     als Text  der Inhalt wird herausgelöst und neu umbrochen; er ist
+               danach änderbar und durchsuchbar wie jeder Hefttext.
+
+   Beides hat seinen Preis, und der gehört gesagt: als Bild kann man den
+   Text nicht ändern und die Suche findet ihn nicht. Als Text geht das
+   Aussehen verloren – Spalten, Tabellen, die genaue Stelle jedes Wortes.
+   Die Wahl trifft deshalb der Nutzer (ui/homeGrid.js) und nicht der Code.
+
+   ── Was hier NICHT versucht wird ────────────────────────────────────
+   Das Layout nachzubauen. Ein PDF weiß nichts von Absätzen, Überschriften
+   oder Listen – es weiß nur, welches Zeichen an welcher Stelle steht.
+   Alles darüber ist geraten, und eine halbe Nachbildung wäre schlechter
+   als eine ehrliche Übersetzung: Text in Absätzen, Überschriften an der
+   Schriftgröße erkannt, Seitenumbruch beim Seitenumbruch.
+
+   Ein PDF ohne Textebene (ein eingescanntes Blatt) hat gar nichts zu
+   holen. Das wird erkannt und gesagt – sonst entstünde ein leeres Heft
+   ohne jeden Hinweis, warum.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Text in etwas verwandeln, das gefahrlos in HTML stehen darf. */
+function alsHtmlText(text) {
+  return String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Die Textzeilen einer PDF-Seite.
+ *
+ * pdf.js liefert Textstücke mit ihrer Stelle auf dem Blatt, nicht
+ * Zeilen – ein Wort kann ein eigenes Stück sein. Zusammengefasst wird
+ * über die Grundlinie (transform[5]); was auf derselben Höhe steht,
+ * gehört in dieselbe Zeile.
+ *
+ * @returns {Array<{text:string, y:number, groesse:number}>}
+ */
+function pdfZeilen(inhalt) {
+  const stuecke = (inhalt.items || []).filter(it => it && typeof it.str === 'string');
+
+  const zeilen = [];
+  for (const it of stuecke) {
+    const y = Math.round(it.transform[5]);
+    const groesse = Math.abs(it.transform[3]) || Math.abs(it.transform[0]) || 10;
+    const x = it.transform[4];
+
+    /* Zwei Zeichen Toleranz: eine Zeile ist nie zeichengenau auf einer
+       Höhe – Hoch- und Tiefgestelltes, andere Schriften, Rundungen. */
+    const passend = zeilen.find(z => Math.abs(z.y - y) <= 2);
+    if (passend) {
+      passend.stuecke.push({ x, str: it.str, breite: it.width || 0 });
+      passend.groesse = Math.max(passend.groesse, groesse);
+    } else {
+      zeilen.push({ y, groesse, stuecke: [{ x, str: it.str, breite: it.width || 0 }] });
+    }
+  }
+
+  // Von oben nach unten. Der Nullpunkt eines PDF liegt UNTEN links.
+  zeilen.sort((a, b) => b.y - a.y);
+
+  return zeilen.map(z => {
+    z.stuecke.sort((a, b) => a.x - b.x);
+    let text = '';
+    let letztesEnde = null;
+    for (const s of z.stuecke) {
+      /* Ein Leerzeichen nur dort, wo auf dem Blatt wirklich eine Lücke
+         ist. Sonst wird aus „Wort-" + „teil" ein „Wort- teil". */
+      if (letztesEnde !== null && s.x - letztesEnde > 1 && !/\s$/.test(text) && !/^\s/.test(s.str)) {
+        text += ' ';
+      }
+      text += s.str;
+      letztesEnde = s.x + s.breite;
+    }
+    return { text: text.replace(/\s+/g, ' ').trim(), y: z.y, groesse: z.groesse };
+  }).filter(z => z.text);
+}
+
+/**
+ * Macht aus den Zeilen einer Seite Absätze und Überschriften.
+ *
+ * @param {number} normal  die übliche Schriftgröße des Dokuments
+ */
+function pdfBloeckeAusZeilen(zeilen, normal) {
+  const bloecke = [];
+  let absatz = [];
+  let letztesY = null;
+  let letzteGroesse = null;
+
+  const schliesse = () => {
+    if (!absatz.length) return;
+    bloecke.push({ html: '<p>' + alsHtmlText(absatz.join(' ')) + '</p>' });
+    absatz = [];
+  };
+
+  for (const z of zeilen) {
+    /* Deutlich größer als der Rest? Dann ist es eine Überschrift. Der
+       Schwellwert ist grob, und das ist Absicht: feiner geraten hieße,
+       oft daneben zu liegen, und eine falsche Überschrift stört mehr
+       als eine fehlende. */
+    const stufe = z.groesse >= normal * 1.45 ? 1 : (z.groesse >= normal * 1.18 ? 2 : 0);
+
+    if (stufe) {
+      schliesse();
+      bloecke.push({ html: `<p class="j-title-${stufe}">${alsHtmlText(z.text)}</p>` });
+      letztesY = z.y;
+      letzteGroesse = z.groesse;
+      continue;
+    }
+
+    /* Ein neuer Absatz beginnt bei einer größeren Lücke als dem üblichen
+       Zeilenabstand – anderthalb Zeilen sind die Grenze. Und immer dann,
+       wenn die Schriftgröße wechselt. */
+    const lueckeZuGross = letztesY !== null && (letztesY - z.y) > z.groesse * 1.8;
+    const andereGroesse = letzteGroesse !== null && Math.abs(letzteGroesse - z.groesse) > 0.6;
+    if (lueckeZuGross || andereGroesse) schliesse();
+
+    absatz.push(z.text);
+    letztesY = z.y;
+    letzteGroesse = z.groesse;
+  }
+
+  schliesse();
+  return bloecke;
+}
+
+/**
+ * Liest den Text eines PDF und baut daraus die Seiten eines Hefts.
+ *
+ * @returns {Promise<{seiten:number, quellseiten:number, leer:boolean}>}
+ *   leer = das PDF hatte keine Textebene (eingescannt)
+ */
+async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
+  if (typeof InkwellDocxPaginate === 'undefined') throw new Error('NO_DOCX_MODULE');
+
+  const base64 = String(dataUrl).split(',')[1] || '';
+  const roh = window.atob(base64);
+  const bytes = new Uint8Array(roh.length);
+  for (let i = 0; i < roh.length; i++) bytes[i] = roh.charCodeAt(i);
+
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+
+  // Erst alle Zeilen sammeln, dann die uebliche Schriftgroesse bestimmen:
+  // ohne sie waere „gross" ein Wert aus der Luft.
+  const proSeite = [];
+  for (let nr = 1; nr <= pdf.numPages; nr++) {
+    const seite = await pdf.getPage(nr);
+    proSeite.push(pdfZeilen(await seite.getTextContent()));
+    if (onFortschritt) onFortschritt(nr, pdf.numPages);
+  }
+
+  const alleZeilen = proSeite.flat();
+  if (!alleZeilen.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
+
+  /* Die haeufigste Groesse ist der Fliesstext. Der Mittelwert waere
+     schlechter: ein einziger grosser Titel zieht ihn nach oben, und
+     danach gilt der halbe Text als Ueberschrift. */
+  const zaehler = new Map();
+  for (const z of alleZeilen) {
+    const k = Math.round(z.groesse * 2) / 2;
+    zaehler.set(k, (zaehler.get(k) || 0) + z.text.length);
+  }
+  let normal = 10;
+  let beste = -1;
+  for (const [groesse, gewicht] of zaehler) {
+    if (gewicht > beste) { beste = gewicht; normal = groesse; }
+  }
+
+  const bloecke = [];
+  proSeite.forEach((zeilen, idx) => {
+    const teil = pdfBloeckeAusZeilen(zeilen, normal);
+    // Jede PDF-Seite faengt eine neue Heftseite an. Alles andere waere
+    // eine Vermutung darueber, ob der Text weiterlaeuft.
+    if (idx > 0 && teil.length) teil[0].umbruchDavor = true;
+    bloecke.push(...teil);
+  });
+
+  if (!bloecke.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
+
+  const bg = nb.defaultBg || 'ruled';
+  const seiten = InkwellDocxPaginate.verteile(bloecke, {
+    breite: CFG.PAGE_W, hoehe: CFG.PAGE_H, bg
+  });
+
+  nb.pages = seiten.map(s => {
+    const pg = makePage(bg);
+    // Durch den Sanitizer, obwohl der Text aus dem eigenen Umwandler
+    // kommt: gebaut ist er aus einer FREMDEN Datei.
+    pg.textContent = typeof sanitizePageHtml === 'function'
+      ? sanitizePageHtml(s.html) : s.html;
+    return pg;
+  });
+  nb.sections = [];
+
+  return { seiten: nb.pages.length, quellseiten: pdf.numPages, leer: false };
+}
+window.fillNotebookFromPdfText = fillNotebookFromPdfText;
+
+/* ══════════════════════════════════════════════════════════════════════
    EIN WORD-DOKUMENT ALS NEUES HEFT
 
    Drei Schritte, jeder in seiner eigenen Datei:
