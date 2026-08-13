@@ -62,11 +62,25 @@
 
     const hits = [];
 
-    /* Nur die eigenen Hefte. Ein geteiltes Dokument liegt zwar mit in
-       S.notebooks, gehört aber nicht hierher: der Treffer würde es über
-       openNotebook aufmachen, und zwar ohne den Nur-Lese-Zustand, den
-       ui/sharedDocs.js dafür setzt. */
-    const notebooks = typeof ownNotebooks === 'function' ? ownNotebooks() : S.notebooks;
+    /* ── Auch die geteilten Dokumente ──────────────────────────────
+       Sie waren hier ausgeschlossen, und zwar aus einem guten Grund: der
+       Treffer hätte sie über openNotebook aufgemacht – ohne den
+       Nur-Lese-Zustand, ohne Live-Raum, ohne Aufsicht auf den Kopf. Man
+       hätte in einem fremden Heft geschrieben, und nichts davon wäre
+       angekommen.
+
+       Der Grund ist weg: openHit() nimmt für sie jetzt den richtigen Weg
+       (openSharedDocumentById in ui/sharedDocs.js). Und der Ausschluss
+       war teuer – man sucht etwas, es ist da, und es wird nicht
+       gefunden.
+
+       Gesucht wird in dem, was schon HIER liegt: ein geteiltes Dokument
+       steht erst dann in S.notebooks, wenn es einmal geöffnet wurde. Die
+       ungeöffneten mitzusuchen hieße, bei jeder Eingabe jedes fremde
+       Heft herunterzuladen. */
+    const eigene = typeof ownNotebooks === 'function' ? ownNotebooks() : S.notebooks;
+    const geteilte = typeof sharedNotebooks === 'function' ? sharedNotebooks() : [];
+    const notebooks = eigene.concat(geteilte);
 
     for (const nb of notebooks) {
       if (nb.name && nb.name.toLowerCase().includes(query)) {
@@ -146,6 +160,12 @@
       const title = document.createElement('span');
       title.className = 'search-hit-title';
 
+      /* Woher der Treffer kommt. Ohne die Marke saehen ein eigenes und
+         ein geteiltes Heft gleich aus – und beim geteilten geht nach dem
+         Anklicken der Nur-Lese-Zustand an, was ohne Vorwarnung wie ein
+         Fehler wirkt. */
+      const geteilt = typeof isSharedNotebook === 'function' && isSharedNotebook(hit.nb);
+
       if (hit.kind === 'page') {
         title.textContent = `${hit.nb.name} · ${hit.sec ? hit.sec.name + ' · ' : ''}${t('page') || 'Seite'} ${hit.pageNo}`;
         const snip = document.createElement('span');
@@ -163,6 +183,16 @@
       }
 
       row.appendChild(body);
+
+      /* Die Marke ganz rechts, nach dem Text – sie ist eine Beifuegung,
+         keine Ueberschrift. */
+      if (geteilt) {
+        const marke = document.createElement('span');
+        marke.className = 'search-hit-shared';
+        marke.textContent = t('searchFromShared') || 'geteilt';
+        row.appendChild(marke);
+      }
+
       row.addEventListener('click', () => openHit(hit));
       results.appendChild(row);
     }
@@ -180,6 +210,19 @@
      Zeitgeber: gezeichnet wird einmal, nicht dreimal. */
   function openHit(hit) {
     reset();
+
+    /* Ein geteiltes Dokument geht seinen eigenen Weg: es braucht den
+       Nur-Lese-Zustand und den Live-Raum, und beides haengt an
+       openSharedDocument. Die Seite wird dabei NICHT angesprungen – das
+       Dokument wird erst geladen, und wo die Seite dann sitzt, weiss
+       ui/sharedDocs.js besser als wir. */
+    if (typeof isSharedNotebook === 'function' && isSharedNotebook(hit.nb)) {
+      const docId = String(hit.nb.id).replace(/^shared:/, '');
+      if (typeof window.openSharedDocumentById === 'function') {
+        window.openSharedDocumentById(docId);
+      }
+      return;
+    }
 
     if (hit.kind === 'notebook') { openNotebook(hit.nb.id); return; }
 

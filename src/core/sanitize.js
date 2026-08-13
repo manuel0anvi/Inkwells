@@ -56,6 +56,17 @@
     'FONT',
     'UL', 'OL', 'LI', 'BLOCKQUOTE', 'SECTION',
 
+    /* ── Verweise ────────────────────────────────────────────────────
+       Sie standen bewusst nicht hier: ein <a> traegt eine ADRESSE, und
+       eine Adresse ist der uebliche Weg, ueber den in einer Seite etwas
+       Ausfuehrbares landet (javascript:, data:, vbscript:).
+
+       Seit es sie im Editor gibt (ui/links.js), gehoeren sie dazu – aber
+       nur mit der Pruefung in istAdresse() weiter unten. Was dort nicht
+       durchkommt, verliert sein href und bleibt als blosser Text stehen:
+       lieber ein toter Verweis als ein gefaehrlicher. */
+    'A',
+
     /* ── Tabellen ────────────────────────────────────────────────────
        Sie standen bewusst NICHT hier: bis es sie im Editor gab, war ein
        <table> in einem Seitentext etwas Fremdes, und die Bereinigung hat
@@ -110,6 +121,45 @@
      anders als ein Mass, auch 0 sein: links oben ist eine gueltige Lage. */
   const istStelle = (wert) => /^\d{1,4}$/.test(String(wert).trim());
 
+  /* ══════════════════════════════════════════════════════════════════
+     WELCHE ADRESSE AN EINEM VERWEIS STEHEN DARF
+
+     Ausdruecklich eine Liste des ERLAUBTEN und nicht des Verbotenen.
+     Eine Sperrliste waere hier besonders truegerisch: sie muesste
+     javascript: treffen, aber auch  java\nscript: ,  JaVaScRiPt: ,
+     &#106;avascript: und was der Browser sonst noch als dasselbe liest.
+
+     Drei Arten kommen durch:
+
+       http:  und  https:   das gewoehnliche Netz
+       mailto:              eine Mailadresse
+       inkwell:             die eigene Adresse der App, ueber die ein
+                            Freigabe-Link geoeffnet wird (main.js)
+
+     Gepruefte wird ueber den URL-Parser des Browsers und nicht mit einem
+     eigenen regulaeren Ausdruck: der Parser liest die Adresse GENAU SO,
+     wie sie spaeter auch benutzt wird, und faellt auf keine der
+     Schreibweisen oben herein.
+
+     >>> Warum relative Adressen durchfallen <<<
+     Sie brauchen eine Grundlage, und die ist in der App der oertliche
+     Server und auf der Website inkwells.me. Ein Verweis auf die eigene
+     Seite ergibt in einem Heft keinen Sinn und waere nur ein Weg, auf
+     Dateien der Oberflaeche zu zeigen.
+     ══════════════════════════════════════════════════════════════════ */
+  const ERLAUBTE_SCHEMATA = new Set(['http:', 'https:', 'mailto:', 'inkwell:']);
+
+  function istAdresse(wert) {
+    if (typeof wert !== 'string') return false;
+    const roh = wert.trim();
+    if (!roh || roh.length > 2048) return false;
+    try {
+      return ERLAUBTE_SCHEMATA.has(new URL(roh).protocol);
+    } catch (err) {
+      return false;   // ohne Schema, also relativ – siehe oben
+    }
+  }
+
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {
     return typeof wert === 'string'
@@ -147,6 +197,18 @@
 
       // <font color="…"> – der Weg, auf dem Chromium foreColor ablegt
       if (name === 'color' && el.tagName === 'FONT' && istFarbe(wert)) continue;
+
+      /* Die Adresse eines Verweises, siehe istAdresse(). Kommt sie nicht
+         durch, faellt sie unten mit allem anderen weg – der Text des
+         Verweises bleibt stehen, er ist dann nur nicht mehr anklickbar. */
+      if (name === 'href' && el.tagName === 'A' && istAdresse(wert)) continue;
+
+      /* Ein Verweis oeffnet sich im Standardbrowser (ui/links.js). Die
+         beiden Angaben sind reine Vorsorge fuer die Website, wo er in
+         einem neuen Reiter aufgeht: ohne noopener bekaeme die fremde
+         Seite ueber window.opener Zugriff auf die unsere. */
+      if (name === 'target' && el.tagName === 'A' && wert === '_blank') continue;
+      if (name === 'rel' && el.tagName === 'A' && wert === 'noopener noreferrer') continue;
 
       // Verbundene Zellen, siehe ZELLEN_ATTRIBUTE
       if (ZELLEN_ATTRIBUTE.has(name) && (el.tagName === 'TD' || el.tagName === 'TH')

@@ -472,6 +472,7 @@
       Collab.start(fresh.docId, notebook, crdtState, finalRole === 'edit', {
         isOwner: false,
         ownerUid: fresh.owner,
+        roomKey: fresh.roomKey || '',
         onOwnerAway: applyOwnerHold
       }).catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
     }
@@ -717,6 +718,7 @@
       Collab.start(entry.docId, nb, crdtState, true, {
         isOwner: true,
         ownerUid: me.uid,
+        roomKey: loaded.head.roomKey || '',
         memberUids: api.roomRolesFrom ? api.roomRolesFrom(loaded.head) : {}
       }).catch(err => console.warn('[SharedDocs] Live-Betrieb aus:', err?.message || err));
     }
@@ -1226,6 +1228,28 @@
   };
 
   window.openSharedDocumentByLink = openFromLink;
+
+  /* ══════════════════════════════════════════════════════════════════
+     EIN GETEILTES DOKUMENT ÜBER SEINE KENNUNG ÖFFNEN
+
+     Für die Suche (ui/search.js). Sie darf openNotebook NICHT selbst
+     aufrufen: ein geteiltes Dokument braucht den Nur-Lese-Zustand, den
+     Live-Raum und die Aufsicht auf den Kopf, und all das hängt an
+     openSharedDocument. Ohne diesen Weg wurden geteilte Hefte deshalb
+     gar nicht erst durchsucht.
+
+     @param {string} docId  ohne das „shared:" davor
+     ══════════════════════════════════════════════════════════════════ */
+  window.openSharedDocumentById = async function openSharedDocumentById(docId) {
+    try {
+      const api = await whenShareReady();
+      const head = await api.loadDocumentHead(docId);
+      await openSharedDocument(head);
+    } catch (err) {
+      console.error('[SharedDocs] Dokument konnte nicht geöffnet werden:', err);
+      toast(describeError(err), true);
+    }
+  };
   window.flushSharedDocSave = startSave;
 
   /* Steht im offenen geteilten Dokument etwas zum Zurueckschreiben an?

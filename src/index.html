@@ -344,6 +344,16 @@
             <button class="tb-opt" id="fmt-bold"><b>B</b></button>
             <button class="tb-opt" id="fmt-italic"><i>I</i></button>
             <button class="tb-opt" id="fmt-under"><u>U</u></button>
+            <!-- Verweis. Die Kette ist das gewohnte Bild dafuer; ein
+                 Buchstabe waere neben B/I/U nicht zu unterscheiden. -->
+            <button class="tb-opt" id="fmt-link" data-i18n-title="linkButton" title="Verweis">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M6.4 9.6a2.6 2.6 0 0 0 3.7 0l2.3-2.3a2.6 2.6 0 0 0-3.7-3.7l-1 1"
+                      stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                <path d="M9.6 6.4a2.6 2.6 0 0 0-3.7 0L3.6 8.7a2.6 2.6 0 0 0 3.7 3.7l1-1"
+                      stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </button>
             <div class="tb-sep-sm"></div>
             <!-- EIN Knopf fuer Aufzaehlung und Nummerierung. Die breite
                  Haelfte schaltet die zuletzt benutzte Form an und aus und
@@ -789,6 +799,36 @@
         Der Cloud-Speicher bewahrt ältere Fassungen jeder Datei auf. Hier kannst du zu einer davon zurück.
       </p>
       <div id="versions-list" style="display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EINEN VERWEIS SETZEN
+     Zwei Felder: der Text, der im Heft steht, und die Adresse dahinter.
+     Der Text ist vorbelegt mit dem, was markiert war – das ist der
+     haeufigste Fall und erspart das Abtippen. -->
+<div class="overlay" id="ov-link" style="display:none">
+  <div class="modal" style="width:440px; max-width:92vw;">
+    <div class="modal-head">
+      <h3 id="link-title" data-i18n="linkTitle">Verweis</h3>
+      <button class="modal-close-x" id="link-close">✕</button>
+    </div>
+    <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+      <label class="link-field">
+        <span data-i18n="linkTextLabel">Text</span>
+        <input type="text" id="link-text" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="link-field">
+        <span data-i18n="linkUrlLabel">Adresse</span>
+        <input type="text" id="link-url" autocomplete="off" spellcheck="false"
+               placeholder="https://">
+      </label>
+      <p class="link-error" id="link-error" style="display:none"></p>
+      <div class="modal-btns">
+        <button id="link-remove" class="link-remove-btn" style="display:none" data-i18n="linkRemove">Entfernen</button>
+        <button id="link-cancel" data-i18n="cancel">Abbrechen</button>
+        <button id="link-ok" class="ok-btn" data-i18n="linkInsert">Einfügen</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1629,6 +1669,9 @@
   <script src="lib/katex.min.js"></script>
   <script src="core/formula.js"></script>
   <script src="ui/formula.js"></script>
+  <!-- Verweise im Text. Nach toolbar.js, weil sein Knopf dort in der
+       Formatleiste sitzt. -->
+  <script src="ui/links.js"></script>
   <script src="ui/ruler.js"></script>
   <script src="ui/comments.js"></script>
   <script src="lib/yjs.bundle.js"></script>

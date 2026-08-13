@@ -2547,6 +2547,10 @@
       room = await window.InkwellShare.joinDocRoom(id, {
         isOwner: !!opts.isOwner,
         ownerUid: opts.ownerUid || '',
+        /* Der Name des Live-Raums aus dem Kopf. Ohne Angabe ist es die
+           Dokumentkennung – so laufen alle bestehenden Dokumente weiter.
+           Warum es ihn gibt: siehe roomKey in core/share.js. */
+        roomKey: opts.roomKey || '',
         // Nur der Besitzer schreibt sie – siehe database.rules.json
         memberUids: opts.memberUids || {}
       });

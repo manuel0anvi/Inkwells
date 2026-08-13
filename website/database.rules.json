@@ -23,12 +23,30 @@
    schreiben dürfte, aber nicht in der Liste steht.
 
    ── Gegen das Besetzen einer fremden Kennung ─────────────────────
-   roles/{docId} darf anlegen, wer sich selbst als owner einträgt –
+   roles/{raum} darf anlegen, wer sich selbst als owner einträgt –
    danach nur noch dieser owner. Ein Fremder könnte also einen Raum
    besetzen, BEVOR der echte Besitzer ihn zum ersten Mal betritt.
-   Dagegen prüft der Client beim Betreten, dass roles/{docId}/owner mit
+   Dagegen prüft der Client beim Betreten, dass roles/{raum}/owner mit
    dem Besitzer aus Firestore übereinstimmt, und bleibt sonst aus
    (joinDocRoom). Die Regeln allein können das nicht entscheiden.
+
+   >>> Und wenn es doch passiert ist? <<<
+   Bis vor kurzem: gar nichts. Der Raum hieß wie das Dokument, die Regel
+   ließ nur den eingetragenen owner schreiben, und der echte Besitzer kam
+   nie mehr hinein – die Live-Zusammenarbeit dieses Dokuments war
+   dauerhaft tot. An eine Dokumentkennung kommt aber schon, wer einen
+   reinen LESE-Link öffnet.
+
+   Deshalb heißt der Raum jetzt nicht mehr zwingend wie das Dokument. Im
+   Firestore-Kopf steht `roomKey`; fehlt er, ist es wie bisher die
+   Dokumentkennung. Findet der Besitzer seinen Raum besetzt, würfelt er
+   einen neuen und trägt ihn dort ein (joinDocRoom in core/share.js). Die
+   Eingeladenen lesen ihn beim nächsten Öffnen aus dem Kopf; der Besetzer
+   sitzt in einem Raum, in den niemand mehr kommt.
+
+   Ändern darf `roomKey` nur der Besitzer – editorUpdate() in
+   website/firestore.rules zählt die erlaubten Felder einzeln auf, und er
+   steht nicht dabei.
 */
 {
   "rules": {

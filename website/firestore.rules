@@ -414,7 +414,15 @@ service cloud.firestore {
       /* Seit der Inhalt in einzelne Seiten zerlegt ist, schreibt niemand
          mehr das ganze Heft. Am Kopf bleiben für Bearbeiter nur die
          Angaben, die zum Inhalt gehören: Reihenfolge, Abschnitte, Stand.
-         Titel, Rechte und Mitgliederliste bleiben Sache des Besitzers. */
+         Titel, Rechte und Mitgliederliste bleiben Sache des Besitzers.
+
+         `roomKey` steht bewusst NICHT in der Liste. Er sagt, unter
+         welchem Namen der Live-Raum in der Realtime Database läuft, und
+         der Besitzer wechselt ihn, wenn jemand seinen Raum besetzt hat
+         (joinDocRoom in core/share.js, ausführlich in
+         website/database.rules.json). Dürfte ein Bearbeiter ihn ändern,
+         könnte er alle anderen aus dem Raum aussperren – und der
+         Besitzer müsste jedes Mal hinterherwechseln. */
       function editorUpdate() {
         return isVerifiedUser()
                && canEdit()

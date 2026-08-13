@@ -873,6 +873,25 @@ function describeDoc(docId, data) {
        eigene Kennung beim Öffnen selbst ein (registerMyUid), damit der
        Besitzer daraus die Rollenliste des Raums bauen kann. */
     memberUids: (data.memberUids && typeof data.memberUids === 'object') ? data.memberUids : {},
+    /* ── Unter welchem Namen der Live-Raum läuft ────────────────────
+       Fehlt er, ist es die Dokumentkennung selbst – so lief es bisher,
+       und so laufen alle bestehenden Dokumente weiter.
+
+       >>> Wozu er dann überhaupt gut ist <<<
+       Die Regeln der Realtime Database lassen roles/{raum} anlegen, wer
+       sich selbst als owner einträgt; erst danach ist der Raum vergeben.
+       Wer eine Dokumentkennung kannte – und die bekommt jeder, der einen
+       reinen LESE-Link öffnet –, konnte den Raum also besetzen, BEVOR der
+       echte Besitzer ihn zum ersten Mal betritt. Der Client merkte das
+       zwar (ROOM_OWNER_MISMATCH), aber danach kam der Besitzer nie mehr
+       hinein: die Regel lässt nur den eingetragenen owner schreiben. Die
+       Live-Zusammenarbeit dieses Dokuments war dauerhaft tot, ohne einen
+       Ausweg in der App.
+
+       Mit dem Raumnamen gibt es einen: der Besitzer würfelt einen neuen
+       und trägt ihn in den Kopf ein (joinDocRoom). Der Besetzer sitzt
+       dann in einem Raum, in den niemand mehr kommt. */
+    roomKey: typeof data.roomKey === 'string' && data.roomKey ? data.roomKey : docId,
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
     updatedAt: toDate(data.updatedAt),
     createdAt: toDate(data.createdAt),
@@ -2301,9 +2320,21 @@ async function joinDocRoom(docId, options = {}) {
   const { ref, child, push, set, remove, onValue, onChildAdded, onDisconnect,
           query: rtQuery, limitToLast, serverTimestamp: rtNow, get: rtGet } = mod;
 
-  const meRef = ref(rtdb, `presence/${docId}/${me.uid}`);
-  const opsRef = ref(rtdb, `ops/${docId}`);
-  const rolesRef = ref(rtdb, `roles/${docId}`);
+  /* Der Name des Raums – normalerweise die Dokumentkennung. Weicht er
+     ab, hat der Besitzer den Raum einmal gewechselt; siehe roomKey in
+     describeDoc() und die Übernahme weiter unten. */
+  let raum = options.roomKey || docId;
+
+  let meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
+  let opsRef = ref(rtdb, `ops/${raum}`);
+  let rolesRef = ref(rtdb, `roles/${raum}`);
+
+  const zeigeAufRaum = (neuerRaum) => {
+    raum = neuerRaum;
+    meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
+    opsRef = ref(rtdb, `ops/${raum}`);
+    rolesRef = ref(rtdb, `roles/${raum}`);
+  };
 
   /* ── Steht die Leitung? ───────────────────────────────────────────
      Die Realtime Database nimmt Schreibvorgaenge auch ohne Verbindung
@@ -2343,11 +2374,40 @@ async function joinDocRoom(docId, options = {}) {
       r[uid] = true;
       if (rolle === 'edit') w[uid] = true;
     }
+    const rollen = { owner: me.uid, r, w };
+
+    /* ── Ist der Raum besetzt? ──────────────────────────────────────
+       roles/{raum} darf anlegen, wer sich selbst als owner einträgt.
+       Steht dort eine fremde Kennung, ist der Raum vergeben – und die
+       Regel lässt uns dort nie mehr hinein. Vorher endete das hier
+       endgültig: der Besitzer bekam eine Absage von der Datenbank, und
+       die Live-Zusammenarbeit dieses Dokuments blieb für immer aus.
+
+       Der Ausweg ist ein anderer Raum. Er wird gewürfelt und in den
+       Firestore-Kopf geschrieben; die Eingeladenen lesen ihn beim
+       nächsten Öffnen von dort. Wer den alten besetzt hält, sitzt
+       danach allein darin. */
+    let vorhanden = null;
+    try {
+      const snap = await mitZeitgrenze(rtGet(rolesRef), 8000);
+      vorhanden = snap && snap.exists() ? (snap.val() || {}).owner : null;
+    } catch (err) {
+      // Nicht lesen können heißt nicht besetzt – weitermachen und schreiben
+      console.warn('[Share] Rollenliste nicht lesbar:', err.message);
+    }
+
+    if (vorhanden && vorhanden !== me.uid) {
+      console.warn('[Share] Der Raum ist von einer fremden Kennung belegt – neuer Raum');
+      const neuerRaum = makeShareId();
+      await step('Raum wechseln', () => updateDoc(doc(db, DOCS, docId), { roomKey: neuerRaum }));
+      zeigeAufRaum(neuerRaum);
+    }
+
     /* Ohne Zeitgrenze: steht die Leitung nicht, kommt set() nie zurueck
        und das Oeffnen des Hefts bliebe haengen. Der Schreibvorgang ist
        damit nicht verloren - die Datenbank reicht ihn nach, sobald sie
        wieder kann. */
-    await mitZeitgrenze(set(rolesRef, { owner: me.uid, r, w }), 8000);
+    await mitZeitgrenze(set(rolesRef, rollen), 8000);
   } else {
     /* >>> Gehört dieser Raum wirklich dem, dem das Dokument gehört? <<<
        roles/{docId} darf anlegen, wer sich selbst als owner einträgt.
@@ -2361,8 +2421,13 @@ async function joinDocRoom(docId, options = {}) {
       const snap = await rtGet(rolesRef);
       const eingetragen = snap.exists() ? (snap.val() || {}).owner : null;
       if (eingetragen && eingetragen !== wanted) {
+        /* Für den Eingeladenen ist hier Schluss – aber nicht endgültig:
+           sobald der Besitzer das Dokument das nächste Mal öffnet, wechselt
+           er den Raum (oben), und beim nächsten Öffnen steht der neue Name
+           im Kopf. Deshalb sagt die Meldung, worauf man wartet. */
         throw new Error('ROOM_OWNER_MISMATCH: Der Raum gehört einer anderen '
-          + 'Kennung als das Dokument – Live-Betrieb bleibt aus.');
+          + 'Kennung als das Dokument. Sobald der Besitzer das Dokument '
+          + 'öffnet, wird ein neuer Raum angelegt.');
       }
     }
 
@@ -2387,7 +2452,7 @@ async function joinDocRoom(docId, options = {}) {
        Störung: ohne anwesenden Besitzer dürfen die Eingeladenen ohnehin
        nur lesen. Der Streifen sagt es dann. */
     try {
-      await warteAufEinlass(mod, rtdb, docId, me.uid);
+      await warteAufEinlass(mod, rtdb, raum, me.uid);
     } catch (err) {
       /* Ohne Leitung ist "der Besitzer hat dich nicht aufgenommen" die
          falsche Auskunft - wir haben schlicht nie nachsehen koennen. */
@@ -2620,7 +2685,7 @@ async function joinDocRoom(docId, options = {}) {
   }
 
   function onPresence(callback) {
-    return beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${docId}`), (snap) => {
+    return beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${raum}`), (snap) => {
       gut();
       const all = snap.val() || {};
       // lost = die stehen gebliebene Marke eines Besitzers, dem die
@@ -2675,7 +2740,7 @@ async function joinDocRoom(docId, options = {}) {
       report();
     }, () => { connected = false; report(); });
 
-    const stopOwner = beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+    const stopOwner = beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${raum}/${ownerUid}`), (snap) => {
       gut();
       /* >>> Kein Eintrag zählt schon als weg <<<
          Ob der Besitzer abgestürzt ist oder ordentlich zugemacht hat,

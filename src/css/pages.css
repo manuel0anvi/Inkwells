@@ -1824,3 +1824,27 @@ body.touch-draw .j-canvas {
     font-size: 13px
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   VERWEISE IM SEITENTEXT
+
+   Sie sehen aus wie im Web – unterstrichen und in der Goldfarbe der App –
+   aber sie verhalten sich wie TEXT: ein gewoehnlicher Klick setzt die
+   Schreibmarke, geoeffnet wird mit Strg und Klick (ui/links.js). Der
+   Zeiger wechselt deshalb auch erst dann; ein Zeigefinger, der nichts
+   tut, waere ein Versprechen, das keiner einloest.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.j-text a[href] {
+  color: #2a5fa8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  cursor: text;
+}
+
+.links-aktiv .j-text a[href] {
+  cursor: pointer;
+  background: rgba(42, 95, 168, .12);
+  border-radius: 2px;
+}

@@ -1258,7 +1258,23 @@
 }
 .search-hit:hover { border-color: var(--gd); transform: translateX(2px); }
 .search-hit-dot { width: 4px; border-radius: 2px; flex-shrink: 0; }
-.search-hit-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.search-hit-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+
+/* Kommt der Treffer aus einem geteilten Dokument? Nach dem Anklicken
+   geht dort der Nur-Lese-Zustand an – ohne Marke saehe das wie ein
+   Fehler aus. */
+.search-hit-shared {
+  align-self: center;
+  flex-shrink: 0;
+  font-family: 'DM Mono', Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--md);
+  border: 1px solid var(--sb2);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
 .search-hit-title {
   font-family: 'DM Mono', Consolas, monospace;
   font-size: 10px;
@@ -2069,3 +2085,42 @@
   border-color: var(--gold);
   color: var(--sh);
 }
+
+/* ═══ Verweis setzen ═══ */
+
+.link-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.link-field > span {
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--md);
+}
+
+.link-field input {
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  border: 1px solid var(--sb);
+  background: var(--sh);
+  color: var(--hi);
+}
+.link-field input:focus {
+  outline: none;
+  border-color: var(--gd);
+}
+
+.link-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--red);
+}
+
+/* Links neben Abbrechen/Einfuegen. „Entfernen" ist das Gegenteil der
+   beiden anderen und gehoert nicht in ihre Reihe. */
+.link-remove-btn { margin-right: auto; }
