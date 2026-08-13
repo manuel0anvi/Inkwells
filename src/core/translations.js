@@ -615,6 +615,10 @@ const TRANSLATIONS = {
     versionReasonBefore: 'vor dem Zurückholen',
     versionReasonConflict: 'eigene Fassung beim Konflikt',
     versionReasonRemote: 'Fassung aus der Cloud beim Konflikt',
+    // Versionssperre bei geteilten Dokumenten (core/share.js)
+    versionLockYouOlder: 'Dieses Dokument gehört zu Inkwell {ihre}, du hast {meine}. Bitte aktualisiere die App, dann kannst du es öffnen.',
+    versionLockOwnerOlder: 'Der Besitzer arbeitet mit einer älteren Fassung von Inkwell ({ihre}) als du ({meine}). Solange das so ist, lässt sich das Dokument nicht öffnen.',
+    cloudUpdatedFromOther: '„{name}“ wurde auf einem anderen Gerät geändert.',
     conflictSuffix: 'Konflikt',
     conflictCreated: 'Ein Heft wurde auf einem anderen Gerät geändert. Deine Fassung wurde als „{name}“ gesichert.',
     pdfBuilding: 'PDF wird erstellt…',
@@ -1388,6 +1392,10 @@ const TRANSLATIONS = {
     versionReasonBefore: 'before restoring',
     versionReasonConflict: 'own version at the conflict',
     versionReasonRemote: 'cloud version at the conflict',
+    // Version lock for shared documents (core/share.js)
+    versionLockYouOlder: 'This document belongs to Inkwell {ihre}, you have {meine}. Please update the app, then you can open it.',
+    versionLockOwnerOlder: 'The owner is using an older version of Inkwell ({ihre}) than you ({meine}). While that is the case, the document cannot be opened.',
+    cloudUpdatedFromOther: '"{name}" was changed on another device.',
     conflictSuffix: 'conflict',
     conflictCreated: 'A notebook was changed on another device. Your version was saved as "{name}".',
     pdfBuilding: 'Building PDF…',
@@ -2152,6 +2160,10 @@ const TRANSLATIONS = {
     versionReasonBefore: 'prima del ripristino',
     versionReasonConflict: 'versione propria al conflitto',
     versionReasonRemote: 'versione cloud al conflitto',
+    // Blocco di versione per i documenti condivisi (core/share.js)
+    versionLockYouOlder: 'Questo documento appartiene a Inkwell {ihre}, tu hai {meine}. Aggiorna l\'app per poterlo aprire.',
+    versionLockOwnerOlder: 'Il proprietario usa una versione di Inkwell più vecchia ({ihre}) della tua ({meine}). Finché è così, il documento non può essere aperto.',
+    cloudUpdatedFromOther: '"{name}" è stato modificato su un altro dispositivo.',
     conflictSuffix: 'conflitto',
     conflictCreated: 'Un quaderno è stato modificato su un altro dispositivo. La tua versione è stata salvata come "{name}".',
     pdfBuilding: 'Creazione PDF…',

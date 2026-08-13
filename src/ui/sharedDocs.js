@@ -426,7 +426,44 @@
 
   /* ── Ein Dokument öffnen ────────────────────────────────────────── */
 
+  /* ══════════════════════════════════════════════════════════════════
+     GLEICHE FASSUNG ODER GAR NICHT
+
+     Die Prüfung steht in openSharedDocument und nicht an den beiden
+     Wegen davor (Kachel und Link), weil BEIDE hier hindurchkommen. Eine
+     Sperre, die man über den Link umgehen kann, ist keine.
+
+     Sie steht ganz am Anfang, vor dem Laden: was hier abgewiesen wird,
+     soll gar nicht erst über die Leitung gehen.
+
+     Warum das nötig ist, steht bei versionPasst() in core/share.js.
+     ══════════════════════════════════════════════════════════════════ */
+  async function versionsSperre(head) {
+    const api = window.InkwellShare;
+    if (!api || typeof api.versionPasst !== 'function') return false;
+
+    const urteil = await api.versionPasst(head);
+    if (urteil.ok) return false;
+
+    const satz = urteil.wer === 'besitzer'
+      ? (t('versionLockOwnerOlder')
+          || 'Der Besitzer arbeitet mit einer älteren Fassung von Inkwell ({ihre}) als du ({meine}). '
+           + 'Solange das so ist, lässt sich das Dokument nicht öffnen.')
+      : (t('versionLockYouOlder')
+          || 'Dieses Dokument gehört zu Inkwell {ihre}, du hast {meine}. '
+           + 'Bitte aktualisiere die App, dann kannst du es öffnen.');
+
+    const text = satz.replace('{ihre}', urteil.ihre).replace('{meine}', urteil.meine);
+    if (typeof showAlert === 'function') await showAlert(text);
+    else if (typeof toast === 'function') toast(text, true);
+
+    console.warn('[SharedDocs] Versionssperre:', urteil.meine, 'vs', urteil.ihre);
+    return true;
+  }
+
   async function openSharedDocument(head) {
+    if (await versionsSperre(head)) return;
+
     const api = await whenShareReady();
 
     /* Ohne Konto (oder mit einer Adresse, die nicht eingetragen ist) bleibt

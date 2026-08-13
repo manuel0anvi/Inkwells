@@ -173,6 +173,15 @@ class CloudSyncManager {
     setInterval(() => this._processQueue(), 5000);
     setInterval(() => this._watchSessionExpiry(), 20000);
 
+    /* Nachsehen, ob ein anderes Gerät etwas geändert hat. Kostet im
+       Normalfall eine einzige Anfrage – siehe sucheNeuesAusDerCloud().
+       Ohne diesen Takt bekam die laufende App von einem zweiten Rechner
+       gar nichts mit, man musste sie neu starten. */
+    setInterval(() => {
+      this.sucheNeuesAusDerCloud().catch(err =>
+        console.warn('[CloudSync] Nachsehen fehlgeschlagen:', err.message));
+    }, 45000);
+
     // Was beim letzten Mal ohne Internet liegen blieb, soll nicht erst
     // beim nächsten Tippen hochgehen. Bewusst ohne await, damit der Start
     // nicht auf die Cloud wartet.
@@ -183,10 +192,18 @@ class CloudSyncManager {
     // Nach Ruhezustand oder langer Pause kann das Token abgelaufen sein,
     // bevor der Intervall-Wecker wieder zum Zug kommt. Sobald das Fenster
     // wieder sichtbar ist, deshalb sofort nachsehen.
+    /* Und beim Zurückkommen sofort, nicht erst im nächsten Takt. Wer vom
+       Laptop an den PC wechselt, klickt Inkwell an und will DANN den
+       neuen Stand sehen – 45 Sekunden zu warten fühlt sich kaputt an. */
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) this._watchSessionExpiry();
+      if (document.hidden) return;
+      this._watchSessionExpiry();
+      this.sucheNeuesAusDerCloud().catch(() => {});
     });
-    window.addEventListener('focus', () => this._watchSessionExpiry());
+    window.addEventListener('focus', () => {
+      this._watchSessionExpiry();
+      this.sucheNeuesAusDerCloud().catch(() => {});
+    });
 
     this._watchSessionExpiry();
     this._notify();
@@ -1257,16 +1274,100 @@ class CloudSyncManager {
   async _catchUpAfterStart() {
     if (!this._canSync() || !this.isOnline) return;
 
-    if (this.syncQueue.length) {
-      await this._processQueue();
-      // refreshRemote() bleibt aus, also den Papierkorb hier eigens nachziehen
-      await this._catchUpTrash();
-      return;
+    /* >>> Hier wurde der Abgleich uebersprungen <<<
+       Stand etwas in der Warteschlange, lief nur der Upload und die
+       Funktion war zu Ende – heruntergeladen wurde NICHTS. Wer auf zwei
+       Geraeten arbeitet, hatte damit den Fall: am Laptop etwas
+       schreiben, beide Apps neu starten, und am PC passiert nichts. Auch
+       kein Konflikt wurde bemerkt, denn der wird beim Herunterladen
+       geprueft.
+
+       Jetzt laeuft erst der Upload und DANN der Abgleich. Die
+       Reihenfolge muss so sein: was hier liegen geblieben ist, gehoert
+       hinauf, bevor die Gegenseite beurteilt wird. */
+    if (this.syncQueue.length) await this._processQueue();
+
+    await this.refreshRemote();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     REGELMÄSSIG NACHSEHEN, OB ES ETWAS NEUES GIBT
+
+     >>> Warum es das vorher nicht gab <<<
+     refreshRemote() lief beim Anmelden, beim Start und auf Knopfdruck –
+     sonst nie. Solange die App offen war, bekam sie von einem anderen
+     Gerät also gar nichts mit. Man musste die App neu starten, um zu
+     sehen, was am anderen Rechner geschrieben wurde.
+
+     >>> Warum NICHT einfach refreshRemote() im Takt <<<
+     Der lädt jede Heftdatei vollständig herunter. Alle Minute alle
+     Hefte zu ziehen wäre unverschämt – gegenüber der Leitung, dem Akku
+     und dem Kontingent des Anbieters.
+
+     Deshalb zweistufig: die Dateiliste kostet EINE Anfrage und bringt
+     den Änderungszeitpunkt gleich mit. Geladen wird nur, was seit dem
+     letzten Abgleich dieses Hefts wirklich neuer geworden ist. Im
+     Normalfall – niemand hat etwas geändert – bleibt es bei der einen
+     Anfrage.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Ein paar Sekunden Luft: die Uhren zweier Rechner gehen nie genau
+     gleich, und der eigene Upload setzt selbst einen Zeitstempel. Ohne
+     die Toleranz hielte sich die App fuer dauernd veraltet. */
+  _NEUES_TOLERANZ_MS = 3000;
+
+  async sucheNeuesAusDerCloud() {
+    if (!this._canSync() || !this.isOnline || this.syncing) return 0;
+
+    let files;
+    try {
+      files = await this._listNotebookFiles();
+    } catch (err) {
+      console.warn('[CloudSync] Nachsehen fehlgeschlagen:', err.message);
+      return 0;
     }
 
-    // Keine gemerkte Liste (etwa nach einem Absturz): über die Zeitstempel
-    // herausfinden, welche Hefte hier neuer sind als in der Cloud.
-    await this.refreshRemote();
+    const lokale = (typeof S !== 'undefined' && S.notebooks) ? S.notebooks : [];
+    const zuLaden = [];
+
+    for (const file of files) {
+      const treffer = lokale.find(nb =>
+        nb.origin !== 'shared' && this.provider.matchesNotebook(file, nb));
+
+      // Gibt es hier gar nicht – dann ist es neu und muss her
+      if (!treffer) { zuLaden.push(file); continue; }
+
+      /* Neuer als der Stand, den wir zuletzt abgeglichen haben? Der
+         Vergleich läuft gegen syncedAt und nicht gegen updatedAt: sonst
+         zöge jede eigene, noch nicht hochgeladene Änderung die Datei
+         herunter. */
+      const dort = this._toTime(file.modifiedTime);
+      const hier = this._toTime(treffer.syncedAt);
+      if (dort > hier + this._NEUES_TOLERANZ_MS) zuLaden.push(file);
+    }
+
+    if (!zuLaden.length) return 0;
+
+    console.log('[CloudSync]', zuLaden.length, 'Heft(e) haben sich anderswo geändert');
+    let uebernommen = 0;
+
+    for (const file of zuLaden) {
+      try {
+        const json = await this.provider.downloadFile(this._http, file.id);
+        const nb = this._denormalizeNotebook(json, file);
+        if (!nb) continue;
+        await this._mergeRemoteNotebook(nb);
+        uebernommen++;
+      } catch (err) {
+        console.warn('[CloudSync] Datei nicht lesbar:', file.name, err.message);
+      }
+    }
+
+    if (uebernommen) {
+      if (typeof renderHomeGrid === 'function') renderHomeGrid();
+      this._notify();
+    }
+    return uebernommen;
   }
 
   /**
@@ -1847,6 +1948,35 @@ class CloudSyncManager {
       await FileManager_.saveNotebook(normalized, { syncCloud: false, touch: false });
     } catch (err) {
       console.warn('[CloudSync] Konnte nicht lokal gespeichert werden:', err);
+    }
+
+    /* ── Es hat sich etwas geändert – das darf man merken ────────────
+       Bisher geschah das lautlos. Wer am Laptop etwas geschrieben hatte
+       und am PC davorsass, sah bestenfalls, dass sein Heft anders
+       aussieht, ohne zu wissen warum – und schlimmstenfalls gar nichts,
+       weil das OFFENE Heft im Fenster stehen blieb.
+
+       Beides wird hier nachgeholt. Nur bei einem UPDATE, nicht beim
+       ersten Herunterladen: sonst prasselte beim ersten Anmelden für
+       jedes Heft eine Meldung herein. */
+    if (!existing) return;
+
+    if (typeof toast === 'function') {
+      toast((typeof t === 'function' && t('cloudUpdatedFromOther')
+        || '„{name}" wurde auf einem anderen Gerät geändert.')
+        .replace('{name}', normalized.name || ''));
+    }
+    if (typeof renderHomeGrid === 'function') renderHomeGrid();
+
+    /* >>> Das offene Heft MUSS neu aufgebaut werden <<<
+       S.notebooks trägt jetzt die neue Fassung, das Fenster zeigt aber
+       noch die alte. Ohne diesen Aufbau schriebe der Nutzer in einem
+       Stand weiter, den es nicht mehr gibt – und die nächste Sicherung
+       machte daraus die Wahrheit. */
+    if (typeof S !== 'undefined' && S.activeNbId === normalized.id
+        && typeof openNotebook === 'function') {
+      try { openNotebook(normalized.id); }
+      catch (err) { console.warn('[CloudSync] Heft konnte nicht neu aufgebaut werden:', err); }
     }
   }
 

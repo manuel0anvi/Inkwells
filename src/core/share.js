@@ -824,6 +824,80 @@ async function isOwnShare(shareId) {
    ══════════════════════════════════════════════════════════════════════ */
 
 /** Wirft, wenn kein echtes Konto angemeldet ist. */
+/* ══════════════════════════════════════════════════════════════════════
+   VERSIONSSPERRE
+
+   Wer ein geteiltes Dokument öffnen will, muss dieselbe Fassung von
+   Inkwell haben wie der Besitzer. Sonst kommt er gar nicht hinein – auch
+   nicht zum Lesen, und auch nicht über einen Link.
+
+   >>> Warum so streng, und warum in BEIDE Richtungen <<<
+   Ein geteiltes Dokument ist kein Dateiformat, das man verträglich
+   halten kann. Es ist ein laufender Raum: Yjs-Stände, ein
+   Änderungsstrom, eine Rollenliste, ein Merkzettel über den letzten
+   Stand. Ändert sich daran etwas zwischen zwei Fassungen, dann schreiben
+   zwei verschiedene Stände in dieselbe Ablage – und was dabei
+   herauskommt, merkt niemand sofort, sondern Tage später an fehlender
+   Arbeit.
+
+   Deshalb ist auch die ältere Seite gesperrt, nicht nur die neuere:
+   „meine ist neuer, also kann ich das schon lesen" stimmt genau so
+   wenig. Wer schreibt, schreibt in einer Form, die der andere nicht
+   kennt.
+
+   Verglichen wird die Fassung, wie sie ist – nicht „grösser oder
+   kleiner". Ein Vergleich mit grösser/kleiner wäre eine Aussage über
+   Verträglichkeit, und die trifft hier niemand.
+
+   Ein Kopf ohne Angabe stammt aus der Zeit vor dieser Sperre. Der bleibt
+   offen: sonst wäre jedes bestehende Dokument mit einem Schlag für alle
+   zu, und niemand käme mehr an seine Sachen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Die Fassung, die hier läuft. Leer, wenn sie nicht zu ermitteln ist. */
+let _eigeneVersion = '';
+
+async function eigeneAppVersion() {
+  if (_eigeneVersion) return _eigeneVersion;
+  try {
+    if (typeof window !== 'undefined' && window.api && window.api.getAppVersion) {
+      _eigeneVersion = String(await window.api.getAppVersion() || '').trim();
+    }
+  } catch (err) { /* dann eben ohne */ }
+  return _eigeneVersion;
+}
+
+/**
+ * Passt die eigene Fassung zu der des Dokuments?
+ *
+ * @returns {Promise<{ok:boolean, meine:string, ihre:string, wer:'ich'|'besitzer'|''}>}
+ *   `wer` sagt, WESSEN Fassung die ältere ist – daraus wird der Satz für
+ *   den Nutzer. Bei ok ist es leer.
+ */
+async function versionPasst(head) {
+  const ihre = String(head && head.appVersion || '').trim();
+  const meine = await eigeneAppVersion();
+
+  // Ohne Angabe auf einer der beiden Seiten wird nicht gesperrt
+  if (!ihre || !meine) return { ok: true, meine, ihre, wer: '' };
+  if (ihre === meine) return { ok: true, meine, ihre, wer: '' };
+
+  /* Wer ist älter? Nur für den Satz, nicht für die Entscheidung – die
+     ist schon gefallen. Teil für Teil als Zahl, damit 1.10.0 nach 1.9.0
+     kommt und nicht davor. */
+  const teile = (v) => String(v).split('.').map(s => Number.parseInt(s, 10) || 0);
+  const a = teile(meine), b = teile(ihre);
+  let wer = '';
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (x === y) continue;
+    wer = x < y ? 'ich' : 'besitzer';
+    break;
+  }
+
+  return { ok: false, meine, ihre, wer };
+}
+
 function requireIdentity() {
   const me = currentIdentity();
   if (!me || me.anonymous || !me.email) throw new Error('NEEDS_ACCOUNT');
@@ -892,6 +966,10 @@ function describeDoc(docId, data) {
        und trägt ihn in den Kopf ein (joinDocRoom). Der Besetzer sitzt
        dann in einem Raum, in den niemand mehr kommt. */
     roomKey: typeof data.roomKey === 'string' && data.roomKey ? data.roomKey : docId,
+    /* Mit welcher Fassung von Inkwell der Besitzer arbeitet. Leer heisst:
+       aus der Zeit davor – dann wird nicht gesperrt. Siehe
+       versionPasst() weiter unten. */
+    appVersion: typeof data.appVersion === 'string' ? data.appVersion : '',
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
     updatedAt: toDate(data.updatedAt),
     createdAt: toDate(data.createdAt),
@@ -1263,6 +1341,12 @@ async function shareDocument(notebook, options = {}) {
     revision: (existing?.revision || 0) + 1,
     linkMode,
     linkId,
+    /* Die Fassung des Besitzers. Sie entscheidet, wer hereindarf –
+       siehe versionPasst(). Sie steht im Kopf und nicht anderswo, weil
+       jeder sie beim Öffnen ohnehin liest, und weil nur der Besitzer sie
+       ändern darf: editorUpdate() in website/firestore.rules zählt die
+       erlaubten Felder einzeln auf, und sie steht nicht dabei. */
+    appVersion: await eigeneAppVersion(),
     updatedAt: serverTimestamp()
   };
 
@@ -3079,6 +3163,10 @@ const InkwellShare = {
   normalizeEmail,
   looksLikeEmail,
 
+  // Versionssperre: passt meine Fassung zu der des Besitzers?
+  versionPasst,
+  eigeneAppVersion,
+
   // Umwandler – reine Funktionen, für Tests und die Oberfläche
   splitNotebook,
   assembleNotebook,
@@ -3111,5 +3199,6 @@ export {
   loadDocument, loadPage, registerMyUid, roomRolesFrom,
   docUrlFor, appUrlFor, normalizeEmail, looksLikeEmail,
   splitNotebook, assembleNotebook, fingerprintNotebook,
+  versionPasst, eigeneAppVersion,
   joinDocRoom, savePageText, initialsOf, colorForUid
 };

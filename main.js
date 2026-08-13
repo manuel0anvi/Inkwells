@@ -725,20 +725,6 @@ ipcMain.handle('open-external', async (_, url) => {
     return false;
   }
 
-  /* ── Der Browser soll auch nach VORN kommen ───────────────────────
-     shell.openExternal öffnet die Seite verlässlich, aber unter Windows
-     blieb Inkwell im Vordergrund: der Verweis ging auf, und man sah
-     davon nichts. Gemeldet als „macht den Link zwar auf, geht aber
-     nicht zum Browser hin".
-
-     Der Grund ist eine Regel von Windows: nur das Programm, das gerade
-     vorne ist, darf ein anderes nach vorne holen. Ein frisch geöffneter
-     Reiter in einem schon laufenden Browser bekommt das nicht von
-     selbst. Wer den Vordergrund ABGIBT, macht ihn dagegen frei – und
-     der Browser nimmt ihn.
-
-     Erst öffnen, dann abgeben: andersherum wäre das Fenster schon weg,
-     bevor die Seite überhaupt angefordert wurde. */
   try {
     await shell.openExternal(ziel.href);
   } catch (err) {
@@ -746,11 +732,85 @@ ipcMain.handle('open-external', async (_, url) => {
     return false;
   }
 
-  if (process.platform === 'win32' && win && !win.isDestroyed()) {
-    try { win.blur(); } catch (err) { /* dann bleibt es eben vorne */ }
-  }
+  holeBrowserNachVorn();
   return true;
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   DEN BROWSER WIRKLICH NACH VORN HOLEN
+
+   shell.openExternal oeffnet die Seite verlaesslich – aber unter Windows
+   blieb Inkwell davor stehen, und der Reiter ging unsichtbar im
+   Hintergrund auf.
+
+   >>> Warum das so ist <<<
+   Windows laesst nur das Programm, das gerade VORNE ist, ein anderes
+   nach vorne holen. Laeuft der Browser schon, reicht der Aufruf bloss
+   eine Adresse an das bestehende Exemplar weiter – und das hat dieses
+   Recht nicht. Der Reiter entsteht, das Fenster bleibt hinten.
+
+   >>> Was NICHT funktioniert hat <<<
+   win.blur(). Damit gibt Inkwell den Vordergrund ab, aber Windows
+   vergibt ihn dann nach der Stapelreihenfolge – man landete in dem
+   Programm, das VOR Inkwell dran war, und der Browser blieb hinten.
+   Genau so wurde es gemeldet.
+
+   >>> Was funktioniert <<<
+   Das Browserfenster ausdruecklich ansprechen. PowerShell kann das ohne
+   zusaetzliche Bauteile: SetForegroundWindow aus der user32, dazu
+   ShowWindow, falls das Fenster als Symbol in der Leiste liegt.
+
+   Gesucht wird der Prozess ueber die Fenster-Ueberschrift, nicht ueber
+   den Namen des Browsers: welcher es ist, weiss hier niemand, und die
+   frisch geoeffnete Seite ist ohnehin das Fenster, das zuletzt etwas
+   getan hat. Genommen wird das neueste sichtbare Hauptfenster unter den
+   bekannten Browsern.
+
+   Scheitert das, bleibt es beim alten Verhalten – die Seite ist offen,
+   nur eben hinten. Ein Verweis darf daran nicht hängen bleiben, deshalb
+   laeuft alles im Hintergrund und ohne Rueckmeldung.
+   ══════════════════════════════════════════════════════════════════════ */
+const BROWSER_PROZESSE = ['chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'arc'];
+
+function holeBrowserNachVorn() {
+  if (process.platform !== 'win32') return;
+
+  const namen = BROWSER_PROZESSE.map(n => `'${n}'`).join(',');
+  const skript = `
+    Add-Type @"
+      using System;
+      using System.Runtime.InteropServices;
+      public class Vordergrund {
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+        [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+      }
+"@
+    $p = Get-Process -Name ${namen} -ErrorAction SilentlyContinue |
+         Where-Object { $_.MainWindowHandle -ne 0 } |
+         Sort-Object StartTime -Descending |
+         Select-Object -First 1
+    if ($p) {
+      $h = $p.MainWindowHandle
+      if ([Vordergrund]::IsIconic($h)) { [Vordergrund]::ShowWindow($h, 9) | Out-Null }
+      [Vordergrund]::SetForegroundWindow($h) | Out-Null
+    }`;
+
+  /* Kurz warten: ein eben gestarteter Browser hat sein Fenster noch
+     nicht, und ein laufender braucht einen Moment fuer den neuen Reiter.
+     Ohne die Pause griffe der Aufruf ins Leere. */
+  setTimeout(() => {
+    try {
+      const ps = spawn('powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', skript],
+        { detached: true, stdio: 'ignore', windowsHide: true });
+      ps.on('error', (err) => console.warn('[Extern] Vordergrund:', err.message));
+      ps.unref();
+    } catch (err) {
+      console.warn('[Extern] Vordergrund nicht moeglich:', err.message);
+    }
+  }, 600);
+}
 
 /**
  * Token-Anfragen der Anmeldedienste. Muss hier laufen und nicht im Fenster:
