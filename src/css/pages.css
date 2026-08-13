@@ -1835,16 +1835,29 @@ body.touch-draw .j-canvas {
    tut, waere ein Versprechen, das keiner einloest.
    ══════════════════════════════════════════════════════════════════════ */
 
+/* ── Die Schrift bleibt schwarz ──────────────────────────────────────
+   Hier stand das Blau aus dem Web. Auf einem Blatt ist das falsch: ein
+   Heft ist mit einem Stift geschrieben, und ein Wort wechselt nicht die
+   Farbe, weil etwas dahinterliegt. Ausserdem war es nicht mehr von
+   einer selbst gesetzten Textfarbe zu unterscheiden.
+
+   `color: inherit` und nicht eine feste Farbe: wer einen Verweis rot
+   einfaerbt, soll ihn rot bekommen. Erkennbar bleibt er an der
+   Unterstreichung – und beim Zeigen sagt es der Streifen darueber
+   (ui/links.js). */
 .j-text a[href] {
-  color: #2a5fa8;
+  color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
   cursor: text;
 }
 
+/* Mit gedruecktem Strg tut ein Klick etwas – dann darf man es auch
+   sehen. Der Grund ist neutral gehalten, damit er nicht wie eine
+   Textfarbe aussieht. */
 .links-aktiv .j-text a[href] {
   cursor: pointer;
-  background: rgba(42, 95, 168, .12);
+  background: rgba(26, 21, 16, .09);
   border-radius: 2px;
 }

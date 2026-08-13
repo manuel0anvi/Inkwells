@@ -369,17 +369,65 @@
     }
   }
 
-  function zeigeStreifen(href, warten) {
+  /* ══════════════════════════════════════════════════════════════════
+     DER STREIFEN STEHT AM VERWEIS, NICHT AM FENSTERRAND
+
+     Zuerst sass er unten links, wie die Statuszeile eines Browsers. Das
+     wurde als falsch gemeldet, und zu Recht: in einem Browser gehört die
+     Statuszeile zum Fenster, hier gehört die Auskunft zu EINEM Wort
+     mitten im Text. Wer auf Seite drei ein Wort antippt und die Antwort
+     am unteren Bildschirmrand suchen muss, hat den Blick am falschen
+     Ort – und mit dem Finger ist der untere Rand oft von der eigenen
+     Hand verdeckt.
+
+     Also darüber, wie ein Hinweisfähnchen. Nach UNTEN weicht es nur
+     aus, wenn oben kein Platz mehr ist; seitlich bleibt es im Fenster,
+     damit ein Verweis am rechten Rand seine Auskunft nicht abschneidet.
+     ══════════════════════════════════════════════════════════════════ */
+  const STREIFEN_LUFT = 8;
+
+  function zeigeStreifen(href, warten, anker) {
     if (!streifen) return;
     streifenZiel.textContent = zielText(href);
     streifenHinweis.textContent = warten
       ? (t('linkTapAgain') || 'noch einmal tippen zum Öffnen')
       : (t('linkCtrlClick') || 'Strg + Klick zum Öffnen');
+
+    // Erst sichtbar machen, sonst hat er keine messbare Größe
     streifen.style.display = 'flex';
+    streifen.style.visibility = anker ? 'hidden' : '';
+    if (!anker) return;
+
+    const ziel = anker.getBoundingClientRect();
+    const eigen = streifen.getBoundingClientRect();
+
+    // Mittig über dem Verweis, aber innerhalb des Fensters
+    let links = ziel.left + (ziel.width - eigen.width) / 2;
+    links = Math.max(STREIFEN_LUFT,
+      Math.min(links, window.innerWidth - eigen.width - STREIFEN_LUFT));
+
+    let oben = ziel.top - eigen.height - STREIFEN_LUFT;
+    // Kein Platz darüber? Dann darunter – aber nie halb aus dem Bild
+    if (oben < STREIFEN_LUFT) oben = ziel.bottom + STREIFEN_LUFT;
+    oben = Math.min(oben, window.innerHeight - eigen.height - STREIFEN_LUFT);
+
+    streifen.style.left = Math.round(links) + 'px';
+    streifen.style.top = Math.round(oben) + 'px';
+    streifen.style.visibility = '';
   }
 
   function versteckeStreifen() {
-    if (streifen) streifen.style.display = 'none';
+    if (!streifen) return;
+    streifen.style.display = 'none';
+    streifen.style.visibility = '';
+  }
+
+  /* Beim Blättern oder Zoomen wandert der Verweis, das Fähnchen nicht –
+     es stünde dann irgendwo im Nichts. Lieber weg damit; beim Zeigen
+     kommt es sofort wieder, und der Tipp mit dem Finger fängt neu an. */
+  for (const was of ['scroll', 'resize']) {
+    window.addEventListener(was, () => { if (angetippt) vergissTipp(); else versteckeStreifen(); },
+      { passive: true, capture: was === 'scroll' });
   }
 
   function vergissTipp() {
@@ -394,7 +442,7 @@
   document.addEventListener('pointerover', (e) => {
     if (e.pointerType === 'touch') return;   // dort gilt der Tipp-Weg
     const a = verweisUnter(e.target);
-    if (a) zeigeStreifen(a.getAttribute('href') || '', false);
+    if (a) zeigeStreifen(a.getAttribute('href') || '', false, a);
     else if (!angetippt) versteckeStreifen();
   }, true);
 
@@ -475,7 +523,7 @@
       e.stopPropagation();
       if (angetippt === a) { vergissTipp(); folge(href); return; }
       angetippt = a;
-      zeigeStreifen(href, true);
+      zeigeStreifen(href, true, a);
       clearTimeout(angetipptUhr);
       // Nach einer Weile gilt der erste Tipp nicht mehr
       angetipptUhr = setTimeout(vergissTipp, 4000);

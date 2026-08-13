@@ -2210,24 +2210,30 @@ body.hat-konflikt .view {
 /* ══════════════════════════════════════════════════════════════════════
    WOHIN EIN VERWEIS FUEHRT
 
-   Unten links, wie die Statuszeile eines Browsers. Ueber allem, aber
-   ohne Zeigerereignisse: der Streifen darf nie im Weg stehen, gerade
-   nicht bei einem Verweis am unteren Seitenrand.
+   Ein Faehnchen ueber dem Verweis. Es sass zuerst unten links wie die
+   Statuszeile eines Browsers – dort gehoert sie zum FENSTER, hier
+   gehoert die Auskunft aber zu einem Wort mitten im Text. Und mit dem
+   Finger ist der untere Rand oft von der eigenen Hand verdeckt.
+
+   Stelle und Groesse setzt ui/links.js; hier steht nur das Aussehen.
+   `pointer-events: none` ist wesentlich: das Faehnchen liegt ueber dem
+   Text und duerfte sonst genau den Verweis abfangen, dessen Ziel es
+   gerade anzeigt – der zweite Tipp mit dem Finger ginge ins Leere.
    ══════════════════════════════════════════════════════════════════════ */
 .link-peek {
   position: fixed;
-  left: 12px;
-  bottom: 12px;
+  left: 0;
+  top: 0;
   z-index: 880;
   display: flex;
   align-items: baseline;
   gap: 10px;
-  max-width: 60vw;
-  padding: 7px 13px;
+  max-width: min(52vw, 460px);
+  padding: 6px 12px;
   border-radius: 7px;
   background: var(--sc);
   border: 1px solid var(--sb2);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .45);
   pointer-events: none;
 }
 
