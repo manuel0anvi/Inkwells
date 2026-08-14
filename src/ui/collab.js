@@ -945,10 +945,28 @@
 
      Gehört die Sperre einem selbst (das kann nicht sein) oder gibt es
      keine, passiert hier nichts.
+
+     >>> Warum das Verschieben STILL geschieht <<<
+     Gemeldet worden: „jemand anders schreibt, ich fasse das Heft gar
+     nicht an – und trotzdem kommt dauernd der Hinweis." Der Grund war
+     dieser Takt hier. Er läuft alle 600 ms weiter, auch wenn die eigene
+     Marke bloß irgendwo im Text liegt; wandert die Sperre des anderen
+     über sie hinweg, sprang jedes Mal ein Hinweis heraus, ohne dass
+     jemand etwas versucht hätte.
+
+     Der Hinweis gehört an den VERSUCH, nicht an die Sperre. Wer wirklich
+     tippt, bekommt ihn ohnehin aus app.js (lockedHere → warnLocked).
+     Deshalb wird hier nur noch gemeldet, wenn beides zutrifft: der
+     Aufruf kommt von einer eigenen Bewegung (`melden`) UND auf dieser
+     Seite wurde gerade wirklich geschrieben (schreibtGerade).
      ══════════════════════════════════════════════════════════════════ */
   let letzterAusweich = 0;
 
-  function haltCaretAusSperre() {
+  /**
+   * @param {boolean} [melden] Darf ein Hinweis erscheinen? Nur bei einer
+   *   Bewegung, die vom Nutzer selbst ausgeht – der Takt meldet nie.
+   */
+  function haltCaretAusSperre(melden = false) {
     if (!others.length) return;
     /* Ohne Auswahl-Werkzeug gibt es hier nichts zu tun. Der Prüfstand
        scripts/test-collab-sync.js fährt collab.js in einem nachgebauten
@@ -982,7 +1000,11 @@
     try { gesetzt = setFlatCaret(textDiv, ziel); } catch (err) { gesetzt = false; }
     if (!gesetzt) { try { textDiv.blur(); } catch (err) { /* egal */ } }
 
-    // Sagen, warum die Marke wegspringt – sonst wirkt es wie ein Fehler
+    /* Sagen, warum die Marke wegspringt – aber nur dem, der hier auch
+       wirklich arbeitet. Wer nur zusieht, soll das Sperrband sehen und
+       sonst nichts (siehe der Absatz oben). */
+    if (!melden || !schreibtGerade(pageId)) return;
+
     const jetzt = Date.now();
     if (jetzt - letzterAusweich > LOCK_HINT_MS) {
       letzterAusweich = jetzt;
@@ -2681,7 +2703,7 @@
     // kommt – 'input' allein würde die Hälfte verpassen.
     /* Und beim selben Anlass: eine Marke, die in einer gesperrten Zeile
        gelandet ist, wieder herausschieben (haltCaretAusSperre). */
-    const beiAuswahl = () => { haltCaretAusSperre(); reportCaret(); };
+    const beiAuswahl = () => { haltCaretAusSperre(true); reportCaret(); };
     document.addEventListener('selectionchange', beiAuswahl);
     stops.push(() => document.removeEventListener('selectionchange', beiAuswahl));
 
@@ -2714,8 +2736,9 @@
       renderCarets();
       renderLocks();
       /* Auch ohne eigenes Zutun kann die Marke in eine Sperre geraten:
-         der andere beansprucht die Zeile, in der sie gerade steht. */
-      haltCaretAusSperre();
+         der andere beansprucht die Zeile, in der sie gerade steht. Ohne
+         Hinweis – dieser Takt läuft, ob man etwas tut oder nicht. */
+      haltCaretAusSperre(false);
     }, 600);
 
     const scroller = E('pg-scroll');

@@ -111,10 +111,24 @@
     newCountEl.style.display = count > 0 ? 'inline-block' : 'none';
   }
 
+  /* ── Ohne Anmeldung kommt hier gar nichts an ────────────────────────
+     Gefragt wird CloudSync_ und nicht die Firebase-Kennung: die beiden
+     sind zweierlei, und genau daran lag der gemeldete Fehler. Die
+     Firebase-Sitzung hält Wochen, das Zugriffstoken eine Stunde. Lief
+     letzteres ab (oder meldete man sich ab, ohne dass die Abmeldung bei
+     Firebase durchkam), war man in der App abgemeldet – die Beobachtung
+     der Freigaben lief aber weiter und meldete munter neue Dokumente.
+     ─────────────────────────────────────────────────────────────── */
+  function cloudAngemeldet() {
+    return typeof window.CloudSync_?.isAuthenticated === 'function'
+      && window.CloudSync_.isAuthenticated();
+  }
+
   /** Beim Start einmal kurz sagen, was dazugekommen ist. */
   let announced = false;
   function announceNew() {
     if (announced || activeTab === 'shared') return;
+    if (!cloudAngemeldet()) return;
     const fresh = newDocs();
     if (!fresh.length) return;
     announced = true;
@@ -210,8 +224,24 @@
      Meldung von CloudSync neu gezeichnet wird – die kommen häufig. */
   let wasOffline = isOffline();
 
+  /* Und derselbe Merkzettel für die Anmeldung. CloudSync_ meldet jede
+     Kleinigkeit; gehandelt wird nur beim WECHSEL. */
+  let warAngemeldet = cloudAngemeldet();
+
   function onCloudChange() {
     refreshTabVisibility();
+
+    /* Abgemeldet oder Sitzung abgelaufen: Beobachtung beenden. Ohne das
+       lief sie weiter, solange die Firebase-Kennung noch galt – der
+       gemeldete Fehler „nach dem Abmelden kommen weiter Hinweise aus der
+       Cloud". Andersherum genauso: nach der Anmeldung wieder anwerfen. */
+    const jetztAngemeldet = cloudAngemeldet();
+    if (jetztAngemeldet !== warAngemeldet) {
+      warAngemeldet = jetztAngemeldet;
+      if (jetztAngemeldet) startWatching().catch(() => {});
+      else stopWatching();
+    }
+
     const now = isOffline();
     if (now !== wasOffline) {
       wasOffline = now;
@@ -350,6 +380,29 @@
     return t('shareFailed').replace('{msg}', msg || '?');
   }
 
+  /**
+   * Beendet die Beobachtung und räumt alles weg, was aus ihr stammt.
+   *
+   * Wird beim Abmelden und beim Ablauf der Sitzung gebraucht. Die Liste
+   * wird dabei ausdrücklich geleert: sonst stünden nach dem Abmelden
+   * fremde Dokumente in der Übersicht und in der Suche, obwohl niemand
+   * mehr das Recht hat, sie zu öffnen.
+   */
+  function stopWatching() {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+    retryDelay = 2000;
+    if (unwatchList) { unwatchList(); unwatchList = null; }
+
+    docs = [];
+    listError = '';
+    /* Zurücksetzen, damit die nächste Anmeldung wieder einmal sagen darf,
+       was inzwischen dazugekommen ist. */
+    announced = false;
+    renderBadge();
+    if (activeTab === 'shared') renderShared();
+  }
+
   /** Startet (oder erneuert) die Beobachtung der eigenen Empfängerliste. */
   async function startWatching() {
     clearTimeout(retryTimer);
@@ -375,10 +428,28 @@
       return;
     }
 
+    /* ── Und jetzt erst: ist überhaupt noch jemand angemeldet? ────────
+       Die Frage steht ausdrücklich HINTER den beiden Wartezeiten oben.
+       Beim Start läuft dieser Aufruf, bevor Settings.init() durch ist
+       (core/init.js) – davor wüsste CloudSync_ noch von keinem Token und
+       würde jede Sitzung für beendet erklären.
+
+       Dahinter ist die Auskunft verlässlich, und sie ist die
+       entscheidende: die Firebase-Kennung von eben kann längst gelten,
+       während das Zugriffstoken abgelaufen ist. Genau dann lief die
+       Beobachtung bisher weiter und meldete neue Freigaben an jemanden,
+       der gar nicht mehr angemeldet war. */
+    if (!cloudAngemeldet()) { stopWatching(); return; }
+
     listError = '';
     unwatchList = api.watchSharedDocs(
       api.currentIdentity().email,
       (list) => {
+        /* Zwischen dem Anmelden der Beobachtung und ihrer ersten Antwort
+           kann die Sitzung geendet haben. Firestore schickt trotzdem –
+           es kennt die Abmeldung in der App nicht. */
+        if (!cloudAngemeldet()) { stopWatching(); return; }
+
         listError = '';
         retryDelay = 2000;
         docs = list.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
@@ -1378,6 +1449,34 @@
      saveOpenDocument() steigt bei !dirty ohnehin sofort aus - fuer die
      Anzeige beim Beenden muss man es aber VORHER wissen. */
   window.sharedDocHatOffenes = () => !!(live && dirty && !S.readOnly);
+
+  /* ══════════════════════════════════════════════════════════════════
+     WELCHES HEFT STECKT GERADE IN EINEM LIVE-RAUM?
+
+     Gefragt von core/cloudSync.js. Solange eine Freigabe läuft, ist der
+     RAUM die Wahrheit und nicht die Datei im Drive: der Text kommt über
+     Yjs, die Handschrift bogenweise, und beides landet im 4-Sekunden-
+     Takt in Firestore.
+
+     >>> Warum das gebraucht wird <<<
+     Gemeldet worden: „während der Live-Freigabe kommt dauernd, das
+     Dokument habe in der Cloud eine andere Fassung als hier." Und das
+     stimmte sogar – nur war es kein Konflikt, sondern der Normalfall.
+     Der Besitzer lädt seine Datei alle paar Sekunden hoch, während die
+     anderen weiterschreiben; zwischen dem Ende eines Uploads und der
+     nächsten Änderung liegen selten mehr als ein paar Augenblicke. Der
+     Abgleich sah dann zwei frische Zeitstempel und zwei verschiedene
+     Inhalte – genau seine Bedingung für „zwei Fassungen".
+
+     Schlimmer als das Band wäre gewesen, was danach kam: das
+     Herunterladen der Cloud-Fassung und ein openNotebook() mitten in die
+     laufende Sitzung hinein. Damit wäre die Arbeit der letzten Minuten
+     durch einen älteren Stand ersetzt worden.
+
+     Der Wert ist leer, sobald die Sitzung endet – ab da gleicht sich
+     das Heft wieder ganz gewöhnlich ab.
+     ══════════════════════════════════════════════════════════════════ */
+  window.liveShareNbId = () => (live && live.nbId) ? live.nbId : '';
 
   // Beim Start einmal nachsehen. Ohne Anmeldung passiert dabei nichts.
   startWatching().catch(err => console.warn('[SharedDocs] Start:', err?.message || err));

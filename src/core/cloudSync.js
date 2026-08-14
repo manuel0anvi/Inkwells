@@ -584,10 +584,18 @@ class CloudSyncManager {
     try {
       const api = await this._whenShareReady(3000);
       await api.signOutIdentity();
-      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
     } catch (err) {
       console.warn('[CloudSync] Firebase-Abmeldung übersprungen:', err.message);
     }
+
+    /* Die Meldung geht AUF JEDEN FALL hinaus, auch wenn die
+       Firebase-Abmeldung eben nicht durchkam (ohne Netz tut sie das
+       nie). Sie hing vorher im try darüber, und damit hing die halbe
+       Aufräumarbeit daran: ui/sharedDocs.js beendet erst hier seine
+       Beobachtung der Freigaben. Blieb die Meldung aus, lief sie weiter
+       – und man bekam nach dem Abmelden noch Hinweise auf Dokumente,
+       die einem gerade jemand freigegeben hatte. */
+    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
 
     this._notify();
   }
@@ -1068,6 +1076,20 @@ class CloudSyncManager {
     if (typeof toast === 'function') {
       toast(typeof t === 'function' ? t('sessionExpired') : 'Sitzung abgelaufen – bitte erneut anmelden.', true);
     }
+
+    /* ── Auch eine abgelaufene Sitzung ist eine beendete Sitzung ──────
+       Die Firebase-Kennung bleibt bestehen (sie hat ihre eigene, viel
+       längere Laufzeit) – und genau daran hing der gemeldete Fehler: die
+       Beobachtung der Freigaben in ui/sharedDocs.js lief unbeirrt
+       weiter. Man war abgemeldet, sah den roten Kopf in der Titelleiste,
+       und bekam trotzdem Hinweise, jemand habe ein Dokument freigegeben.
+
+       Beim Abmelden von Hand kam diese Meldung schon immer; hier fehlte
+       sie. Die Empfänger entscheiden selbst, was sie damit tun –
+       ui/sharedDocs.js fragt danach ausdrücklich CloudSync_, ob noch
+       jemand angemeldet ist. */
+    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+
     this._notify();
   }
 
@@ -1336,6 +1358,11 @@ class CloudSyncManager {
 
       // Gibt es hier gar nicht – dann ist es neu und muss her
       if (!treffer) { zuLaden.push(file); continue; }
+
+      /* Läuft für das Heft gerade eine Freigabe, wird gar nicht erst
+         geladen. _mergeRemoteNotebook stiege ohnehin aus; das hier spart
+         alle 45 Sekunden eine ganze Heftdatei über die Leitung. */
+      if (this._laeuftLive(treffer.id)) continue;
 
       /* Neuer als der Stand, den wir zuletzt abgeglichen haben? Der
          Vergleich läuft gegen syncedAt und nicht gegen updatedAt: sonst
@@ -1892,10 +1919,34 @@ class CloudSyncManager {
     return remote;
   }
 
+  /**
+   * Läuft für dieses Heft gerade eine Live-Freigabe?
+   *
+   * Dann hat der Abgleich hier nichts zu suchen – Begründung bei
+   * window.liveShareNbId in ui/sharedDocs.js.
+   */
+  _laeuftLive(nbId) {
+    if (!nbId) return false;
+    if (typeof window === 'undefined') return false;
+    if (typeof window.liveShareNbId !== 'function') return false;
+    try { return window.liveShareNbId() === nbId; }
+    catch (err) { return false; }
+  }
+
   async _mergeRemoteNotebook(remoteNotebook) {
     // Liegt das Heft im Papierkorb, darf es nicht wieder auftauchen
     if (typeof Trash !== 'undefined' && Trash?.find?.(remoteNotebook.id)) {
       console.log('[CloudSync] Übersprungen, liegt im Papierkorb:', remoteNotebook.id);
+      return;
+    }
+
+    /* Steckt das Heft gerade in einer Live-Freigabe, gilt der Raum und
+       nicht die Datei. Ohne diesen Ausstieg meldete der Abgleich mitten
+       in der gemeinsamen Arbeit „zwei Fassungen" und tauschte den Inhalt
+       unter den Schreibenden aus. Der Upload läuft weiter – die Datei
+       bleibt die Sicherung, sie ist nur nicht mehr die Quelle. */
+    if (this._laeuftLive(remoteNotebook.id)) {
+      console.log('[CloudSync] Übersprungen, läuft gerade live:', remoteNotebook.id);
       return;
     }
 
