@@ -52,6 +52,11 @@
   let raum = null;          // der Live-Raum, solange einer läuft
   let stopChat = null;
   let stopTipp = null;
+  let stopStatus = null;
+
+  /* Leer heißt: er läuft. Sonst der Grund, warum nicht – siehe
+     onChatStatus in core/share.js. */
+  let gesperrt = '';
 
   /* Was schon angezeigt wird. Firebase liefert jede Nachricht genau
      einmal – aber der Strom meldet sich nach einem Abbruch neu an und
@@ -216,6 +221,44 @@
     liste.appendChild(leer);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WENN DER CHAT NICHT DARF
+
+     Der Zweig `chat` ist in der Realtime Database neu. Solange die dort
+     veröffentlichten Regeln ihn nicht kennen, wird jeder Zugriff
+     abgewiesen (core/share.js sagt es einmal in der Konsole und gibt
+     dann Ruhe).
+
+     Im Fenster darf das nicht als „ich habe nichts geschrieben"
+     ankommen. Deshalb steht der Grund IN der Leiste, und das Feld ist
+     zu: ein Eingabefeld, in das man tippen kann und aus dem nie etwas
+     hinausgeht, ist schlimmer als eines, das gesperrt ist.
+     ══════════════════════════════════════════════════════════════════ */
+  function zeigeSperre() {
+    const liste = el('chat-list');
+    const feld = el('chat-input');
+    const senden = el('chat-send');
+
+    if (feld) { feld.disabled = !!gesperrt; }
+    if (senden) { senden.disabled = !!gesperrt; }
+
+    // Nichts zu melden: einen alten Hinweis wegräumen und fertig
+    liste?.querySelector('.chat-gesperrt')?.remove();
+    if (!gesperrt) { leereHinweis(); return; }
+
+    if (!liste) return;
+    liste.querySelector('.chat-leer')?.remove();
+
+    const kasten = document.createElement('div');
+    kasten.className = 'chat-gesperrt';
+    kasten.textContent = txt('chatRulesMissing',
+      'Der Chat ist in der Live-Datenbank noch nicht freigeschaltet. '
+      + 'Die Regeln aus website/database.rules.json müssen in der Firebase '
+      + 'Console veröffentlicht werden.');
+    liste.appendChild(kasten);
+    nachUnten();
+  }
+
   function zeigeNachricht(m) {
     if (!m || gesehen.has(m.id)) return;
     gesehen.add(m.id);
@@ -304,6 +347,11 @@
 
     feld.value = text;
     passeHoeheAn();
+
+    /* Beim ersten Versuch kann genau hier herauskommen, dass die Regeln
+       den Chat nicht kennen. Dann steht der Grund schon in der Leiste –
+       ein zusätzliches „kam nicht an" sagt nichts dazu. */
+    if (gesperrt) return;
     if (typeof toast === 'function') toast(txt('chatFailed', 'Die Nachricht kam nicht an.'), true);
   }
 
@@ -360,7 +408,19 @@
     if (typeof raum.onChat === 'function') stopChat = raum.onChat(zeigeNachricht);
     if (typeof raum.onTyping === 'function') stopTipp = raum.onTyping(zeigeTippende);
 
+    /* Der Zustand kommt sofort und noch einmal, wenn er kippt. Mit ?.
+       gefragt: eine ältere core/share.js kennt ihn nicht – dann bleibt
+       es beim bisherigen Verhalten. */
+    if (typeof raum.onChatStatus === 'function') {
+      stopStatus = raum.onChatStatus((grund) => {
+        gesperrt = grund || '';
+        zeigeSperre();
+        zeichneIkone();
+      });
+    }
+
     leereHinweis();
+    zeigeSperre();
     zeichneIkone();
   }
 
@@ -372,10 +432,13 @@
 
     if (typeof stopChat === 'function') { try { stopChat(); } catch (e) {} }
     if (typeof stopTipp === 'function') { try { stopTipp(); } catch (e) {} }
+    if (typeof stopStatus === 'function') { try { stopStatus(); } catch (e) {} }
     stopChat = null;
     stopTipp = null;
+    stopStatus = null;
     raum = null;
     tippAn = false;
+    gesperrt = '';
 
     gesehen.clear();
     ungelesen = 0;
@@ -385,7 +448,14 @@
     const streifen = el('chat-typing');
     if (streifen) streifen.style.display = 'none';
     const feld = el('chat-input');
-    if (feld) { feld.value = ''; feld.style.height = ''; feld.style.overflowY = ''; }
+    if (feld) {
+      feld.value = '';
+      feld.style.height = '';
+      feld.style.overflowY = '';
+      feld.disabled = false;
+    }
+    const senden = el('chat-send');
+    if (senden) senden.disabled = false;
 
     setzeOffen(false);
     zeichneIkone();

@@ -579,6 +579,7 @@ const TRANSLATIONS = {
     chatSend: 'Senden',
     chatEmpty: 'Noch nichts gesagt. Was hier steht, gehört nicht ins Heft.',
     chatFailed: 'Die Nachricht kam nicht an.',
+    chatRulesMissing: 'Der Chat ist in der Live-Datenbank noch nicht freigeschaltet. Die Regeln aus website/database.rules.json müssen in der Firebase Console unter Realtime Database → Regeln veröffentlicht werden. Alles andere an der Freigabe läuft davon unberührt weiter.',
     sharedListError: 'Liste konnte nicht geladen werden ({msg}). Wird erneut versucht.',
 
     // Umfang des Hefts (ui/wordCount.js)
@@ -1382,6 +1383,7 @@ const TRANSLATIONS = {
     chatSend: 'Send',
     chatEmpty: 'Nothing said yet. What goes here stays out of the notebook.',
     chatFailed: 'The message did not get through.',
+    chatRulesMissing: 'Chat is not enabled in the live database yet. The rules from website/database.rules.json need to be published in the Firebase Console under Realtime Database → Rules. Everything else about the share keeps working.',
     sharedListError: 'The list could not be loaded ({msg}). Trying again.',
 
     // Size of the notebook (ui/wordCount.js)
@@ -2176,6 +2178,7 @@ const TRANSLATIONS = {
     chatSend: 'Invia',
     chatEmpty: 'Ancora nulla. Quello che scrivi qui resta fuori dal quaderno.',
     chatFailed: 'Il messaggio non è arrivato.',
+    chatRulesMissing: 'La chat non è ancora abilitata nel database live. Le regole di website/database.rules.json devono essere pubblicate nella Firebase Console in Realtime Database → Regole. Tutto il resto della condivisione continua a funzionare.',
     sharedListError: 'Impossibile caricare l\'elenco ({msg}). Nuovo tentativo in corso.',
 
     // Dimensione del quaderno (ui/wordCount.js)

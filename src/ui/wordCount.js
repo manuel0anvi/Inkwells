@@ -149,21 +149,41 @@
 
   /* ── Das Schild ───────────────────────────────────────────────────── */
 
+  let leiste = null;
   let schild = null;
   let letzte = null;
 
+  /**
+   * Die Zeile am Fuss der Blattspalte, und darin das Schild.
+   *
+   * >>> Warum eine eigene Zeile und nicht ein Schild in der Ecke <<<
+   * Zuerst hing das Schild frei in der linken unteren Ecke der Spalte –
+   * und lag damit je nach Fensterbreite, Zoom und geöffneter Navigation
+   * halb über dem weissen Papier. Eine Rechnung („neben das Blatt, wenn
+   * dort Platz ist") wäre nicht zu halten: bei einem schmalen Fenster
+   * gibt es den Rand gar nicht.
+   *
+   * Ausserhalb des Rollbereichs kann es das Blatt gar nicht mehr
+   * berühren – in keiner Stellung, ohne Rechnung.
+   */
   function baueSchild() {
     if (schild) return schild;
     const spalte = document.querySelector('.editor-col');
     if (!spalte) return null;
 
+    leiste = document.createElement('div');
+    leiste.id = 'count-bar';
+    leiste.className = 'count-bar';
+    leiste.style.display = 'none';
+
     schild = document.createElement('button');
     schild.type = 'button';
     schild.id = 'count-badge';
     schild.className = 'count-badge';
-    schild.style.display = 'none';
     schild.addEventListener('click', oeffne);
-    spalte.appendChild(schild);
+
+    leiste.appendChild(schild);
+    spalte.appendChild(leiste);
     return schild;
   }
 
@@ -176,13 +196,15 @@
     const el = baueSchild();
     if (!el) return;
 
-    /* Nur im offenen Heft. Auf der Startseite gibt es kein Blatt, neben
-       dem das Schild stehen könnte. */
+    /* Nur im offenen Heft. Auf der Startseite gibt es kein Blatt, zu dem
+       der Umfang gehören könnte – und die Zeile nähme dort nur Höhe weg.
+       Weggenommen wird deshalb die ganze ZEILE, nicht nur das Schild:
+       eine leere Leiste wäre ein Balken ohne Inhalt. */
     const imHeft = document.getElementById('view-journal');
     const offen = imHeft && imHeft.style.display !== 'none';
-    if (!offen || !letzte) { el.style.display = 'none'; return; }
+    if (!offen || !letzte) { if (leiste) leiste.style.display = 'none'; return; }
 
-    el.style.display = 'inline-flex';
+    if (leiste) leiste.style.display = 'flex';
     el.innerHTML = '';
 
     const a = document.createElement('span');
@@ -338,8 +360,8 @@
   setInterval(() => {
     const imHeft = document.getElementById('view-journal');
     const offen = !!imHeft && imHeft.style.display !== 'none';
-    if (!offen) { if (schild) schild.style.display = 'none'; return; }
+    if (!offen) { if (leiste) leiste.style.display = 'none'; return; }
     if (!letzte) frischAuf(true);
-    else if (schild && schild.style.display === 'none') zeichneSchild();
+    else if (leiste && leiste.style.display === 'none') zeichneSchild();
   }, 1000);
 })();

@@ -1867,35 +1867,58 @@ body.touch-draw .j-canvas {
 /* ══════════════════════════════════════════════════════════════════════
    DER ZÄHLER UNTEN LINKS  (ui/wordCount.js)
 
-   Er liegt IN der Blattspalte und nicht fest am Fenster: mit offener
-   Navigation oder offener Kommentarleiste wandert der Blattbereich, und
-   ein Schild am Fensterrand stünde dann über der Navigation.
+   >>> Er liegt NIE auf dem Blatt <<<
+   Zuerst hing er frei in der linken unteren Ecke der Blattspalte – und
+   damit je nach Fensterbreite, Zoom und geöffneter Navigation halb über
+   dem weissen Papier. Genau so wurde es gemeldet.
 
-   Deshalb steht `.editor-col` auf `position: relative`. Das ändert
-   nebenbei auch, woran `.add-page-btn-wrap` hängt – vorher war das
-   mangels eines gesetzten Vorfahren das ganze Fenster, und der Knopf
-   „Neue Seite" saß in dessen Mitte statt in der Mitte des Blattbereichs.
-   Das ist die richtigere Stelle, nicht bloß eine andere.
+   Eine Rechnung wäre nicht zu halten gewesen: „links neben das Blatt,
+   wenn dort Platz ist" hängt an Fensterbreite, Zoom, Navigation und
+   Kommentarleiste zugleich, und bei einem schmalen Fenster gibt es den
+   Rand gar nicht. Irgendwann läge das Schild wieder auf dem Papier.
 
-   Ruhig gehalten: halbdurchsichtig, bis man mit dem Zeiger hingeht. Er
+   Deshalb steht es JETZT ausserhalb: eine eigene, schmale Zeile UNTER
+   dem Rollbereich. Sie gehört zur Spalte, nicht zur Seite – damit kann
+   sie das Blatt gar nicht mehr berühren, in keiner Stellung. Sie kostet
+   das Blatt ein paar Bildpunkte Höhe; das ist der Preis dafür, dass die
+   Frage ein für alle Mal beantwortet ist.
+
+   Ruhig gehalten: halbdurchsichtig, bis man mit dem Zeiger hingeht. Sie
    steht neben dem Text und darf beim Lesen nicht mitreden.
    ══════════════════════════════════════════════════════════════════════ */
+/* Die Zeile sitzt am Fuss der Blattspalte. Damit der Knopf „Neue Seite"
+   nicht auf ihr liegt, hängt er ab jetzt an DIESER Spalte statt am
+   ganzen Fenster (er hatte nie einen gesetzten Vorfahren) und steht um
+   die Höhe der Zeile darüber. Nebenbei sitzt er dadurch mittig über dem
+   BLATT statt mittig im Fenster – bei offener Navigation ist das ein
+   sichtbarer Unterschied, und die richtigere Stelle. */
 .editor-col {
   position: relative
 }
 
+.add-page-btn-wrap {
+  bottom: 24px
+}
+
+.count-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  /* Dieselbe Farbe wie der Rollbereich darüber: die Zeile soll wie ein
+     Stück des dunklen Umfelds wirken, nicht wie ein eigener Balken. */
+  background: #1a1a24;
+  border-top: 1px solid var(--sb);
+  padding: 0 12px;
+  min-height: 24px
+}
+
 .count-badge {
-  position: absolute;
-  left: 12px;
-  bottom: 10px;
-  z-index: 101;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--sb2);
-  background: var(--sp);
+  padding: 2px 0;
+  border: none;
+  background: none;
   color: var(--md);
   font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
   font-size: 10.5px;
@@ -1903,25 +1926,25 @@ body.touch-draw .j-canvas {
   white-space: nowrap;
   cursor: pointer;
   opacity: .55;
-  transition: opacity .15s, color .15s, border-color .15s
+  transition: opacity .15s, color .15s
 }
 
 .count-badge:hover {
   opacity: 1;
-  color: var(--hi);
-  border-color: var(--gd)
+  color: var(--hi)
 }
 
 .count-badge-sep {
   color: var(--lo)
 }
 
-/* Auf einem schmalen Schirm nimmt das Schild dem Blatt keinen Platz
-   weg – es liegt darüber. Dann lieber nur die Wörter. */
 @media (max-width: 700px) {
+  .count-bar {
+    padding: 0 8px;
+    min-height: 22px
+  }
+
   .count-badge {
-    left: 8px;
-    bottom: 8px;
     font-size: 10px
   }
 }
@@ -2056,6 +2079,32 @@ body.touch-draw .j-canvas {
 .chat-list::before {
   content: '';
   margin-top: auto
+}
+
+/* Der Chat darf nicht. Kein Toast, sondern ein Kasten IN der Leiste:
+   dort steht die Frage, dort gehoert die Antwort hin – und ein Toast
+   waere weg, bevor man ihn zu Ende gelesen hat. */
+.chat-gesperrt {
+  margin: auto 0 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--sb2);
+  background: var(--sh2);
+  color: var(--md);
+  font-size: 12px;
+  line-height: 1.5
+}
+
+.chat-compose textarea:disabled,
+.chat-send:disabled {
+  opacity: .4;
+  cursor: not-allowed
+}
+
+.chat-send:disabled:hover {
+  background: var(--sh2);
+  border-color: var(--sb2);
+  color: var(--md)
 }
 
 .chat-leer {

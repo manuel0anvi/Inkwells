@@ -221,6 +221,33 @@ console.log('\n2. Der Zähler\n');
   // Ein Seitenbild ist auch ein Bild, obwohl es nicht in objects steht
   check('Seitenbilder zählen mit', /page\.bgImg\) bilder\+\+/.test(zaehle), true);
 }
+{
+  /* ── Und er liegt NIE auf dem Blatt ──────────────────────────────
+     Zuerst hing das Schild frei in der Ecke der Blattspalte und lag je
+     nach Fensterbreite, Zoom und geöffneter Navigation halb über dem
+     Papier. Eine Rechnung wäre nicht zu halten gewesen – bei einem
+     schmalen Fenster gibt es den Rand gar nicht.
+
+     Jetzt ist es eine eigene Zeile UNTER dem Rollbereich. Das ist keine
+     Einstellung, sondern Bauart: was ausserhalb von .pg-scroll steht,
+     kann das Blatt nicht berühren. */
+  const bau = funktion(zaehlQuelle, 'baueSchild');
+  check('Das Schild sitzt in einer eigenen Zeile',
+    /leiste\.className = 'count-bar'/.test(bau), true);
+  check('Und die Zeile hängt an der Blattspalte',
+    /spalte\.appendChild\(leiste\)/.test(bau), true);
+
+  const css = lies('src', 'css', 'pages.css');
+  const regel = css.slice(css.indexOf('.count-bar {'), css.indexOf('}', css.indexOf('.count-bar {')));
+  check('Sie liegt im Fluss und schwebt nicht',
+    !/position:\s*(absolute|fixed)/.test(regel), true);
+  check('Und nimmt sich ihre Höhe', /min-height/.test(regel), true);
+
+  // Auf der Startseite gibt es kein Blatt – dann ist die ganze Zeile weg
+  const zeichne = funktion(zaehlQuelle, 'zeichneSchild');
+  check('Ohne offenes Heft ist die Zeile weg',
+    /leiste\.style\.display = 'none'/.test(zeichne), true);
+}
 
 console.log('\n3. Der Chat\n');
 {
@@ -300,6 +327,76 @@ console.log('\n3. Der Chat\n');
   check('Das Eingabefeld ist ein textarea', /<textarea id="chat-input"/.test(leiste), true);
   // Als ATTRIBUT gefragt – im Kommentar darüber steht das Wort absichtlich
   check('Und kein contenteditable', !/contenteditable\s*=/.test(leiste), true);
+}
+
+console.log('\n4. Wenn die Regeln den Chat noch nicht kennen\n');
+{
+  /* Der Zweig `chat` ist in der Realtime Database neu. Solange die dort
+     veröffentlichten Regeln ihn nicht haben, wird JEDER Zugriff
+     abgewiesen – und kein Wiederholen der Welt ändert daran etwas.
+
+     Vorher lief genau das: der Beobachter meldete sich alle halbe Minute
+     neu an, die Tipp-Anzeige schickte im Takt des Tippens, und in der
+     Konsole stand eine Wand aus permission_denied. */
+  const ctx = { console, String };
+  vm.createContext(ctx);
+  vm.runInContext(funktion(shareQuelle, 'istVerboten'), ctx);
+  const verboten = ctx.istVerboten;
+
+  check('permission_denied wird erkannt',
+    verboten(new Error('PERMISSION_DENIED: Permission denied')), true);
+  check('Auch in der Schreibweise der Datenbank',
+    verboten({ message: "permission_denied at /chat/abc/m: Client doesn't have permission" }), true);
+  check('Ein Netzfehler dagegen nicht',
+    verboten(new Error('network error')), false);
+  check('Und gar kein Fehler auch nicht', verboten(null), false);
+
+  /* Die Beharrlichkeit muss aufhören KÖNNEN. Ohne diesen Ausgang gäbe
+     es keine Stelle, an der die Wiederholung endet. */
+  const beharrlich = funktion(shareQuelle, 'beharrlich');
+  check('Der Beobachter kann aufgeben', /typeof aufgeben === 'function'/.test(beharrlich), true);
+  check('Und tut es dann endgültig', /beendet = true;\s*\n\s*return;/.test(beharrlich), true);
+
+  // Beide Chat-Beobachter nehmen diesen Ausgang
+  check('Der Chat-Strom gibt auf', /\), 'Chat', chatEndgueltig\)/.test(shareQuelle), true);
+  check('Die Tipp-Anzeige auch', /\), 'Tipp-Anzeige', chatEndgueltig\)/.test(shareQuelle), true);
+
+  /* Und es wird nichts mehr losgeschickt. setTyping ist dabei das
+     Wichtigere: es kommt im Takt des Tippens. */
+  const senden = funktion(shareQuelle, 'sendChat');
+  const tippen = funktion(shareQuelle, 'setTyping');
+  check('Nachrichten gehen dann nicht mehr hinaus', /if \(left \|\| chatAus\)/.test(senden), true);
+  check('Und die Tipp-Anzeige erst recht nicht', /if \(left \|\| chatAus\)/.test(tippen), true);
+
+  // Gesagt wird es genau einmal, samt Abhilfe
+  const faellt = funktion(shareQuelle, 'chatFaelltAus');
+  check('Gemeldet wird einmal', /if \(chatAus\) return true;/.test(faellt), true);
+  check('Mit dem, was zu tun ist', /CHAT_HILFE/.test(faellt), true);
+  check('Die Abhilfe nennt die Datei',
+    /website\/database\.rules\.json/.test(shareQuelle.slice(
+      shareQuelle.indexOf('const CHAT_HILFE'), shareQuelle.indexOf('const CHAT_HILFE') + 400)), true);
+}
+{
+  /* Im Fenster darf das nicht als „ich habe nichts geschrieben"
+     ankommen. Ein Eingabefeld, in das man tippen kann und aus dem nie
+     etwas hinausgeht, ist schlimmer als eines, das gesperrt ist. */
+  const sperre = funktion(chatQuelle, 'zeigeSperre');
+  check('Der Grund steht in der Leiste', /chat-gesperrt/.test(sperre), true);
+  check('Das Feld wird zugemacht', /feld\.disabled = !!gesperrt/.test(sperre), true);
+  check('Der Senden-Knopf auch', /senden\.disabled = !!gesperrt/.test(sperre), true);
+  check('Und beim Aufheben ist der Hinweis wieder weg',
+    /if \(!gesperrt\) \{ leereHinweis\(\); return; \}/.test(sperre), true);
+
+  check('Die Oberfläche hört auf den Zustand',
+    /raum\.onChatStatus\(/.test(chatQuelle), true);
+  check('Der Raum gibt ihn heraus',
+    /onChatStatus/.test(shareQuelle.slice(shareQuelle.indexOf('return {\n    me: card,'),
+      shareQuelle.indexOf('return {\n    me: card,') + 400)), true);
+
+  // Kein zweiter Hinweis obendrauf – der Kasten sagt schon alles
+  const sende = funktion(chatQuelle, 'sende');
+  check('Kein zusätzlicher Toast, wenn der Grund schon dasteht',
+    /if \(gesperrt\) return;/.test(sende), true);
 }
 
 console.log('');

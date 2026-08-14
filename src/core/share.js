@@ -2846,10 +2846,21 @@ async function joinDocRoom(docId, options = {}) {
      Deshalb wird nach einem Abbruch neu angemeldet, mit wachsendem
      Abstand bis höchstens einer halben Minute.
 
+     >>> Wann Beharrlichkeit falsch ist <<<
+     Bei einem Zugang, den die Regeln GAR NICHT kennen. Dann ist der
+     nächste Versuch so aussichtslos wie der erste, und beharrlich heißt
+     nur noch: alle halbe Minute dieselbe Meldung in die Konsole, für
+     immer. Genau das ist mit dem Chat passiert, solange die
+     veröffentlichten Regeln den Zweig `chat` noch nicht hatten.
+
+     `aufgeben` entscheidet das. Trifft es zu, wird ein letztes Mal
+     gemeldet – mit dem, was zu tun ist – und dann ist Ruhe.
+
      @param {(gut: Function, weg: Function) => Function} anmelden
      @param {string} was  Name für die Konsole
+     @param {(err: Error) => boolean} [aufgeben]  Endgültig? Kein weiterer Versuch
      ══════════════════════════════════════════════════════════════════ */
-  function beharrlich(anmelden, was) {
+  function beharrlich(anmelden, was, aufgeben) {
     let beendet = false, uhr = null, pause = 800, aus = null;
 
     const versuch = () => {
@@ -2859,6 +2870,12 @@ async function joinDocRoom(docId, options = {}) {
         (err) => {
           aus = null;
           if (beendet) return;
+
+          if (typeof aufgeben === 'function' && aufgeben(err)) {
+            beendet = true;
+            return;
+          }
+
           console.warn('[Share] Beobachter abgebrochen (' + was + '), neuer Versuch in '
             + pause + ' ms:', err?.message || err);
           uhr = setTimeout(versuch, pause);
@@ -3046,6 +3063,64 @@ async function joinDocRoom(docId, options = {}) {
 
   const CHAT_MAX_LEN = 800;
 
+  /* ══════════════════════════════════════════════════════════════════
+     WENN DIE REGELN DEN CHAT NOCH NICHT KENNEN
+
+     Der Zweig `chat` ist neu. Solange die in der Firebase Console
+     veröffentlichten Regeln ihn nicht haben, fällt er auf `.read: false`
+     an der Wurzel – und JEDER Zugriff wird abgewiesen, Lesen wie
+     Schreiben.
+
+     Das ist kein Fehler, den ein weiterer Versuch behebt. Vorher lief
+     genau das: der Beobachter meldete sich alle halbe Minute neu an, die
+     Tipp-Anzeige schickte alle zwei Sekunden, und in der Konsole stand
+     eine Wand aus permission_denied – während der Nutzer im Fenster nur
+     sah, dass nichts passiert.
+
+     Jetzt wird EINMAL gesagt, was zu tun ist, und dann ist Ruhe. Der
+     übrige Live-Betrieb ist davon unberührt: Anwesenheit, Text und
+     Handschrift liegen in anderen Zweigen und laufen weiter.
+     ══════════════════════════════════════════════════════════════════ */
+
+  const CHAT_HILFE = 'Der Chat braucht den Zweig "chat" in den Regeln der '
+    + 'Realtime Database. Abhilfe: website/database.rules.json in der '
+    + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.';
+
+  let chatAus = '';                 // Grund, oder leer
+  const chatHoerer = new Set();     // wer über den Zustand Bescheid will
+
+  function istVerboten(err) {
+    const m = String(err?.message || err || '').toLowerCase();
+    return m.includes('permission_denied') || m.includes('permission denied');
+  }
+
+  /** Einmal melden, dann still bleiben. */
+  function chatFaelltAus(err) {
+    if (chatAus) return true;
+    chatAus = 'RULES';
+    console.warn('[Share] Der Chat ist abgewiesen worden. ' + CHAT_HILFE);
+    for (const cb of chatHoerer) { try { cb(chatAus); } catch (e) {} }
+    return true;
+  }
+
+  /* Ein abgewiesener Zugang kommt durch Wiederholen nicht zurück. Diese
+     Antwort beendet die Beharrlichkeit (siehe dort). */
+  function chatEndgueltig(err) {
+    return istVerboten(err) ? chatFaelltAus(err) : false;
+  }
+
+  /**
+   * Meldet, ob der Chat benutzbar ist. Der Rückruf kommt sofort mit dem
+   * jetzigen Stand und noch einmal, wenn er sich ändert.
+   *
+   * @param {(grund: string) => void} cb  '' heißt: er läuft
+   */
+  function onChatStatus(cb) {
+    chatHoerer.add(cb);
+    try { cb(chatAus); } catch (e) {}
+    return () => chatHoerer.delete(cb);
+  }
+
   /**
    * Schickt eine Nachricht in den Raum.
    *
@@ -3055,7 +3130,7 @@ async function joinDocRoom(docId, options = {}) {
    * @returns {Promise<boolean>} ob sie angekommen ist
    */
   function sendChat(text) {
-    if (left) return Promise.resolve(false);
+    if (left || chatAus) return Promise.resolve(false);
     const tx = String(text || '').replace(/\s+$/, '').slice(0, CHAT_MAX_LEN);
     if (!tx) return Promise.resolve(false);
 
@@ -3069,6 +3144,7 @@ async function joinDocRoom(docId, options = {}) {
     };
 
     return push(chatRef, eintrag).then(() => true).catch((err) => {
+      if (istVerboten(err)) { chatFaelltAus(err); return false; }
       console.warn('[Share] Nachricht nicht gesendet:', err?.message || err);
       return false;
     });
@@ -3103,7 +3179,7 @@ async function joinDocRoom(docId, options = {}) {
         });
       },
       (err) => weg(err)
-    ), 'Chat');
+    ), 'Chat', chatEndgueltig);
   }
 
   /**
@@ -3115,10 +3191,15 @@ async function joinDocRoom(docId, options = {}) {
    * wackelnde Punkte ist das zu viel Betrieb.
    */
   function setTyping(an) {
-    if (left) return Promise.resolve(false);
+    /* Bei abgewiesenem Chat gar nicht erst losschicken: das hier kommt
+       im Takt des Tippens und war der lauteste Teil der Fehlerwand. */
+    if (left || chatAus) return Promise.resolve(false);
     const ziel = child(tippRef, me.uid);
     const p = an ? set(ziel, rtNow()) : remove(ziel);
-    return p.then(() => true).catch(() => false);
+    return p.then(() => true).catch((err) => {
+      if (istVerboten(err)) chatFaelltAus(err);
+      return false;
+    });
   }
 
   /**
@@ -3150,7 +3231,7 @@ async function joinDocRoom(docId, options = {}) {
     const stop = beharrlich((gut, weg) => onValue(tippRef,
       (snap) => { gut(); zuletzt = snap.val() || {}; melde(); },
       (err) => weg(err)
-    ), 'Tipp-Anzeige');
+    ), 'Tipp-Anzeige', chatEndgueltig);
 
     /* Ein Eintrag, der nicht mehr aufgefrischt wird, verfällt von selbst.
        Ohne diesen Takt bliebe er stehen, bis sich irgendetwas anderes am
@@ -3276,7 +3357,7 @@ async function joinDocRoom(docId, options = {}) {
     me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles,
     onConnection, leave,
     // Das Gespräch neben dem Dokument
-    sendChat, onChat, setTyping, onTyping
+    sendChat, onChat, setTyping, onTyping, onChatStatus
   };
 }
 
