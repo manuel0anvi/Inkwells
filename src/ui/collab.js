@@ -445,6 +445,12 @@
     }
 
     if (leuteOffen()) zeigeLeute();   // offenes Fenster mitführen
+
+    /* Die Chat-Ikone steht neben den Abzeichen und hängt an derselben
+       Frage: ist sonst noch jemand da? Mit sich selbst redet niemand. */
+    if (window.ChatUI && typeof window.ChatUI.refresh === 'function') {
+      window.ChatUI.refresh();
+    }
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -2652,6 +2658,14 @@
 
     showLiveState();
 
+    /* Der Chat hängt am Raum und nicht am Dokument: erst hier gibt es
+       jemanden, mit dem man reden könnte. ui/chat.js meldet sich damit
+       für Nachrichten und Tipp-Anzeige an. */
+    if (window.ChatUI && typeof window.ChatUI.attach === 'function') {
+      try { window.ChatUI.attach(room); }
+      catch (err) { console.warn('[Collab] Chat nicht angeschlossen:', err?.message || err); }
+    }
+
     /* >>> Ohne Kontakt zum Besitzer wird nur gelesen <<<
        Egal ob ihm die Leitung abgerissen ist, er die App zugemacht hat,
        oder die EIGENE Verbindung fehlt: ohne gesicherten Kontakt könnte
@@ -2765,6 +2779,12 @@
     // und in dem Stand, der gleich gesichert wird.
     try { flushAllPending(); } catch (e) {}
     try { syncStructure(); } catch (e) {}
+
+    /* Den Chat als Erstes abhängen: er hält eigene Beobachter am Raum,
+       und der wird gleich verlassen. */
+    if (window.ChatUI && typeof window.ChatUI.detach === 'function') {
+      try { window.ChatUI.detach(); } catch (e) {}
+    }
 
     clearInterval(staleTimer);
     staleTimer = null;
@@ -3209,6 +3229,13 @@
     start, stop, setCanWrite, refreshRoomRoles,
     noteTextChange, noteStroke, notePage, noteChange,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
+    /* Wer außer einem selbst gerade da ist – flach kopiert, damit
+       niemand von außen in die laufende Liste hineinschreibt. Der Chat
+       braucht daraus Name, Initialen und Farbe. */
+    people: () => others.map(p => ({
+      uid: p.uid, name: p.name, email: p.email,
+      initials: p.initials, color: p.color
+    })),
     // Nur die fremden Marken – die Tabelle zum Abfotografieren
     fremdeMarken: zeigeFremdeMarken,
     // Zeilensperre – app.js fragt vor jeder Eingabe nach

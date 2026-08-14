@@ -1863,3 +1863,429 @@ body.touch-draw .j-canvas {
   background: rgba(42, 95, 168, .12);
   border-radius: 2px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER ZÄHLER UNTEN LINKS  (ui/wordCount.js)
+
+   Er liegt IN der Blattspalte und nicht fest am Fenster: mit offener
+   Navigation oder offener Kommentarleiste wandert der Blattbereich, und
+   ein Schild am Fensterrand stünde dann über der Navigation.
+
+   Deshalb steht `.editor-col` auf `position: relative`. Das ändert
+   nebenbei auch, woran `.add-page-btn-wrap` hängt – vorher war das
+   mangels eines gesetzten Vorfahren das ganze Fenster, und der Knopf
+   „Neue Seite" saß in dessen Mitte statt in der Mitte des Blattbereichs.
+   Das ist die richtigere Stelle, nicht bloß eine andere.
+
+   Ruhig gehalten: halbdurchsichtig, bis man mit dem Zeiger hingeht. Er
+   steht neben dem Text und darf beim Lesen nicht mitreden.
+   ══════════════════════════════════════════════════════════════════════ */
+.editor-col {
+  position: relative
+}
+
+.count-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  z-index: 101;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sb2);
+  background: var(--sp);
+  color: var(--md);
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 10.5px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity .15s, color .15s, border-color .15s
+}
+
+.count-badge:hover {
+  opacity: 1;
+  color: var(--hi);
+  border-color: var(--gd)
+}
+
+.count-badge-sep {
+  color: var(--lo)
+}
+
+/* Auf einem schmalen Schirm nimmt das Schild dem Blatt keinen Platz
+   weg – es liegt darüber. Dann lieber nur die Wörter. */
+@media (max-width: 700px) {
+  .count-badge {
+    left: 8px;
+    bottom: 8px;
+    font-size: 10px
+  }
+}
+
+/* ── Die Aufstellung in der Mitte ─────────────────────────────────── */
+.count-modal {
+  min-width: 340px;
+  max-width: 420px
+}
+
+.count-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 60vh;
+  overflow-y: auto
+}
+
+.count-group {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gd);
+  padding: 14px 0 6px
+}
+
+.count-group:first-child {
+  padding-top: 2px
+}
+
+.count-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--sb)
+}
+
+.count-row:last-child {
+  border-bottom: none
+}
+
+.count-row-name {
+  color: var(--md);
+  font-size: 13px
+}
+
+.count-row-val {
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--hi);
+  font-variant-numeric: tabular-nums
+}
+
+/* Die drei, um die es meistens geht, etwas kräftiger */
+.count-row.stark .count-row-name {
+  color: var(--hi)
+}
+
+.count-row.stark .count-row-val {
+  color: var(--gold);
+  font-size: 15px
+}
+
+.count-empty {
+  color: var(--md);
+  font-size: 13px;
+  padding: 8px 0
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER CHAT  (ui/chat.js)
+
+   Gebaut wie die Kommentarleiste darüber: ein Flex-Kind, das von 0 auf
+   seine Breite wächst und damit das Blatt zur Seite schiebt, statt sich
+   darüberzulegen. Die Maße sind bewusst dieselben – die beiden Leisten
+   sitzen an derselben Kante und schließen einander aus, und dann darf
+   das Blatt beim Wechsel nicht springen.
+   ══════════════════════════════════════════════════════════════════════ */
+.chat-panel {
+  display: flex;
+  flex-shrink: 0;
+  background: var(--sp);
+  border-left: 1px solid var(--sb)
+}
+
+.chat-panel-inner {
+  width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  transition: width .2s ease
+}
+
+.chat-panel.open .chat-panel-inner {
+  width: 268px
+}
+
+.chat-panel-head {
+  padding: 9px 10px 7px 12px;
+  border-bottom: 1px solid var(--sb);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 268px;
+  color: var(--md);
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  min-width: 268px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb2) transparent
+}
+
+/* Ein Gespräch fängt UNTEN an. Bei drei Nachrichten klebten sie sonst
+   oben und der Rest war leer – das sieht aus wie eine Liste, nicht wie
+   ein Gespräch. Der leere Vorlauf schiebt sie nach unten und ist beim
+   Überlaufen von selbst weg (er hat keine eigene Höhe). */
+.chat-list::before {
+  content: '';
+  margin-top: auto
+}
+
+.chat-leer {
+  color: var(--md);
+  font-size: 12px;
+  padding: 10px 4px;
+  opacity: .7
+}
+
+/* ── Eine Nachricht ──────────────────────────────────────────────────
+   Abzeichen links, Blase rechts. Die eigenen kehren die Reihenfolge um
+   und rücken nach rechts – das kennt jeder, und man erkennt seine
+   eigenen Zeilen, ohne den Namen zu lesen. */
+.chat-msg {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%
+}
+
+.chat-msg.selbst {
+  flex-direction: row-reverse
+}
+
+.chat-face {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: #fff;
+  border: 1.5px solid var(--sp);
+  user-select: none;
+  cursor: default
+}
+
+.chat-face.klein {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+  margin-right: -6px
+}
+
+.chat-bubble {
+  background: var(--sh2);
+  border: 1px solid var(--sb);
+  border-radius: 10px 10px 10px 3px;
+  padding: 6px 9px 4px;
+  min-width: 0;
+  max-width: 190px
+}
+
+.chat-msg.selbst .chat-bubble {
+  background: var(--sb);
+  border-radius: 10px 10px 3px 10px
+}
+
+.chat-text {
+  color: var(--hi);
+  font-size: 13px;
+  line-height: 1.45;
+  /* Ein langes Wort ohne Leerzeichen (eine Adresse) sprengt die Blase
+     sonst über die Leistenbreite hinaus. */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap
+}
+
+.chat-time {
+  display: block;
+  text-align: right;
+  margin-top: 1px;
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 9px;
+  color: var(--lo)
+}
+
+/* ── Wer gerade tippt ────────────────────────────────────────────────
+   Über dem Eingabefeld und nicht in der Liste: die Liste rollt, und die
+   Anzeige soll immer zu sehen sein. */
+.chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 6px;
+  min-width: 268px;
+  flex-shrink: 0
+}
+
+.chat-typing-faces {
+  display: inline-flex;
+  align-items: center;
+  padding-right: 6px
+}
+
+.chat-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center
+}
+
+.chat-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--md);
+  animation: chat-dot 1.1s infinite ease-in-out
+}
+
+.chat-dots i:nth-child(2) {
+  animation-delay: .18s
+}
+
+.chat-dots i:nth-child(3) {
+  animation-delay: .36s
+}
+
+@keyframes chat-dot {
+  0%, 60%, 100% {
+    opacity: .25;
+    transform: translateY(0)
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px)
+  }
+}
+
+/* Wer die Bewegung im System abgestellt hat, bekommt sie auch hier
+   nicht. Die Punkte bleiben trotzdem stehen – sie SIND die Auskunft. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-dots i {
+    animation: none;
+    opacity: .6
+  }
+}
+
+/* ── Das Eingabefeld ─────────────────────────────────────────────── */
+.chat-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  min-width: 268px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--sb)
+}
+
+.chat-compose textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  background: var(--sh2);
+  border: 1px solid var(--sb2);
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: var(--hi);
+  font-family: 'Crimson Pro', serif;
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+  max-height: 120px
+}
+
+.chat-compose textarea:focus {
+  border-color: var(--gd)
+}
+
+.chat-send {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--sb2);
+  background: var(--sh2);
+  color: var(--md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s
+}
+
+.chat-send:hover {
+  background: var(--gold);
+  border-color: transparent;
+  color: var(--sh)
+}
+
+/* ── Die Ikone in der Leiste über dem Dokument ─────────────────────
+   Neben den Abzeichen der Anwesenden, weil sie zu ihnen gehört: sie ist
+   nur da, wenn auch sie da sind. */
+.chat-open-btn {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--md);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s
+}
+
+.chat-open-btn:hover {
+  color: var(--hi);
+  background: var(--sh2)
+}
+
+.chat-open-btn.aktiv {
+  color: var(--gold);
+  border-color: var(--gd);
+  background: var(--sh2)
+}
+
+/* Ungelesenes: ein Punkt, keine Zahl. Wie viele es sind, sagt einem im
+   Gespräch zu zweit nichts, was man nicht gleich selbst sieht. */
+.chat-open-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 1.5px solid var(--bg)
+}

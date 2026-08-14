@@ -329,6 +329,19 @@
   function setzeLeiste(offen) {
     const p = leiste();
     if (!p || p.classList.contains('open') === offen) return;
+
+    /* ── Der Chat hat Vorrang ────────────────────────────────────────
+       Beide Leisten sitzen an derselben Kante und schieben das Blatt.
+       Nebeneinander bliebe davon nichts übrig. Wer den Chat offen hat,
+       redet gerade mit jemandem – dann darf ihm kein Wischen und kein
+       angetippter Kommentar die Leiste unter der Hand austauschen.
+
+       Zu ist der Weg immer frei: `offen === false` läuft hier vorbei. */
+    if (offen && typeof window.chatBlocksComments === 'function'
+        && window.chatBlocksComments()) {
+      return;
+    }
+
     if (!offen) _hervor = null;
     p.classList.toggle('open', offen);
     // Die Spalte wird schmaler: der Zoom passt die Seite neu ein
@@ -343,7 +356,11 @@
     const pgId = S.activePgId;
     const anzahl = (pgId && typeof getPageComments === 'function')
       ? getPageComments(pgId).length : 0;
-    const noetig = anzahl > 0 && !leisteOffen() && randBreite() < MIN_RAND;
+    /* Bei offenem Chat weg: er sitzt an derselben Kante, und ein Griff,
+       der auf einen Druck nichts tut, ist schlimmer als keiner. */
+    const chatOffen = typeof window.chatBlocksComments === 'function'
+      && window.chatBlocksComments();
+    const noetig = anzahl > 0 && !leisteOffen() && !chatOffen && randBreite() < MIN_RAND;
     griff.style.display = noetig ? 'flex' : 'none';
     const zahl = E('comment-tab-count');
     if (zahl) zahl.textContent = String(anzahl);
@@ -676,4 +693,8 @@
 
   /* ── Global erreichbar ────────────────────────────────────────────── */
   window.refreshComments = planeNeu;
+
+  /* Der Chat macht diese Leiste zu, bevor er seine eigene aufzieht –
+     beide sitzen an derselben Kante (ui/chat.js). */
+  window.closeCommentPanel = () => setzeLeiste(false);
 })();

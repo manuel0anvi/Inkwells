@@ -47,6 +47,29 @@
    Ändern darf `roomKey` nur der Besitzer – editorUpdate() in
    website/firestore.rules zählt die erlaubten Felder einzeln auf, und er
    steht nicht dabei.
+
+   ── Warum der Chat NICHT im Änderungsstrom liegt ─────────────────
+   Es wäre naheliegend gewesen, eine Nachricht als weitere Art von `op`
+   zu schicken – ein Strom ist schon da. Zwei Gründe sprechen dagegen:
+
+     · ops/{docId} darf nur schreiben, wer in `w` steht, also das Recht
+       zu BEARBEITEN hat. Wer ein Dokument nur lesen darf, könnte dann
+       nichts sagen – und gerade der hat oft eine Frage.
+     · Der Änderungsstrom wird beschnitten (pruneOps, OP_BACKLOG). Was
+       dort älter ist, ist weg. Für eine Yjs-Änderung ist das richtig,
+       für eine Bemerkung an einen Menschen nicht.
+
+   chat/{docId} hat deshalb einen eigenen Baum: lesen und schreiben darf
+   jeder, der in `r` steht. Er hält CHAT_MAX_AGE_MS und wird danach von
+   den Beteiligten selbst weggeräumt – dieselbe Regelform wie bei ops
+   erlaubt jedem das Löschen von wirklich Altem, sonst bliebe es liegen,
+   sobald der Verfasser nicht mehr da ist.
+
+   `t` darunter ist die Tipp-Anzeige: eine Zahl je Kennung, der Zeitpunkt
+   des letzten Anschlags. Sie steht nicht bei der Anwesenheit, weil die
+   nur der Besitzer eines Eintrags schreiben darf UND weil jede Änderung
+   dort die Marken und Sperrbänder aller Beteiligten neu rechnen lässt –
+   für ein Wackeln von drei Punkten ist das zu viel Betrieb.
 */
 {
   "rules": {
@@ -165,6 +188,47 @@
           "$other": {
             ".validate": false
           }
+        }
+      }
+    },
+    "chat": {
+      "$docId": {
+        ".read": "auth != null && root.child('roles').child($docId).child('r').child(auth.uid).val() === true",
+        "m": {
+          "$msgId": {
+            ".write": "auth != null && root.child('roles').child($docId).child('r').child(auth.uid).val() === true && (!data.exists() || data.child('by').val() === auth.uid || (!newData.exists() && data.child('at').isNumber() && data.child('at').val() < now - 86400000))",
+            ".validate": "newData.hasChildren(['by', 'at', 'tx'])",
+            "by": {
+              ".validate": "newData.val() === auth.uid"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "tx": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 800"
+            },
+            "nm": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "ini": {
+              ".validate": "newData.isString() && newData.val().length <= 4"
+            },
+            "col": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "t": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('roles').child($docId).child('r').child(auth.uid).val() === true",
+            ".validate": "!newData.exists() || newData.isNumber()"
+          }
+        },
+        "$other": {
+          ".validate": false
         }
       }
     }

@@ -299,6 +299,11 @@ function openNotebook(id, opts = {}) {
      auch beim Besitzer. Läuft im Hintergrund weiter; bis der Raum steht,
      verhält sich das Heft ganz gewöhnlich (ui/sharedDocs.js). */
   if (typeof window.onNotebookOpened === 'function') window.onNotebookOpened(nb);
+
+  /* Der Zähler unten links gehört zu DIESEM Heft. Ohne den Anstoß hier
+     stünde nach dem Wechsel noch der Umfang des vorigen da – und das
+     eine Sekunde lang, bis der Takt in ui/wordCount.js ihn einholt. */
+  if (typeof window.refreshWordCount === 'function') window.refreshWordCount(true);
 }
 
 /* ── OPEN SECTION (renders its pages) ── */
@@ -718,8 +723,26 @@ function appendPageDOM(page, index) {
   textDiv.addEventListener('paste', e => {
     e.preventDefault();
     if (S.readOnly) return;
+    const daten = e.clipboardData || window.clipboardData;
+
+    /* ── Ein Bild wird zum Objekt, kein Text ────────────────────────
+       Und zwar VOR der Zeilensperre gefragt: ein Bild landet auf der
+       Seite, nicht in der Zeile, an der ein anderer gerade schreibt.
+       Es würde dort niemandem ins Gehege kommen.
+
+       Ein Bildschirmfoto bringt nebenbei oft auch Text mit (die
+       Anwendung legt beides in die Zwischenablage). Wer ein Bild
+       kopiert hat, will das Bild – deshalb steht diese Frage zuerst
+       und der Textzweig darunter kommt dann gar nicht mehr dran. */
+    if (typeof zwischenablageHatBild === 'function' && zwischenablageHatBild(daten)) {
+      fuegeBilderAusZwischenablage(daten, page)
+        .then(n => { if (n) setTimeout(() => checkPageOverflow(textDiv, page), 20); })
+        .catch(err => console.warn('[App] Bild einsetzen:', err?.message || err));
+      return;
+    }
+
     if (lockedHere(page, textDiv, 'insertFromPaste')) return;
-    const text = (e.clipboardData || window.clipboardData).getData('text');
+    const text = daten.getData('text');
     if (!text) return;
 
     // Smart indent: get current line indentation

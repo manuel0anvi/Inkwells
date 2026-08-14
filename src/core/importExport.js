@@ -60,6 +60,261 @@ function makeImagePage(dataUrl, breite, hoehe) {
 window.makeImagePage = makeImagePage;
 
 /* ══════════════════════════════════════════════════════════════════════
+   EIN BILD AUS DER ZWISCHENABLAGE
+
+   Ein Bildschirmfoto machen und es einsetzen ist der häufigste Weg, wie
+   ein Bild in ein Heft kommt – über den Dateiwähler ginge es nur als
+   Umweg über eine Datei, die niemand haben will.
+
+   >>> Warum große Bilder verkleinert werden <<<
+   Ein Bildschirmfoto von einem 4K-Schirm sind rund 3840×2160 Punkte. Als
+   PNG in einer Zeichenkette (data:) wird daraus schnell ein zweistelliger
+   Megabyte-Betrag, und der liegt danach in JEDER Kopie des Hefts: in der
+   Datei, in der Cloud, in jedem abgelegten Stand und bei jedem, der das
+   Dokument geteilt bekommt. Auf einem Blatt von 794 Punkten Breite sieht
+   man von der Auflösung nichts.
+
+   Verkleinert wird deshalb auf MAX_KANTE, und zwar nur nach unten – ein
+   kleines Bild bleibt, wie es ist. Das Format bleibt PNG, solange es
+   dabei unter der Schwelle bleibt; darüber wird JPEG daraus. PNG hält
+   Text und Striche scharf (ein Bildschirmfoto besteht meist daraus),
+   JPEG rettet den Fall, in dem jemand ein Foto einsetzt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const BILD_MAX_KANTE = 1600;      // längere Seite, in Bildpunkten
+const BILD_JPEG_AB = 900 * 1024;  // ab dieser Größe lieber JPEG
+
+/** Lädt eine Bilddatei und gibt sie als data:-Zeichenkette zurück. */
+function leseBildDatei(datei) {
+  return new Promise((fertig, schief) => {
+    const leser = new FileReader();
+    leser.onload = () => fertig(String(leser.result || ''));
+    leser.onerror = () => schief(new Error('BILD_UNLESBAR'));
+    leser.readAsDataURL(datei);
+  });
+}
+
+/** Wartet, bis ein Bild wirklich Maße hat. */
+function ladeBild(dataUrl) {
+  return new Promise((fertig, schief) => {
+    const bild = new Image();
+    bild.onload = () => fertig(bild);
+    bild.onerror = () => schief(new Error('BILD_UNLESBAR'));
+    bild.src = dataUrl;
+  });
+}
+
+/**
+ * Verkleinert, falls nötig. Gibt immer `{ url, w, h }` zurück – auch
+ * dann, wenn nichts zu tun war.
+ */
+async function passeBildAn(dataUrl) {
+  const bild = await ladeBild(dataUrl);
+  const bw = bild.naturalWidth || bild.width;
+  const bh = bild.naturalHeight || bild.height;
+  if (!bw || !bh) throw new Error('BILD_UNLESBAR');
+
+  const laengste = Math.max(bw, bh);
+  const klein = laengste <= BILD_MAX_KANTE && dataUrl.length < BILD_JPEG_AB;
+  if (klein) return { url: dataUrl, w: bw, h: bh };
+
+  const faktor = Math.min(1, BILD_MAX_KANTE / laengste);
+  const zw = Math.max(1, Math.round(bw * faktor));
+  const zh = Math.max(1, Math.round(bh * faktor));
+
+  const flaeche = document.createElement('canvas');
+  flaeche.width = zw;
+  flaeche.height = zh;
+  const ctx = flaeche.getContext('2d');
+  ctx.drawImage(bild, 0, 0, zw, zh);
+
+  let url = flaeche.toDataURL('image/png');
+  if (url.length > BILD_JPEG_AB) url = flaeche.toDataURL('image/jpeg', 0.82);
+  return { url, w: zw, h: zh };
+}
+
+/**
+ * Wo steht die Schreibmarke auf dem Blatt? In Seitenkoordinaten.
+ *
+ * Damit landet ein eingesetztes Bild dort, wo man gerade ist, und nicht
+ * blind oben links über der Überschrift. Ist die Marke nirgends (Zeiger-
+ * werkzeug, gerade gerollt), kommt null zurück.
+ */
+function markeAufSeite(page) {
+  const pgEl = E('pg-scroll')?.querySelector('[data-pgid="' + page.id + '"]');
+  if (!pgEl) return null;
+
+  const sel = window.getSelection ? window.getSelection() : null;
+  if (!sel || !sel.rangeCount) return null;
+
+  const r = sel.getRangeAt(0).getBoundingClientRect();
+  if (!r || (!r.height && !r.width)) return null;
+
+  // Gehört die Marke überhaupt zu DIESER Seite?
+  const pr = pgEl.getBoundingClientRect();
+  if (r.top < pr.top || r.top > pr.bottom) return null;
+
+  const zoom = (typeof getZoom === 'function' && getZoom()) || 1;
+  return Math.round((r.bottom - pr.top) / zoom) + 10;
+}
+
+/**
+ * Setzt ein Bild als Objekt auf eine Seite.
+ *
+ * Die Rechnung ist dieselbe wie beim Einfügen über den Dateiwähler, nur
+ * mit einer Obergrenze: ein Bild, das breiter als das Blatt ist, wäre
+ * halb daneben und man käme an seine Griffe nicht mehr heran.
+ *
+ * @param {number} [ab] Höhe, ab der es stehen soll (Seitenkoordinaten)
+ * @returns {object|null} das angelegte Objekt
+ */
+function setzeBildObjekt(page, bild, ab) {
+  if (!page || !bild || !bild.url) return null;
+
+  const nutzbar = (page.w || CFG.PAGE_W) - 160;
+  let ow = Math.min(420, nutzbar);
+  let oh = ow * (bild.h / (bild.w || 1));
+
+  // Hochkant: nicht über die halbe Seitenhöhe hinaus
+  const hoehe = page.h || CFG.PAGE_H;
+  const hoechstens = (hoehe - BILD_KOPF_PX) * 0.6;
+  if (oh > hoechstens) { oh = hoechstens; ow = oh * (bild.w / (bild.h || 1)); }
+
+  /* Unter der Marke, aber nie unter den Blattrand hinaus und nie in den
+     Seitenkopf hinein. Ohne diese beiden Grenzen läge das Bild bei einer
+     Marke am Seitenende halb außerhalb. */
+  let y = Number.isFinite(ab) ? ab : (BILD_KOPF_PX + 24);
+  y = Math.min(Math.max(y, BILD_KOPF_PX + 24), Math.max(BILD_KOPF_PX + 24, hoehe - oh - 24));
+
+  const obj = {
+    id: uid(), kind: 'image', src: bild.url, name: bild.name || 'Bild',
+    x: 80, y: Math.round(y),
+    w: Math.round(ow), h: Math.round(oh), rot: 0
+  };
+
+  if (!page.objects) page.objects = [];
+  page.objects.push(obj);
+
+  /* Die Objekt-Ebene fehlt, wenn die Seite gerade nicht gezeichnet ist.
+     Das Bild liegt dann trotzdem im Heft – dieselbe Vorsicht wie in
+     insertFilesFlow, wo genau das einmal ein verlorenes Bild war. */
+  const objLayer = E('pg-scroll')
+    ?.querySelector('[data-pgid="' + page.id + '"]')
+    ?.querySelector('.j-objects');
+  if (objLayer && typeof placeObject === 'function') placeObject(objLayer, obj, page);
+
+  return obj;
+}
+
+/**
+ * Holt die Bilder aus einer Zwischenablage und setzt sie auf die Seite.
+ *
+ * >>> Warum `items` UND `files` durchgesehen werden <<<
+ * Was in der Zwischenablage liegt, sieht je nach Herkunft anders aus. Ein
+ * Bildschirmfoto kommt als `items`-Eintrag ohne Dateinamen, eine im
+ * Explorer kopierte Datei als `files`-Eintrag. Chromium füllt mal das
+ * eine, mal beides – gesammelt wird deshalb aus beiden, und Doppelte
+ * werden über ihre Größe ausgesiebt.
+ *
+ * @returns {Promise<number>} wie viele Bilder eingesetzt wurden
+ */
+async function fuegeBilderAusZwischenablage(dataTransfer, page) {
+  if (!dataTransfer || !page) return 0;
+  if (S.readOnly) return 0;
+
+  const dateien = [];
+  const gesehen = new Set();
+  const merke = (datei) => {
+    if (!datei || !/^image\//.test(datei.type || '')) return;
+    const schluessel = (datei.name || '') + ':' + datei.size + ':' + datei.type;
+    if (gesehen.has(schluessel)) return;
+    gesehen.add(schluessel);
+    dateien.push(datei);
+  };
+
+  for (const eintrag of Array.from(dataTransfer.items || [])) {
+    if (eintrag.kind !== 'file') continue;
+    merke(eintrag.getAsFile());
+  }
+  for (const datei of Array.from(dataTransfer.files || [])) merke(datei);
+
+  if (!dateien.length) return 0;
+
+  /* Die Stelle JETZT messen, vor dem Einlesen: das dauert einen Moment,
+     und bis dahin kann die Marke längst woanders stehen. */
+  let ab = markeAufSeite(page);
+
+  /* Der Schritt in den Verlauf steht VOR der ersten Änderung und gilt für
+     alle Bilder zusammen: einmal Rückgängig nimmt das Einsetzen zurück,
+     nicht Bild für Bild. */
+  if (typeof pushPageHistory === 'function') pushPageHistory(page);
+
+  let gesetzt = 0;
+  for (const datei of dateien) {
+    try {
+      const roh = await leseBildDatei(datei);
+      const bild = await passeBildAn(roh);
+      bild.name = datei.name || 'Bild';
+      const obj = setzeBildObjekt(page, bild, ab);
+      if (!obj) continue;
+      gesetzt++;
+      // Mehrere auf einmal: das nächste kommt unter das vorige
+      ab = obj.y + obj.h + 16;
+    } catch (err) {
+      console.warn('[Einfügen] Bild aus der Zwischenablage:', err?.message || err);
+    }
+  }
+
+  if (!gesetzt) return 0;
+
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+  toast(gesetzt + ' ' + t('objectsInserted'));
+  return gesetzt;
+}
+window.fuegeBilderAusZwischenablage = fuegeBilderAusZwischenablage;
+
+/** Liegt in dieser Zwischenablage überhaupt ein Bild? */
+function zwischenablageHatBild(dataTransfer) {
+  if (!dataTransfer) return false;
+  for (const eintrag of Array.from(dataTransfer.items || [])) {
+    if (eintrag.kind === 'file' && /^image\//.test(eintrag.type || '')) return true;
+  }
+  for (const datei of Array.from(dataTransfer.files || [])) {
+    if (/^image\//.test(datei.type || '')) return true;
+  }
+  return false;
+}
+window.zwischenablageHatBild = zwischenablageHatBild;
+
+/* ── Einsetzen, ohne im Text zu stehen ──────────────────────────────
+   Strg+V mit dem Zeigerwerkzeug, nach dem Rollen, nach dem Anklicken
+   eines Bildes: die Schreibmarke ist dann nirgends, und der Griff am
+   Textfeld (app.js) bekommt gar nichts zu sehen. Das Bild soll trotzdem
+   ankommen – auf der Seite, die gerade im Bild steht.
+
+   Steht die Marke IM Text, ist der Griff dort schon zuständig; hier wird
+   dann nichts getan, sonst käme das Bild zweimal. Und in einem Eingabe-
+   feld (Suche, Freigabe-Dialog) gilt das gewöhnliche Einsetzen. */
+document.addEventListener('paste', (e) => {
+  if (typeof S === 'undefined' || !S.activePgId || S.readOnly) return;
+
+  const ziel = e.target;
+  if (ziel && ziel.closest) {
+    if (ziel.closest('.j-text')) return;                     // app.js macht das
+    if (ziel.closest('input, textarea, [contenteditable]')) return;
+  }
+  if (!zwischenablageHatBild(e.clipboardData)) return;
+
+  const info = typeof getPage === 'function' ? getPage(S.activePgId) : null;
+  if (!info || !info.page) return;
+
+  e.preventDefault();
+  fuegeBilderAusZwischenablage(e.clipboardData, info.page)
+    .catch(err => console.warn('[Einfügen] Bild:', err?.message || err));
+});
+
+/* ══════════════════════════════════════════════════════════════════════
    EIN PDF ALS NEUES HEFT
 
    Derselbe Weg wie beim Einfuegen – parsePdfToImages malt jede Seite in

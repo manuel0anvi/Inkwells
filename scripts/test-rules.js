@@ -584,6 +584,50 @@ function headData(overrides = {}) {
     set(ref(rtOf(STRANGER), 'ops/dok1/oF'),
         { p: 'p1', by: STRANGER.uid, at: Date.now(), k: 'y', u: 'AAAA' }));
 
+  section('Realtime Database: der Chat');
+
+  /* >>> Der Unterschied zum Änderungsstrom <<<
+     ops darf nur, wer BEARBEITEN darf. Der Chat steht jedem offen, der
+     das Dokument lesen darf – gerade wer nur zusehen kann, hat oft eine
+     Frage. Genau das prüft die erste Zeile hier. */
+  const nachricht = { by: READER.uid, at: Date.now(), tx: 'Schau mal auf Seite 4' };
+
+  await ok('Auch wer nur liest, darf etwas sagen',
+    set(ref(rtOf(READER), 'chat/dok1/m/n1'), nachricht));
+  await ok('Mit Name, Initialen und Farbe',
+    set(ref(rtOf(EDITOR), 'chat/dok1/m/n2'), {
+      by: EDITOR.uid, at: Date.now(), tx: 'mach ich',
+      nm: 'Bearbeiter', ini: 'BE', col: '#2a5fa8'
+    }));
+  await ok('Mitlesen darf, wer in der Liste steht',
+    get(ref(rtOf(READER), 'chat/dok1')));
+
+  await denied('Aber nicht unter fremdem Namen',
+    set(ref(rtOf(EDITOR), 'chat/dok1/m/n3'), { ...nachricht }));
+  await denied('Eine leere Nachricht ist keine',
+    set(ref(rtOf(READER), 'chat/dok1/m/n4'), { ...nachricht, tx: '' }));
+  await denied('Und keine ohne Ende',
+    set(ref(rtOf(READER), 'chat/dok1/m/n5'), { ...nachricht, tx: 'x'.repeat(801) }));
+  await denied('Erfundene Felder nicht',
+    set(ref(rtOf(READER), 'chat/dok1/m/n6'), { ...nachricht, bild: 'data:...' }));
+
+  /* Ein Fremder ist angemeldet – anonym genügt, und anonym ist jeder
+     Besucher der Website. Er darf weder mitlesen noch mitreden. */
+  await denied('Ein Fremder liest nicht mit',
+    get(ref(rtOf(STRANGER), 'chat/dok1')));
+  await denied('Und redet auch nicht mit',
+    set(ref(rtOf(STRANGER), 'chat/dok1/m/nF'),
+        { by: STRANGER.uid, at: Date.now(), tx: 'hallo' }));
+
+  await ok('Die Tipp-Anzeige setzt man für sich selbst',
+    set(ref(rtOf(READER), 'chat/dok1/t/' + READER.uid), Date.now()));
+  await ok('Und nimmt sie wieder weg',
+    remove(ref(rtOf(READER), 'chat/dok1/t/' + READER.uid)));
+  await denied('Für einen anderen nicht',
+    set(ref(rtOf(READER), 'chat/dok1/t/' + EDITOR.uid), Date.now()));
+  await denied('Und nur als Zahl',
+    set(ref(rtOf(READER), 'chat/dok1/t/' + READER.uid), 'ja'));
+
   section('Realtime Database: aufräumen');
 
   await env.withSecurityRulesDisabled(async (ctx) => {
@@ -603,6 +647,26 @@ function headData(overrides = {}) {
     remove(ref(rtOf(EDITOR), 'ops/dok1/frisch')));
   await ok('Die eigenen jederzeit',
     remove(ref(rtOf(EDITOR), 'ops/dok1/o1')));
+
+  /* Der Chat hält länger als der Änderungsstrom – einen Tag statt zehn
+     Minuten. Eine Bemerkung an einen Menschen ist auch morgen noch etwas
+     wert, eine Yjs-Änderung nicht. */
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.database();
+    await set(ref(db, 'chat/dok1/m/alt'), {
+      by: 'jemand-anderes', at: Date.now() - 25 * 60 * 60 * 1000, tx: 'von gestern'
+    });
+    await set(ref(db, 'chat/dok1/m/frisch'), {
+      by: 'jemand-anderes', at: Date.now(), tx: 'von eben'
+    });
+  });
+
+  await ok('Alte fremde Nachrichten darf jeder Beteiligte wegräumen',
+    remove(ref(rtOf(READER), 'chat/dok1/m/alt')));
+  await denied('Frische fremde nicht',
+    remove(ref(rtOf(READER), 'chat/dok1/m/frisch')));
+  await ok('Die eigenen jederzeit',
+    remove(ref(rtOf(READER), 'chat/dok1/m/n1')));
 
   section('Realtime Database: alles Übrige bleibt zu');
 

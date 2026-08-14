@@ -2360,6 +2360,26 @@ const OP_BACKLOG = 200;
 // Änderungen, die älter sind, räumt der Client beim Betreten weg.
 const OP_MAX_AGE_MS = 10 * 60 * 1000;
 
+/* ── Der Chat im Raum ──────────────────────────────────────────────
+   So viele Nachrichten holt man beim Betreten nach. Mehr wäre bei jedem
+   Öffnen eine spürbare Ladezeit, weniger fühlt sich an, als sei etwas
+   verlorengegangen. */
+const CHAT_BACKLOG = 80;
+
+/* Wie lange eine Nachricht bleibt. Länger als der Änderungsstrom (10
+   Minuten): eine Bemerkung an einen Menschen ist auch morgen noch etwas
+   wert, eine Yjs-Änderung nicht. Kürzer als „für immer": der Chat ist
+   das Gespräch NEBEN der Arbeit, das Ergebnis gehört ins Dokument. Die
+   Regel in website/database.rules.json lässt genau ab dieser Grenze
+   jeden Beteiligten aufräumen. */
+const CHAT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/* Länger als das gilt niemand mehr als „schreibt gerade". Die Anzeige
+   wird bei jedem Anschlag aufgefrischt (CHAT_TYPING_REFRESH_MS in
+   ui/chat.js) – wer aufhört, verschwindet also nach dieser Zeit von
+   selbst, auch wenn seine Abmeldung nie ankommt. */
+const CHAT_TYPING_TTL_MS = 6000;
+
 let _rtdbPromise = null;
 
 /**
@@ -2408,7 +2428,8 @@ function colorForUid(uid) {
  * @param {object} [options]
  * @param {boolean} [options.isOwner]  ist DIESE Person der Besitzer?
  * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerAway
- * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/onOp/leave
+ * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/
+ *   onOp/sendChat/onChat/setTyping/onTyping/leave
  */
 /** Ein Versprechen, das nach der Frist auf jeden Fall zurueckkommt. */
 function mitZeitgrenze(versprechen, ms) {
@@ -2496,12 +2517,16 @@ async function joinDocRoom(docId, options = {}) {
   let meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
   let opsRef = ref(rtdb, `ops/${raum}`);
   let rolesRef = ref(rtdb, `roles/${raum}`);
+  let chatRef = ref(rtdb, `chat/${raum}/m`);
+  let tippRef = ref(rtdb, `chat/${raum}/t`);
 
   const zeigeAufRaum = (neuerRaum) => {
     raum = neuerRaum;
     meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
     opsRef = ref(rtdb, `ops/${raum}`);
     rolesRef = ref(rtdb, `roles/${raum}`);
+    chatRef = ref(rtdb, `chat/${raum}/m`);
+    tippRef = ref(rtdb, `chat/${raum}/t`);
   };
 
   /* ── Steht die Leitung? ───────────────────────────────────────────
@@ -3006,6 +3031,149 @@ async function joinDocRoom(docId, options = {}) {
     ), 'Änderungsstrom');
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DER CHAT
+
+     Das Gespräch NEBEN dem Dokument. Es liegt bewusst in einem eigenen
+     Baum und nicht im Änderungsstrom – die beiden Gründe stehen in
+     website/database.rules.json.
+
+     Name, Initialen und Farbe reisen an jeder Nachricht MIT, statt sie
+     beim Anzeigen aus der Anwesenheit zu holen. Sonst stünde über jeder
+     Zeile von jemandem, der inzwischen gegangen ist, ein Fragezeichen –
+     und gerade die alten Zeilen liest man später.
+     ══════════════════════════════════════════════════════════════════ */
+
+  const CHAT_MAX_LEN = 800;
+
+  /**
+   * Schickt eine Nachricht in den Raum.
+   *
+   * Anders als sendOp darf das JEDER, der das Dokument lesen darf. Wer
+   * nur zusehen darf, hat oft genau deshalb eine Frage.
+   *
+   * @returns {Promise<boolean>} ob sie angekommen ist
+   */
+  function sendChat(text) {
+    if (left) return Promise.resolve(false);
+    const tx = String(text || '').replace(/\s+$/, '').slice(0, CHAT_MAX_LEN);
+    if (!tx) return Promise.resolve(false);
+
+    const eintrag = {
+      by: me.uid,
+      at: rtNow(),
+      tx,
+      nm: String(card.name || '').slice(0, 120),
+      ini: String(card.initials || '').slice(0, 4),
+      col: String(card.color || '').slice(0, 32)
+    };
+
+    return push(chatRef, eintrag).then(() => true).catch((err) => {
+      console.warn('[Share] Nachricht nicht gesendet:', err?.message || err);
+      return false;
+    });
+  }
+
+  /**
+   * Meldet jede Nachricht – auch die eigenen.
+   *
+   * >>> Warum hier NICHT gefiltert wird <<<
+   * sendOp lässt die eigenen Änderungen weg, weil sie örtlich schon
+   * eingearbeitet sind. Im Chat ist es umgekehrt: erst wenn die eigene
+   * Zeile aus dem Raum zurückkommt, steht sie wirklich dort. Genau das
+   * soll man sehen – sonst stünde sie im Fenster und wäre nie
+   * angekommen.
+   */
+  function onChat(callback) {
+    return beharrlich((gut, weg) => onChildAdded(
+      rtQuery(chatRef, limitToLast(CHAT_BACKLOG)),
+      (snap) => {
+        gut();
+        const m = snap.val();
+        if (!m || !m.tx) return;
+        callback({
+          id: snap.key,
+          uid: m.by || '',
+          at: typeof m.at === 'number' ? m.at : Date.now(),
+          text: String(m.tx),
+          name: m.nm || '',
+          initials: m.ini || '?',
+          color: m.col || '',
+          selbst: m.by === me.uid
+        });
+      },
+      (err) => weg(err)
+    ), 'Chat');
+  }
+
+  /**
+   * Sagt, dass man gerade tippt – oder aufgehört hat.
+   *
+   * Bewusst nicht in der Anwesenheit: die schreibt nur der Eigentümer
+   * ihres Eintrags, und jede Änderung dort lässt bei allen Beteiligten
+   * Marken und Sperrbänder neu rechnen (ui/collab.js). Für drei
+   * wackelnde Punkte ist das zu viel Betrieb.
+   */
+  function setTyping(an) {
+    if (left) return Promise.resolve(false);
+    const ziel = child(tippRef, me.uid);
+    const p = an ? set(ziel, rtNow()) : remove(ziel);
+    return p.then(() => true).catch(() => false);
+  }
+
+  /**
+   * Meldet laufend, WER gerade tippt – ohne einen selbst.
+   *
+   * Der Zeitstempel wird hier ausgewertet und nicht beim Empfänger: eine
+   * Anzeige, die hängen bleibt, weil jemandem die Leitung abgerissen
+   * ist, sieht aus wie ein Fehler. Gemessen wird gegen die eigene Uhr –
+   * gehen die Uhren auseinander, verschiebt sich die Anzeige um diesen
+   * Betrag, und mehr als ein paar Sekunden zu früh oder zu spät kann
+   * dabei nicht herauskommen.
+   */
+  function onTyping(callback) {
+    let uhr = null;
+    let zuletzt = {};
+
+    const melde = () => {
+      const jetzt = Date.now();
+      const frisch = [];
+      for (const [uid, at] of Object.entries(zuletzt)) {
+        if (uid === me.uid) continue;
+        if (typeof at !== 'number') continue;
+        if (jetzt - at > CHAT_TYPING_TTL_MS) continue;
+        frisch.push(uid);
+      }
+      try { callback(frisch); } catch (e) { /* Anzeige darf nichts kosten */ }
+    };
+
+    const stop = beharrlich((gut, weg) => onValue(tippRef,
+      (snap) => { gut(); zuletzt = snap.val() || {}; melde(); },
+      (err) => weg(err)
+    ), 'Tipp-Anzeige');
+
+    /* Ein Eintrag, der nicht mehr aufgefrischt wird, verfällt von selbst.
+       Ohne diesen Takt bliebe er stehen, bis sich irgendetwas anderes am
+       Baum ändert – und das kann bei einem abgerissenen Gerät nie sein. */
+    uhr = setInterval(melde, 1500);
+
+    return () => { clearInterval(uhr); stop(); };
+  }
+
+  /** Alte Nachrichten wegräumen. Wie pruneOps, nur mit längerer Frist. */
+  async function pruneChat() {
+    try {
+      const snap = await rtGet(chatRef);
+      const alle = snap.val() || {};
+      const grenze = Date.now() - CHAT_MAX_AGE_MS;
+      for (const [key, m] of Object.entries(alle)) {
+        if (typeof m?.at === 'number' && m.at < grenze) {
+          await remove(child(chatRef, key)).catch(() => {});
+        }
+      }
+    } catch (err) { /* nicht wichtig genug für eine Meldung */ }
+  }
+
   /** Alte Einträge wegräumen – sonst wächst der Strom endlos. */
   async function pruneOps() {
     try {
@@ -3027,6 +3195,11 @@ async function joinDocRoom(docId, options = {}) {
     for (const stop of stops) { try { stop(); } catch (e) {} }
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
+
+    /* Die Tipp-Anzeige mitnehmen. Sie verfiele zwar von selbst
+       (CHAT_TYPING_TTL_MS), aber „X schreibt gerade" von jemandem, der
+       das Dokument eben zugemacht hat, sind sechs Sekunden zu viel. */
+    try { await remove(child(tippRef, me.uid)); } catch (e) {}
 
     /* ══════════════════════════════════════════════════════════════════
        DER BESITZER NIMMT NUR DAS SCHREIBRECHT MIT, NICHT DIE GANZE LISTE
@@ -3060,6 +3233,7 @@ async function joinDocRoom(docId, options = {}) {
   }
 
   pruneOps();
+  pruneChat();
 
   /**
    * Die Rollenliste des Raums neu schreiben. Nur der Besitzer darf das,
@@ -3098,7 +3272,12 @@ async function joinDocRoom(docId, options = {}) {
     });
   }
 
-  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles, onConnection, leave };
+  return {
+    me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles,
+    onConnection, leave,
+    // Das Gespräch neben dem Dokument
+    sendChat, onChat, setTyping, onTyping
+  };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────
