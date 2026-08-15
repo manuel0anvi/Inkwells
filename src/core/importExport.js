@@ -776,7 +776,10 @@ async function insertFilesFlow() {
 window.insertFilesFlow = insertFilesFlow;
 
 /* ── SAVE / LOAD / PDF ── */
-function syncAll() { QA('.j-page').forEach(pgEl => { const info = getPage(pgEl.dataset.pgid); if (!info) return; const txt = pgEl.querySelector('.j-text'); if (txt) info.page.textContent = txt.innerHTML; info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[info.page.id] || [])); }); }
+/* Der Editor ins Datenmodell, Seite für Seite. Über ohneGriffe, sonst
+   reisen Greifstreifen und der Zustand kommentierter Stellen mit – die
+   Begründung steht dort (app.js). */
+function syncAll() { QA('.j-page').forEach(pgEl => { const info = getPage(pgEl.dataset.pgid); if (!info) return; const txt = pgEl.querySelector('.j-text'); if (txt) info.page.textContent = typeof ohneGriffe === 'function' ? ohneGriffe(txt) : txt.innerHTML; info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[info.page.id] || [])); }); }
 async function doLoad() { 
   if (!window.api) { toast(t('electronOnly'), true); return; } 
   const data = await window.api.load(); 

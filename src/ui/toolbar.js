@@ -924,7 +924,9 @@ function toggleHeading(tag) {
     if (info) {
       const pgEl = E('pages-wrap')?.querySelector('[data-pgid="' + info.page.id + '"]');
       const textDiv = pgEl?.querySelector('.j-text');
-      if (textDiv) info.page.textContent = textDiv.innerHTML;
+      // Über ohneGriffe: sonst reist die Anzeige mit (app.js)
+      if (textDiv) info.page.textContent = typeof ohneGriffe === 'function'
+        ? ohneGriffe(textDiv) : textDiv.innerHTML;
     }
   }, 50);
 }
@@ -1319,7 +1321,9 @@ E('fmt-p').addEventListener('mousedown', e => {
     if (info) {
       const pgEl = E('pages-wrap')?.querySelector('[data-pgid="' + info.page.id + '"]');
       const textDiv = pgEl?.querySelector('.j-text');
-      if (textDiv) info.page.textContent = textDiv.innerHTML;
+      // Über ohneGriffe: sonst reist die Anzeige mit (app.js)
+      if (textDiv) info.page.textContent = typeof ohneGriffe === 'function'
+        ? ohneGriffe(textDiv) : textDiv.innerHTML;
     }
   }, 50);
 });

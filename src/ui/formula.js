@@ -471,7 +471,8 @@
         const pgEl = textDiv.closest('[data-pgid]');
         const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
         if (info) {
-          info.page.textContent = textDiv.innerHTML;
+          info.page.textContent = typeof ohneGriffe === 'function'
+            ? ohneGriffe(textDiv) : textDiv.innerHTML;
           if (window.Collab && typeof Collab.noteTextChange === 'function') {
             Collab.noteTextChange(info.page.id, info.page.textContent);
           }

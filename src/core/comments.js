@@ -162,7 +162,10 @@ function notiereKommentarText(textDiv) {
   const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
   if (!info) return;
 
-  info.page.textContent = textDiv.innerHTML;
+  /* Über ohneGriffe und nicht roh: an dieser Stelle hängen die Marken
+     schon im Text, und an ihnen kann Anzeige kleben (app.js). */
+  info.page.textContent = typeof ohneGriffe === 'function'
+    ? ohneGriffe(textDiv) : textDiv.innerHTML;
   if (window.Collab && typeof Collab.noteTextChange === 'function') {
     Collab.noteTextChange(info.page.id, info.page.textContent);
   }

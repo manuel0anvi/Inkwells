@@ -109,23 +109,69 @@ function _applyPageSnapshot(page, snap) {
    an den Zeilenunterkanten (core/tables.js). */
 const GRIFF_WAHL = '.j-tbl-griff, .j-tbl-zeilengriff';
 
+/* ══════════════════════════════════════════════════════════════════════
+   WAS IM TEXT STEHT UND WAS NUR DARÜBERLIEGT
+
+   Im .j-text steht zweierlei durcheinander: der Text des Hefts und die
+   Anzeige, die die Oberfläche gerade darüberlegt. Gespeichert und
+   verschickt werden darf nur das Erste.
+
+   Zweierlei liegt darüber:
+
+     · DIE GREIFSTREIFEN an Spalten- und Zeilenkanten (core/tables.js).
+       Sie liegen als Kind in der Zelle, damit sie sich mit ihr bewegen.
+       Kämen sie mit, reisten sie durch Yjs zu den anderen und kämen bei
+       jedem Abgleich ein weiteres Mal dazu.
+
+     · DER ZUSTAND EINER KOMMENTIERTEN STELLE: `j-aktiv` und `j-cursor`,
+       solange man darüber schwebt oder mit der Schreibmarke darin steht,
+       und der `title` mit Verfasser und Anmerkung (ui/comments.js). Das
+       ist Anzeige, keine Auszeichnung – sie hängt daran, wo gerade die
+       Maus liegt.
+
+   >>> Warum das Zweite dazugekommen ist <<<
+   Weil es sonst mitreist. Der `title` landete im gespeicherten Text und
+   damit im geteilten Dokument: schon das blosse Darüberfahren machte
+   aus einer unveränderten Seite eine geänderte, und der Abgleich schob
+   sie hinaus. Beim anderen nahm die Bereinigung den `title` wieder weg
+   (er steht nicht auf der Liste in core/sanitize.js) – seine Fassung
+   unterschied sich damit wieder von unserer, und das Spiel begann von
+   vorn. Ein Text, der sich beim Hinsehen ändert, ist für einen
+   zeichengenauen Abgleich das Schlimmste, was es gibt.
+
+   Kopiert wird der Baum, statt am lebenden herumzunehmen: das
+   Herausnehmen und Zurückhängen verschöbe die Schreibmarke mitten im
+   Tippen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Klassen und Attribute, die nur die Anzeige betreffen. `j-resolved`
+   steht bewusst NICHT dabei: die kommt aus dem Kommentar selbst und ist
+   für alle gleich. */
+const NUR_ANZEIGE_KLASSEN = ['j-aktiv', 'j-cursor'];
+const MARKEN_WAHL = '.j-comment-mark';
+
 /**
- * Der HTML-Inhalt eines Textbereichs OHNE die Bedienteile.
+ * Der HTML-Inhalt eines Textbereichs, so wie er ins Heft gehört.
  *
- * Die Greifstreifen liegen als Kind in der Zelle, damit sie sich mit ihr
- * bewegen – gespeichert werden dürfen sie aber nicht, sonst reisen sie
- * durch Yjs zu den anderen und kommen bei jedem Abgleich ein weiteres
- * Mal dazu.
- *
- * Kopiert wird der Baum, statt die Streifen kurz herauszunehmen: das
- * Herausnehmen und Zurückhängen im lebenden Baum verschöbe die
- * Schreibmarke mitten im Tippen.
+ * Jede Stelle, die den Editor ins Datenmodell schreibt, geht hier
+ * hindurch – sonst rutscht die Anzeige an einer davon doch wieder mit
+ * hinein (es sind sechs, und fünf hatten es einmal falsch).
  */
 function ohneGriffe(textDiv) {
   if (!textDiv) return '';
-  if (!textDiv.querySelector(GRIFF_WAHL)) return textDiv.innerHTML;
+
+  const griffe = textDiv.querySelector(GRIFF_WAHL);
+  const marken = textDiv.querySelector(MARKEN_WAHL);
+  if (!griffe && !marken) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
+
   const kopie = textDiv.cloneNode(true);
   kopie.querySelectorAll(GRIFF_WAHL).forEach(g => g.remove());
+  kopie.querySelectorAll(MARKEN_WAHL).forEach(m => {
+    m.removeAttribute('title');
+    m.classList.remove(...NUR_ANZEIGE_KLASSEN);
+    // Ein leer gewordenes class-Attribut nicht als class="" stehen lassen
+    if (!m.getAttribute('class')) m.removeAttribute('class');
+  });
   return kopie.innerHTML;
 }
 
@@ -845,7 +891,7 @@ function checkPageOverflow(textDiv, page) {
   if (isNew) { const pgEl = appendPageDOM(nextPage, pages.length); pgEl.style.opacity = '0'; pgEl.style.transform = 'translateY(12px)'; pgEl.style.transition = 'opacity .25s,transform .25s'; requestAnimationFrame(() => requestAnimationFrame(() => { pgEl.style.opacity = '1'; pgEl.style.transform = 'none'; })); }
   const nextPgEl = E('pg-scroll').querySelector('[data-pgid="' + nextPage.id + '"]'); if (!nextPgEl) return;
   const nextTD = nextPgEl.querySelector('.j-text'); if (!nextTD) return;
-  nextTD.innerHTML = overflow.join('') + nextTD.innerHTML; nextPage.textContent = nextTD.innerHTML;
+  nextTD.innerHTML = overflow.join('') + nextTD.innerHTML; nextPage.textContent = ohneGriffe(nextTD);
   nextTD.focus(); const r = document.createRange(); r.setStart(nextTD, 0); r.collapse(true); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   nextPgEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActivePg(nextPage.id); renderSideTree();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
