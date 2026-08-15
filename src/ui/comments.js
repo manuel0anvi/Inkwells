@@ -697,4 +697,59 @@
   /* Der Chat macht diese Leiste zu, bevor er seine eigene aufzieht –
      beide sitzen an derselben Kante (ui/chat.js). */
   window.closeCommentPanel = () => setzeLeiste(false);
+
+  /* ══════════════════════════════════════════════════════════════════
+     FEHLERSUCHE: WO IST DIE MARKIERUNG HIN?
+
+     Ein Kommentar besteht aus ZWEI Teilen an zwei verschiedenen Orten:
+     dem Eintrag in nb.comments und dem <span> im Text der Seite. Geht
+     einer davon verloren, sieht das im Fenster unterschiedlich aus –
+     und man kann es von aussen nicht auseinanderhalten:
+
+       · Marke weg, Eintrag da   → die Stelle ist nicht mehr zu sehen,
+                                    die Karte steht aber noch da.
+       · Eintrag weg, Marke da   → die Stelle ist unterstrichen, die
+                                    Karte fehlt (core/comments.js baut
+                                    dann einen Platzhalter).
+
+     Wichtig ist die Spalte `imModell`: sie sagt, ob die Marke im
+     gespeicherten Text der Seite steht oder nur im Fenster. Steht sie
+     nur im Fenster, geht sie beim nächsten Öffnen verloren – und dann
+     liegt der Fehler auf dem Weg ins Datenmodell, nicht in der Anzeige.
+
+     Aufruf in der Konsole:  kommentarBefund()
+     ══════════════════════════════════════════════════════════════════ */
+  window.kommentarBefund = function kommentarBefund() {
+    const nb = typeof getNb === 'function' ? getNb() : null;
+    if (!nb) { console.log('[Kommentare] Kein Heft offen.'); return []; }
+
+    const zeilen = (nb.comments || []).map(c => {
+      const wahl = '.j-comment-mark[data-cid="' + CSS.escape(String(c.id)) + '"]';
+      const info = typeof getPage === 'function' ? getPage(c.pageId) : null;
+      const html = info ? String(info.page.textContent || '') : '';
+      return {
+        id: String(c.id).slice(0, 10),
+        seite: String(c.pageId).slice(0, 10),
+        text: String(c.text || '').slice(0, 30),
+        imFenster: !!document.querySelector(wahl),
+        imModell: html.includes('data-cid="' + c.id + '"'),
+        erledigt: !!c.resolved,
+        vonMir: typeof istMeinKommentar === 'function' ? istMeinKommentar(c) : '?'
+      };
+    });
+
+    /* Und andersherum: Marken im Text, zu denen es keinen Eintrag gibt. */
+    const bekannt = new Set((nb.comments || []).map(c => String(c.id)));
+    const verwaist = [...document.querySelectorAll('.j-comment-mark[data-cid]')]
+      .map(m => m.dataset.cid).filter(cid => !bekannt.has(String(cid)));
+
+    console.table(zeilen);
+    if (verwaist.length) console.warn('[Kommentare] Marken ohne Eintrag:', verwaist);
+    const nurFenster = zeilen.filter(z => z.imFenster && !z.imModell);
+    if (nurFenster.length) {
+      console.warn('[Kommentare] Diese Marken stehen NUR im Fenster und gehen beim '
+        + 'nächsten Öffnen verloren:', nurFenster.map(z => z.id));
+    }
+    return zeilen;
+  };
 })();
