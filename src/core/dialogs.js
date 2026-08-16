@@ -384,7 +384,7 @@ function applyReadOnlyChrome(readOnly, sharedDoc) {
 
   /* Beim Besitzer steht dort nicht „freigegeben von …" – er ist es ja
      selbst. Stattdessen der Hinweis, dass das Heft gerade live geteilt
-     ist, und der Knopf zum Verlassen verschwindet. */
+     ist. */
   const textEl = E('shared-bar-text');
   if (textEl) {
     if (sharedDoc.isOwner) {
@@ -395,6 +395,4 @@ function applyReadOnlyChrome(readOnly, sharedDoc) {
     }
   }
 
-  const leaveBtn = E('shared-bar-leave');
-  if (leaveBtn) leaveBtn.style.display = sharedDoc.isOwner ? 'none' : '';
 }

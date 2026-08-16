@@ -359,16 +359,75 @@
       if (head.updatedAt) parts.push(fmtDate(head.updatedAt));
       meta.textContent = parts.join(' · ');
 
-      body.append(name, badge, meta);
+      /* Derselbe Punkteknopf wie an den eigenen Heften – nur dass hier
+         genau ein Eintrag dahinter steht (siehe #shared-ctx-menu). Wer
+         eine Freigabe loswerden will, sucht sie in der Übersicht am Heft
+         und nicht in der Leiste des geöffneten Dokuments. */
+      const punkte = document.createElement('button');
+      punkte.className = 'nb-card-edit-btn';
+      punkte.title = t('sharedLeave');
+      punkte.textContent = '⋯';
+      punkte.addEventListener('click', e => {
+        e.stopPropagation();
+        zeigeKartenMenue(e.clientX, e.clientY, head);
+      });
+
+      body.append(punkte, name, badge, meta);
       card.append(spine, body);
       card.addEventListener('click', () => openSharedDocument(head).catch(err => {
         console.error('[SharedDocs] Öffnen fehlgeschlagen:', err);
         toast(describeError(err), true);
       }));
+      card.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        zeigeKartenMenue(e.clientX, e.clientY, head);
+      });
 
       sharedGrid.appendChild(card);
     }
   }
+
+  /* ── Das Punktemenü einer geteilten Karte ─────────────────────────── */
+
+  let menueDoc = null;      // welches Heft gerade gemeint ist
+
+  function zeigeKartenMenue(x, y, head) {
+    const menue = E('shared-ctx-menu');
+    if (!menue) return;
+    menueDoc = head;
+    menue.style.cssText = `display:block;left:${x}px;top:${y}px;position:fixed`;
+    setTimeout(() => document.addEventListener('pointerdown', menueDraussen), 0);
+  }
+
+  function schliesseKartenMenue() {
+    const menue = E('shared-ctx-menu');
+    if (menue) menue.style.display = 'none';
+    document.removeEventListener('pointerdown', menueDraussen);
+  }
+
+  function menueDraussen(e) {
+    if (!e.target.closest('#shared-ctx-menu')) schliesseKartenMenue();
+  }
+
+  E('sharedctx-hide')?.addEventListener('click', async () => {
+    const head = menueDoc;
+    schliesseKartenMenue();
+    if (!head) return;
+    if (!await showConfirm(t('sharedLeaveConfirm'))) return;
+
+    try {
+      const api = await whenShareReady();
+      await api.leaveDocument(head.docId);
+      /* Steht ausgerechnet dieses Heft gerade offen, muss es auch zu:
+         sonst schriebe man weiter in ein Dokument, das man eben aus der
+         eigenen Liste genommen hat. */
+      if (S.sharedDoc && S.sharedDoc.docId === head.docId) kickOut(t('sharedLeft'));
+      else toast(t('sharedLeft'));
+    } catch (err) {
+      console.error('[SharedDocs] Verlassen fehlgeschlagen:', err);
+      toast(describeError(err), true);
+    }
+  });
 
   function describeError(err) {
     const msg = err?.message || '';
@@ -1291,22 +1350,9 @@
     }
   }
 
-  /* ── Freigabe verlassen ─────────────────────────────────────────── */
-
-  E('shared-bar-leave')?.addEventListener('click', async () => {
-    const open = S.sharedDoc;
-    if (!open || open.isOwner) return;     // sein eigenes Heft verlässt niemand
-    if (!await showConfirm(t('sharedLeaveConfirm'))) return;
-
-    try {
-      const api = await whenShareReady();
-      await api.leaveDocument(open.docId);
-      kickOut(t('sharedLeft'));
-    } catch (err) {
-      console.error('[SharedDocs] Verlassen fehlgeschlagen:', err);
-      toast(describeError(err), true);
-    }
-  });
+  /* Der Knopf „Freigabe verlassen" in der Leiste über dem Dokument ist
+     entfallen; die Entscheidung sitzt jetzt im Punktemenü der Karte in
+     der Übersicht (zeigeKartenMenue weiter oben). */
 
   /* ── Aus dem Browser heraus geöffnet ────────────────────────────────
      main.js schickt inkwell://share/<linkId> als eigenes Ereignis. Das
