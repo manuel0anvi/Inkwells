@@ -284,8 +284,164 @@
     }
 
     zeile.append(kreis, blase, aktionen);
+    haengeFingerAn(zeile, m);
     return zeile;
   }
+
+  /* ══════════════════════════════════════════════════════════════════
+     MIT DEM FINGER: WISCHEN UND LANGES DRÜCKEN
+
+     Die beiden Knöpfe neben der Blase erscheinen beim Darüberfahren.
+     Ein Finger fährt aber nicht über etwas, ohne es zu berühren – auf
+     dem Tablet standen sie deshalb dauerhaft da, an jeder einzelnen
+     Zeile. Das ist in einem Gespräch von zwanzig Zeilen vierzig Knöpfe,
+     die man nie braucht.
+
+     Stattdessen die zwei Gesten, die auf einem Telefon jeder kennt:
+
+       Nach rechts wischen   antwortet auf diese Nachricht
+       Lange drücken         öffnet Antworten und Zurücknehmen
+
+     >>> Warum die Zeile beim Wischen mitgeht <<<
+     Ohne die Bewegung wüsste man bis zum Loslassen nicht, ob die Geste
+     überhaupt erkannt wird. Sie geht nur bis zur Schwelle mit und
+     federt zurück – das ist die Rückmeldung, nicht die Wirkung.
+
+     >>> touch-action <<<
+     Die Liste rollt senkrecht. `pan-y` an der Zeile sagt dem Browser:
+     senkrecht gehört weiter dir, waagerecht uns. Ohne das macht er aus
+     dem gezogenen Finger ein Rollen und bricht die Geste mit
+     pointercancel ab – dieselbe Falle wie beim Tabellenraster
+     (css/toolbar.css).
+     ══════════════════════════════════════════════════════════════════ */
+
+  // So weit muss der Finger, damit die Antwort ausgelöst wird
+  const WISCH_SCHWELLE = 52;
+  // Und so weit geht die Zeile höchstens mit
+  const WISCH_MAX = 72;
+  // So lange gedrückt halten heisst „langes Drücken"
+  const HALTEN_MS = 480;
+  // So weit darf der Finger dabei wandern, ohne dass es ein Wischen wird
+  const HALTEN_ZITTERN = 10;
+
+  function haengeFingerAn(zeile, m) {
+    let start = null;      // { x, y, id }
+    let uhr = null;        // Nachlauf fürs lange Drücken
+    let wischt = false;
+    let erledigt = false;  // schon ausgelöst – der Rest wird ignoriert
+
+    const zurueck = () => {
+      zeile.classList.remove('wischt');
+      zeile.style.transform = '';
+      wischt = false;
+    };
+
+    const aufraeumen = () => {
+      clearTimeout(uhr);
+      uhr = null;
+      start = null;
+      zurueck();
+    };
+
+    zeile.addEventListener('pointerdown', (e) => {
+      // Nur der Finger. Mit der Maus gibt es die Knöpfe daneben.
+      if (e.pointerType === 'mouse') return;
+      if (e.target.closest('.chat-akt-btn, .chat-zitat')) return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      erledigt = false;
+      clearTimeout(uhr);
+      uhr = setTimeout(() => {
+        uhr = null;
+        if (!start || wischt || erledigt) return;
+        erledigt = true;
+        zeigeZeilenMenue(start.x, start.y, m);
+        aufraeumen();
+      }, HALTEN_MS);
+    });
+
+    zeile.addEventListener('pointermove', (e) => {
+      if (!start || start.id !== e.pointerId || erledigt) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+
+      /* Senkrecht gewischt heisst: die Liste rollen. Dann ist die Geste
+         hier vorbei – auch das lange Drücken, sonst spränge das Menü
+         mitten aus einer Rollbewegung heraus. */
+      if (!wischt && Math.abs(dy) > Math.abs(dx)) {
+        if (Math.abs(dy) > HALTEN_ZITTERN) aufraeumen();
+        return;
+      }
+      if (Math.abs(dx) > HALTEN_ZITTERN) { clearTimeout(uhr); uhr = null; }
+      // Nur nach rechts, wie beim Telefon
+      if (dx <= 0) { zurueck(); return; }
+
+      wischt = true;
+      zeile.classList.add('wischt');
+      // Zäher werdend: die letzten Pixel kosten mehr als die ersten
+      const weg = Math.min(WISCH_MAX, dx * (dx > WISCH_SCHWELLE ? 0.4 : 1));
+      zeile.style.transform = 'translateX(' + Math.round(weg) + 'px)';
+      zeile.classList.toggle('reif', dx >= WISCH_SCHWELLE);
+    });
+
+    const beenden = (e) => {
+      if (!start || (e && start.id !== e.pointerId)) return;
+      const dx = e && e.clientX !== undefined ? e.clientX - start.x : 0;
+      const ausloesen = !erledigt && wischt && dx >= WISCH_SCHWELLE;
+      aufraeumen();
+      zeile.classList.remove('reif');
+      if (ausloesen) setzeAntwort(m);
+    };
+
+    zeile.addEventListener('pointerup', beenden);
+    zeile.addEventListener('pointercancel', () => aufraeumen());
+  }
+
+  /* ── Das Menü beim langen Drücken ─────────────────────────────────── */
+
+  let menueNachricht = null;
+
+  function zeigeZeilenMenue(x, y, m) {
+    const menue = el('chat-msg-menu');
+    if (!menue) return;
+    menueNachricht = m;
+
+    // Zurücknehmen gibt es nur an der eigenen Zeile
+    const weg = el('chatctx-weg');
+    if (weg) weg.style.display = m.selbst ? '' : 'none';
+
+    menue.style.cssText = 'display:block;position:fixed;left:0;top:0';
+    /* Erst zeigen, dann messen: ein Menü mit display:none hat keine
+       Grösse, und es soll nicht über den Rand hinausstehen. */
+    const b = menue.offsetWidth || 200;
+    const h = menue.offsetHeight || 90;
+    menue.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - b - 8, x - b / 2))) + 'px';
+    menue.style.top = Math.round(Math.max(8, Math.min(window.innerHeight - h - 8, y - h - 8))) + 'px';
+
+    setTimeout(() => document.addEventListener('pointerdown', menueDraussen, true), 0);
+  }
+
+  function schliesseZeilenMenue() {
+    const menue = el('chat-msg-menu');
+    if (menue) menue.style.display = 'none';
+    menueNachricht = null;
+    document.removeEventListener('pointerdown', menueDraussen, true);
+  }
+
+  function menueDraussen(e) {
+    if (!e.target.closest('#chat-msg-menu')) schliesseZeilenMenue();
+  }
+
+  el('chatctx-antwort')?.addEventListener('click', () => {
+    const m = menueNachricht;
+    schliesseZeilenMenue();
+    if (m) setzeAntwort(m);
+  });
+
+  el('chatctx-weg')?.addEventListener('click', () => {
+    const m = menueNachricht;
+    schliesseZeilenMenue();
+    if (m) nimmZurueck(m);
+  });
 
   /** Die gemeinte Zeile kurz hervorheben – wenn sie noch da ist. */
   function springeZu(id) {

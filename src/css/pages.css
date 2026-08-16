@@ -2294,24 +2294,65 @@ body.touch-draw .j-canvas {
   color: #d9534f
 }
 
-/* ── Mit dem Finger gibt es kein Darüberfahren ───────────────────────
-   Dieselbe Überlegung wie beim Punkteknopf der Heftkarte
-   (css/responsive.css): ein Finger schwebt nicht, also muss dastehen,
-   was er treffen soll. body.touch-input setzt core/state.js nach der
-   zuletzt benutzten Eingabeart; das Hochformat kommt dazu, damit ein
-   frisch umgeklapptes Gerät nicht erst eine Berührung braucht. */
-body.touch-input .chat-akt {
-  visibility: visible;
+/* ══════════════════════════════════════════════════════════════════════
+   MIT DEM FINGER: WISCHEN UND LANGES DRÜCKEN
+
+   Ein Finger fährt nicht über etwas, ohne es zu berühren. Die Knöpfe
+   standen deshalb auf dem Tablet dauerhaft da – an jeder Zeile, also in
+   einem Gespräch von zwanzig Zeilen vierzig Knöpfe, die man nie braucht.
+
+   Stattdessen die zwei Gesten, die auf einem Telefon jeder kennt: nach
+   rechts wischen antwortet, langes Drücken öffnet das Menü. Die Handgriffe
+   dafür stehen in ui/chat.js.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Senkrecht gehört der Liste, waagerecht der Geste. Ohne das macht der
+   Browser aus dem gezogenen Finger ein Rollen und bricht die Geste mit
+   pointercancel ab – dieselbe Falle wie beim Tabellenraster. */
+.chat-msg {
+  touch-action: pan-y;
+  position: relative
+}
+
+/* Federt zurück, wenn der Finger loslässt. Während der Bewegung ist der
+   Übergang aus: sonst liefe die Zeile dem Finger hinterher. */
+.chat-msg:not(.wischt) {
+  transition: transform .18s ease-out
+}
+
+/* Das Zeichen, das unter der weggeschobenen Zeile zum Vorschein kommt.
+   Blass, solange die Schwelle nicht erreicht ist, und golden, sobald ein
+   Loslassen wirklich antworten würde – so weiss man es VOR dem Loslassen. */
+.chat-msg::before {
+  content: '↩';
+  position: absolute;
+  left: -26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: var(--lo);
+  opacity: 0;
+  transition: opacity .12s, color .12s;
+  pointer-events: none
+}
+
+.chat-msg.selbst::before {
+  /* Die eigenen Zeilen stehen rechts; das Zeichen gehört trotzdem an die
+     Seite, aus der gewischt wird. */
+  left: auto;
+  right: calc(100% + 8px)
+}
+
+.chat-msg.wischt::before {
   opacity: 1
 }
 
-@media (any-pointer: coarse) and (orientation: portrait) {
-  .chat-akt {
-    visibility: visible;
-    opacity: 1
-  }
+.chat-msg.reif::before {
+  color: var(--gold)
 }
 
+/* Die Knöpfe daneben gibt es mit dem Finger nicht – dort wischt und
+   drückt man. Sie bleiben für Maus und Trackpad. */
 @media (any-pointer: coarse) {
   .chat-akt-btn {
     width: 32px;

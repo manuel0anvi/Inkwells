@@ -596,6 +596,25 @@
           <button class="modal-close-x" id="chat-close" title="✕">✕</button>
         </div>
         <div class="chat-list" id="chat-list"></div>
+        <!-- Mit dem Finger: langes Druecken auf eine Nachricht. Zwei
+             Eintraege, mehr gibt es an einer Zeile nicht zu tun; das
+             Zuruecknehmen erscheint nur an der eigenen (ui/chat.js). -->
+        <div class="ctx-menu" id="chat-msg-menu" style="display:none">
+          <button class="ctx-item" id="chatctx-antwort">
+            <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 16 16" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3.5 2 7l4 3.5"/><path d="M2 7h6.5a4.5 4.5 0 0 1 4.5 4.5v1"/>
+            </svg>
+            <span data-i18n="chatReply">Antworten</span>
+          </button>
+          <button class="ctx-item danger" id="chatctx-weg">
+            <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 16 16" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2h5.8l.6-8.2"/>
+            </svg>
+            <span data-i18n="chatDelete">Nachricht zurücknehmen</span>
+          </button>
+        </div>
         <!-- Wer gerade tippt: Abzeichen und drei wandernde Punkte -->
         <div class="chat-typing" id="chat-typing" style="display:none">
           <span class="chat-typing-faces" id="chat-typing-faces"></span>
