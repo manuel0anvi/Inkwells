@@ -65,6 +65,18 @@
    erlaubt jedem das Löschen von wirklich Altem, sonst bliebe es liegen,
    sobald der Verfasser nicht mehr da ist.
 
+   Die EIGENE Nachricht darf man jederzeit zurücknehmen: dafür steht in
+   derselben Regel `data.child('by').val() === auth.uid`. Fremdes bleibt
+   bis zum Ablauf der Frist – „löschen, was ein anderer gesagt hat"
+   gehört nicht in ein Gespräch zu zweit.
+
+   `rid`, `rn` und `rt` tragen eine Antwort: die Kennung der gemeinten
+   Nachricht, ihr Verfasser und ein kurzer Ausschnitt. Der Ausschnitt
+   reist mit, weil die gemeinte Nachricht nach einem Tag weg sein kann
+   (siehe sendChat in src/core/share.js). Ohne diese drei Felder weist
+   `$other` jede Antwort ab – die Regeln müssen dafür veröffentlicht
+   werden, sonst kommt gar keine Antwort mehr an.
+
    `t` darunter ist die Tipp-Anzeige: eine Zahl je Kennung, der Zeitpunkt
    des letzten Anschlags. Sie steht nicht bei der Anwesenheit, weil die
    nur der Besitzer eines Eintrags schreiben darf UND weil jede Änderung
@@ -215,6 +227,15 @@
             },
             "col": {
               ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "rid": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "rn": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
+            "rt": {
+              ".validate": "newData.isString() && newData.val().length <= 140"
             },
             "$other": {
               ".validate": false

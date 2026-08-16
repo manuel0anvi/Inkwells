@@ -2185,6 +2185,207 @@ body.touch-draw .j-canvas {
   color: var(--lo)
 }
 
+/* ── Das Zitat über einer Antwort ────────────────────────────────────
+   In der Blase, mit einem farbigen Strich links – dasselbe Bild wie in
+   jedem Nachrichtenprogramm. Ein Klick springt zur gemeinten Zeile;
+   deshalb ein <button> und kein <div>: er ist mit der Tastatur
+   erreichbar und sagt von sich aus, dass er etwas tut. */
+.chat-zitat {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 0 0 4px;
+  padding: 3px 6px;
+  background: rgba(255, 255, 255, .045);
+  border: none;
+  border-left: 2px solid var(--gold);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit
+}
+
+.chat-zitat:hover {
+  background: rgba(255, 255, 255, .09)
+}
+
+.chat-zitat-wer {
+  display: block;
+  font-size: 10px;
+  color: var(--gold);
+  line-height: 1.4
+}
+
+.chat-zitat-text {
+  display: block;
+  font-size: 11px;
+  color: var(--md);
+  line-height: 1.35;
+  /* Zwei Zeilen reichen, um sie wiederzuerkennen. Der ganze Satz stünde
+     sonst zweimal da – einmal als Zitat und einmal weiter oben. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere
+}
+
+/* Kurz hervorgehoben, wenn ein Klick aufs Zitat hierher gesprungen ist */
+.chat-msg.gefunden .chat-bubble {
+  animation: chat-gefunden 1.6s ease-out
+}
+
+@keyframes chat-gefunden {
+  0%, 55% { box-shadow: 0 0 0 2px var(--gold) }
+  100% { box-shadow: 0 0 0 2px transparent }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg.gefunden .chat-bubble {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--gold)
+  }
+}
+
+/* ── Antworten und Zurücknehmen ──────────────────────────────────────
+   Neben der Blase, nicht darin: sie gehören zur Zeile und nicht zum
+   Gesagten. Mit der Maus erscheinen sie beim Darüberfahren – in einem
+   Gespräch bedürfen die meisten Zeilen keiner Bedienung, und zwei
+   Knöpfe an jeder wären Lärm.
+
+   Sie nehmen ihren Platz IMMER ein (visibility statt display): sonst
+   spränge die Blase beim Darüberfahren zur Seite, und man träfe den
+   Knopf nicht, den man gerade ansteuert. */
+.chat-akt {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity .12s
+}
+
+.chat-msg:hover .chat-akt,
+.chat-msg:focus-within .chat-akt {
+  visibility: visible;
+  opacity: 1
+}
+
+.chat-akt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--lo);
+  cursor: pointer
+}
+
+.chat-akt-btn:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.chat-akt-btn.gefahr:hover {
+  color: #d9534f
+}
+
+/* ── Mit dem Finger gibt es kein Darüberfahren ───────────────────────
+   Dieselbe Überlegung wie beim Punkteknopf der Heftkarte
+   (css/responsive.css): ein Finger schwebt nicht, also muss dastehen,
+   was er treffen soll. body.touch-input setzt core/state.js nach der
+   zuletzt benutzten Eingabeart; das Hochformat kommt dazu, damit ein
+   frisch umgeklapptes Gerät nicht erst eine Berührung braucht. */
+body.touch-input .chat-akt {
+  visibility: visible;
+  opacity: 1
+}
+
+@media (any-pointer: coarse) and (orientation: portrait) {
+  .chat-akt {
+    visibility: visible;
+    opacity: 1
+  }
+}
+
+@media (any-pointer: coarse) {
+  .chat-akt-btn {
+    width: 32px;
+    height: 32px
+  }
+}
+
+/* ── Worauf gerade geantwortet wird ──────────────────────────────────
+   Über dem Eingabefeld, damit es beim Rollen der Liste stehen bleibt –
+   dieselbe Stelle wie „wer gerade tippt". */
+.chat-antwort-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  min-width: 268px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--sb);
+  background: var(--sh2)
+}
+
+.chat-antwort-marke {
+  width: 2px;
+  align-self: stretch;
+  border-radius: 1px;
+  background: var(--gold);
+  flex: none
+}
+
+.chat-antwort-inhalt {
+  min-width: 0;
+  flex: 1
+}
+
+.chat-antwort-wer {
+  display: block;
+  font-size: 10px;
+  color: var(--gold)
+}
+
+.chat-antwort-text {
+  display: block;
+  font-size: 11px;
+  color: var(--md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis
+}
+
+.chat-antwort-weg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--lo);
+  font-size: 12px;
+  cursor: pointer
+}
+
+.chat-antwort-weg:hover {
+  background: var(--sb);
+  color: var(--hi)
+}
+
+@media (any-pointer: coarse) {
+  .chat-antwort-weg {
+    width: 32px;
+    height: 32px
+  }
+}
+
 /* ── Wer gerade tippt ────────────────────────────────────────────────
    Über dem Eingabefeld und nicht in der Liste: die Liste rollt, und die
    Anzeige soll immer zu sehen sein. */

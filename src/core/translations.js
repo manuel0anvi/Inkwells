@@ -263,6 +263,9 @@ const TRANSLATIONS = {
     chooseFolder: 'Ordner wählen',
     autoSave: 'Automatisch speichern',
     autoSaveHint: 'Gespeichert wird kurz nachdem du aufhörst zu schreiben.',
+    chatNotify: 'Chat-Meldungen',
+    chatNotifySetting: 'Bei neuen Nachrichten benachrichtigen',
+    chatNotifyHint: 'Windows zeigt sie rechts unten – nur, wenn Inkwell gerade nicht im Vordergrund ist.',
     
     // Save status
     saved: 'Gespeichert',
@@ -577,6 +580,12 @@ const TRANSLATIONS = {
     chatSend: 'Senden',
     chatEmpty: 'Noch nichts gesagt. Was hier steht, gehört nicht ins Heft.',
     chatFailed: 'Die Nachricht kam nicht an.',
+    chatReply: 'Antworten',
+    chatSomeone: 'Jemand',
+    chatQuoteGone: 'Diese Nachricht gibt es nicht mehr.',
+    chatDelete: 'Nachricht zurücknehmen',
+    chatDeleteConfirm: 'Diese Nachricht zurücknehmen? Sie verschwindet auch bei den anderen.',
+    chatDeleteFailed: 'Die Nachricht konnte nicht zurückgenommen werden.',
     chatRulesMissing: 'Der Chat ist in der Live-Datenbank noch nicht freigeschaltet. Die Regeln aus website/database.rules.json müssen in der Firebase Console unter Realtime Database → Regeln veröffentlicht werden. Alles andere an der Freigabe läuft davon unberührt weiter.',
     sharedListError: 'Liste konnte nicht geladen werden ({msg}). Wird erneut versucht.',
 
@@ -1066,6 +1075,9 @@ const TRANSLATIONS = {
     chooseFolder: 'Choose Folder',
     autoSave: 'Auto-save',
     autoSaveHint: 'Your work is saved shortly after you stop writing.',
+    chatNotify: 'Chat notifications',
+    chatNotifySetting: 'Notify me about new messages',
+    chatNotifyHint: 'Windows shows them bottom right – only while Inkwell is not in the foreground.',
     
     // Save status
     saved: 'Saved',
@@ -1376,6 +1388,12 @@ const TRANSLATIONS = {
     chatSend: 'Send',
     chatEmpty: 'Nothing said yet. What goes here stays out of the notebook.',
     chatFailed: 'The message did not get through.',
+    chatReply: 'Reply',
+    chatSomeone: 'Someone',
+    chatQuoteGone: 'That message is gone.',
+    chatDelete: 'Take message back',
+    chatDeleteConfirm: 'Take this message back? It disappears for everyone else too.',
+    chatDeleteFailed: 'The message could not be taken back.',
     chatRulesMissing: 'Chat is not enabled in the live database yet. The rules from website/database.rules.json need to be published in the Firebase Console under Realtime Database → Rules. Everything else about the share keeps working.',
     sharedListError: 'The list could not be loaded ({msg}). Trying again.',
 
@@ -1856,6 +1874,9 @@ const TRANSLATIONS = {
     chooseFolder: 'Scegli Cartella',
     autoSave: 'Salvataggio automatico',
     autoSaveHint: 'Il salvataggio avviene poco dopo che smetti di scrivere.',
+    chatNotify: 'Notifiche chat',
+    chatNotifySetting: 'Avvisami dei nuovi messaggi',
+    chatNotifyHint: 'Windows le mostra in basso a destra – solo quando Inkwell non è in primo piano.',
     
     // Save status
     saved: 'Salvato',
@@ -2166,6 +2187,12 @@ const TRANSLATIONS = {
     chatSend: 'Invia',
     chatEmpty: 'Ancora nulla. Quello che scrivi qui resta fuori dal quaderno.',
     chatFailed: 'Il messaggio non è arrivato.',
+    chatReply: 'Rispondi',
+    chatSomeone: 'Qualcuno',
+    chatQuoteGone: 'Questo messaggio non c\'è più.',
+    chatDelete: 'Ritira il messaggio',
+    chatDeleteConfirm: 'Ritirare questo messaggio? Sparisce anche per gli altri.',
+    chatDeleteFailed: 'Non è stato possibile ritirare il messaggio.',
     chatRulesMissing: 'La chat non è ancora abilitata nel database live. Le regole di website/database.rules.json devono essere pubblicate nella Firebase Console in Realtime Database → Regole. Tutto il resto della condivisione continua a funzionare.',
     sharedListError: 'Impossibile caricare l\'elenco ({msg}). Nuovo tentativo in corso.',
 

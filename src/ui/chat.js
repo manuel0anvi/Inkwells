@@ -51,8 +51,14 @@
 
   let raum = null;          // der Live-Raum, solange einer läuft
   let stopChat = null;
+  let stopWeg = null;
   let stopTipp = null;
   let stopStatus = null;
+
+  /* Ab wann eine Nachricht als „neu" gilt. Alles davor ist der
+     Rückstand, den der Strom beim Anmelden nachliefert – der gehört in
+     die Liste, aber nicht in eine Windows-Meldung. */
+  let angeschlossenSeit = 0;
 
   /* Leer heißt: er läuft. Sonst der Grund, warum nicht – siehe
      onChatStatus in core/share.js. */
@@ -113,8 +119,10 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || !offen()) return;
-    /* Nur zumachen, wenn nichts geschrieben ist – sonst wäre ein
-       versehentliches Escape ein verlorener Satz. */
+    /* In Schritten zurück: erst den Bezug, dann den Satz, dann die
+       Leiste. Sonst wäre ein versehentliches Escape ein verlorener
+       Satz – und ein zweites Escape schliesst ja weiterhin. */
+    if (antwortAuf) { setzeAntwort(null); return; }
     const feld = el('chat-input');
     if (feld && feld.value.trim()) { feld.value = ''; passeHoeheAn(); return; }
     setzeOffen(false);
@@ -169,9 +177,31 @@
     return 'hsl(' + h + ' 62% 58%)';
   }
 
+  /**
+   * Ein Knopf mit einem Sinnbild aus einer Vorlage in index.html.
+   *
+   * >>> Warum nicht einfach innerHTML mit dem SVG <<<
+   * Weil in dieser Datei NICHTS über innerHTML gesetzt wird – hier
+   * kommt fremder Text herein, und eine Ausnahme „nur für dieses eine
+   * feste SVG" ist genau die Sorte Regel, an der später jemand
+   * vorbeirutscht. Geprüft wird das in scripts/test-neue-teile.js.
+   */
+  function knopfMitBild(vorlageId, klassen, name) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = klassen;
+    btn.title = name;
+    const vorlage = el(vorlageId);
+    if (vorlage && vorlage.content) btn.appendChild(vorlage.content.cloneNode(true));
+    return btn;
+  }
+
   function baueZeile(m) {
     const zeile = document.createElement('div');
     zeile.className = 'chat-msg' + (m.selbst ? ' selbst' : '');
+    zeile.dataset.mid = m.id;
+    // Für den Antwort-Knopf: was zitiert würde, steht am Element selbst
+    zeile._nachricht = m;
 
     /* Das Abzeichen steht NEBEN der Nachricht, nicht darüber: wer
        darauf zeigt, sieht den Namen. Er noch einmal ausgeschrieben über
@@ -185,6 +215,33 @@
     const blase = document.createElement('div');
     blase.className = 'chat-bubble';
 
+    /* ══════════════════════════════════════════════════════════════
+       DAS ZITAT ÜBER DER ANTWORT
+
+       In der Blase und nicht daneben: es gehört zu dieser Nachricht,
+       nicht zwischen zwei. Ein Klick springt zur gemeinten Zeile –
+       solange es sie noch gibt. Nach einem Tag ist sie weg
+       (CHAT_MAX_AGE_MS), und dann bleibt eben der Ausschnitt stehen,
+       der mitgereist ist.
+       ══════════════════════════════════════════════════════════════ */
+    if (m.antwort) {
+      const zitat = document.createElement('button');
+      zitat.type = 'button';
+      zitat.className = 'chat-zitat';
+
+      const wer = document.createElement('span');
+      wer.className = 'chat-zitat-wer';
+      wer.textContent = m.antwort.name || txt('chatSomeone', 'Jemand');
+
+      const was = document.createElement('span');
+      was.className = 'chat-zitat-text';
+      was.textContent = m.antwort.text || '';
+
+      zitat.append(wer, was);
+      zitat.addEventListener('click', () => springeZu(m.antwort.id));
+      blase.appendChild(zitat);
+    }
+
     const text = document.createElement('div');
     text.className = 'chat-text';
     // textContent und nicht innerHTML: hier kommt fremder Text herein
@@ -195,8 +252,75 @@
     zeit.textContent = uhrzeit(m.at);
 
     blase.append(text, zeit);
-    zeile.append(kreis, blase);
+
+    /* ══════════════════════════════════════════════════════════════
+       ANTWORTEN UND ZURÜCKNEHMEN
+
+       Zwei kleine Knöpfe neben der Blase. Mit der Maus erscheinen sie
+       beim Darüberfahren – dauerhaft sichtbar wären sie Lärm in einem
+       Gespräch, in dem die meisten Zeilen keiner Bedienung bedürfen.
+
+       Mit dem Finger gibt es kein Darüberfahren: dort stehen sie von
+       selbst da (css/pages.css fragt body.touch-input und das
+       Hochformat, dieselbe Regel wie beim Punkteknopf der Heftkarte).
+
+       Zurücknehmen gibt es nur an der eigenen Zeile. Fremdes zu
+       löschen ist keine Bedienung, die in ein Gespräch gehört – und
+       die Regeln in der Datenbank liessen es ohnehin nicht zu.
+       ══════════════════════════════════════════════════════════════ */
+    const aktionen = document.createElement('div');
+    aktionen.className = 'chat-akt';
+
+    const antworten = knopfMitBild('chat-icon-antwort', 'chat-akt-btn',
+      txt('chatReply', 'Antworten'));
+    antworten.addEventListener('click', () => setzeAntwort(m));
+    aktionen.appendChild(antworten);
+
+    if (m.selbst) {
+      const weg = knopfMitBild('chat-icon-weg', 'chat-akt-btn gefahr',
+        txt('chatDelete', 'Nachricht zurücknehmen'));
+      weg.addEventListener('click', () => nimmZurueck(m));
+      aktionen.appendChild(weg);
+    }
+
+    zeile.append(kreis, blase, aktionen);
     return zeile;
+  }
+
+  /** Die gemeinte Zeile kurz hervorheben – wenn sie noch da ist. */
+  function springeZu(id) {
+    const ziel = el('chat-list')?.querySelector('[data-mid="' + CSS.escape(String(id)) + '"]');
+    if (!ziel) { toastKurz(txt('chatQuoteGone', 'Diese Nachricht gibt es nicht mehr.')); return; }
+    ziel.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    ziel.classList.remove('gefunden');
+    // Neu anstossen: ohne den Zwischenschritt läuft die Kennzeichnung
+    // beim zweiten Klick auf dieselbe Zeile nicht noch einmal
+    void ziel.offsetWidth;
+    ziel.classList.add('gefunden');
+    setTimeout(() => ziel.classList.remove('gefunden'), 1600);
+  }
+
+  function toastKurz(text) {
+    if (typeof toast === 'function') toast(text);
+  }
+
+  async function nimmZurueck(m) {
+    if (!raum || typeof raum.deleteChat !== 'function') return;
+    if (typeof showConfirm === 'function'
+        && !await showConfirm(txt('chatDeleteConfirm', 'Diese Nachricht zurücknehmen?'))) return;
+
+    /* Die Zeile NICHT schon hier wegnehmen: kommt das Löschen nicht
+       durch, stünde sie bei allen anderen weiter da und nur hier nicht
+       mehr. Weg ist sie, wenn der Raum es meldet (entferneZeile). */
+    const gut = await raum.deleteChat(m.id);
+    if (!gut) toastKurz(txt('chatDeleteFailed', 'Die Nachricht konnte nicht zurückgenommen werden.'));
+  }
+
+  function entferneZeile(id) {
+    const zeile = el('chat-list')?.querySelector('[data-mid="' + CSS.escape(String(id)) + '"]');
+    zeile?.remove();
+    if (antwortAuf && antwortAuf.id === id) setzeAntwort(null);
+    leereHinweis();
   }
 
   /** Steht die Liste schon fast unten? Dann darf sie mitwandern. */
@@ -274,9 +398,69 @@
     if (folgen || m.selbst) nachUnten();
 
     if (!offen() && !m.selbst) { ungelesen++; zeichneIkone(); }
+    if (!m.selbst) meldeWindows(m);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WINDOWS SAGT BESCHEID, WENN INKWELL NICHT VORNE IST
+
+     Der Punkt an der Ikone reicht nur, solange man hinsieht. Wer neben
+     dem Heft an etwas anderem arbeitet, hat das Fenster gar nicht auf
+     dem Schirm – und eine Nachricht, die man erst beim nächsten
+     Hinsehen bemerkt, ist keine Nachricht.
+
+     >>> Was hier NICHT entschieden wird <<<
+     Ob das Fenster vorne steht. Das weiss nur der Hauptprozess
+     verlässlich (main.js, notify-chat): das Fenster kann minimiert
+     sein oder auf einem anderen Schreibtisch liegen, und beides sieht
+     von hier aus gleich aus.
+
+     >>> Der Rückstand beim Betreten meldet nichts <<<
+     Beim Anmelden am Strom kommen bis zu CHAT_BACKLOG alte
+     Nachrichten auf einmal – ohne die Sperre unten stünden achtzig
+     Meldungen von gestern rechts unten übereinander. Erst was NACH
+     dem Anschluss ankommt, gilt als neu.
+     ══════════════════════════════════════════════════════════════════ */
+  function meldeWindows(m) {
+    if (!angeschlossenSeit || (m.at || 0) < angeschlossenSeit) return;
+    if (typeof Settings !== 'undefined' && Settings.get && Settings.get('chatNotifyOff')) return;
+    if (!window.api || typeof window.api.notifyChat !== 'function') return;
+
+    const wer = m.name || txt('chatTitle', 'Chat');
+    const heft = (typeof S !== 'undefined' && S.sharedDoc && S.sharedDoc.title) || '';
+    try {
+      window.api.notifyChat({
+        title: heft ? wer + ' — ' + heft : wer,
+        body: m.text
+      });
+    } catch (err) { /* eine Meldung darf nichts kosten */ }
   }
 
   /* ── Schreiben ────────────────────────────────────────────────────── */
+
+  /* Worauf die nächste Nachricht antwortet – oder nichts. */
+  let antwortAuf = null;
+
+  function setzeAntwort(m) {
+    antwortAuf = m ? { id: m.id, name: m.name || '', text: m.text || '' } : null;
+
+    const bar = el('chat-antwort-bar');
+    if (!bar) return;
+    if (!antwortAuf) { bar.style.display = 'none'; return; }
+
+    const wer = el('chat-antwort-wer');
+    const was = el('chat-antwort-text');
+    if (wer) wer.textContent = m.selbst
+      ? txt('collabYou', 'du')
+      : (antwortAuf.name || txt('chatSomeone', 'Jemand'));
+    if (was) was.textContent = antwortAuf.text;
+    bar.style.display = 'flex';
+
+    // Wer auf Antworten drückt, will danach tippen
+    el('chat-input')?.focus();
+  }
+
+  el('chat-antwort-weg')?.addEventListener('click', () => setzeAntwort(null));
 
   /** Das Feld wächst mit dem Text – bis zu einer Grenze. */
   const FELD_MAX_PX = 120;
@@ -336,16 +520,20 @@
 
     /* Das Feld sofort leeren, nicht erst nach der Antwort: bei einer
        trägen Leitung tippt man sonst in einen Satz hinein, der gerade
-       hinausgeht. Scheitert es, kommt er zurück ins Feld. */
+       hinausgeht. Scheitert es, kommt er zurück ins Feld – und mit ihm
+       der Bezug, auf den er sich bezog. */
+    const bezug = antwortAuf;
     feld.value = '';
+    setzeAntwort(null);
     passeHoeheAn();
     clearTimeout(tippEnde);
     melde(false);
 
-    const gut = await raum.sendChat(text);
+    const gut = await raum.sendChat(text, bezug);
     if (gut) return;
 
     feld.value = text;
+    if (bezug) setzeAntwort({ id: bezug.id, name: bezug.name, text: bezug.text });
     passeHoeheAn();
 
     /* Beim ersten Versuch kann genau hier herauskommen, dass die Regeln
@@ -404,8 +592,12 @@
     detach();
     if (!neuerRaum) return;
     raum = neuerRaum;
+    angeschlossenSeit = Date.now();
 
     if (typeof raum.onChat === 'function') stopChat = raum.onChat(zeigeNachricht);
+    /* Mit ?. gefragt: eine ältere core/share.js kennt das Zurücknehmen
+       noch nicht – dann bleibt es beim bisherigen Verhalten. */
+    if (typeof raum.onChatRemoved === 'function') stopWeg = raum.onChatRemoved(entferneZeile);
     if (typeof raum.onTyping === 'function') stopTipp = raum.onTyping(zeigeTippende);
 
     /* Der Zustand kommt sofort und noch einmal, wenn er kippt. Mit ?.
@@ -431,14 +623,17 @@
     clearTimeout(tippEnde);
 
     if (typeof stopChat === 'function') { try { stopChat(); } catch (e) {} }
+    if (typeof stopWeg === 'function') { try { stopWeg(); } catch (e) {} }
     if (typeof stopTipp === 'function') { try { stopTipp(); } catch (e) {} }
     if (typeof stopStatus === 'function') { try { stopStatus(); } catch (e) {} }
     stopChat = null;
+    stopWeg = null;
     stopTipp = null;
     stopStatus = null;
     raum = null;
     tippAn = false;
     gesperrt = '';
+    angeschlossenSeit = 0;
 
     gesehen.clear();
     ungelesen = 0;
@@ -447,6 +642,7 @@
     if (liste) liste.innerHTML = '';
     const streifen = el('chat-typing');
     if (streifen) streifen.style.display = 'none';
+    setzeAntwort(null);
     const feld = el('chat-input');
     if (feld) {
       feld.value = '';
@@ -459,6 +655,15 @@
 
     setzeOffen(false);
     zeichneIkone();
+  }
+
+  /* Wer die Meldung anklickt, will das Gespräch sehen – nicht bloss ein
+     Fenster, das nach vorn springt. Das Nachvornholen macht main.js,
+     das Aufziehen hier. */
+  if (window.api && typeof window.api.onChatNotificationClicked === 'function') {
+    window.api.onChatNotificationClicked(() => {
+      if (raum && jemandDa()) setzeOffen(true);
+    });
   }
 
   window.ChatUI = { attach, detach, refresh, isOpen: offen };

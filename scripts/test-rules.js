@@ -611,6 +611,23 @@ function headData(overrides = {}) {
   await denied('Erfundene Felder nicht',
     set(ref(rtOf(READER), 'chat/dok1/m/n6'), { ...nachricht, bild: 'data:...' }));
 
+  /* ── Eine Antwort auf eine andere Nachricht ────────────────────────
+     rid ist die gemeinte Kennung, rn ihr Verfasser, rt ein kurzer
+     Ausschnitt. Der Ausschnitt reist mit, weil die gemeinte Nachricht
+     nach einem Tag weg sein kann (sendChat in src/core/share.js).
+
+     Ohne diese drei Felder in den Regeln weist `$other` jede Antwort
+     ab – und zwar die GANZE Nachricht, nicht nur das Zitat darin.
+     Genau davor steht die erste Zeile hier. */
+  await ok('Eine Antwort trägt Kennung, Namen und Ausschnitt',
+    set(ref(rtOf(READER), 'chat/dok1/m/n7'), {
+      ...nachricht, rid: '-Nabc123', rn: 'Bearbeiter', rt: 'mach ich'
+    }));
+  await denied('Der Ausschnitt bleibt kurz',
+    set(ref(rtOf(READER), 'chat/dok1/m/n8'), { ...nachricht, rt: 'x'.repeat(141) }));
+  await denied('Und die Kennung ist eine Zeichenkette',
+    set(ref(rtOf(READER), 'chat/dok1/m/n9'), { ...nachricht, rid: 42 }));
+
   /* Ein Fremder ist angemeldet – anonym genügt, und anonym ist jeder
      Besucher der Website. Er darf weder mitlesen noch mitreden. */
   await denied('Ein Fremder liest nicht mit',

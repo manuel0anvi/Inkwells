@@ -2530,8 +2530,9 @@ function warteAufEinlass(mod, rtdb, docId, uid, timeoutMs = 25000) {
 async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
   const { mod, db: rtdb } = await loadRealtime();
-  const { ref, child, push, set, remove, onValue, onChildAdded, onDisconnect,
-          query: rtQuery, limitToLast, serverTimestamp: rtNow, get: rtGet } = mod;
+  const { ref, child, push, set, remove, onValue, onChildAdded, onChildRemoved,
+          onDisconnect, query: rtQuery, limitToLast,
+          serverTimestamp: rtNow, get: rtGet } = mod;
 
   /* Der Name des Raums – normalerweise die Dokumentkennung. Weicht er
      ab, hat der Besitzer den Raum einmal gewechselt; siehe roomKey in
@@ -3088,6 +3089,11 @@ async function joinDocRoom(docId, options = {}) {
 
   const CHAT_MAX_LEN = 800;
 
+/* So viel einer Nachricht reist als Zitat mit, wenn jemand darauf
+   antwortet. Genug, um sie wiederzuerkennen; kurz genug, dass die
+   Antwort nicht doppelt so lang wird wie das Zitat darin. */
+const CHAT_QUOTE_LEN = 140;
+
   /* ══════════════════════════════════════════════════════════════════
      WENN DIE REGELN DEN CHAT NOCH NICHT KENNEN
 
@@ -3152,9 +3158,12 @@ async function joinDocRoom(docId, options = {}) {
    * Anders als sendOp darf das JEDER, der das Dokument lesen darf. Wer
    * nur zusehen darf, hat oft genau deshalb eine Frage.
    *
+   * @param {string} text
+   * @param {{id:string, name:string, text:string}} [antwortAuf]
+   *        Worauf geantwortet wird – oder nichts.
    * @returns {Promise<boolean>} ob sie angekommen ist
    */
-  function sendChat(text) {
+  function sendChat(text, antwortAuf) {
     if (left || chatAus) return Promise.resolve(false);
     const tx = String(text || '').replace(/\s+$/, '').slice(0, CHAT_MAX_LEN);
     if (!tx) return Promise.resolve(false);
@@ -3168,9 +3177,48 @@ async function joinDocRoom(docId, options = {}) {
       col: String(card.color || '').slice(0, 32)
     };
 
+    /* ══════════════════════════════════════════════════════════════
+       DIE ANTWORT TRÄGT IHR ZITAT MIT SICH
+
+       Naheliegender wäre, nur die Kennung (rid) zu schicken und den
+       Text beim Anzeigen aus der Liste zu holen. Das geht hier nicht
+       verlässlich: geholt werden nur die letzten CHAT_BACKLOG
+       Nachrichten, und ältere sind nach einem Tag ohnehin gelöscht
+       (CHAT_MAX_AGE_MS). Eine Antwort auf etwas, das nicht mehr da
+       ist, stünde dann ohne jeden Bezug im Gespräch.
+
+       Deshalb reisen Name und ein kurzer Ausschnitt mit. Die Kennung
+       bleibt trotzdem dabei: solange das Ursprüngliche noch in der
+       Liste steht, springt ein Klick auf das Zitat dorthin.
+       ══════════════════════════════════════════════════════════════ */
+    if (antwortAuf && antwortAuf.id) {
+      eintrag.rid = String(antwortAuf.id).slice(0, 64);
+      eintrag.rn = String(antwortAuf.name || '').slice(0, 120);
+      eintrag.rt = String(antwortAuf.text || '').slice(0, CHAT_QUOTE_LEN);
+    }
+
     return push(chatRef, eintrag).then(() => true).catch((err) => {
       if (istVerboten(err)) { chatFaelltAus(err); return false; }
       console.warn('[Share] Nachricht nicht gesendet:', err?.message || err);
+      return false;
+    });
+  }
+
+  /**
+   * Nimmt eine eigene Nachricht zurück.
+   *
+   * Nur die eigene: die Regel in website/database.rules.json lässt
+   * Fremdes erst nach Ablauf der Frist löschen (dann räumt pruneChat
+   * ohnehin auf). Geprüft wird das dort und nicht hier – was der Client
+   * verspricht, gilt nicht.
+   *
+   * @returns {Promise<boolean>}
+   */
+  function deleteChat(id) {
+    if (left || chatAus || !id) return Promise.resolve(false);
+    return remove(child(chatRef, String(id))).then(() => true).catch((err) => {
+      if (istVerboten(err)) return false;
+      console.warn('[Share] Nachricht nicht geloescht:', err?.message || err);
       return false;
     });
   }
@@ -3205,11 +3253,34 @@ async function joinDocRoom(docId, options = {}) {
           name: m.nm || '',
           initials: m.ini || '?',
           color: m.col || '',
-          selbst: m.by === me.uid
+          selbst: m.by === me.uid,
+          // Worauf geantwortet wurde – siehe sendChat
+          antwort: m.rid ? { id: String(m.rid), name: m.rn || '', text: String(m.rt || '') } : null
         });
       },
       (err) => weg(err)
     ), 'Chat', chatEndgueltig);
+  }
+
+  /**
+   * Meldet, wenn eine Nachricht verschwindet.
+   *
+   * Zwei Gründe dafür: jemand hat seine eigene zurückgenommen, oder
+   * pruneChat hat Abgelaufenes weggeräumt. Für die Anzeige ist beides
+   * dasselbe – die Zeile gehört weg.
+   *
+   * >>> Warum das eine eigene Anmeldung braucht <<<
+   * onChildAdded meldet nur das Dazukommen. Ohne den Gegenpart blieb
+   * eine zurückgenommene Nachricht bei allen anderen stehen, bis sie
+   * das Dokument neu öffneten – und genau das sieht aus, als habe das
+   * Löschen nicht funktioniert.
+   */
+  function onChatRemoved(callback) {
+    return beharrlich((gut, weg) => onChildRemoved(
+      rtQuery(chatRef, limitToLast(CHAT_BACKLOG)),
+      (snap) => { gut(); try { callback(snap.key); } catch (e) {} },
+      (err) => weg(err)
+    ), 'Chat-Ruecknahme', chatEndgueltig);
   }
 
   /**
@@ -3396,7 +3467,7 @@ async function joinDocRoom(docId, options = {}) {
     me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles,
     onConnection, leave,
     // Das Gespräch neben dem Dokument
-    sendChat, onChat, setTyping, onTyping, onChatStatus
+    sendChat, deleteChat, onChat, onChatRemoved, setTyping, onTyping, onChatStatus
   };
 }
 
