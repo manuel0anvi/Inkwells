@@ -2374,6 +2374,30 @@ const CHAT_BACKLOG = 80;
    jeden Beteiligten aufräumen. */
 const CHAT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/* ══════════════════════════════════════════════════════════════════════
+   UND WER RÄUMT AUF, WENN NIEMAND DAS HEFT ÖFFNET?
+
+   Weggeräumt wurde bisher genau einmal: beim Betreten des Raums. Wer ein
+   Heft eine Woche nicht anfasst, fand danach das Gespräch von damals
+   noch vollständig vor – die Frist stand zwar auf einem Tag, sie kam
+   aber nie zum Tragen, weil sie niemand auslöste.
+
+   Ein Dienst, der das ohne Beteiligte täte, gibt es hier nicht: Inkwell
+   hat keinen Server, nur Firebase und die Geräte der Beteiligten. Also
+   auf zwei Wegen:
+
+     · GEZEIGT wird ohnehin nur, was jünger als die Frist ist (onChat
+       verwirft den Rest). Das gilt sofort und in jedem Fenster, auch
+       wenn zum Löschen gerade niemand da war. Für den Nutzer ist der
+       Chat damit verlässlich nach einem Tag leer.
+     · GELÖSCHT wird laufend, solange irgendein Fenster den Raum offen
+       hat – beim Betreten und danach in diesem Takt. Eine Stunde, weil
+       eine Nachricht, die eine Stunde über ihre Frist hinaus in der
+       Datenbank liegt, niemandem schadet: sehen kann sie ohnehin keiner
+       mehr.
+   ══════════════════════════════════════════════════════════════════════ */
+const CHAT_PRUNE_EVERY_MS = 60 * 60 * 1000;
+
 /* Länger als das gilt niemand mehr als „schreibt gerade". Die Anzeige
    wird bei jedem Anschlag aufgefrischt (CHAT_TYPING_REFRESH_MS in
    ui/chat.js) – wer aufhört, verschwindet also nach dieser Zeit von
@@ -2744,6 +2768,7 @@ async function joinDocRoom(docId, options = {}) {
   let pendingPage = null;
   let pageTimer = null;
   let left = false;
+  let chatPruneTimer = null;
 
   // Nur einmal darüber klagen, nicht bei jedem Tastendruck
   let extrasWarned = false;
@@ -3167,6 +3192,11 @@ async function joinDocRoom(docId, options = {}) {
         gut();
         const m = snap.val();
         if (!m || !m.tx) return;
+        /* Abgelaufenes gar nicht erst durchreichen. Gelöscht wird es
+           von pruneChat – aber darauf zu warten hiesse, dass ein
+           Gespräch von vorletzter Woche noch dasteht, bloss weil
+           zwischendurch niemand den Raum betreten hat. */
+        if (typeof m.at === 'number' && Date.now() - m.at > CHAT_MAX_AGE_MS) return;
         callback({
           id: snap.key,
           uid: m.by || '',
@@ -3243,6 +3273,7 @@ async function joinDocRoom(docId, options = {}) {
 
   /** Alte Nachrichten wegräumen. Wie pruneOps, nur mit längerer Frist. */
   async function pruneChat() {
+    if (left || chatAus) return;
     try {
       const snap = await rtGet(chatRef);
       const alle = snap.val() || {};
@@ -3273,6 +3304,7 @@ async function joinDocRoom(docId, options = {}) {
     if (left) return;
     left = true;
     clearTimeout(pageTimer);
+    clearInterval(chatPruneTimer);
     for (const stop of stops) { try { stop(); } catch (e) {} }
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
@@ -3315,6 +3347,13 @@ async function joinDocRoom(docId, options = {}) {
 
   pruneOps();
   pruneChat();
+
+  /* Und danach weiter, solange der Raum offen ist – siehe
+     CHAT_PRUNE_EVERY_MS. Der Takt hängt am Raum und nicht am Fenster:
+     leave() nimmt ihn mit, sonst räumte ein längst verlassener Raum
+     weiter in einer Datenbank herum, in der er nichts mehr zu suchen
+     hat. */
+  chatPruneTimer = setInterval(pruneChat, CHAT_PRUNE_EVERY_MS);
 
   /**
    * Die Rollenliste des Raums neu schreiben. Nur der Besitzer darf das,
