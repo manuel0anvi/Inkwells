@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, Notification } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const https = require('https');
@@ -701,6 +701,52 @@ ipcMain.handle('install-and-restart', async () => {
 });
 
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+/* ══════════════════════════════════════════════════════════════════════
+   EINE CHAT-NACHRICHT, WÄHREND INKWELL IM HINTERGRUND LIEGT
+
+   Wer zu zweit an einem Heft schreibt, hat Inkwell nicht dauernd vorne.
+   Eine Nachricht kam bisher nur im Fenster an – man sah sie, wenn man
+   ohnehin schon hinsah, und sonst nie.
+
+   >>> Warum die Entscheidung HIER faellt und nicht in der Oberflaeche <<<
+   Ob das Fenster gerade vorne ist, weiss nur der Hauptprozess sicher.
+   `document.hasFocus()` im Fenster sagt es zwar auch, aber es sagt
+   nichts darueber, ob das Fenster minimiert ist oder auf einem anderen
+   Schreibtisch liegt. Und eine Meldung, die aufpoppt, waehrend man das
+   Gespraech offen vor sich hat, ist genau die Sorte Laerm, wegen der
+   Leute Meldungen abschalten.
+
+   Zurueckgemeldet wird, ob wirklich gemeldet wurde – die Oberflaeche
+   braucht das nicht, aber die Pruefung schon.
+   ══════════════════════════════════════════════════════════════════════ */
+ipcMain.handle('notify-chat', (_, daten = {}) => {
+  if (!Notification.isSupported()) return false;
+  // Vorne und nicht minimiert: dann sieht man die Nachricht ohnehin
+  if (win && !win.isDestroyed() && win.isFocused() && !win.isMinimized()) return false;
+
+  const titel = String(daten.title || 'Inkwell').slice(0, 120);
+  const text = String(daten.body || '').slice(0, 300);
+  if (!text) return false;
+
+  try {
+    const meldung = new Notification({ title: titel, body: text, silent: false });
+    /* Ein Klick holt das Heft nach vorn. Ohne das muesste man die
+       Meldung lesen und danach das Fenster selbst suchen. */
+    meldung.on('click', () => {
+      if (!win || win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      win.webContents.send('chat-notification-clicked');
+    });
+    meldung.show();
+    return true;
+  } catch (err) {
+    console.warn('[Meldung] Nicht angezeigt:', err.message);
+    return false;
+  }
+});
 
 /* Der nächste Anmeldeversuch läuft ohne Zutun – das Fenster dazu bleibt
    unsichtbar. Siehe did-create-window weiter oben. */

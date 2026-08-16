@@ -59,6 +59,12 @@ contextBridge.exposeInMainWorld('api', {
 
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
+  /* Eine Chat-Nachricht melden, solange Inkwell im Hintergrund liegt.
+     Ob wirklich gemeldet wird, entscheidet der Hauptprozess – nur der
+     weiss, ob das Fenster gerade vorne steht (siehe dort). */
+  notifyChat: (daten) => ipcRenderer.invoke('notify-chat', daten),
+  onChatNotificationClicked: (cb) => ipcRenderer.on('chat-notification-clicked', () => cb()),
+
   // Registry
   loadRegistry:      () => ipcRenderer.invoke('load-registry'),
   saveRegistry:     (d) => ipcRenderer.invoke('save-registry', d),

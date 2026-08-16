@@ -12,6 +12,7 @@
   const btnPickSaveLocation = E('btn-pick-save-location');
   
   const settingsVersion = E('settings-version');
+  const chatNotifyChk = E('chat-notify-on');
   // Cloud UI elements
   const cloudEnabledChk = E('cloud-enabled');
   const cloudConfigRow = E('cloud-config-row');
@@ -187,6 +188,11 @@
     languageSelect.value = settings.language || 'de';
     saveLocationDisplay.value = settings.saveLocation || '';
 
+    /* Gespeichert wird das ABSCHALTEN, nicht das Anschalten: eine
+       Einstellungsdatei aus der Zeit davor kennt den Wert nicht, und
+       „nicht bekannt" muss hier „an" heissen. */
+    if (chatNotifyChk) chatNotifyChk.checked = !settings.chatNotifyOff;
+
     if (cloudEnabledChk) cloudEnabledChk.checked = !!settings.cloudEnabled;
     if (cloudConfigRow) cloudConfigRow.style.display = settings.cloudEnabled ? 'flex' : 'none';
     
@@ -231,6 +237,7 @@
     
     // Cloud settings
     if (cloudEnabledChk) updates.cloudEnabled = !!cloudEnabledChk.checked;
+    if (chatNotifyChk) updates.chatNotifyOff = !chatNotifyChk.checked;
 
     await Settings.update(updates);
 

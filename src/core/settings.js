@@ -20,6 +20,16 @@ const DEFAULT_SETTINGS = {
      der Werkzeugleiste weiterhin ab; DIESE Entscheidung steht hier.
      Der alte Wert wird beim Laden weggeräumt (STALE_SETTINGS). */
   touchDrawOff: false,
+  /* ── Meldet Windows eine Chat-Nachricht? ──────────────────────────
+     Ja, solange nichts anderes gesagt wird – und deshalb steht hier das
+     ABSCHALTEN und nicht das Anschalten. Eine Einstellungsdatei aus der
+     Zeit davor kennt den Wert nicht, und „nicht bekannt" muss „an"
+     heissen; andersherum bekäme niemand, der die App schon benutzt,
+     jemals eine Meldung, ohne sie erst zu suchen.
+
+     Gemeldet wird nur, solange das Fenster nicht vorne steht – das
+     entscheidet main.js, nicht diese Einstellung. */
+  chatNotifyOff: false,
   cloudEnabled: false,
   // Cloud-Anbieter: 'google' (Drive) oder 'microsoft' (OneDrive).
   // Siehe core/cloudConfig.js und core/providers/.
