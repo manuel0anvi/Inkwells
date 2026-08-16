@@ -186,15 +186,16 @@ console.log('\n2. Waehrend der Live-Freigabe gleicht sich nichts ab\n');
     /window\.liveShareNbId = \(\)/.test(sharedQuelle), true);
 }
 
-console.log('\n3. Die Zeilensperre meldet sich nur beim Versuch\n');
+console.log('\n3. Die Zeilensperre: die Marke verschwindet, statt zu huepfen\n');
 {
   /* haltCaretAusSperre in einer nachgebauten Umgebung: eine fremde
      Sperre liegt ueber der eigenen Marke. Gezaehlt wird, wie oft ein
-     Hinweis herausgeht. */
-  function baueLauf({ getippt }) {
+     Hinweis herausgeht und ob die Marke wirklich verschwindet. */
+  function baueLauf({ getippt, eigenerAnspruch = null }) {
     const ctx = {
       console, Date, Number, Math,
       hinweise: 0,
+      weggenommen: 0,
       gesetzt: [],
       others: [{ uid: 'fremd' }],
       LOCK_HINT_MS: 2500,
@@ -202,6 +203,11 @@ console.log('\n3. Die Zeilensperre meldet sich nur beim Versuch\n');
       warnLocked: () => { ctx.hinweise++; },
       lockOwner: () => ({ uid: 'fremd', lockFrom: 10, lockTo: 40 }),
       schreibtGerade: () => getippt,
+      /* Der eigene Anspruch – null heisst „keiner". Er entsteht nur beim
+         Tippen und ist um fremde Marken beschnitten (ohneFremdeStellen). */
+      eigeneSperreDeckt: (pageId, stelle) => !!eigenerAnspruch
+        && stelle >= eigenerAnspruch.from && stelle <= eigenerAnspruch.to,
+      markeWeg: () => { ctx.weggenommen++; },
       flatCaretPos: () => 20,
       setFlatCaret: (el, ziel) => { ctx.gesetzt.push(ziel); return true; },
       window: {
@@ -226,13 +232,19 @@ console.log('\n3. Die Zeilensperre meldet sich nur beim Versuch\n');
     ctx.haltCaretAusSperre(false);
     ctx.haltCaretAusSperre(false);
     check('Der Takt meldet nie', ctx.hinweise, 0);
-    check('Schiebt die Marke aber trotzdem heraus', ctx.gesetzt, [9, 9]);
+    check('Nimmt die Marke aber trotzdem weg', ctx.weggenommen, 2);
+    /* >>> Und schiebt sie NICHT woandershin <<<
+       Vorher landete sie auf lockFrom-1, also in einer Zeile, die
+       niemand angeklickt hatte – meist ueber dem Band. Wer dort
+       weiterschrieb, schrieb an der falschen Stelle, und beim naechsten
+       Takt sprang es erneut. Genau das war „alles wird buggy". */
+    check('Und schiebt sie nirgendwohin', ctx.gesetzt, []);
   }
   {
     // Marke bewegt, aber nicht geschrieben – auch das ist kein Versuch
     const ctx = baueLauf({ getippt: false });
     ctx.haltCaretAusSperre(true);
-    check('Eine blosse Bewegung ohne Tippen auch nicht', ctx.hinweise, 0);
+    check('Eine blosse Bewegung ohne Tippen meldet nicht', ctx.hinweise, 0);
   }
   {
     // Wer wirklich schreibt, soll erfahren, warum die Marke wegspringt
@@ -244,6 +256,36 @@ console.log('\n3. Die Zeilensperre meldet sich nur beim Versuch\n');
     ctx.haltCaretAusSperre(true);
     check('Aber nicht zweimal hintereinander', ctx.hinweise, 1);
   }
+  {
+    /* ── Zwei Sperrzonen ueberlappen ──────────────────────────────────
+       Person A schreibt in Zeile 5, Person B in Zeile 4. Bs Sperre
+       umfasst ihre Zeile UND die darauf folgende, reicht also bis in As
+       Zeile hinein. Vorher flog As Marke bei jedem Takt heraus und kam
+       beim naechsten Anschlag zurueck: der Cursor huepfte.
+
+       Wer einen eigenen Anspruch auf die Stelle hat, bleibt jetzt. */
+    const ctx = baueLauf({ getippt: true, eigenerAnspruch: { from: 15, to: 30 } });
+    ctx.haltCaretAusSperre(true);
+    ctx.haltCaretAusSperre(false);
+    check('Die eigene Zeile bleibt trotz fremder Sperre darueber', ctx.weggenommen, 0);
+    check('Und es kommt auch kein Hinweis', ctx.hinweise, 0);
+  }
+  {
+    // Wer keinen Anspruch auf DIESE Stelle hat, weicht weiterhin
+    const ctx = baueLauf({ getippt: true, eigenerAnspruch: { from: 60, to: 80 } });
+    ctx.haltCaretAusSperre(false);
+    check('Ein Anspruch woanders hilft nicht', ctx.weggenommen, 1);
+  }
+}
+{
+  /* Der Anspruch entsteht nur um die eigene Marke herum und weicht
+     zurueck, wo schon eine fremde sitzt. */
+  const ohne = funktion(collabQuelle, 'ohneFremdeStellen');
+  check('Der Anspruch weicht vor fremden Marken zurueck',
+    /if \(stelle > offset\) bis = Math\.min/.test(ohne)
+    && /else if \(stelle < offset\) von = Math\.max/.test(ohne), true);
+  check('Die eigene Stelle bleibt aber immer darin',
+    /if \(bis < offset \|\| von > offset\) return null;/.test(ohne), true);
 }
 {
   /* Der Takt darf nicht versehentlich wieder auf true gesetzt werden. */

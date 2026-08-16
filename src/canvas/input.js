@@ -29,6 +29,30 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // Im Nur-Lese-Modus darf der Zeiger stehen (Markieren und Kopieren
     // bleiben möglich), aber es wird nichts gesetzt oder verändert.
     if (S.readOnly) { setActivePg(page.id); return; }
+
+    /* ══════════════════════════════════════════════════════════════
+       AUF EIN FREMDES SPERRBAND SETZT SICH GAR KEINE MARKE
+
+       Dort gehört die Zeile jemand anderem. Vorher setzte der Klick die
+       Marke trotzdem – placeCaretAnywhere füllte dabei bis dorthin auf
+       (und verschob damit die Stellen für alle Beteiligten, auch die
+       Sperre selbst), und erst der Takt in ui/collab.js schob sie
+       wieder heraus. Das Aufgefüllte blieb stehen.
+
+       Jetzt passiert an dieser Stelle schlicht nichts, und die Marke
+       verschwindet sichtbar: es ist nichts da, wo man nichts darf.
+       ══════════════════════════════════════════════════════════════ */
+    const pgEl = textDiv.closest('[data-pgid]');
+    const sperrt = (window.Collab && typeof Collab.trifftSperrband === 'function')
+      ? Collab.trifftSperrband(clientX, clientY, pgEl) : null;
+    if (sperrt) {
+      Collab.markeWeg(textDiv);
+      // Sagen, wem die Zeile gehört – warnLocked hält den Takt selbst ein
+      if (typeof Collab.warnLocked === 'function') Collab.warnLocked(sperrt);
+      setActivePg(page.id);
+      return;
+    }
+
     const richMode = !isPlainTextEditable(textDiv);
     placeCaretAnywhere(textDiv, clientX, clientY, forceManual || richMode, page);
     setActivePg(page.id);

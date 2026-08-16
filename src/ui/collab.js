@@ -928,6 +928,12 @@
       else if (inputType === 'deleteContentForward') to = to + 1;
     }
 
+    /* Die eigene Zeile gehört einem selbst, auch wenn eine fremde Sperre
+       über sie hinweggeht (siehe eigeneSperreDeckt). Ohne das bekam, wer
+       in Zeile 5 schreibt, dauernd „X bearbeitet diese Zeile" zu lesen,
+       weil X in Zeile 4 sitzt und die Sperre eine Zeile weiter reicht. */
+    if (eigeneSperreDeckt(pageId, from) && eigeneSperreDeckt(pageId, to)) return null;
+
     return lockOwner(pageId, from, to);
   }
 
@@ -944,10 +950,26 @@
          Rechtschreibhilfe, ein Einfügen über das Kontextmenü des
          Systems, eine Eingabemethode. Dann stand doch etwas da.
 
-     Deshalb wird die zusammengefallene Marke aus der Sperre
-     herausgeschoben, und zwar an die Stelle davor. MARKIEREN bleibt
-     erlaubt: eine Auswahl über mehrere Zeilen ist zum Lesen und Kopieren
-     da und ändert nichts.
+     Deshalb verschwindet die zusammengefallene Marke aus einer fremden
+     Sperre. MARKIEREN bleibt erlaubt: eine Auswahl über mehrere Zeilen
+     ist zum Lesen und Kopieren da und ändert nichts.
+
+     >>> Sie VERSCHWINDET, sie wird nicht verschoben <<<
+     Hier stand: die Marke wandert an die Stelle vor der Sperre. Das war
+     falsch, und zwar gleich doppelt.
+
+       · Sie stand danach in einer Zeile, die man gar nicht angeklickt
+         hatte – meist ÜBER dem Band. Wer dort weiterschrieb, schrieb an
+         einer Stelle, die er nicht gemeint hatte.
+       · Und sie stand dort mitten in einer Zeile, die dem anderen
+         gleich gehören könnte: die Sperre wandert mit seinem Schreiben
+         mit. Das Ergebnis war ein Cursor, der bei jedem Takt woandershin
+         sprang. Gemeldet als „alles wird buggy".
+
+     Ein gesperrter Bereich gehört jemand anderem. Das Richtige ist
+     deshalb nicht, einen Ersatzplatz zu suchen, sondern gar keinen:
+     die Auswahl wird aufgehoben und das Textfeld gibt den Fokus ab. Es
+     ist dann sichtbar nichts da, wo man gerade nichts darf.
 
      Gehört die Sperre einem selbst (das kann nicht sein) oder gibt es
      keine, passiert hier nichts.
@@ -967,6 +989,82 @@
      Seite wurde gerade wirklich geschrieben (schreibtGerade).
      ══════════════════════════════════════════════════════════════════ */
   let letzterAusweich = 0;
+
+  /* ══════════════════════════════════════════════════════════════════
+     LIEGT DIESER PUNKT AUF EINEM FREMDEN SPERRBAND?
+
+     Gefragt wird vor dem Setzen der Schreibmarke (canvas/input.js), also
+     BEVOR irgendetwas passiert ist. Ohne das lief die Reihenfolge
+     andersherum: der Klick setzte die Marke, placeCaretAnywhere füllte
+     dabei bis dorthin auf – und erst der nächste Takt schob die Marke
+     wieder heraus. Das Auffüllen blieb stehen und verschob alle Stellen
+     dahinter, auch die Sperre des anderen. Genau daraus wurde „alles
+     wird buggy".
+
+     >>> Warum über die Bänder und nicht über die Stelle im Text <<<
+     Eine Stelle im Text gibt es an dieser Stelle noch gar nicht – sie
+     entstünde erst durch das Setzen der Marke. Die Bänder liegen
+     dagegen schon da, in Bildschirmkoordinaten, und sie sind genau das,
+     was der Nutzer sieht. Was aussieht wie gesperrt, ist gesperrt.
+     ══════════════════════════════════════════════════════════════════ */
+  /** Welche Stelle im Text liegt unter diesem Punkt? −1, wenn keine. */
+  function stelleUnterZeiger(clientX, clientY, pgEl) {
+    const textDiv = pgEl && typeof pgEl.querySelector === 'function'
+      ? pgEl.querySelector('.j-text') : null;
+    if (!textDiv || typeof flatPosOfPoint !== 'function') return -1;
+    const treffer = document.caretPositionFromPoint
+      ? document.caretPositionFromPoint(clientX, clientY)
+      : (document.caretRangeFromPoint ? document.caretRangeFromPoint(clientX, clientY) : null);
+    const knoten = treffer ? (treffer.offsetNode || treffer.startContainer) : null;
+    if (!knoten || !textDiv.contains(knoten)) return -1;
+    try {
+      const stelle = flatPosOfPoint(textDiv, knoten,
+        treffer.offset !== undefined ? treffer.offset : treffer.startOffset);
+      return stelle === null ? -1 : stelle;
+    } catch (err) { return -1; }
+  }
+
+  function trifftSperrband(clientX, clientY, pgEl) {
+    if (!others.length || !pgEl || typeof pgEl.querySelectorAll !== 'function') return null;
+
+    /* Ein Band, das über die eigene beanspruchte Zeile hinweggeht, ist
+       kein Hindernis – sonst käme man in die Zeile, in der man gerade
+       schreibt, nach einem Klick daneben nicht mehr zurück. Gemeint ist
+       wirklich nur die eigene Zeile; alles andere sperrt weiterhin.
+
+       Die Stelle unter dem Zeiger wird dafür gemessen und nicht gesetzt:
+       gesetzt würde sie erst durch den Klick, den wir hier ja gerade
+       noch abwenden wollen. */
+    if (eigeneSperreDeckt(pgEl.dataset ? pgEl.dataset.pgid : '',
+                          stelleUnterZeiger(clientX, clientY, pgEl))) return null;
+
+    for (const band of pgEl.querySelectorAll('.collab-lock')) {
+      const r = band.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (clientX < r.left || clientX > r.right
+          || clientY < r.top || clientY > r.bottom) continue;
+      // Wem sie gehört, damit der Hinweis einen Namen nennen kann
+      return others.find(p => p.uid === band.dataset.uid) || others[0] || null;
+    }
+    return null;
+  }
+
+  /**
+   * Nimmt die Schreibmarke aus dem Text – ohne ihr eine neue Stelle zu
+   * geben.
+   *
+   * Beides ist nötig: die Auswahl aufheben nimmt den Cursor weg, der
+   * Fokus muss aber auch weg, sonst setzt Chromium ihn beim nächsten
+   * Anschlag von selbst wieder an den Anfang des Feldes – und der liegt
+   * je nach Seite mitten in fremdem Text.
+   */
+  function markeWeg(textDiv) {
+    try {
+      const sel = window.getSelection();
+      if (sel && typeof sel.removeAllRanges === 'function') sel.removeAllRanges();
+    } catch (err) { /* dann wenigstens der Fokus */ }
+    try { textDiv.blur(); } catch (err) { /* egal */ }
+  }
 
   /**
    * @param {boolean} [melden] Darf ein Hinweis erscheinen? Nur bei einer
@@ -994,17 +1092,13 @@
     try { stelle = flatCaretPos(textDiv); } catch (err) { return; }
     if (stelle === null) return;
 
+    // Die eigene Zeile gehört einem selbst – siehe eigeneSperreDeckt
+    if (eigeneSperreDeckt(pageId, stelle)) return;
+
     const person = lockOwner(pageId, stelle, stelle);
     if (!person) return;
 
-    /* Vor die Sperre. Ist dort kein Platz (die Sperre fängt am
-       Seitenanfang an), dann dahinter – irgendwohin muss sie. */
-    const davor = person.lockFrom - 1;
-    const ziel = davor >= 0 ? davor : person.lockTo + 1;
-
-    let gesetzt = false;
-    try { gesetzt = setFlatCaret(textDiv, ziel); } catch (err) { gesetzt = false; }
-    if (!gesetzt) { try { textDiv.blur(); } catch (err) { /* egal */ } }
+    markeWeg(textDiv);
 
     /* Sagen, warum die Marke wegspringt – aber nur dem, der hier auch
        wirklich arbeitet. Wer nur zusieht, soll das Sperrband sehen und
@@ -1137,6 +1231,8 @@
           band.style.top = box.top + 'px';
           band.style.height = box.height + 'px';
           band.style.setProperty('--lock-color', farbe);
+          // Wem das Band gehört – trifftSperrband braucht den Namen
+          if (band.dataset.uid !== person.uid) band.dataset.uid = person.uid;
         });
       }
     }
@@ -1216,9 +1312,90 @@
     if (!schreibtGerade(pageId)) return null;
     if (typeof flatTextOf !== 'function') return null;
 
-    try {
-      return visualLineSpan(textDiv, offset);
-    } catch (err) { return null; }
+    let span = null;
+    try { span = visualLineSpan(textDiv, offset); } catch (err) { return null; }
+    span = ohneFremdeStellen(span, pageId, textDiv, offset);
+
+    /* Was hier herauskommt, ist der eigene Anspruch – merken, damit
+       eigeneSperreDeckt() ihn kennt (siehe dort). */
+    if (span) eigeneSperre.set(pageId, { from: span.from, to: span.to, at: Date.now() });
+    else eigeneSperre.delete(pageId);
+    return span;
+  }
+
+  /* Der zuletzt gemeldete eigene Anspruch, je Seite. */
+  const eigeneSperre = new Map();
+
+  /* ══════════════════════════════════════════════════════════════════
+     WER SCHREIBT, HAT DIE VOLLMACHT ÜBER SEINE ZEILE
+
+     Gegenstück zu ohneFremdeStellen, auf der Empfängerseite: dort wird
+     verhindert, dass ein Zusammenstoss ENTSTEHT, hier, dass er noch
+     etwas anrichtet, wenn er trotzdem entstanden ist – weil die fremde
+     Sperre einen Augenblick älter ist, oder weil am anderen Ende eine
+     ältere Fassung von Inkwell läuft, die die Zusatzzeile noch ohne
+     Rücksicht beansprucht.
+
+     >>> Warum nicht einfach „ich tippe gerade" <<<
+     Das wäre zu grob. `schreibtGerade` gilt zehn Sekunden lang für die
+     ganze Seite – wer eben noch geschrieben hat und dann mitten in eine
+     fremde Zeile klickt, dürfte damit dort weitermachen, und die Sperre
+     wäre wertlos.
+
+     Massgeblich ist deshalb der eigene ANSPRUCH: die Zeile, die man
+     zuletzt selbst gemeldet hat. Er entsteht nur beim Tippen, er endet
+     mit dem Nachlauf, und ohneFremdeStellen hat ihm alles weggeschnitten,
+     wo schon eine fremde Marke sitzt. Wer in eine fremde Zeile klickt,
+     hat dort keinen Anspruch – der alte lag ja woanders.
+     ══════════════════════════════════════════════════════════════════ */
+  function eigeneSperreDeckt(pageId, stelle) {
+    const eigen = eigeneSperre.get(pageId);
+    if (!eigen) return false;
+    if (Date.now() - eigen.at > LOCK_TTL_MS) return false;
+    return stelle >= eigen.from && stelle <= eigen.to;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WAS SCHON JEMAND ANDEREM GEHÖRT, WIRD NICHT BEANSPRUCHT
+
+     Eine Sperre umfasst die eigene Zeile UND die darauf folgende – damit
+     der andere sieht, dass hier gearbeitet wird. Genau daraus entstand
+     ein Zusammenstoss:
+
+       Person A schreibt in Zeile 5.
+       Person B schreibt in Zeile 4 – ihre Sperre reicht bis Zeile 5.
+
+     Damit lag A mitten in Bs Sperre, obwohl A dort zuerst war und
+     gerade tippt. As Marke wurde herausgeworfen, kam beim nächsten
+     Anschlag zurück, flog wieder heraus: der Cursor hüpfte. Gemeldet
+     genau so.
+
+     Die Zusatzzeile ist eine Höflichkeit, kein Recht. Sitzt dort schon
+     eine fremde Marke, wird sie einfach nicht mitbeansprucht – die
+     eigene Zeile bleibt in jedem Fall.
+
+     >>> Und wenn beide gleichzeitig anfangen <<<
+     Dann schneidet jeder dem anderen die Zusatzzeile weg, und beide
+     behalten ihre eigene. Das ist das gewollte Ergebnis: wer schreibt,
+     behält seine Zeile.
+     ══════════════════════════════════════════════════════════════════ */
+  function ohneFremdeStellen(span, pageId, textDiv, offset) {
+    if (!span || !others.length) return span;
+
+    let von = span.from;
+    let bis = span.to;
+
+    for (const person of peopleOnPage(pageId, textDiv)) {
+      const stelle = Number(person.offset);
+      if (!Number.isFinite(stelle) || stelle < 0) continue;
+      if (stelle < von || stelle > bis) continue;
+      // Die eigene Zeile bleibt: nur zurückweichen, nie darüber hinaus
+      if (stelle > offset) bis = Math.min(bis, stelle - 1);
+      else if (stelle < offset) von = Math.max(von, stelle + 1);
+    }
+
+    if (bis < offset || von > offset) return null;   // nichts mehr übrig
+    return (von === span.from && bis === span.to) ? span : { from: von, to: bis };
   }
 
   /** Wo steht die eigene Marke auf DIESER Seite – falls sie dort steht. */
@@ -3233,6 +3410,8 @@
     fremdeMarken: zeigeFremdeMarken,
     // Zeilensperre – app.js fragt vor jeder Eingabe nach
     editBlockedBy, warnLocked, lockOwner, caretOf,
+    // ... und canvas/input.js vor jedem Klick, siehe dort
+    trifftSperrband, markeWeg,
     // Sofort abgleichen, ohne auf den Takt zu warten (Tests, Schließen)
     syncNow: syncStructure,
     // Fehlersuche: was fremde Anschläge mit der eigenen Marke gemacht haben
