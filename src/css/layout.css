@@ -135,18 +135,10 @@
   cursor: help
 }
 
-.shared-bar-btn {
-  background: none;
-  border: 1px solid var(--sb2);
-  border-radius: 5px;
-  color: var(--md);
-  padding: 4px 10px;
-  font-size: 10px;
-  font-family: inherit;
-  cursor: pointer
-}
-
-.shared-bar-btn:hover { color: var(--hi); border-color: var(--gold) }
+/* .shared-bar-btn trug „Freigabe verlassen". Der Knopf ist entfallen –
+   die Entscheidung sitzt jetzt im Punktemenü der Karte in der Übersicht
+   (ui/sharedDocs.js). In dieser Leiste steht damit nur noch, WAS gerade
+   offen ist, und nichts, was etwas tut. */
 
 /* ── Wer gerade mitarbeitet ─────────────────────────────────────────
    Oben eine Leiste mit runden Abzeichen (wie bei Google Docs), und am
@@ -331,24 +323,10 @@
   transition: top .12s ease-out, height .12s ease-out
 }
 
-.collab-lock-tag {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
-  font-size: 9px;
-  line-height: 13px;
-  color: #fff;
-  white-space: nowrap;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: .92;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .3)
-}
+/* Das Namensschild am Band (.collab-lock-tag) ist entfallen. Wer die
+   Zeile hält, sagt schon die Schreibmarke daneben – in derselben Farbe
+   und mit demselben Namen. Zwei Schilder in einer Zeile verdeckten
+   genau den Text, um den es ging. */
 
 /* Kurzes Aufblinken, wenn jemand doch hineintippt */
 .collab-lock.bump {

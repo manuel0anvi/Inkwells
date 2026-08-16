@@ -1115,20 +1115,19 @@
         if (!zeilen.length) continue;
 
         const farbe = person.color || 'var(--gold)';
-        const name = '🔒 ' + (person.name || person.email || '?');
 
+        /* >>> Ohne Namensschild am Band <<<
+           Am oberen Band hing „🔒 Name". Das war dieselbe Auskunft
+           zweimal: die fremde Schreibmarke steht schon in derselben
+           Farbe in derselben Zeile und trägt den Namen bereits. Zwei
+           Schilder übereinander in einer Zeile verdecken den Text, den
+           sie erklären sollen. Die Farbe des Bandes genügt, um es der
+           Marke zuzuordnen. */
         zeilen.forEach((box, i) => {
           const key = person.uid + '#' + i;
           const band = reuse(lockEls, key, pgEl, () => {
             const el = document.createElement('div');
             el.className = 'collab-lock';
-            // Nur das oberste Band trägt den Namen – die darunter gehören
-            // sichtbar dazu, sollen ihn aber nicht wiederholen
-            if (i === 0) {
-              const tag = document.createElement('span');
-              tag.className = 'collab-lock-tag';
-              el.appendChild(tag);
-            }
             return el;
           });
           gebraucht.add(key);
@@ -1138,12 +1137,6 @@
           band.style.top = box.top + 'px';
           band.style.height = box.height + 'px';
           band.style.setProperty('--lock-color', farbe);
-
-          const tag = band.firstElementChild;
-          if (tag) {
-            if (tag.style.background !== farbe) tag.style.background = farbe;
-            if (tag.textContent !== name) tag.textContent = name;
-          }
         });
       }
     }
