@@ -650,11 +650,149 @@ function getRenderedContentBottom(textDiv, top, pt, lh) {
   return bottom;
 }
 
-function _createPWithSpacesOrBr(targetCol) {
+/* ══════════════════════════════════════════════════════════════════════
+   ABSTAND STATT LEERZEICHEN
+
+   Wer in einem Heft irgendwohin tippt und dort zu schreiben anfängt,
+   soll das können – das ist der Kern von Inkwell. Bis hierher wurde der
+   Weg dorthin mit ECHTEN ZEICHEN aufgefüllt: Zeilenumbrüche nach unten,
+   Leerzeichen nach rechts. Das hatte Folgen, die niemand wollte:
+
+     · Die Leerzeichen sind Inhalt. Sie zählen im Wortzähler, stehen im
+       Word-Export, findet die Suche, und der Live-Abgleich schickt sie
+       an alle anderen.
+     · Eine Proportionalschrift hat ungleich breite Zeichen. Vierzig
+       Leerzeichen sind nie genau die Stelle, auf die man gezeigt hat –
+       der Text sass immer ein Stück daneben.
+     · Wer davor etwas ändert, verschiebt alles dahinter. Und
+       wegzubekommen war der Block nur mit vierzig Rückschritten.
+     · Eine Seite bestand dadurch oft aus EINER sehr langen Zeile, die
+       bloss umbricht. Die Zeilensperre der Live-Zusammenarbeit ist
+       daran schon einmal gescheitert (ui/collab.js, visualLineSpan).
+
+   Der Abstand ist jetzt eine EIGENSCHAFT und kein Inhalt:
+
+     nach unten    margin-top am Block, auf ganze Zeilenhöhen gerundet,
+                   damit der Text auf den Linien des Papiers sitzt
+     nach rechts   margin-left am Block – wenn die Zeile neu ist
+     mitten drin   ein leerer Abstandshalter <span class="j-luecke">,
+                   wenn rechts neben schon geschriebenem Text geklickt
+                   wird. Ein Element statt vierzig Zeichen: ein
+                   Rückschritt nimmt ihn weg, und im Text steht nichts.
+
+   Gehalten wird beides als geprüfter Zahlenwert im style-Attribut;
+   core/sanitize.js lässt genau margin-left, margin-top und die Breite
+   des Abstandshalters durch und wirft alles andere weg. core/docx.js
+   schreibt daraus beim Ausgeben echte Word-Einzüge – das ist treuer als
+   die Leerzeichen es je waren.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Weiter als das wird nicht eingerückt. Eine A4-Seite ist keine 2000 px
+   breit; die Grenze ist gegen Unsinn da, nicht gegen den Nutzer. */
+const MAX_ABSTAND_PX = 2000;
+
+function _abstandWert(px) {
+  return Math.max(0, Math.min(MAX_ABSTAND_PX, Math.round(px)));
+}
+
+/**
+ * Ein leerer Absatz, der an der gewünschten Stelle beginnt.
+ *
+ * @param {number} linksPx  Einzug von links, in Seiten-Pixeln
+ * @param {number} obenPx   Abstand nach oben, in Seiten-Pixeln
+ */
+function _neuerAbsatz(linksPx = 0, obenPx = 0) {
   const p = document.createElement('p');
-  if (targetCol > 0) p.appendChild(document.createTextNode(' '.repeat(targetCol)));
-  else p.appendChild(document.createElement('br'));
+  /* Ein <br> muss hinein: ein leerer Absatz hat sonst keine Höhe, und
+     die Schreibmarke findet in ihm keinen Platz. */
+  p.appendChild(document.createElement('br'));
+  const links = _abstandWert(linksPx);
+  const oben = _abstandWert(obenPx);
+  if (links > 0) p.style.marginLeft = links + 'px';
+  if (oben > 0) p.style.marginTop = oben + 'px';
   return p;
+}
+
+/**
+ * Der Abstandshalter für die Mitte einer Zeile.
+ *
+ * >>> Warum ein Element und keine Leerzeichen <<<
+ * Weil er keiner ist: er trägt keinen Text, nur eine Breite. Der
+ * Wortzähler sieht nichts, die Suche findet nichts, ein einziger
+ * Rückschritt nimmt ihn weg – und er ist genau so breit, wie er sein
+ * soll, statt „ungefähr vierzig Leerzeichen".
+ */
+function _neueLuecke(breitePx) {
+  const s = document.createElement('span');
+  s.className = 'j-luecke';
+  s.style.width = _abstandWert(breitePx) + 'px';
+
+  /* ── Er ist ein STÜCK, kein Ort zum Schreiben ─────────────────────
+     Ohne das landete das Getippte IM Halter: „nach dem Element" ist für
+     Chromium dieselbe Stelle wie „am Ende des Elements", solange nichts
+     dahinter steht. Der Text sass dann in einem 183 px breiten Kasten
+     statt dahinter.
+
+     Nicht bearbeitbar heisst: der Halter ist ein Ding, keine Textstelle.
+     Die Marke kann davor und dahinter stehen, aber nicht darin, und ein
+     einziger Rückschritt nimmt ihn ganz weg. Genau so soll er sich
+     anfühlen – wie ein Abstand, nicht wie vierzig Leerzeichen.
+     core/sanitize.js lässt das Attribut deshalb an ihm stehen. */
+  s.setAttribute('contenteditable', 'false');
+
+  /* ── Warum ein Zeichen darin steht ────────────────────────────────
+     Ein LEERES inline-Element überlebt in contenteditable nicht: sobald
+     daneben getippt wird, räumt Chromium es als „leere Auszeichnung"
+     weg. Gemessen: der Halter war nach dem ersten Buchstaben spurlos
+     verschwunden und der Text stand wieder ganz links.
+
+     Deshalb ein Nullbreiten-Leerzeichen. Es ist unsichtbar, EIN Zeichen
+     statt vierzig, und es hält den Halter am Leben. Wo es stört, wird es
+     ausdrücklich weggerechnet – der Wortzähler und der Word-Export tun
+     das (ui/wordCount.js, core/docx.js). */
+  s.appendChild(document.createTextNode(LUECKEN_ZEICHEN));
+  return s;
+}
+
+/* Ausdrücklich als Fluchtfolge und nicht als Zeichen: es ist unsichtbar,
+   und ein unsichtbares Zeichen im Quelltext ist eine Falle für jeden,
+   der die Zeile später anfasst. */
+const LUECKEN_ZEICHEN = '\u200b';
+
+/* ══════════════════════════════════════════════════════════════════════
+   WAS EIN BLOSSER KLICK HINTERLÄSST: NICHTS
+
+   Ein Klick ins Leere legt einen Absatz an, damit die Schreibmarke
+   irgendwo stehen kann. Wer sich verklickt und woandershin klickt, hätte
+   damit einen leeren Absatz im Heft – und im geteilten Dokument bekämen
+   ihn alle anderen mit.
+
+   Deshalb gilt das Angelegte als VORLÄUFIG, bis wirklich etwas
+   geschrieben wird. Beim nächsten Setzen der Marke und beim Verlassen
+   des Feldes wird es wieder weggeräumt; der erste Anschlag macht es
+   endgültig (app.js meldet das über markiereBleibend).
+
+   Die Markierung steht in einer Eigenschaft am Element und nicht als
+   Attribut: sie soll nie in page.textContent landen.
+   ══════════════════════════════════════════════════════════════════════ */
+const VORLAEUFIG = '_inkwellVorlaeufig';
+
+/** Das vorläufig Angelegte wieder wegnehmen – falls es noch leer ist. */
+function raeumeVorlaeufiges(textDiv, ausser) {
+  if (!textDiv || !textDiv.querySelectorAll) return;
+  for (const el of [...textDiv.querySelectorAll('p, span.j-luecke')]) {
+    if (!el[VORLAEUFIG] || el === ausser) continue;
+    /* Steht inzwischen etwas darin, bleibt es: dann war es kein blosser
+       Klick mehr. Ein <br> allein zählt nicht als Inhalt. */
+    if (el.tagName === 'P' && (el.textContent || '').trim()) { el[VORLAEUFIG] = false; continue; }
+    el.remove();
+  }
+}
+
+/** Der erste Anschlag macht aus „vorläufig" „bleibend". */
+function markiereBleibend(textDiv) {
+  if (!textDiv || !textDiv.querySelectorAll) return;
+  for (const el of textDiv.querySelectorAll('p, span.j-luecke')) el[VORLAEUFIG] = false;
 }
 
 function _setRangeEndOfNode(range, node) {
@@ -669,6 +807,9 @@ function _setRangeEndOfNode(range, node) {
 function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page = null) {
   if (!textDiv) return;
   let didPad = false;
+  /* Was der vorige Klick angelegt und niemand beschrieben hat, gehört
+     weg, bevor der nächste etwas Neues anlegt (siehe VORLAEUFIG). */
+  raeumeVorlaeufiges(textDiv);
   textDiv.focus();
   const r = textDiv.getBoundingClientRect();
   const cs = getComputedStyle(textDiv);
@@ -721,42 +862,53 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
         if (ctrs.length > 0 && ctrs[0].right > 0) lineEndX = ctrs[0].right;
         else if (range.getBoundingClientRect()?.right > 0) lineEndX = range.getBoundingClientRect().right;
 
+        /* Rechts neben schon geschriebenem Text: ein Abstandshalter, kein
+           Leerzeichenblock. Er trägt nur eine Breite, und die stimmt
+           genau – anders als „ungefähr vierzig Leerzeichen" in einer
+           Schrift mit ungleich breiten Zeichen. */
         if (clientX > lineEndX + cw * 0.7) {
-          const tn = document.createTextNode(' '.repeat(Math.max(1, Math.floor((clientX - lineEndX) / Math.max(2, cw)))));
-          range.insertNode(tn);
-          range.setStart(tn, tn.nodeValue.length);
+          const halter = _neueLuecke((clientX - lineEndX) / Math.max(0.01, scaleX));
+          halter[VORLAEUFIG] = true;
+          range.insertNode(halter);
+          // Die Marke gehört HINTER den Halter, sonst tippt man davor
+          range.setStartAfter(halter);
           range.collapse(true);
+          didPad = true;
         }
       }
     }
 
     if (!range && forceManual) {
-      const targetCol = Math.max(0, Math.floor((clientX - r.left) / Math.max(2, cw)));
+      /* Der Einzug rechnet in Seiten-Pixeln, nicht in Bildschirm-Pixeln:
+         die Seite ist gezoomt, der gespeicherte Wert darf das nicht sein. */
+      const linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
 
       if (clickedClearlyBelow && blocks.length) {
         const pxBelow = Math.max(0, clientY - blocks[blocks.length - 1].getBoundingClientRect().bottom);
-        const extraLines = Math.min(40, Math.max(1, Math.floor(pxBelow / Math.max(12, lh)) + 1));
-        let newBlock = null;
-        for (let i = 0; i < extraLines; i++) {
-          newBlock = _createPWithSpacesOrBr(i === extraLines - 1 ? targetCol : 0);
-          textDiv.appendChild(newBlock);
-        }
+        /* Auf ganze Zeilenhöhen gerundet, sonst sässe der Text zwischen
+           den Linien des Papiers. Genau das taten die leeren Absätze von
+           selbst, die hier vorher entstanden – nur brauchte es dafür bis
+           zu vierzig davon. */
+        const zeilen = Math.min(40, Math.max(0, Math.round(pxBelow / Math.max(12, lh))));
+        const neu = _neuerAbsatz(linksPx, zeilen * lh / Math.max(0.01, scaleY));
+        neu[VORLAEUFIG] = true;
+        textDiv.appendChild(neu);
+        didPad = true;
         range = document.createRange();
-        _setRangeEndOfNode(range, newBlock);
+        _setRangeEndOfNode(range, neu);
       } else {
         const block = blocks.find(c => clientY < c.getBoundingClientRect().top + c.getBoundingClientRect().height * 0.5) || blocks[blocks.length - 1];
+        const neu = _neuerAbsatz(linksPx, 0);
+        neu[VORLAEUFIG] = true;
+        didPad = true;
         if (block) {
-          const spacer = _createPWithSpacesOrBr(targetCol);
-          if (clientY >= (block.getBoundingClientRect().top + block.getBoundingClientRect().height * 0.5)) block.insertAdjacentElement('afterend', spacer);
-          else block.insertAdjacentElement('beforebegin', spacer);
-          range = document.createRange();
-          _setRangeEndOfNode(range, spacer);
+          if (clientY >= (block.getBoundingClientRect().top + block.getBoundingClientRect().height * 0.5)) block.insertAdjacentElement('afterend', neu);
+          else block.insertAdjacentElement('beforebegin', neu);
         } else {
-          const p = _createPWithSpacesOrBr(targetCol);
-          textDiv.appendChild(p);
-          range = document.createRange();
-          _setRangeEndOfNode(range, p);
+          textDiv.appendChild(neu);
         }
+        range = document.createRange();
+        _setRangeEndOfNode(range, neu);
       }
     }
 
@@ -768,7 +920,7 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
 
     const sel = window.getSelection();
     if (sel) { sel.removeAllRanges(); sel.addRange(range); }
-    return false;
+    return didPad;
   }
 
   // Handle plain text mode
@@ -815,23 +967,83 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
 
   if (colAnchor !== null && Math.abs(targetCol - colAnchor) <= 2) targetCol = colAnchor;
 
-  while (lines.length <= targetLine) { lines.push(''); didPad = true; }
-  
-  if (lines[targetLine].length < targetCol) { 
-    lines[targetLine] += ' '.repeat(targetCol - lines[targetLine].length); 
-    didPad = true; 
-  } else if (isExistingLine) {
-    targetCol = Math.min(targetCol, lines[targetLine].length);
+  /* ══════════════════════════════════════════════════════════════════
+     AUCH AUF EINER REINEN TEXTSEITE: ABSTAND STATT LEERZEICHEN
+
+     Hier standen zwei Schleifen: leere Zeilen anhängen, bis die geklickte
+     Zeile existiert, und dann Leerzeichen, bis die Spalte stimmt. Genau
+     das ist die gemeldete Sache.
+
+     Eine reine Textseite (nur Textknoten und <br>) hat aber gar nichts,
+     woran ein Einzug hängen könnte. Deshalb bekommt sie an dieser Stelle
+     ihren ersten Absatz – und zwar NUR sie, der vorhandene Text bleibt
+     unangetastet. Die Seite ist damit von da an eine gewöhnliche
+     Absatzseite, und das ist sie ohnehin, sobald jemand eine Überschrift
+     oder eine Aufzählung benutzt.
+
+     Umgebaut wird nur, wenn wirklich aufgefüllt werden müsste. Wer in
+     vorhandenen Text klickt, merkt von alldem nichts – dieser Zweig wird
+     dann gar nicht erreicht (siehe die beiden Rückgaben oben).
+     ══════════════════════════════════════════════════════════════════ */
+  const brauchtZeilen = targetLine >= lines.length;
+  const brauchtSpalten = (lines[targetLine] || '').length < targetCol;
+
+  let zeilenAnfang = 0;
+  for (let i = 0; i < Math.min(targetLine, lines.length); i++) zeilenAnfang += lines[i].length + 1;
+
+  /* ── Unter allem, was schon dasteht ────────────────────────────────
+     Ein neuer Absatz mit Abstand nach oben und nach links. Er ist der
+     erste Block dieser Seite; der vorhandene Text bleibt unangetastet. */
+  if (brauchtZeilen) {
+    const linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
+    /* Wie weit unter dem vorhandenen Text? In ganzen Zeilen, damit der
+       Text auf den Linien des Papiers sitzt. */
+    const zeilenDrunter = Math.max(0, targetLine - lines.length + (rawText.length ? 0 : 1));
+    const neu = _neuerAbsatz(linksPx, zeilenDrunter * lh / Math.max(0.01, scaleY));
+    neu[VORLAEUFIG] = true;
+    textDiv.appendChild(neu);
+
+    const range = document.createRange();
+    _setRangeEndOfNode(range, neu);
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    textDiv._colAnchor = targetCol;
+    return true;
   }
 
-  textDiv.textContent = lines.join('\n');
-  let caretIndex = 0;
-  for (let i = 0; i < targetLine; i++) caretIndex += lines[i].length + 1;
-  setPlainCaret(textDiv, caretIndex + targetCol);
+  /* ── Rechts neben eine Zeile, die es schon gibt ────────────────────
+     Hier half kein Einzug: der Text der Zeile steht ja schon links. Ein
+     Abstandshalter ans Ende dieser Zeile bringt die Marke genau dorthin,
+     wo gezeigt wurde – mit einem Element statt vierzig Leerzeichen. */
+  if (brauchtSpalten) {
+    const ende = zeilenAnfang + lines[targetLine].length;
+    const rand = rangeForTextOffset(textDiv, ende);
+    if (rand) {
+      const bis = rand.getBoundingClientRect();
+      const rechts = (bis && bis.right > 0) ? bis.right : r.left;
+      if (clientX > rechts + cw * 0.7) {
+        const halter = _neueLuecke((clientX - rechts) / Math.max(0.01, scaleX));
+        halter[VORLAEUFIG] = true;
+        rand.insertNode(halter);
+        rand.setStartAfter(halter);
+        rand.collapse(true);
+        const sel = window.getSelection();
+        if (sel) { sel.removeAllRanges(); sel.addRange(rand); }
+        textDiv._colAnchor = targetCol;
+        return true;
+      }
+    }
+    // Zu nah dran, um einen Abstand zu rechtfertigen: ans Zeilenende
+    setPlainCaret(textDiv, ende);
+    textDiv._colAnchor = lines[targetLine].length;
+    return false;
+  }
+
+  if (isExistingLine) targetCol = Math.min(targetCol, lines[targetLine].length);
+
+  setPlainCaret(textDiv, zeilenAnfang + targetCol);
   textDiv._colAnchor = targetCol;
-  
-  if (didPad && typeof updateWhitespaceDebugOverlays === 'function') updateWhitespaceDebugOverlays();
-  return didPad;
+  return false;
 }
 
 function isPlainTextEditable(textDiv) {

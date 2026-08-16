@@ -93,7 +93,25 @@
      Alternative, von einem style bleibt unten allein die Farbe uebrig.
      Gebraucht wird sie vor allem beim Oeffnen von Word-Dokumenten –
      dort ist eine zentrierte Ueberschrift der Normalfall. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved)$/;
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke)$/;
+
+  /* ── Abstand statt Leerzeichen ──────────────────────────────────────
+     `j-luecke` ist der Abstandshalter, den ein Klick rechts neben schon
+     geschriebenen Text setzt (canvas/text.js). Er traegt keinen Text,
+     nur eine Breite – und die MUSS hier durchkommen, sonst waere er nach
+     dem ersten Abgleich null Pixel breit und die Stelle verloren.
+
+     Welche Elemente einen Einzug tragen duerfen. Ein Mass an einem
+     <span> mitten im Satz waere etwas anderes als ein Absatzeinzug und
+     hat hier nichts zu suchen – der Abstandshalter ist die einzige
+     Ausnahme, und er wird eigens geprueft. */
+  const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+                              'LI', 'UL', 'OL', 'BLOCKQUOTE']);
+
+  /* Nur eine nackte Pixelzahl, hoechstens vier Stellen. Kein calc(), kein
+     var(), keine andere Einheit – gebraucht wird nur, was canvas/text.js
+     selbst schreibt, und das ist immer „<Zahl>px". */
+  const istAbstand = (wert) => /^\d{1,4}(\.\d{1,2})?px$/.test(String(wert || '').trim());
 
   /* KaTeX erzeugt beim Rendern eine Vielzahl innerer Elemente mit eigenen
      Klassen. Sie alle aufzuzählen wäre brüchig – jede neue KaTeX-Version
@@ -188,10 +206,41 @@
       /* Vom style bleibt allein die Farbe stehen. Gelesen wird ueber
          el.style, das der Browser schon geparst hat – damit kann keine
          merkwuerdige Schreibweise durchrutschen. */
+      /* ══════════════════════════════════════════════════════════════
+         VOM style BLEIBT DIE FARBE – UND DER ABSTAND
+
+         Lange blieb hier nur die Farbe stehen. Dazugekommen sind drei
+         Masse, mit denen Inkwell seit der Umstellung auf „Abstand statt
+         Leerzeichen" die Stelle hält, an die jemand geklickt hat
+         (canvas/text.js):
+
+           margin-left  Einzug eines Absatzes
+           margin-top   Abstand nach oben, auf ganze Zeilen gerundet
+           width        die Breite eines Abstandshalters (span.j-luecke)
+
+         Vorher stand dort, wo diese Masse jetzt stehen, ein Block aus
+         Leerzeichen im TEXT. Fielen die Masse hier weg, käme das aufs
+         Gleiche hinaus wie damals: die Stelle wäre beim ersten Abgleich
+         verloren.
+
+         Durchgelassen wird nur eine geprüfte Zahl in Pixeln (istAbstand)
+         und nur an einem Element, das sie tragen darf. Ein Mass kann
+         nichts ausführen; das Schlimmste, was ein zu grosser Wert
+         anrichtet, ist ein Absatz, der weit rechts steht – deshalb die
+         Obergrenze. */
       if (name === 'style') {
         const farbe = el.style && el.style.color;
+        const links = el.style && el.style.marginLeft;
+        const oben = el.style && el.style.marginTop;
+        const breite = el.style && el.style.width;
+        const istBlock = BLOCK_TAGS.has(el.tagName);
+        const istHalter = el.tagName === 'SPAN' && el.classList.contains('j-luecke');
+
         el.removeAttribute('style');
         if (istFarbe(farbe)) el.style.color = farbe;
+        if (istBlock && istAbstand(links)) el.style.marginLeft = links;
+        if (istBlock && istAbstand(oben)) el.style.marginTop = oben;
+        if (istHalter && istAbstand(breite)) el.style.width = breite;
         continue;
       }
 
@@ -225,6 +274,15 @@
       // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.
       if (name === 'data-latex' && el.tagName === 'SPAN'
           && el.classList.contains('j-formula')) continue;
+
+      /* Der Abstandshalter ist ein Stück und keine Textstelle. Ohne
+         dieses Attribut landete Getipptes IN ihm statt dahinter – für
+         Chromium ist „hinter dem Element" dieselbe Stelle wie „am Ende
+         des Elements", solange nichts dahinter steht (canvas/text.js).
+         Nur an ihm und nur mit diesem einen Wert: 'true' wäre das
+         Gegenteil und machte aus jedem Element ein Eingabefeld. */
+      if (name === 'contenteditable' && el.tagName === 'SPAN'
+          && el.classList.contains('j-luecke') && String(wert) === 'false') continue;
 
       /* data-cid an der kommentierten Stelle: die Kennung des Kommentars,
          zu dem sie gehört. Ohne sie ginge die Verknüpfung zwischen Text und

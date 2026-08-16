@@ -399,6 +399,72 @@ console.log('\n4. Wenn die Regeln den Chat noch nicht kennen\n');
     /if \(gesperrt\) return;/.test(sende), true);
 }
 
+console.log('\nAbstand statt Leerzeichen\n');
+{
+  /* ══════════════════════════════════════════════════════════════════
+     ES DARF KEIN LEERZEICHEN MEHR AUFGEFUELLT WERDEN
+
+     Wer irgendwohin klickt und dort schreibt, bekam bis dahin echte
+     Zeichen: Zeilenumbrueche nach unten, Leerzeichen nach rechts. Die
+     zaehlten im Wortzaehler mit, standen im Word-Export, fand die Suche
+     und reisten durch Yjs zu allen Beteiligten.
+
+     Geprueft wird die QUELLE und nicht das Verhalten: das Verhalten
+     haengt an echten Klicks in einem echten Fenster (dafuer gibt es
+     scripts/test-touch). Hier soll auffallen, wenn jemand die alten
+     Schleifen wieder einbaut – der Rueckfall waere still. */
+  const textQuelle = lies('src', 'canvas', 'text.js');
+
+  check('Keine Leerzeichen-Schleife mehr in canvas/text.js',
+    !/' '\.repeat\(/.test(textQuelle), true);
+  check('Und keine leeren Zeilen zum Auffuellen',
+    !/while \(lines\.length <= targetLine\)/.test(textQuelle), true);
+
+  check('Stattdessen ein Absatz mit Abstand',
+    /function _neuerAbsatz/.test(textQuelle)
+    && /style\.marginLeft/.test(textQuelle) && /style\.marginTop/.test(textQuelle), true);
+  check('Und ein Abstandshalter fuer die Mitte der Zeile',
+    /function _neueLuecke/.test(textQuelle) && /j-luecke/.test(textQuelle), true);
+
+  /* Der Abstand nach oben rastet auf ganze Zeilen ein, sonst saesse der
+     Text zwischen den Linien des Papiers. */
+  check('Der Abstand nach oben rastet auf ganze Zeilen ein',
+    /Math\.round\(pxBelow \/ Math\.max\(12, lh\)\)/.test(textQuelle), true);
+
+  /* Ein blosser Klick darf nichts hinterlassen (Stufe C). */
+  check('Angelegtes gilt erst als vorlaeufig',
+    /const VORLAEUFIG/.test(textQuelle)
+    && /function raeumeVorlaeufiges/.test(textQuelle), true);
+  check('Der erste Anschlag macht es bleibend',
+    /function markiereBleibend/.test(textQuelle)
+    && /markiereBleibend\(textDiv\)/.test(appQuelle), true);
+  check('Und das Verlassen des Feldes raeumt es weg',
+    /addEventListener\('blur', \(\) => \{\s*if \(typeof raeumeVorlaeufiges/.test(appQuelle), true);
+
+  /* Ohne die Masse im Sanitizer waere die Stelle beim ersten Abgleich
+     verloren – genau das, was die Leerzeichen verhindern sollten. */
+  const sauberQuelle = lies('src', 'core', 'sanitize.js');
+  check('Der Sanitizer laesst Einzug und Abstand durch',
+    /el\.style\.marginLeft = links/.test(sauberQuelle)
+    && /el\.style\.marginTop = oben/.test(sauberQuelle), true);
+  check('Und nur als geprueftes Mass',
+    /const istAbstand = \(wert\) => \/\^\\d\{1,4\}/.test(sauberQuelle), true);
+  check('Der Abstandshalter bleibt ein Stueck',
+    /name === 'contenteditable'/.test(sauberQuelle), true);
+
+  /* Word kennt beides – der Export wird dadurch treuer als vorher. */
+  const docxQuelle = lies('src', 'core', 'docx.js');
+  check('Word bekommt einen echten Einzug',
+    /w:ind w:left="\$\{klickEinzug\}"/.test(docxQuelle), true);
+  check('Und einen echten Abstand nach oben',
+    /w:spacing w:before="\$\{oben\}"/.test(docxQuelle), true);
+
+  /* Das Nullbreiten-Leerzeichen haelt den Halter am Leben, ist aber
+     kein Inhalt: gezaehlt gehoert es nicht. */
+  check('Der Wortzaehler rechnet das Nullbreiten-Leerzeichen heraus',
+    /\\u200b/.test(zaehlQuelle), true);
+}
+
 console.log('');
 if (failed) {
   console.error(`${failed} Pruefung(en) fehlgeschlagen.`);

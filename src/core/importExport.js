@@ -1148,6 +1148,11 @@ function buildPdf(nb, options = {}) {
   .tx .j-align-right { text-align: right !important }
   .tx .j-align-justify { text-align: justify !important }
 
+  /* Der Abstandshalter aus einem Klick rechts neben bestehenden Text
+     (canvas/text.js). Seine Breite steht am Element; ohne diese Regel
+     hätte er keine, und der Text ruckte im Ausdruck nach links. */
+  .tx .j-luecke { display: inline-block; height: 1px; vertical-align: baseline }
+
   .tx ul, .tx ol { margin: 0; padding: 0 0 0 32px; line-height: inherit }
   .tx li { margin: 0; padding: 0; line-height: inherit }
   .tx ul.j-list-disc { list-style-type: disc }

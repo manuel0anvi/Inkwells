@@ -520,6 +520,12 @@
   const LIST_INDENT_PX = 32;      // = padding-left je Ebene in css/pages.css
   const LIST_HANGING_PX = 20;     // so weit steht die Marke davor
 
+  /* So breit wird ein Leerzeichen beim Ausgeben veranschlagt. Gebraucht
+     nur für den Abstandshalter mitten in einer Zeile (siehe dort) – ein
+     Näherungswert, denn wie breit Word es wirklich setzt, weiss nur
+     Word. Im Heft selbst wird nichts genähert. */
+  const LUECKE_ZEICHEN_PX = 4.5;
+
   function romanOf(n) {
     const paare = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
       [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
@@ -601,6 +607,26 @@
     return null;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     ABSTAND STATT LEERZEICHEN – UND IN WORD ECHTE EINZÜGE
+
+     Wer in Inkwell irgendwohin klickt und dort schreibt, bekommt seit
+     der Umstellung keinen Block aus Leerzeichen mehr, sondern einen
+     Einzug am Absatz (canvas/text.js). Word kennt genau das:
+
+       margin-left  ->  w:ind w:left
+       margin-top   ->  w:spacing w:before
+
+     Das ist TREUER als vorher. Die Leerzeichen kamen in Words Schrift
+     anders heraus als in Inkwells – der Text stand im Export immer ein
+     Stück woanders. Ein Einzug ist ein Mass und überall dasselbe.
+     ══════════════════════════════════════════════════════════════════ */
+  function pxAusStil(el, name) {
+    const wert = el && el.style ? el.style[name] : '';
+    const zahl = Number.parseFloat(String(wert || ''));
+    return Number.isFinite(zahl) && zahl > 0 ? zahl : 0;
+  }
+
   /**
    * @param {string} html Inhalt von page.textContent
    * @returns {Array<{style: string, runs: Array}>}
@@ -670,9 +696,33 @@
           continue;
         }
 
+        /* ── Der Abstandshalter mitten in einer Zeile ──────────────────
+           In Inkwell ist er ein leeres Element mit einer Breite
+           (canvas/text.js). Word kennt so etwas nicht: dort gibt es
+           mitten in einer Zeile nur Zeichen und Tabulatoren, und ein
+           Tabulator bräuchte einen Anschlag an einer Stelle, die sich
+           hier nicht ausrechnen lässt (sie hängt davon ab, wie breit
+           der Text davor in WORDS Schrift wird).
+
+           Also Leerzeichen – aber nur hier, im Ausgegebenen. Im Heft
+           selbst steht weiterhin kein einziges. Das ist der Punkt der
+           ganzen Umstellung: der Verlust bleibt in der Kopie, statt im
+           Original zu stehen. */
+        if (tag === 'SPAN' && child.classList && child.classList.contains('j-luecke')) {
+          const px = pxAusStil(child, 'width');
+          if (px > 0) {
+            const anzahl = Math.max(1, Math.min(120, Math.round(px / LUECKE_ZEICHEN_PX)));
+            ensureParagraph().runs.push({ ...format, text: ' '.repeat(anzahl) });
+          }
+          continue;
+        }
+
         if (BLOCK_TAGS.has(tag)) {
           const absatz = openParagraph(paragraphStyleOf(child));
           absatz.align = ausrichtungVon(child);
+          // Wo der Klick hingezeigt hat – siehe pxAusStil
+          absatz.einzugPx = pxAusStil(child, 'marginLeft');
+          absatz.obenPx = pxAusStil(child, 'marginTop');
 
           if (tag === 'LI' && liste) {
             liste.n++;
@@ -829,10 +879,20 @@
     const einzug = Math.round((paragraph.indentPx || 0) * TWIPS_PER_PX);
     if (einzug) props.push(`<w:tabs><w:tab w:val="left" w:pos="${einzug}"/></w:tabs>`);
 
-    props.push(`<w:spacing w:before="0" w:after="0" w:line="${Math.round(lh * TWIPS_PER_PX)}" w:lineRule="exact"/>`);
+    /* Der Abstand nach oben, den ein Klick weiter unten gesetzt hat.
+       Er steht in ganzen Zeilenhöhen (canvas/text.js) und kommt damit in
+       Word auf dieselben Zeilen wie im Heft. */
+    const oben = Math.round((paragraph.obenPx || 0) * TWIPS_PER_PX);
+    props.push(`<w:spacing w:before="${oben}" w:after="0" w:line="${Math.round(lh * TWIPS_PER_PX)}" w:lineRule="exact"/>`);
+
+    /* Der Einzug eines Aufzählungspunktes hängt (die Marke steht davor);
+       der Einzug aus einem Klick ist ein gewöhnlicher linker Einzug.
+       Beides zugleich kommt nicht vor – ein Listenpunkt entsteht nicht
+       aus einem Klick ins Leere. */
+    const klickEinzug = Math.round((paragraph.einzugPx || 0) * TWIPS_PER_PX);
     props.push(einzug
       ? `<w:ind w:left="${einzug}" w:right="0" w:hanging="${Math.round(LIST_HANGING_PX * TWIPS_PER_PX)}"/>`
-      : '<w:ind w:left="0" w:right="0" w:firstLine="0"/>');
+      : `<w:ind w:left="${klickEinzug}" w:right="0" w:firstLine="0"/>`);
     if (paragraph.align) props.push(`<w:jc w:val="${paragraph.align}"/>`);
 
     /* ── Eine Überschrift ist auch in Word eine Überschrift ───────────

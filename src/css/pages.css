@@ -754,6 +754,22 @@ body.touch-draw .j-canvas {
 .j-text .j-align-right { text-align: right !important }
 .j-text .j-align-justify { text-align: justify !important }
 
+/* ── Der Abstandshalter ──────────────────────────────────────────────
+   Was ein Klick rechts neben schon geschriebenen Text setzt: keine
+   vierzig Leerzeichen, sondern ein Element mit einer Breite
+   (canvas/text.js). Die Breite steht am Element selbst.
+
+   inline-block, damit die Breite überhaupt gilt – ein leeres <span>
+   ohne Inhalt hat sonst keine. user-select: none, damit er sich beim
+   Markieren nicht wie ein Zeichen anfühlt; löschen lässt er sich
+   trotzdem mit einem Rückschritt, denn im Text steht er ja doch. */
+.j-text .j-luecke {
+  display: inline-block;
+  height: 1px;
+  vertical-align: baseline;
+  user-select: none
+}
+
 .j-text h1,
 .j-text p.j-title-1 {
   font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;

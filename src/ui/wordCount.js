@@ -83,9 +83,17 @@
    *     hintereinander machen daraus kein leeres Wort.
    *   · Ein Absatz ist eine Zeile, in der etwas steht. Leerzeilen zählen
    *     nicht mit – sonst hätte jedes Heft doppelt so viele.
+   *   · Das Nullbreiten-Leerzeichen fällt weg. Es steht im
+   *     Abstandshalter, den ein Klick rechts neben schon geschriebenen
+   *     Text setzt (canvas/text.js), und hält ihn dort am Leben – es ist
+   *     Bedienung und kein Inhalt. Gezählt gehört es aus zwei Gründen
+   *     nicht: es wäre ein Zeichen, das niemand sieht, und es klebte
+   *     zwei Wörter zu einem zusammen.
    */
   function zaehleText(roh) {
-    const sauber = String(roh || '').replace(/\r\n?/g, '\n').trim();
+    const sauber = String(roh || '')
+      .replace(/\u200b/g, ' ')
+      .replace(/\r\n?/g, '\n').trim();
     return {
       zeichenMit: sauber.length,
       zeichenOhne: sauber.replace(/\s/g, '').length,

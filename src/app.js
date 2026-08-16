@@ -596,8 +596,19 @@ function appendPageDOM(page, index) {
   redrawStrokes(canvas, S.strokeHistory[page.id]);
   (page.objects || []).forEach(obj => placeObject(objLayer, obj, page));
   attachInput(canvas, textDiv, objLayer, page);
+  /* Ein Klick ins Leere legt einen Absatz an, damit die Marke irgendwo
+     stehen kann – aber nur VORLÄUFIG (canvas/text.js). Der erste
+     Anschlag macht ihn endgültig, das Verlassen des Feldes räumt ihn
+     weg. Ohne das hinterliesse jeder verirrte Klick einen leeren Absatz
+     im Heft, im geteilten Dokument bei allen Beteiligten. */
+  textDiv.addEventListener('blur', () => {
+    if (typeof raeumeVorlaeufiges !== 'function') return;
+    raeumeVorlaeufiges(textDiv);
+  });
+
   textDiv.addEventListener('input', () => {
     if (S._isUndoingOrRedoing) return;
+    if (typeof markiereBleibend === 'function') markiereBleibend(textDiv);
     S._lastPgAction = S._lastPgAction || {};
     S._lastPgAction[page.id] = 'text';
     // Der Sicherungspunkt wird schon in 'beforeinput' gesetzt (pushTypingHistory),
