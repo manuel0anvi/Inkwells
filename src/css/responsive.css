@@ -286,176 +286,27 @@ body.touch-input .nb-card-edit-btn {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   DIE WERKZEUGLEISTE MUSS OHNE SCHIEBEN HINEINPASSEN
+   DIE WERKZEUGLEISTE – HIER STANDEN IHRE ENGE-STUFEN
 
-   Sie kann seitlich rollen (css/toolbar.css), aber das ist ein Notnagel
-   und keine Bedienung: was rechts heraussteht, findet niemand, und mit
-   dem Finger ist ein waagerechtes Schieben in einer 40 px hohen Leiste
-   kaum zu treffen. Im Hochformat – also sobald jemand den Laptop
-   umklappt – stand die Haelfte draussen.
+   Fünf Stufen nach Fensterbreite: Beschriftungen weg, Abstände enger,
+   im Hochformat ein "+" statt der Einfüge-Knöpfe. Jede Schwelle stand
+   doppelt da, einmal für das schmale Fenster und einmal für die offene
+   Navigation, weil die letztere rund 230 px nimmt, ohne dass sich die
+   Fensterbreite ändert.
 
-   >>> ENG WIRD ES AUF ZWEI WEGEN <<<
-   Der eine ist das schmale Fenster. Der andere ist die aufgeklappte
-   Navigation: sie nimmt rund 230 px weg, und die fehlen der Leiste
-   genauso. Eine Regel, die nur nach der Fensterbreite fragt, uebersieht
-   den zweiten Weg vollstaendig – bei 1200 px mit offener Navigation
-   standen gemessen 166 px draussen, ohne dass irgendeine Regel griff.
-   Jede Stufe steht deshalb zweimal da, einmal je Weg. Die Schwelle mit
-   Navigation liegt um deren Breite hoeher.
+   Sie sind alle entfallen. Der Grund ist der dritte Weg, auf dem es eng
+   wird und den keine Medienabfrage kennt: eine offene Chat- oder
+   Kommentarleiste. Genau dort tauchte der "Mehr"-Pfeil auf, mitten in
+   der Arbeit, ohne dass sich am Fenster etwas geändert hätte.
 
-   >>> WARUM NICHT CONTAINER-ABFRAGEN <<<
-   Sauberer waere `@container` an .editor-col – der schrumpft ja
-   wirklich mit, und beide Wege waeren damit derselbe. Es scheidet aus:
-   `container-type: inline-size` bringt Layout-Eingrenzung mit, und damit
-   wuerde .editor-col zum Bezugspunkt fuer `position: fixed` darin. Genau
-   das ist #txt-color-dropdown, und ui/toolbar.js setzt seine Stelle in
-   Fensterkoordinaten – die Farbauswahl saesse daneben.
+   Die Stufen stehen jetzt in css/toolbar.css (.tb-plus, .tb-eng) und
+   werden von ui/toolbar.js gesetzt – nachdem die Leiste GEMESSEN wurde.
+   Damit ist es gleich, aus welchem der drei Gründe es eng geworden ist,
+   und keine Schwelle muss mehr geraten werden.
 
-   >>> WAS NOCH GEZIELT WEICHEN MUSS <<<
-   Stufe 1 – Beschriftung und Zier. Spart Platz, bevor die Paginierung
-            eingreift. Je weniger Seiten, desto besser.
-   Stufe 2 – entfällt. Die Paginierung (▶/◀ in ui/toolbar.js) fängt den
-            Rest auf. Früher wurden hier einzelne Knöpfe ausgeblendet, die
-            dann ganz weg waren; heute sind sie über ▶ erreichbar.
-
-   Die Werkzeuge selbst, die Textformate und das Einfuegen bleiben immer
-   auf Seite 1 – für das Einfuegen gibt es keinen zweiten Weg.
+   Was hier bleibt, ist die Größe der Trefferflächen: die hängt am
+   Finger und nicht an der Enge.
    ══════════════════════════════════════════════════════════════════════ */
-
-/* ── Stufe 1, Weg „Navigation offen" ────────────────────────────────
-   Ohne Navigation passt die volle Leiste bis etwa 1150 px; mit ihr
-   entsprechend rund 230 px frueher. */
-@media (max-width:1350px) {
-
-  .journal-layout:has(#side-panel.open) .tb-mode span,
-  .journal-layout:has(#side-panel.open) .tb-sep,
-  .journal-layout:has(#side-panel.open) .tb-sep-sm {
-    display: none
-  }
-
-  .journal-layout:has(#side-panel.open) .tb-grp {
-    gap: 1px
-  }
-}
-
-/* ── Stufe 1, Weg „schmales Fenster" ─────────────────────────────────
-   Von 1150 auf 1300 heraufgesetzt. Die Beschriftungen der Werkzeuge
-   („Cursor", „Stift 1", …) sind mit Abstand das Breiteste in der Leiste –
-   gemessen 417 px für die sechs Knöpfe gegenüber 189 px ohne Text. Bei
-   1200 px lief die Leiste damit über, obwohl die Stufe noch gar nicht
-   griff. Die Sinnbilder allein sind eindeutig genug; der Name steht
-   weiterhin im Tooltip. */
-@media (max-width:1300px) {
-
-  .tb-mode span,
-  .tb-sep,
-  .tb-sep-sm {
-    display: none
-  }
-
-  .tb-grp {
-    gap: 1px
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   STUFE 2 – ENGER STELLEN, STATT ETWAS WEGZUNEHMEN
-
-   >>> Warum es diese Stufe wieder gibt <<<
-   Der Zoom (−, Prozentwert, +) ist seit dieser Fassung unentbehrlich: er
-   trägt kein data-tb-more mehr und wird nie weggeblättert. Damit fehlt
-   der Paginierung ein Kandidat, und die drei Knöpfe wollen ihren Platz
-   auch dann, wenn es eng wird.
-
-   Genommen wird er dort, wo er nichts kostet: am Abstand. Ein Knopf mit
-   4 px Luft an den Seiten statt 8 ist genauso gut zu treffen – die
-   Fläche schrumpft nur um den Zwischenraum, nicht um das Ziel. Zwanzig
-   Knöpfe mal 6 px sind 120 px, und genau die entscheiden.
-
-   Die frühere Stufe 2 blendete stattdessen einzelne Knöpfe ganz aus;
-   die ist zu Recht entfallen (die Pfeile ▶/◀ fangen den Rest auf).
-   ══════════════════════════════════════════════════════════════════════ */
-
-/* Weg „Navigation offen" – sie nimmt rund 230 px weg, die Schwelle
-   liegt entsprechend höher. */
-@media (max-width:1380px) {
-
-  .journal-layout:has(#side-panel.open) .tb-opt,
-  .journal-layout:has(#side-panel.open) .tb-mode {
-    padding: 4px 4px
-  }
-
-  .journal-layout:has(#side-panel.open) .tb-sep {
-    margin: 0 2px
-  }
-
-  .journal-layout:has(#side-panel.open) .tb-zoom-val {
-    min-width: 38px
-  }
-}
-
-/* Weg „schmales Fenster" */
-@media (max-width:1150px) {
-
-  .tb-opt,
-  .tb-mode {
-    padding: 4px 4px
-  }
-
-  .tb-sep {
-    margin: 0 2px
-  }
-
-  .tb-zoom-val {
-    min-width: 38px
-  }
-}
-
-/* Ab hier zählt jeder Pixel. Der Prozentwert bleibt lesbar – er ist die
-   einzige Stelle, an der der Zoom überhaupt abzulesen ist. */
-@media (max-width:820px) {
-
-  .tb-opt,
-  .tb-mode {
-    padding: 4px 2px
-  }
-
-  .tb-zoom-val {
-    min-width: 34px;
-    font-size: 9px
-  }
-
-  .tb-zoom-btn {
-    min-width: 18px
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   STUFE 3 – DER ENGSTE FALL ÜBERHAUPT
-
-   Schmales Hochformat UND offene Navigation: dort bleiben der Leiste
-   rund 500 px, und siebzehn Knöpfe zu je 36 px sind 610. Gemessen fehlten
-   zuletzt 29 px (scripts/test-touch, „hoch 700 + Navigation").
-
-   Weichen kann nichts mehr: Zurückgehen und Vorgehen sollen ausdrücklich
-   BLEIBEN – „die Knöpfe, die verloren gehen müssten, sind die letzten" –,
-   und Zoom, Teilen und Exportieren sind schon weggeblättert.
-
-   Also 30 statt 32 px Kante. Das ist eine bewusste Ausnahme von der
-   Fingerregel weiter oben: die Alternative wäre eine Leiste, die seitlich
-   rollt, und was rechts heraussteht, findet mit dem Finger niemand.
-   Zwei Pixel weniger trifft man noch, eine unsichtbare Schaltfläche nie.
-   ══════════════════════════════════════════════════════════════════════ */
-@media (max-width:760px) {
-
-  .journal-layout:has(#side-panel.open) .tb-opt,
-  .journal-layout:has(#side-panel.open) .tb-mode,
-  .journal-layout:has(#side-panel.open) .sz-btn {
-    min-width: 30px;
-    min-height: 30px;
-    padding: 4px 1px
-  }
-}
 
 /* Mit dem Finger gilt sonst min-width: 36px (ganz oben) und der engere
    Abstand liefe ins Leere. 32 px trifft der Finger noch zuverlässig –
@@ -503,11 +354,6 @@ body.touch-input .nb-card-edit-btn {
     margin-left: auto;
     justify-content: flex-end
   }
-
-
-  /* Ab hier übernimmt die Paginierung (▶/◀). Keine Knöpfe werden mehr
-     gezielt ausgeblendet – sie sind über ▶ erreichbar, statt ganz zu
-     verschwinden. */
 }
 
 @media (max-width:700px) {
@@ -516,46 +362,11 @@ body.touch-input .nb-card-edit-btn {
   .side-panel.open .side-content {
     width: min(160px, 46vw)
   }
-
-  .tb-mode span {
-    display: none
-  }
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   IM HOCHFORMAT EIN „+" STATT VIER KNÖPFEN
-
-   Quer stehen Formen, Medien, Tabelle und Formel einzeln in der Leiste,
-   und das ist die bessere Anordnung: man sieht, was es überhaupt gibt,
-   und braucht einen Klick statt zwei. Im Hochformat gibt es diesen Platz
-   nicht – sechs Werkzeuge, sieben Textformate und vier Einfüge-Knöpfe in
-   einer Zeile, die nur noch die halbe Breite hat.
-
-   >>> Warum nach der AUSRICHTUNG und nicht nach der Breite <<<
-   Gemeint ist der umgeklappte Laptop und das hochkant gehaltene Tablet.
-   Ein schmal gezogenes Fenster im Querformat ist ein anderer Fall: dort
-   fängt die Paginierung (▶/◀) den Überlauf auf, und wer das Fenster
-   breiter zieht, hat seine Knöpfe sofort zurück. Eine Breitenschwelle
-   würde beides vermischen.
-
-   Die vier Einzelknöpfe verschwinden dabei nicht aus der Bedienung – das
-   Menü steuert GENAU sie an (ui/insert.js), es gibt sie also weiterhin
-   nur einmal.
-   ══════════════════════════════════════════════════════════════════════ */
-@media (orientation: portrait) {
-
-  .tb-insert-all {
-    display: block;
-    /* Vier Pixel Luft nach links, mehr nicht: sein Rahmen im gedrückten
-       Zustand stiess sonst an den Farbring daneben, und die beiden sahen
-       aus wie ein Knopf. */
-    margin-left: 4px
-  }
-
-  #btn-shape,
-  #btn-media,
-  #btn-table,
-  #btn-formula {
-    display: none
-  }
-}
+/* Das "+" statt der Einfüge-Knöpfe hing hier an der Bildschirm-
+   ausrichtung. Es hängt jetzt daran, ob die Leiste den Platz wirklich
+   hat: css/toolbar.css unter .toolbar.tb-plus, gesetzt von
+   ui/toolbar.js. Ein hochkant gehaltenes Tablet ist damit weiterhin
+   abgedeckt – ein schmal gezogenes Fenster im Querformat und ein
+   offener Chat aber eben auch. */

@@ -261,7 +261,13 @@
       shape: () => druecke(E('btn-shape')),
       table: () => druecke(E('btn-table')),
       media: () => druecke(E('btn-media')),
-      formula: () => druecke(E('btn-formula'))
+      formula: () => druecke(E('btn-formula')),
+      /* Der Verweis hört auf mousedown und nicht auf click (ui/links.js
+         merkt sich dort die Auswahl, bevor der Knopf dem Textfeld den
+         Fokus nimmt). druecke() schickt pointerdown und click – das
+         käme bei ihm nie an. */
+      link: () => E('fmt-link')?.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     };
 
     /* Die Schreibmarke muss die Oeffnung ueberleben – derselbe Grund wie

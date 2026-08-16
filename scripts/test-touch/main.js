@@ -152,13 +152,28 @@ app.on('ready', async () => {
     /* #fmt-h1 und #fmt-p standen hier einzeln in der Leiste. Sie stecken
        jetzt in der Auswahl hinter #fmt-style – dort sind sie geschlossen
        und deshalb „nicht sichtbar"; gemessen wird die Auswahl weiter
-       unten, nachdem sie aufgemacht wurde. */
-    for (const sel of ['#fmt-list', '#fmt-list-more',
-                       '#fmt-bold', '#fmt-style', '.tb-mode',
+       unten, nachdem sie aufgemacht wurde.
+
+       >>> Und warum B, Liste und Absatzformat nicht mehr dabeistehen <<<
+       Bei 760 px im Hochformat ist die Leiste in ihrer engsten Stufe:
+       das ganze Textformat steckt dann hinter EINEM Knopf
+       (ui/toolbar.js). Geprueft wird deshalb dieser Knopf – und gleich
+       darauf, dass die Knoepfe DARIN gross genug bleiben. Genau das ist
+       ja der Sinn des Zusammenklappens: lieber ein Knopf mehr als
+       zwanzig, die kein Finger mehr trifft. */
+    for (const sel of ['#fmt-char-fold', '.tb-mode',
                        '#btn-undo', '#btn-redo',
                        '.pg-menu-btn', '#btn-panel-toggle']) {
       const m = await mitte(sel);
       pruefe(sel.padEnd(20) + (m ? m.w + '×' + m.h : 'nicht sichtbar'),
+        !!m && Math.min(m.w, m.h) >= 32, m ? 'zu klein fuer einen Finger' : 'fehlt');
+    }
+
+    // Aufklappen – darin stehen Absatzformat, B/I/U und die Liste
+    await tippe('#fmt-char-fold');
+    for (const sel of ['#fmt-style', '#fmt-bold', '#fmt-list', '#fmt-list-more']) {
+      const m = await mitte(sel);
+      pruefe(('  im Fenster: ' + sel).padEnd(30) + (m ? m.w + '×' + m.h : 'nicht sichtbar'),
         !!m && Math.min(m.w, m.h) >= 32, m ? 'zu klein fuer einen Finger' : 'fehlt');
     }
 
@@ -168,6 +183,7 @@ app.on('ready', async () => {
       !!stilZelle && Math.min(stilZelle.w, stilZelle.h) >= 32,
       stilZelle ? 'zu klein fuer einen Finger' : 'die Auswahl ging nicht auf');
     await js(`document.getElementById('style-pop').style.display = 'none'`);
+    await js(`window.schliesseFaltFenster && window.schliesseFaltFenster()`);
 
     /* ── Mit dem Finger ─────────────────────────────────────────────── */
     abschnitt('Mit dem Finger');

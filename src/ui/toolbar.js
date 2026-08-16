@@ -53,225 +53,183 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 })();
 
 /* ══════════════════════════════════════════════════════════════════════
-   WAS NICHT MEHR HINEINPASST, WIRD UMBLÄTTERT
+   DIE LEISTE STEHT IMMER GANZ DA
 
-   Die Leiste hat Stufen in css/responsive.css: erst weicht die
-   Beschriftung, dann, was es anderswo auch gibt. Das reicht, solange die
-   Zahl der Knöpfe feststeht – mit jedem neuen Werkzeug (Tabelle, Formel,
-   Formen, Lineal) müsste eine weitere Stufe dazu, und jede davon ist
-   geraten.
+   >>> Was hier vorher stand, und warum es weg ist <<<
+   Ein „Mehr"-Pfeil (▶). War die Leiste zu schmal, blätterte er ganze
+   Gruppen auf eine zweite Seite – Teilen, Exportieren, der Zoom. Davor
+   gab es ein ⋯-Menü, das dasselbe tat. Beides hat denselben Fehler: das
+   Werkzeug ist weg, und an seiner Stelle steht ein Knopf, der sagt, dass
+   irgendetwas weg ist. Was, sieht man erst nach dem Klick.
 
-   Deshalb die Pfeil-Navigation: gemessen wird, ob die Leiste breiter ist
-   als ihr Platz. Ist sie es, erscheint ▶ – ein Klick darauf blättert zur
-   nächsten „Seite" an Knöpfen, ◀ führt zurück. Die echten Knöpfe bleiben
-   in der Leiste und behalten ihre Handgriffe; sie werden nur gruppenweise
-   ein- und ausgeblendet.
+   Am deutlichsten wurde das mit dem Chat: sobald er aufgeht, verliert
+   die Leiste seine Breite und der Pfeil erschien – mitten in der Arbeit,
+   ohne dass sich am Fenster etwas geändert hätte.
 
-   >>> Warum nicht einfach seitlich rollen <<<
-   Das kann die Leiste längst (css/toolbar.css), aber was rechts
-   heraussteht, findet niemand – und ein waagerechtes Schieben in einer
-   40 px hohen Leiste trifft mit dem Finger ohnehin kaum jemand. Genau
-   deshalb gibt es die Stufen überhaupt.
+   >>> Was stattdessen geschieht <<<
+   Es weicht nichts mehr. Was nicht in die Zeile passt, wird ENGER
+   gefasst, und zwar in vier Stufen, die eine nach der anderen greifen,
+   solange gemessen noch etwas heraussteht:
 
-   >>> Und warum kein ⋯-Menü mehr <<<
-   Das Menü verbarg, dass es überhaupt etwas gibt. Die Pfeile zeigen
-   sichtbar: hier ist noch mehr. Außerdem kostete das Menü einen Klick
-   zum Öffnen und einen zum Auswählen – die Pfeile blättern mit einem
-   Klick eine ganze Seite um.
+     Stufe 1  Einfügen → „+"
+              Formen, Medien, Tabelle, Formel und Verweis werden ein
+              Knopf; #insert-all-pop zeigt sie mit Namen (ui/insert.js).
+              Fünf auf einen ist der grösste Gewinn im ganzen Aufbau,
+              und er kostet am wenigsten: eingefügt wird selten,
+              geschrieben ständig.
+
+     Stufe 2  Werkzeug- und Zeichenformate → je ein Knopf
+              Die Stiftfarben und -stärken, die Radierergrössen und
+              B/I/U samt Schriftfarbe klappen in ein Fenster unter
+              ihrem Knopf zusammen (siehe falte()). Was zusammengehört,
+              klappt zusammen – nicht Beliebiges in ein Sammelbecken.
+
+     Stufe 3  Enger stellen
+              Der Abstand um die Knöpfe schrumpft (Klasse tb-eng am
+              Körper der Leiste, css/toolbar.css). Die Trefferfläche
+              bleibt, nur die Luft dazwischen geht.
+
+     Stufe 4  Das ganze Textformat unter EINEN Knopf
+              Absatzformat und Liste ziehen zu B/I/U ins selbe Fenster.
+              Der Knopf heisst dann nicht mehr „Schrift", sondern
+              „Format" – er trägt jetzt alles, was ein Absatz sein kann.
+              Das ist der engste Fall überhaupt: schmales Hochformat mit
+              aufgeklappter Navigation, gemessen rund 500 px für die
+              ganze Leiste.
+
+   Reicht auch das nicht, rollt die Leiste seitlich wie eh und je
+   (css/toolbar.css). Das ist der Notnagel und kein Entwurf – aber
+   immer noch besser als ein Knopf, hinter dem sich etwas versteckt.
+
+   >>> Warum gemessen und nicht nach Fensterbreite <<<
+   Eng wird es auf drei Wegen: schmales Fenster, aufgeklappte
+   Navigation, offene Chat- oder Kommentarleiste. Nur der erste steht in
+   einer Medienabfrage. Gemessen wird die Leiste selbst, und die kennt
+   alle drei.
    ══════════════════════════════════════════════════════════════════════ */
 (function () {
   const bar = E('toolbar');
-  const btnPrev = E('btn-tb-prev');
-  const btnNext = E('btn-tb-next');
-  if (!bar || !btnPrev || !btnNext) return;
+  if (!bar) return;
 
-  const istTrenner = el => el.classList
-    && (el.classList.contains('tb-sep') || el.classList.contains('tb-sep-sm'));
+  /* Was zusammenklappen kann: der Knopf, der dann erscheint, das Fenster,
+     in das der Inhalt wandert – und die Stücke selbst mit der Stufe, ab
+     der sie mitgehen. Beim Textformat sind es deshalb drei Stücke mit
+     zwei verschiedenen Stufen (siehe Stufe 2 und Stufe 4 oben).
+
+     Die Reihenfolge hier ist die Reihenfolge IM FENSTER: Absatzformat,
+     dann Schrift, dann Liste – dieselbe wie in der offenen Leiste. */
+  const FALTBAR = [
+    {
+      knopf: 'pen-fold', pop: 'pen-fold-pop',
+      teile: [['pen-fold-inhalt', 2]]
+    },
+    {
+      knopf: 'eraser-fold', pop: 'eraser-fold-pop',
+      teile: [['eraser-fold-inhalt', 2]]
+    },
+    {
+      knopf: 'fmt-char-fold', pop: 'fmt-char-fold-pop',
+      teile: [['fmt-style', 4], ['fmt-char-inhalt', 2], ['fmt-list-wrap', 4]],
+      /* Ab Stufe 4 trägt derselbe Knopf nicht mehr nur die Schrift,
+         sondern das ganze Format – dann soll er auch so heissen. */
+      nameAb4: 'textFormat'
+    }
+  ];
+
+  /* Wohin ein Stück zurückgehört. Beim ersten Falten gemerkt – das
+     Elternteil allein reicht nicht, die Stelle darin gehört dazu. */
+  const heimat = new Map();
 
   /**
-   * Die blätterbaren Stücke, von links nach rechts.
+   * Klappt ein Stück zusammen oder wieder auf.
    *
-   * >>> Gruppen, nicht Zonen <<<
-   * Gezählt wurden bisher die drei Zonen (.tb-left/.tb-center/.tb-right).
-   * Damit war das kleinste, was weichen konnte, eine ganze Zone – und die
-   * Mitte trägt sowohl die Textformate ALS AUCH das Einfügen. Schon ein
-   * Pixel Überlänge nahm also das „+" mit, obwohl daneben noch Platz war.
-   * Genau so wurde es gemeldet. Jetzt ist eine Gruppe ein Stück.
-   *
-   * >>> Der Trenner reist mit seiner Gruppe <<<
-   * Sonst bliebe ein Strich ohne Knöpfe daneben stehen.
-   *
-   * >>> Die Pfeile bleiben immer <<<
-   * Sie liegen selbst in .tb-right. Wurde die Zone ausgeblendet, war auch
-   * das ▶ weg – man kam nicht mehr zurück.
+   * Es WANDERT, es wird nicht kopiert: die Knöpfe darin behalten ihre
+   * Handgriffe und ihren Zustand, und es gibt sie weiterhin nur einmal.
+   * Eine zweite Fassung im Fenster liefe der ersten früher oder später
+   * hinterher – dieselbe Überlegung wie beim Einfüge-Menü
+   * (ui/insert.js).
    */
-  function sammleStuecke() {
-    const alle = [];
-    for (const zone of bar.querySelectorAll('.tb-zone')) {
-      let offenerTrenner = null;
-      for (const kind of zone.children) {
-        if (kind === btnPrev || kind === btnNext) continue;
-        if (istTrenner(kind)) { offenerTrenner = kind; continue; }
+  function falteStueck(id, pop, zu) {
+    const el = E(id);
+    if (!el || !pop) return false;
+    const drin = el.parentElement === pop;
+    if (drin === !!zu) return drin;
 
-        const teile = offenerTrenner ? [offenerTrenner, kind] : [kind];
-        offenerTrenner = null;
-
-        /* >>> Die eigene Sichtbarkeit lesen, nicht überschreiben <<<
-           #pen-opts, #eraser-opts und #shape-opts stehen auf display:none,
-           bis ihr Werkzeug gewählt wird (applyMode). Was von sich aus
-           verborgen ist, kostet keine Breite und ist kein Bewerber fürs
-           Blättern.
-
-           Das Blättern selbst fasst style.display NICHT an, sondern setzt
-           eine Klasse (siehe setzeSichtbar). Vorher merkte es sich hier
-           den „eigenen" Wert – und der war nach dem ersten Wegblättern
-           'none'. Von da an galt die Gruppe als von sich aus verborgen und
-           kam nie wieder: Teilen und Exportieren verschwanden auf einem
-           schmalen Fenster dauerhaft, auch wenn wieder Platz war. */
-        const eigenVerborgen = teile.every(el => el.style.display === 'none');
-
-        /* data-tb-more sagt, was entbehrlich ist: 1 weicht zuerst
-           (Speicher-Hinweis), dann 2 (Teilen, Exportieren), zuletzt 4
-           (Rückgängig und Vor). Ohne Nummer ist die Gruppe unentbehrlich –
-           die Werkzeuge, die Textformate, das Einfügen und der Zoom
-           bleiben immer auf der ersten Seite, denn für das Einfügen gibt
-           es keinen zweiten Weg. */
-        alle.push({
-          teile,
-          rang: +(kind.dataset.tbMore || 0),
-          eigenVerborgen
-        });
+    if (zu) {
+      if (!heimat.has(id)) {
+        heimat.set(id, { eltern: el.parentElement, davor: el.nextSibling });
       }
-      if (offenerTrenner) {
-        alle.push({
-          teile: [offenerTrenner],
-          rang: 99,
-          eigenVerborgen: offenerTrenner.style.display === 'none'
-        });
+      pop.appendChild(el);
+    } else {
+      const h = heimat.get(id);
+      if (h && h.eltern) h.eltern.insertBefore(el, h.davor);
+    }
+    return !!zu;
+  }
+
+  function falte(f, stufe) {
+    const knopf = E(f.knopf);
+    const pop = E(f.pop);
+    if (!knopf || !pop) return;
+
+    let etwasDrin = false;
+    for (const [id, ab] of f.teile) {
+      if (falteStueck(id, pop, stufe >= ab)) etwasDrin = true;
+    }
+
+    /* Noch einmal in der Reihenfolge der Liste einhängen. Ohne das
+       stünde im Fenster, was zuerst gefaltet wurde, auch zuerst – bei
+       Stufe 4 also die Schrift vor dem Absatzformat, obwohl es in der
+       Leiste andersherum steht. appendChild verschiebt, es kopiert
+       nicht; für schon richtig sitzende Stücke kostet es nichts. */
+    if (etwasDrin) {
+      for (const [id] of f.teile) {
+        const el = E(id);
+        if (el && el.parentElement === pop) pop.appendChild(el);
       }
     }
-    return alle;
+
+    knopf.style.display = etwasDrin ? '' : 'none';
+    if (!etwasDrin) {
+      knopf.classList.remove('active');
+      pop.style.display = 'none';
+    }
+    if (f.nameAb4 && typeof t === 'function') {
+      const key = stufe >= 4 ? f.nameAb4 : knopf.dataset.i18nTitle;
+      knopf.title = t(key);
+    }
   }
 
   /* Ein Pixel Spielraum: Chromium rechnet Breiten in Bruchteilen, und
-     scrollWidth rundet auf. Ohne das schöbe die Leiste beim Aufbau
-     grundlos etwas ins Menü. */
+     scrollWidth rundet auf. Ohne das ginge die Leiste beim Aufbau
+     grundlos schon eine Stufe enger. */
   const zuEng = () => bar.scrollWidth > bar.clientWidth + 1;
 
-  let aktuelleSeite = 0;     // 0 = erste Seite
-  let seiten = [];           // [[stück, stück, ...], [stück, ...]]
-  let alleStuecke = [];      // die Stücke dieser Messung (Identität zählt)
+  /** Stufe 0 heisst: alles offen. */
+  function setzeStufe(n) {
+    bar.classList.toggle('tb-plus', n >= 1);
+    for (const f of FALTBAR) falte(f, n);
+    bar.classList.toggle('tb-eng', n >= 3);
+    /* Ab Stufe 4 steht im Textformat nur noch der eine Knopf – die
+       Trennstriche darin hätten nichts mehr zu trennen. */
+    bar.classList.toggle('tb-fmt-zu', n >= 4);
+  }
+
+  const HOECHSTE_STUFE = 4;
   let geplant = false;
 
-  /* Weggeblättert wird über eine KLASSE, nicht über style.display. So
-     bleibt der eigene Wert der Gruppe unangetastet – und eine Gruppe, die
-     einmal weichen musste, gilt später nicht als von sich aus verborgen
-     (siehe sammleStuecke). */
-  function setzeSichtbar(stueck, an) {
-    stueck.teile.forEach(el => el.classList.toggle('tb-weg', !an));
-  }
-
-  function versteckePfeile() {
-    btnNext.style.display = 'none';
-    btnPrev.style.display = 'none';
-  }
-
-  /** Alle Stücke sichtbar machen – Ausgangszustand vor der Messung. */
-  function alleZeigen() {
-    for (const s of alleStuecke) setzeSichtbar(s, true);
-  }
-
-  /* ══════════════════════════════════════════════════════════════════
-     OHNE PLATZ FÜR DEN NAMEN: DER NAME BEIM DARÜBERFAHREN
-
-     Ab 1300 px – mit offener Navigation schon ab 1350 – fallen die
-     Beschriftungen weg und es bleiben die Sinnbilder. „Der Name steht
-     weiterhin im Tooltip" stand als Absicht bereits im Stylesheet
-     (css/responsive.css), nur gab es diesen Tooltip nie: die Knöpfe
-     tragen ihren Namen im <span>, nicht in einem title.
-
-     Gesetzt wird er genau dann, wenn der Name wirklich nicht zu lesen
-     ist. Sonst stünde neben dem sichtbaren Wort „Cursor" nach einer
-     Sekunde noch einmal „Cursor". Ein Knopf, der schon von sich aus
-     einen title hat, behält ihn.
-     ══════════════════════════════════════════════════════════════════ */
-  function stelleKurznamen() {
-    for (const btn of bar.querySelectorAll('button')) {
-      const schild = btn.querySelector('span');
-      const name = schild ? (schild.textContent || '').trim() : '';
-      if (!name) continue;
-
-      const verdeckt = getComputedStyle(schild).display === 'none';
-      if (verdeckt) {
-        if (!btn.title || btn.dataset.titelAusName) {
-          btn.title = name;
-          btn.dataset.titelAusName = '1';
-        }
-      } else if (btn.dataset.titelAusName) {
-        btn.removeAttribute('title');
-        delete btn.dataset.titelAusName;
-      }
-    }
-  }
-
-  /**
-   * Misst, was weichen muss, und teilt in zwei Seiten.
-   *
-   * Weil die Pfeile selbst Platz brauchen, wird mit sichtbarem ▶ gemessen.
-   */
   function anpassen() {
     geplant = false;
-    alleStuecke = sammleStuecke();
-    stelleKurznamen();
+    /* Die Leiste ist nicht sichtbar (Startseite): dann misst sich nichts,
+       und ein Ergebnis von 0 px würde alles zusammenklappen. */
+    if (!bar.offsetParent) return;
 
-    if (!bar.offsetParent) { alleZeigen(); versteckePfeile(); return; }
-
-    alleZeigen();
-    versteckePfeile();
-    aktuelleSeite = 0;
-    seiten = [];
-
-    if (!zuEng()) return;   // alles passt
-
-    // ▶ braucht selbst Platz – erst zeigen, dann rechnen
-    btnNext.style.display = '';
-    if (!zuEng()) { btnNext.style.display = 'none'; return; }
-
-    /* Nur Entbehrliches weicht, und zwar nach Rang. Solange es noch zu
-       eng ist, geht das nächste Stück – nach jedem Schritt wird neu
-       gemessen, sonst wanderte alles auf einmal weg. */
-    const entbehrlich = alleStuecke.filter(s => s.rang > 0 && !s.eigenVerborgen)
-      .sort((a, b) => a.rang - b.rang);
-    const verdraengt = [];
-
-    for (const s of entbehrlich) {
-      if (!zuEng()) break;
-      setzeSichtbar(s, false);
-      verdraengt.push(s);
+    for (let n = 0; n <= HOECHSTE_STUFE; n++) {
+      setzeStufe(n);
+      if (!zuEng()) return;
     }
-
-    if (!verdraengt.length) {
-      /* Es gibt nichts Entbehrliches – dann hilft kein Blättern, und die
-         Leiste rollt eben seitlich weiter (css/toolbar.css). Lieber das
-         als ein „+", das nirgends mehr zu finden ist. */
-      alleZeigen();
-      versteckePfeile();
-      return;
-    }
-
-    seiten = [alleStuecke.filter(s => !verdraengt.includes(s)), verdraengt];
-    zeigeSeite(0);
-  }
-
-  /** Blendet alle Stücke einer Seite ein, die anderen aus. */
-  function zeigeSeite(nr) {
-    aktuelleSeite = nr;
-    const sichtbar = new Set(seiten[nr] || []);
-
-    for (const s of alleStuecke) setzeSichtbar(s, sichtbar.has(s));
-
-    btnPrev.style.display = nr > 0 ? '' : 'none';
-    btnNext.style.display = nr < seiten.length - 1 ? '' : 'none';
+    /* Auch die letzte Stufe reicht nicht – dann bleibt sie stehen und die
+       Leiste rollt. Etwas wegzunehmen wäre hier die schlechtere Wahl. */
   }
 
   function planen() {
@@ -280,37 +238,86 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     requestAnimationFrame(anpassen);
   }
 
-  btnNext.addEventListener('click', () => {
-    if (aktuelleSeite < seiten.length - 1) zeigeSeite(aktuelleSeite + 1);
-  });
-
-  btnPrev.addEventListener('click', () => {
-    if (aktuelleSeite > 0) zeigeSeite(aktuelleSeite - 1);
-  });
-
   window.addEventListener('resize', planen, { passive: true });
 
   /* ══════════════════════════════════════════════════════════════════
      UND WENN NUR DIE LEISTE SCHMALER WIRD
 
-     Das Aufziehen der Navigation nimmt der Leiste über hundert Pixel,
-     ohne dass sich das Fenster ändert – ein resize kommt dabei nicht.
-     Die Aufteilung blieb deshalb stehen, wie sie ohne Navigation
-     gerechnet war, und im Hochformat stand die Leiste danach über den
-     Rand hinaus (scripts/test-touch, „hoch 700 + Navigation").
+     Das Aufziehen der Navigation, der Kommentarleiste oder des Chats
+     nimmt der Leiste über hundert Pixel, ohne dass sich das Fenster
+     ändert – ein resize kommt dabei nicht. Ein Beobachter auf der Leiste
+     selbst deckt jeden Grund ab, aus dem sie schmaler wird.
 
-     Ein Beobachter auf der Leiste selbst deckt jeden Grund ab, aus dem
-     sie schmaler wird. Eine Schleife entsteht daraus nicht: anpassen()
-     blendet nur Kinder aus, die Breite der Leiste selbst rührt es nicht
-     an – und planen() bündelt ohnehin auf ein Einzelbild.
+     Eine Schleife entsteht daraus nicht: anpassen() fasst nur den Inhalt
+     an, die Breite der Leiste selbst rührt es nicht an – und planen()
+     bündelt ohnehin auf ein Einzelbild.
      ══════════════════════════════════════════════════════════════════ */
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(planen).observe(bar);
   }
 
   /* Der Werkzeugwechsel blendet ganze Gruppen ein und aus (applyMode) –
-     danach ist die Rechnung eine andere. */
+     danach ist die Rechnung eine andere. Der Name bleibt, damit die
+     Aufrufer unverändert bleiben. */
   window.updateToolbarOverflow = planen;
+
+  /* ── Die zusammengeklappten Fenster auf- und zumachen ────────────── */
+
+  function stelle(knopf, pop) {
+    const r = knopf.getBoundingClientRect();
+    const b = pop.offsetWidth || 220;
+    pop.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - b - 8, r.left))) + 'px';
+    pop.style.top = Math.round(r.bottom + 6) + 'px';
+  }
+
+  function alleZu(ausser) {
+    for (const f of FALTBAR) {
+      if (f === ausser) continue;
+      const pop = E(f.pop);
+      const knopf = E(f.knopf);
+      if (pop) pop.style.display = 'none';
+      if (knopf) knopf.classList.remove('active');
+    }
+  }
+
+  /* Beim Werkzeugwechsel zumachen: das Stift-Fenster gehört zum Stift.
+     Bliebe es offen, stünde es über der Seite und der Knopf darunter
+     wäre schon nicht mehr da (switchMode ruft es). */
+  window.schliesseFaltFenster = () => alleZu(null);
+
+  for (const f of FALTBAR) {
+    const knopf = E(f.knopf);
+    const pop = E(f.pop);
+    if (!knopf || !pop) continue;
+
+    /* Kein Fokusverlust: darin sitzen B/I/U, und die brauchen die
+       Auswahl im Text, an der sie wirken sollen. */
+    knopf.addEventListener('mousedown', e => e.preventDefault());
+    pop.addEventListener('mousedown', e => {
+      if (!e.target.closest('input')) e.preventDefault();
+    });
+
+    knopf.addEventListener('click', () => {
+      const auf = pop.style.display === 'flex';
+      alleZu(f);
+      pop.style.display = auf ? 'none' : 'flex';
+      knopf.classList.toggle('active', !auf);
+      if (!auf) stelle(knopf, pop);
+    });
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (e.target.closest('.tool-pop, .tb-fold-btn')) return;
+    alleZu(null);
+  }, true);
+
+  window.addEventListener('resize', () => {
+    for (const f of FALTBAR) {
+      const pop = E(f.pop);
+      const knopf = E(f.knopf);
+      if (pop && knopf && pop.style.display === 'flex') stelle(knopf, pop);
+    }
+  }, { passive: true });
 
   document.addEventListener('DOMContentLoaded', planen);
   planen();
@@ -376,6 +383,13 @@ function updatePenUI() {
     if (isMatch) hasNorm = true;
   });
   E('pen-color-ring').classList.toggle('active', !hasNorm);
+
+  /* Der Punkt am zusammengeklappten Stift-Knopf zeigt die Farbe. Ist die
+     Gruppe aufgeklappt, sieht man sie ohnehin an den Farbfeldern – der
+     Knopf steht dann gar nicht da. Ohne den Punkt müsste man das Fenster
+     öffnen, nur um zu sehen, womit man gerade malt. */
+  const punkt = E('pen-fold-dot');
+  if (punkt) punkt.style.background = pen.color;
 }
 let _customColorTarget = null;
 let _customColorAnchor = null;
@@ -867,7 +881,6 @@ E('pg-scroll').addEventListener('scroll', () => {
   if (E('txt-color-dropdown').style.display !== 'none') positionTextColorDropdown();
   if (E('custom-color-pop').style.display !== 'none' && _customColorAnchor) positionCustomColorPopover(_customColorAnchor);
   if (_listPopOffen) positionListStylePop();
-  if (_alignPopOffen) positionAlignPop();
 }, { passive: true });
 
 /* Heading toggles */
@@ -957,7 +970,6 @@ function updateHdrBtns() {
   E('fmt-italic').classList.toggle('active', document.queryCommandState('italic'));
   E('fmt-under').classList.toggle('active', document.queryCommandState('underline'));
   updateListBtns();
-  updateAlignBtns();
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1098,206 +1110,26 @@ window.addEventListener('resize', () => {
 }, { passive: true });
 
 /* ══════════════════════════════════════════════════════════════════════
-   AUSRICHTUNG – DERSELBE GETEILTE KNOPF
+   AUSRICHTUNG – GESTRICHEN
 
-   Vier Möglichkeiten, von denen immer genau eine gilt. Als vier einzelne
-   Knöpfe wären das vier Trefferflächen für eine Entscheidung – in einer
-   Leiste, die im Hochformat ohnehin blättern muss, ist das der falsche
-   Handel. Also gebaut wie der Listen-Knopf daneben: die breite Hälfte
-   legt die GEZEIGTE Ausrichtung an und wieder ab, der Pfeil öffnet die
-   Auswahl.
+   Hier standen ein geteilter Knopf und ein Auswahlfenster für
+   linksbündig, zentriert, rechtsbündig und Blocksatz.
 
-   >>> Warum eine Klasse und kein execCommand <<<
-   document.execCommand('justifyCenter') erzeugt je nach Browser mal ein
-   style="text-align", mal ein <div align>. Von einem style bleibt beim
-   Bereinigen allein die Farbe stehen (core/sanitize.js) – die
-   Ausrichtung wäre beim ersten Cloud-Abgleich weg. Die Klasse steht
-   dort ausdrücklich in der Erlaubnisliste.
+   >>> Warum es das nicht mehr gibt <<<
+   Inkwell ist ein Heft: man tippt irgendwohin und schreibt los. Wo der
+   Text steht, entscheidet die Stelle, an der man angefangen hat – nicht
+   eine Einstellung, die man vorher an einem Absatz gesetzt hat. Beides
+   nebeneinander widerspricht sich: eine gesetzte Ausrichtung zieht den
+   Text von genau der Stelle weg, an die man ihn gerade gesetzt hat.
 
-   >>> Warum links keine Klasse bekommt <<<
-   Linksbündig IST der Zustand ohne Auszeichnung. Eine eigene Klasse
-   dafür wäre eine zweite Schreibweise für dasselbe, und beim Öffnen
-   fremder Hefte müsste man beide kennen.
+   >>> Was von der Ausrichtung bleibt <<<
+   Die Klassen j-align-center/-right/-justify. Sie sind nicht tot: ein
+   eingelesenes Word-Dokument bringt zentrierte Überschriften und
+   Blocksatz mit (core/docxImport.js), und die sollen aussehen wie im
+   Original – css/pages.css richtet sie weiterhin aus, core/sanitize.js
+   lässt sie durch, und core/docx.js schreibt sie beim Ausgeben wieder
+   nach OOXML zurück. Nur ANLEGEN kann sie in Inkwell niemand mehr.
    ══════════════════════════════════════════════════════════════════════ */
-
-const AUSRICHTUNGEN = [
-  { id: 'left', klasse: null, labelKey: 'alignLeft', probe: [13, 9, 13, 9], anker: 'start' },
-  { id: 'center', klasse: 'j-align-center', labelKey: 'alignCenter', probe: [13, 9, 13, 9], anker: 'mitte' },
-  { id: 'right', klasse: 'j-align-right', labelKey: 'alignRight', probe: [13, 9, 13, 9], anker: 'ende' },
-  { id: 'justify', klasse: 'j-align-justify', labelKey: 'alignJustify', probe: [13, 13, 13, 13], anker: 'start' }
-];
-
-let _alignPopOffen = false;
-let _letzteAusrichtung = 'center';   // was die breite Hälfte anlegt
-
-/** Die Ausrichtung des Absatzes, in dem die Schreibmarke steht. */
-function aktiveAusrichtung() {
-  const block = curBlockTag();
-  if (!block || !block.classList) return 'left';
-  for (const a of AUSRICHTUNGEN) {
-    if (a.klasse && block.classList.contains(a.klasse)) return a.id;
-  }
-  return 'left';
-}
-
-/** Zeichnet die vier Striche so, wie der Absatz danach stünde. */
-function maleAusrichtungsIcon(svgOderPfad, id) {
-  const art = AUSRICHTUNGEN.find(a => a.id === id) || AUSRICHTUNGEN[0];
-  const zeilen = art.probe.map((breite, i) => {
-    const y = 3 + i * 3.5;
-    let x1 = 1.5;
-    if (art.anker === 'mitte') x1 = 1.5 + (13 - breite) / 2;
-    else if (art.anker === 'ende') x1 = 1.5 + (13 - breite);
-    return `M${x1} ${y}h${breite}`;
-  }).join('');
-  svgOderPfad.setAttribute('d', zeilen);
-}
-
-function updateAlignBtns() {
-  const wrap = E('fmt-align-wrap');
-  const pfad = E('align-icon-lines');
-  if (!wrap || !pfad) return;
-  const aktiv = aktiveAusrichtung();
-  wrap.classList.toggle('active', aktiv !== 'left');
-  /* Steht die Marke in einem ausgerichteten Absatz, zeigt der Knopf
-     DESSEN Ausrichtung – sonst die zuletzt benutzte. Ein Druck heißt
-     damit immer sichtbar „so" bzw. „das wieder weg". */
-  maleAusrichtungsIcon(pfad, aktiv !== 'left' ? aktiv : _letzteAusrichtung);
-}
-
-/**
- * Legt eine Ausrichtung an – auf allen Absätzen, die die Auswahl berührt.
- *
- * Über die berührten Blöcke und nicht nur über den einen an der Marke:
- * wer drei Absätze markiert und zentriert drückt, meint alle drei.
- */
-function setzeAusrichtung(id) {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return;
-
-  const feld = curBlockTag()?.closest('.j-text');
-  if (!feld || feld.isContentEditable === false) return;
-  if (typeof S !== 'undefined' && S.readOnly) return;
-
-  const pgEl = feld.closest('[data-pgid]');
-  const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
-  if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
-
-  const bereich = sel.getRangeAt(0);
-  const bloecke = [...feld.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6,li,td,th')]
-    .filter(el => bereich.intersectsNode(el)
-      // Nur der innerste Block je Stelle – sonst bekäme ein <td> die
-      // Klasse zusätzlich zu dem <p> darin, und beide richteten aus.
-      && !el.querySelector('p,div,h1,h2,h3,h4,h5,h6,li'));
-  if (!bloecke.length) {
-    const einzeln = curBlockTag();
-    if (einzeln) bloecke.push(einzeln);
-  }
-
-  for (const block of bloecke) {
-    for (const a of AUSRICHTUNGEN) if (a.klasse) block.classList.remove(a.klasse);
-    const art = AUSRICHTUNGEN.find(a => a.id === id);
-    if (art && art.klasse) block.classList.add(art.klasse);
-  }
-
-  if (id !== 'left') _letzteAusrichtung = id;
-  updateAlignBtns();
-
-  // Der Umbau von Hand feuert kein 'input' – das Sichern muss also selbst
-  // angestoßen werden, sonst wäre die Ausrichtung nach dem Neustart weg.
-  if (info) {
-    info.page.textContent = typeof ohneGriffe === 'function' ? ohneGriffe(feld) : feld.innerHTML;
-    if (window.Collab) Collab.noteTextChange(info.page.id, info.page.textContent);
-    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-  }
-  if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
-}
-
-function buildAlignRow() {
-  const reihe = E('align-row');
-  if (!reihe) return;
-  const aktiv = aktiveAusrichtung();
-  reihe.innerHTML = '';
-
-  for (const art of AUSRICHTUNGEN) {
-    const zelle = document.createElement('button');
-    zelle.type = 'button';
-    zelle.className = 'list-style-cell align-cell' + (art.id === aktiv ? ' active' : '');
-    zelle.title = (typeof t === 'function' && art.labelKey) ? t(art.labelKey) : art.id;
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '18');
-    svg.setAttribute('height', '18');
-    svg.setAttribute('viewBox', '0 0 16 16');
-    const pfad = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pfad.setAttribute('stroke', 'currentColor');
-    pfad.setAttribute('stroke-width', '1.4');
-    pfad.setAttribute('stroke-linecap', 'round');
-    maleAusrichtungsIcon(pfad, art.id);
-    svg.appendChild(pfad);
-    zelle.appendChild(svg);
-
-    zelle.addEventListener('mousedown', e => e.preventDefault());
-    zelle.addEventListener('click', () => {
-      setzeAusrichtung(art.id);
-      closeAlignPop();
-    });
-    reihe.appendChild(zelle);
-  }
-}
-
-function positionAlignPop() {
-  const pop = E('align-pop');
-  const anker = E('fmt-align-wrap');
-  if (!pop || !anker) return;
-  const r = anker.getBoundingClientRect();
-  pop.style.left = Math.round(r.left + r.width / 2) + 'px';
-  pop.style.top = Math.round(r.bottom + 8) + 'px';
-  pop.style.transform = 'translateX(-50%)';
-
-  // An keinem Rand aus dem Fenster laufen – wie beim Listen-Fenster
-  const box = pop.getBoundingClientRect();
-  const zuVielRechts = box.right - (window.innerWidth - 8);
-  if (zuVielRechts > 0) pop.style.left = Math.round(box.left - zuVielRechts + box.width / 2) + 'px';
-  if (pop.getBoundingClientRect().left < 8) {
-    pop.style.left = Math.round(8 + pop.getBoundingClientRect().width / 2) + 'px';
-  }
-}
-
-function openAlignPop() {
-  _alignPopOffen = true;
-  buildAlignRow();
-  E('align-pop').style.display = 'block';
-  positionAlignPop();
-}
-
-function closeAlignPop() {
-  const pop = E('align-pop');
-  if (pop) pop.style.display = 'none';
-  _alignPopOffen = false;
-}
-
-['fmt-align', 'fmt-align-more', 'align-pop'].forEach(id => listNoBlur(E(id)));
-
-/* Die breite Hälfte: die gezeigte Ausrichtung anlegen – oder wieder ab,
-   wenn sie schon gilt. Genau wie beim Listen-Knopf. */
-E('fmt-align').addEventListener('click', () => {
-  const aktiv = aktiveAusrichtung();
-  setzeAusrichtung(aktiv !== 'left' ? 'left' : _letzteAusrichtung);
-});
-
-E('fmt-align-more').addEventListener('click', e => {
-  e.stopPropagation();
-  if (_alignPopOffen) return closeAlignPop();
-  openAlignPop();
-});
-
-document.addEventListener('pointerdown', e => {
-  if (!e.target.closest('#align-pop') && !e.target.closest('.tb-split')) closeAlignPop();
-});
-window.addEventListener('resize', () => {
-  if (_alignPopOffen) positionAlignPop();
-}, { passive: true });
 
 /* Die zuletzt gewählte Form überdauert das Schließen der App. Beim Laden
    der Leiste ist die Einstellungsdatei aber noch nicht gelesen – deshalb
@@ -1498,6 +1330,9 @@ function switchMode(mode) {
      Einfügen. Zumachen gehört trotzdem hierher: es liegt über der
      Seite, und wer zum Stift greift, will darauf zeichnen. */
   if (typeof setzeFormenFenster === 'function') setzeFormenFenster(false);
+  // Dasselbe für die zusammengeklappten Gruppen: das Stift-Fenster
+  // gehört zum Stift und hat beim Radierer nichts mehr zu suchen.
+  if (typeof window.schliesseFaltFenster === 'function') window.schliesseFaltFenster();
   updatePenUI();
   applyMode();
   updateUndoRedoUI();

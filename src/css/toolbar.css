@@ -122,13 +122,8 @@
   color: var(--gold)
 }
 
-/* Weggeblättert (ui/toolbar.js). Als Klasse und nicht als style.display,
-   damit der eigene Wert einer Gruppe – #pen-opts und Co. stehen je nach
-   Werkzeug auf none – erhalten bleibt. Deshalb auch !important: gegen
-   genau diesen Inline-Wert muss es sich durchsetzen. */
-.tb-weg {
-  display: none !important
-}
+/* .tb-weg trug, was weggeblättert war. Es wird nichts mehr
+   weggeblättert – siehe die Enge-Stufen weiter unten. */
 
 /* Nichts zum Rückgängigmachen: der Knopf bleibt stehen, statt zu
    verschwinden – ein Knopf, der springt, ist schwerer zu treffen als
@@ -605,43 +600,104 @@
   border-color: var(--gold)
 }
 
-/* ── Das Sammelbecken der Werkzeugleiste ──────────────────────────────
-   Was nicht mehr in die Zeile passt, steht hier untereinander
-   (ui/toolbar.js). Die Gruppen behalten ihr Aussehen, sie stehen nur
-   nicht mehr nebeneinander. */
-.tb-more-pop {
-  position: fixed;
-  z-index: 1300;
-  display: none;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--sc);
-  border: 1px solid var(--sb2);
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
-  padding: 8px
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ENGE-STUFEN DER LEISTE
+
+   Gesetzt von ui/toolbar.js, gemessen und nicht geraten – dort steht
+   auch, warum es die Pfeile ◀ ▶ und das Sammelbecken (.tb-more-pop,
+   .tb-page-btn) nicht mehr gibt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Stufe 1: Einfügen wird ein „+" ──────────────────────────────────
+   Die fünf Einzelknöpfe weichen dem Sammelknopf. Sie verschwinden damit
+   nicht aus der Bedienung: #insert-all-pop steuert genau sie an
+   (ui/insert.js), es gibt sie also weiterhin nur einmal. */
+.toolbar.tb-plus .tb-insert-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Vier Pixel Luft nach links, mehr nicht: sein Rahmen im gedrückten
+     Zustand stiess sonst an den Knopf daneben, und die beiden sahen aus
+     wie einer. */
+  margin-left: 4px
 }
 
-.tb-more-pop .tb-grp {
+.toolbar.tb-plus #btn-shape,
+.toolbar.tb-plus #btn-media,
+.toolbar.tb-plus #btn-table,
+.toolbar.tb-plus #btn-formula,
+.toolbar.tb-plus #fmt-link {
+  display: none
+}
+
+/* ── Stufe 2: was zusammengehört, klappt zusammen ────────────────────
+   Der Knopf steht nur da, solange sein Inhalt im Fenster liegt –
+   ui/toolbar.js setzt sein display beim Falten. Das ▾ sagt, dass
+   darunter etwas aufgeht; ohne das sähe er aus wie ein Schalter. */
+.tb-fold-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0
+}
+
+/* Der Farbpunkt am Stift-Knopf: er zeigt, womit gerade gemalt wird –
+   sonst müsste man das Fenster öffnen, nur um die Farbe zu sehen. */
+.tb-fold-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid var(--sb2);
+  background: var(--md)
+}
+
+/* Der Inhalt selbst sieht in der Leiste und im Fenster gleich aus –
+   dieselben Elemente, nur woanders eingehängt. */
+.tb-fold {
   display: flex;
   align-items: center;
   gap: 2px
 }
 
-/* Die Pfeile zum Umblättern der Leiste. Sie erscheinen nur, wenn die
-   Leiste zu schmal ist – am rechten Rand, gut sichtbar. */
-.tb-page-btn {
-  font-size: 14px;
-  padding: 4px 7px;
-  flex-shrink: 0;
-  color: var(--gold);
-  border-color: var(--gd);
-  font-weight: bold
+/* ── Stufe 3: enger stellen ──────────────────────────────────────────
+   Genommen wird der Platz dort, wo er nichts kostet: am Abstand. Ein
+   Knopf mit 3 px Luft an den Seiten ist genauso gut zu treffen wie
+   einer mit 8 – die Fläche schrumpft nur um den Zwischenraum, nicht um
+   das Ziel. Zwanzig Knöpfe mal 10 px sind 200 px, und genau die
+   entscheiden. */
+.toolbar.tb-eng {
+  gap: 0;
+  padding: 5px 4px
 }
 
-.tb-page-btn:hover {
-  background: var(--gold);
-  color: var(--sh)
+.toolbar.tb-eng .tb-opt,
+.toolbar.tb-eng .tb-mode {
+  padding: 4px 3px
+}
+
+.toolbar.tb-eng .tb-grp {
+  gap: 0
+}
+
+.toolbar.tb-eng .tb-sep {
+  margin: 0 2px
+}
+
+.toolbar.tb-eng .tb-zoom-val {
+  min-width: 34px;
+  font-size: 9px
+}
+
+.toolbar.tb-eng .tb-zoom-btn {
+  min-width: 18px
+}
+
+/* ── Stufe 4: das ganze Textformat unter einem Knopf ─────────────────
+   Dann steht in #text-opts nur noch #fmt-char-fold. Die Trennstriche
+   darin hätten nichts mehr zu trennen und wären zwei einsame Linien
+   neben einem Knopf. */
+.toolbar.tb-fmt-zu #text-opts > .tb-sep-sm {
+  display: none
 }
 
 /* ── Das Einfuegen-Menue ──────────────────────────────────────────── */
@@ -699,8 +755,9 @@
   min-width: 190px
 }
 
-/* Der Sammelknopf gilt nur im Hochformat; quer steht jedes der vier
-   Werkzeuge fuer sich (css/responsive.css schaltet um). */
+/* Der Sammelknopf steht nur da, wenn die Leiste ihn braucht – dann
+   traegt die Leiste .tb-plus (ui/toolbar.js misst das). Sonst steht
+   jedes der fuenf Werkzeuge fuer sich. */
 .tb-insert-all {
   display: none
 }
@@ -929,19 +986,7 @@
    gibt jetzt der Sync-Knopf in der Titelleiste (css/titlebar.css). */
 
 
-/* ── Die Ausrichtung zur Auswahl (ui/toolbar.js) ──────────────────────
-   Dasselbe Fenster wie bei den Listenformen – .list-style-pop trägt
-   Rahmen, Schatten und Lage –, nur mit einer Reihe statt eines Rasters.
-   Vier Möglichkeiten passen nebeneinander; ein Raster wäre eine Zeile
-   mit drei leeren Feldern daneben. */
-.align-row {
-  display: flex;
-  gap: 6px
-}
-
-.align-cell {
-  width: 40px;
-  align-items: center;
-  justify-content: center;
-  color: var(--hi)
-}
+/* Die Ausrichtung zur Auswahl (.align-row/.align-cell) ist entfallen –
+   den Grund nennt ui/toolbar.js. Die Klassen j-align-… bleiben, weil
+   eingelesene Word-Dokumente sie mitbringen; sie stehen in
+   css/pages.css. */
