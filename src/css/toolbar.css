@@ -608,7 +608,24 @@
    .tb-page-btn) nicht mehr gibt.
    ══════════════════════════════════════════════════════════════════════ */
 
-/* ── Stufe 1: Einfügen wird ein „+" ──────────────────────────────────
+/* ── Stufe 1: die Werkzeuge verlieren ihre Namen ─────────────────────
+   Das Sinnbild bleibt, der Name wandert in den title (ui/toolbar.js
+   setzt ihn erst hier – solange er sichtbar danebensteht, wäre er im
+   Tooltip nur dasselbe Wort ein zweites Mal). */
+.toolbar.tb-ohne-namen .tb-mode span {
+  display: none
+}
+
+.toolbar.tb-ohne-namen .tb-grp {
+  gap: 1px
+}
+
+.toolbar.tb-ohne-namen .tb-sep,
+.toolbar.tb-ohne-namen .tb-sep-sm {
+  margin: 0 2px
+}
+
+/* ── Stufe 2: Einfügen wird ein „+" ──────────────────────────────────
    Die fünf Einzelknöpfe weichen dem Sammelknopf. Sie verschwinden damit
    nicht aus der Bedienung: #insert-all-pop steuert genau sie an
    (ui/insert.js), es gibt sie also weiterhin nur einmal. */
@@ -630,7 +647,7 @@
   display: none
 }
 
-/* ── Stufe 2: was zusammengehört, klappt zusammen ────────────────────
+/* ── Stufe 3: was zusammengehört, klappt zusammen ────────────────────
    Der Knopf steht nur da, solange sein Inhalt im Fenster liegt –
    ui/toolbar.js setzt sein display beim Falten. Das ▾ sagt, dass
    darunter etwas aufgeht; ohne das sähe er aus wie ein Schalter. */
@@ -659,7 +676,7 @@
   gap: 2px
 }
 
-/* ── Stufe 3: enger stellen ──────────────────────────────────────────
+/* ── Stufe 4: enger stellen ──────────────────────────────────────────
    Genommen wird der Platz dort, wo er nichts kostet: am Abstand. Ein
    Knopf mit 3 px Luft an den Seiten ist genauso gut zu treffen wie
    einer mit 8 – die Fläche schrumpft nur um den Zwischenraum, nicht um
@@ -692,7 +709,7 @@
   min-width: 18px
 }
 
-/* ── Stufe 4: das ganze Textformat unter einem Knopf ─────────────────
+/* ── Stufe 5: das ganze Textformat unter einem Knopf ─────────────────
    Dann steht in #text-opts nur noch #fmt-char-fold. Die Trennstriche
    darin hätten nichts mehr zu trennen und wären zwei einsame Linien
    neben einem Knopf. */

@@ -68,28 +68,37 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 
    >>> Was stattdessen geschieht <<<
    Es weicht nichts mehr. Was nicht in die Zeile passt, wird ENGER
-   gefasst, und zwar in vier Stufen, die eine nach der anderen greifen,
-   solange gemessen noch etwas heraussteht:
+   gefasst, und zwar in fünf Stufen, die eine nach der anderen greifen,
+   solange gemessen noch etwas heraussteht. Stufe 0 heisst: alles offen,
+   mit ausgeschriebenen Namen an den Werkzeugen.
 
-     Stufe 1  Einfügen → „+"
+     Stufe 1  Die Namen der Werkzeuge weg
+              „Cursor", „Stift 1", „Stift 2", „Marker", „Radierer",
+              „Finger" – gemessen 417 gegenüber 189 px und damit das
+              Breiteste in der ganzen Leiste. Sie gehen als Erstes, weil
+              das Sinnbild bleibt und der Name in den title wandert:
+              nichts wird unerreichbar, es wird nur knapper beschriftet.
+              Ist wieder Platz, stehen sie sofort wieder da.
+
+     Stufe 2  Einfügen → „+"
               Formen, Medien, Tabelle, Formel und Verweis werden ein
               Knopf; #insert-all-pop zeigt sie mit Namen (ui/insert.js).
               Fünf auf einen ist der grösste Gewinn im ganzen Aufbau,
               und er kostet am wenigsten: eingefügt wird selten,
               geschrieben ständig.
 
-     Stufe 2  Werkzeug- und Zeichenformate → je ein Knopf
+     Stufe 3  Werkzeug- und Zeichenformate → je ein Knopf
               Die Stiftfarben und -stärken, die Radierergrössen und
               B/I/U samt Schriftfarbe klappen in ein Fenster unter
               ihrem Knopf zusammen (siehe falte()). Was zusammengehört,
               klappt zusammen – nicht Beliebiges in ein Sammelbecken.
 
-     Stufe 3  Enger stellen
+     Stufe 4  Enger stellen
               Der Abstand um die Knöpfe schrumpft (Klasse tb-eng am
               Körper der Leiste, css/toolbar.css). Die Trefferfläche
               bleibt, nur die Luft dazwischen geht.
 
-     Stufe 4  Das ganze Textformat unter EINEN Knopf
+     Stufe 5  Das ganze Textformat unter EINEN Knopf
               Absatzformat und Liste ziehen zu B/I/U ins selbe Fenster.
               Der Knopf heisst dann nicht mehr „Schrift", sondern
               „Format" – er trägt jetzt alles, was ein Absatz sein kann.
@@ -114,25 +123,25 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
   /* Was zusammenklappen kann: der Knopf, der dann erscheint, das Fenster,
      in das der Inhalt wandert – und die Stücke selbst mit der Stufe, ab
      der sie mitgehen. Beim Textformat sind es deshalb drei Stücke mit
-     zwei verschiedenen Stufen (siehe Stufe 2 und Stufe 4 oben).
+     zwei verschiedenen Stufen (siehe Stufe 3 und Stufe 5 oben).
 
      Die Reihenfolge hier ist die Reihenfolge IM FENSTER: Absatzformat,
      dann Schrift, dann Liste – dieselbe wie in der offenen Leiste. */
   const FALTBAR = [
     {
       knopf: 'pen-fold', pop: 'pen-fold-pop',
-      teile: [['pen-fold-inhalt', 2]]
+      teile: [['pen-fold-inhalt', 3]]
     },
     {
       knopf: 'eraser-fold', pop: 'eraser-fold-pop',
-      teile: [['eraser-fold-inhalt', 2]]
+      teile: [['eraser-fold-inhalt', 3]]
     },
     {
       knopf: 'fmt-char-fold', pop: 'fmt-char-fold-pop',
-      teile: [['fmt-style', 4], ['fmt-char-inhalt', 2], ['fmt-list-wrap', 4]],
-      /* Ab Stufe 4 trägt derselbe Knopf nicht mehr nur die Schrift,
+      teile: [['fmt-style', 5], ['fmt-char-inhalt', 3], ['fmt-list-wrap', 5]],
+      /* Ab Stufe 5 trägt derselbe Knopf nicht mehr nur die Schrift,
          sondern das ganze Format – dann soll er auch so heissen. */
-      nameAb4: 'textFormat'
+      nameAllesAb: 5, nameAlles: 'textFormat'
     }
   ];
 
@@ -179,7 +188,7 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 
     /* Noch einmal in der Reihenfolge der Liste einhängen. Ohne das
        stünde im Fenster, was zuerst gefaltet wurde, auch zuerst – bei
-       Stufe 4 also die Schrift vor dem Absatzformat, obwohl es in der
+       Stufe 5 also die Schrift vor dem Absatzformat, obwohl es in der
        Leiste andersherum steht. appendChild verschiebt, es kopiert
        nicht; für schon richtig sitzende Stücke kostet es nichts. */
     if (etwasDrin) {
@@ -194,8 +203,8 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
       knopf.classList.remove('active');
       pop.style.display = 'none';
     }
-    if (f.nameAb4 && typeof t === 'function') {
-      const key = stufe >= 4 ? f.nameAb4 : knopf.dataset.i18nTitle;
+    if (f.nameAlles && typeof t === 'function') {
+      const key = stufe >= f.nameAllesAb ? f.nameAlles : knopf.dataset.i18nTitle;
       knopf.title = t(key);
     }
   }
@@ -205,17 +214,33 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
      grundlos schon eine Stufe enger. */
   const zuEng = () => bar.scrollWidth > bar.clientWidth + 1;
 
-  /** Stufe 0 heisst: alles offen. */
+  /**
+   * Stufe 0 heisst: alles offen, mit ausgeschriebenen Namen.
+   *
+   * >>> Der title kommt erst, wenn der Name weg ist <<<
+   * Sonst stünde neben dem sichtbaren Wort „Cursor" nach einer Sekunde
+   * noch einmal „Cursor". Ein Knopf, der von sich aus keinen Namen im
+   * Schild trägt (der Finger-Schalter zeigt seinen erst ab Stufe 1),
+   * behält ihn trotzdem – gefragt wird das <span>, nicht der Knopf.
+   */
   function setzeStufe(n) {
-    bar.classList.toggle('tb-plus', n >= 1);
+    const ohneNamen = n >= 1;
+    bar.classList.toggle('tb-ohne-namen', ohneNamen);
+    for (const btn of bar.querySelectorAll('.tb-mode[data-i18n-title]')) {
+      if (!btn.querySelector('span')) continue;
+      if (ohneNamen && typeof t === 'function') btn.title = t(btn.dataset.i18nTitle);
+      else btn.removeAttribute('title');
+    }
+
+    bar.classList.toggle('tb-plus', n >= 2);
     for (const f of FALTBAR) falte(f, n);
-    bar.classList.toggle('tb-eng', n >= 3);
-    /* Ab Stufe 4 steht im Textformat nur noch der eine Knopf – die
+    bar.classList.toggle('tb-eng', n >= 4);
+    /* Ab Stufe 5 steht im Textformat nur noch der eine Knopf – die
        Trennstriche darin hätten nichts mehr zu trennen. */
-    bar.classList.toggle('tb-fmt-zu', n >= 4);
+    bar.classList.toggle('tb-fmt-zu', n >= 5);
   }
 
-  const HOECHSTE_STUFE = 4;
+  const HOECHSTE_STUFE = 5;
   let geplant = false;
 
   function anpassen() {
