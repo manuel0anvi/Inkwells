@@ -465,6 +465,100 @@ console.log('\nAbstand statt Leerzeichen\n');
     /\\u200b/.test(zaehlQuelle), true);
 }
 
+console.log('\nWo man hinklickt, kann man auch schreiben\n');
+{
+  /* ══════════════════════════════════════════════════════════════════
+     DREI STELLEN, AN DENEN DIE MARKE FRUEHER WEGSPRANG
+
+     Gemeldet als „sobald etwas geschrieben wurde, kann man nicht mehr
+     hin, wo man moechte: der Cursor geht an den Anfang oder ans Ende
+     der Zeile" – und als „beim Klick verschiebt sich alles darunter
+     eine Zeile nach unten".
+
+     Auch hier wird die QUELLE geprueft. Das Verhalten haengt an echten
+     Klicks in einem echten Fenster; hier soll auffallen, wenn eine der
+     drei Vorkehrungen wieder herausfaellt. */
+  const textQuelle = lies('src', 'canvas', 'text.js');
+  const eingabeQuelle = lies('src', 'canvas', 'input.js');
+
+  /* 1. Ein Absatz spannt sich ueber die ganze Breite. Wurde danach
+     gefragt, galt jeder Klick auf seiner Hoehe als Klick auf Text. */
+  check('Gefragt wird Textknoten fuer Textknoten',
+    /function beschriebeneKaesten/.test(eingabeQuelle)
+    && /createTreeWalker/.test(eingabeQuelle), true);
+  check('Und nicht mehr ueber den ganzen Inhalt',
+    !/range\.selectNodeContents\(textDiv\);\s*\n\s*const rects/.test(eingabeQuelle), true);
+
+  /* 2. Links neben eingerueckten Text: der Absatz rueckt nach, ein
+     Halter haelt das Vorhandene an seinem Platz. */
+  check('Links neben den Text weicht der Einzug',
+    /function _einzugWeichtNachLinks/.test(textQuelle), true);
+  check('Und ein Halter haelt das Geschriebene fest',
+    /_merkeZurueck\(halter, block, 'marginLeft'/.test(textQuelle), true);
+
+  /* 3. Mitten in einen vorhandenen Abstand: der wird geteilt. */
+  check('Ein vorhandener Abstand laesst sich teilen',
+    /function _teileLuecke/.test(textQuelle)
+    && /function _lueckeUnter/.test(textQuelle), true);
+
+  /* 4. Zwischen zwei Absaetzen wird kein Platz geschaffen, sondern
+     genommen – sonst rutscht alles darunter eine Zeile tiefer. */
+  check('Der neue Absatz nimmt seinen Platz von unten',
+    /nach\.style\.marginTop = Math\.max\(0, altObenPx - obenPx - lhSeite\)/.test(textQuelle), true);
+  check('Ohne Luft entsteht gar kein Absatz',
+    /Kein Platz: dann wird auch keiner geschaffen/.test(textQuelle), true);
+  check('Und der blosse Klick nimmt beides zurueck',
+    /function _nimmZurueck/.test(textQuelle)
+    && /_nimmZurueck\(el\);\s*\n\s*el\.remove\(\)/.test(textQuelle), true);
+}
+
+console.log('\nWer schreibt, hat die Vollmacht ueber seine Zeile\n');
+{
+  /* ══════════════════════════════════════════════════════════════════
+     DAS LOCH IN DER ZEILENSPERRE
+
+     Gemeldet: „wenn ich oefter auf die gesperrte Zeile druecke und
+     dabei tippe, kann man irgendwann trotzdem darin schreiben."
+
+     Der Weg dahin ging ueber den eigenen Anspruch: er umfasst die
+     eigene Zeile UND die naechste. Sass in dieser naechsten inzwischen
+     jemand anderes und schrieb dort, deckte der eigene Anspruch sie
+     immer noch – und damit liessen trifftSperrband, editBlockedBy und
+     der Takt alles durch. */
+  const collabQuelle = lies('src', 'ui', 'collab.js');
+
+  check('Der eigene Anspruch endet an der Zeile eines anderen',
+    /function fremdeZeileDeckt/.test(collabQuelle)
+    && /return !fremdeZeileDeckt\(pageId, stelle\)/.test(collabQuelle), true);
+  check('Gefragt wird nach seiner Zeile, nicht nach seinem Sperrbereich',
+    /visualLineSpan\(textDiv, stelle, 0\)/.test(collabQuelle), true);
+  check('Die Zeile laesst sich ohne die Zusatzzeile messen',
+    /function visualLineSpan\(textDiv, offset, zeilenDanach = 1\)/.test(collabQuelle), true);
+  check('Und der Anspruch faellt weg, sobald man aufhoert',
+    /if \(!schreibtGerade\(pageId\)\) \{ eigeneSperre\.delete\(pageId\); return null; \}/.test(collabQuelle), true);
+}
+
+console.log('\nEin fremdes Dokument wird nicht auf die Platte geschrieben\n');
+{
+  /* Gemeldet: „geteilte Dokumente, die fuer mich freigegeben sind,
+     wurden zu speichern versucht, und dann kam ein Fehler." Von Hand
+     speichern ging an den beiden Bremsen vorbei (markDirty und
+     FileManager) und lief den ganzen Weg fuer die eigene Datei an. */
+  const autoQuelle = lies('src', 'core', 'autoSave.js');
+  const standQuelle = lies('src', 'ui', 'saveStatus.js');
+  const geteiltQuelle = lies('src', 'ui', 'sharedDocs.js');
+
+  check('saveNow steigt bei einem fremden Dokument sofort aus',
+    /isSharedNotebook\(nbId\)\) \{\s*\n\s*return \{ success: true, shared: true \};/.test(autoQuelle), true);
+  check('Von Hand speichern schreibt es in seinen Raum',
+    /forceSharedDocSave/.test(standQuelle), true);
+  check('Fehlt das Recht, wird nicht weiter geklopft',
+    /function rechtFehlt/.test(geteiltQuelle)
+    && /keinSchreibrecht = true/.test(geteiltQuelle), true);
+  check('Ein Netzfehler bleibt dagegen ein Wiederholungsfall',
+    /if \(live === session && !rechtFehlt\(err\)\) dirty = true;/.test(geteiltQuelle), true);
+}
+
 console.log('');
 if (failed) {
   console.error(`${failed} Pruefung(en) fehlgeschlagen.`);
