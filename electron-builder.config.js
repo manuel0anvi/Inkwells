@@ -63,11 +63,21 @@ module.exports = {
      ohne diese Farbe stuende das Gold auf Weiss und verschwaende fast.
 
      languages: die App spricht diese drei, siehe website/js/i18n.js.
-     Der Store zeigt die Eintragung danach in den passenden Maerkten. */
+     Der Store zeigt die Eintragung danach in den passenden Maerkten.
+
+     >>> Warum displayName "Inkwells" heisst und productName "Inkwell" <<<
+     "Inkwell" war im Store schon vergeben, reserviert ist "Inkwells".
+     Partner Center prueft beim Hochladen, ob der Anzeigename im Paket zu
+     einem reservierten Namen passt - sonst wird es abgelehnt.
+
+     Der Unterschied ist Absicht und KEIN Versehen: productName steckt im
+     Dateinamen, im Programmordner und in der Kennung der Installation.
+     Ihn mitzuziehen haette Folgen fuer alle, die schon installiert haben.
+     Die App umzubenennen ist ein eigener Schritt fuer spaeter. */
   appx: {
     ...APPX_IDENTITY,
     applicationId: 'Inkwell',
-    displayName: 'Inkwell',
+    displayName: 'Inkwells',
     backgroundColor: '#0c0e18',
     languages: ['de-DE', 'en-US', 'it-IT'],
     artifactName: 'Inkwell ${version}.${ext}'
