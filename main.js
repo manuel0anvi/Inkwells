@@ -636,8 +636,21 @@ ipcMain.on('confirm-quit', () => {
   else forceClose();     // kam ohne laufende Bitte – dann eben direkt
 });
 
+/* ── Der eigene Updater und der Microsoft Store ──────────────────────
+   Aus dem Store installiert Windows die App als versiegeltes Paket unter
+   Program Files\WindowsApps. Dort kann der NSIS-Installierer nichts
+   ersetzen - er wuerde stattdessen eine zweite Installation unter
+   LOCALAPPDATA anlegen. Der Nutzer haette Inkwell dann doppelt, mit
+   getrennten Heften, und wuesste nicht warum.
+
+   Der Riegel steht hier UND in src/ui/update.js. Doppelt, weil die
+   Oberflaeche aus einer aelteren Fassung stammen kann: der Knopf waere
+   dann noch da, und ohne diese Pruefung liefe der Installierer los. */
+const STOREFASSUNG = process.windowsStore === true;
+
 // IPC handlers for update control
 ipcMain.handle('check-for-updates', async () => {
+  if (STOREFASSUNG) return { ok: true, updateInfo: null };
   try {
     const release = await getLatestGitHubRelease();
     if (!release) return { ok: true, updateInfo: null };
@@ -654,6 +667,7 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('download-update', async () => {
+  if (STOREFASSUNG) return { ok: false, err: 'Store-Fassung: Updates kommen ueber den Store' };
   if (!releaseInfo) return { ok: false, err: 'No update available to download' };
   try {
     const tempDir = app.getPath('temp');
@@ -678,6 +692,7 @@ ipcMain.handle('toggle-download-pause', () => {
 });
 
 ipcMain.handle('install-and-restart', async () => {
+  if (STOREFASSUNG) return { ok: false, err: 'Store-Fassung: Updates kommen ueber den Store' };
   if (!downloadedUpdatePath || !fs.existsSync(downloadedUpdatePath)) return { ok: false, err: 'Update file not found' };
   try {
     /* >>> Erst sichern, DANN den Installierer starten <<<

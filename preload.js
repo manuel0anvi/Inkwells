@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld('api', {
   // Das nächste Anmeldefenster bleibt unsichtbar (stiller Versuch beim Start)
   setSilentAuth:    (an) => ipcRenderer.send('silent-auth', !!an),
 
+  /* Laeuft diese Fassung aus dem Microsoft Store?
+
+     Dort aktualisiert der Store selbst. Der eigene Updater darf gar
+     nicht erst auftauchen: sein Installierer koennte das versiegelte
+     Store-Paket nicht ersetzen, sondern legte eine ZWEITE Installation
+     daneben - der Nutzer haette Inkwell doppelt, mit getrennten Daten. */
+  istStorefassung: process.windowsStore === true,
+
   // Updater controls
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate:  () => ipcRenderer.invoke('download-update'),

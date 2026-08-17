@@ -3,6 +3,14 @@
 (function(){
   const btn = document.getElementById('btn-update');
   if (!btn || !window.api) return;
+
+  /* Store-Fassung: kein eigener Updater.
+
+     Windows haelt sie selbst auf Stand, im Hintergrund und ohne Zutun.
+     Der Knopf wird deshalb gar nicht erst verdrahtet - stuende er da,
+     wuerde er einen Installierer holen, der neben dem Store-Paket eine
+     zweite Installation anlegt. Siehe preload.js. */
+  if (window.api.istStorefassung) { btn.style.display = 'none'; return; }
   
   const textEl = document.getElementById('btn-update-text');
   const bgEl = document.getElementById('btn-update-progress');
