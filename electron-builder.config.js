@@ -26,9 +26,9 @@ const outputDir = path.join(os.homedir(), 'AppData', 'Local', 'Inkwell', 'dist')
 const STORE = process.env.INKWELL_STORE === '1';
 
 const APPX_IDENTITY = {
-  identityName: 'PLATZHALTER.Inkwell',
-  publisher: 'CN=PLATZHALTER',
-  publisherDisplayName: 'PLATZHALTER'
+  identityName: 'Inkwells.Inkwells',
+  publisher: 'CN=641C6486-C859-4269-92DA-078D86AB80F1',
+  publisherDisplayName: 'Inkwells'
 };
 
 module.exports = {
