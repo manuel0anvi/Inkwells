@@ -224,10 +224,15 @@ app.on('ready', async () => {
     await tippe('rechter');
     const vorher = await wortOrt('rechter');
 
-    await js(`(() => { const p = document.querySelector('.j-text p.j-frei');
+    /* Erst den Fokus, dann die Marke: andersherum setzt focus() sie
+       gelegentlich wieder an den Anfang des Feldes zurück, und dann
+       landet das Getippte nirgends. */
+    await js(`(() => { const td = document.querySelector('.j-text');
+      td.focus();
+      const p = td.querySelector('p.j-frei');
       const rg = document.createRange(); rg.selectNodeContents(p); rg.collapse(false);
       const s = getSelection(); s.removeAllRanges(); s.addRange(rg);
-      document.querySelector('.j-text').focus(); return true; })()`);
+      return true; })()`);
     await tippe(NACHSCHUB);
     const nachher = await wortOrt('rechter');
 

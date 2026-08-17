@@ -942,6 +942,23 @@
     crdtState = loaded.crdt || {};
     dirty = extras > 0;                 // eigene Seiten müssen noch hinauf
     live = { docId: entry.docId, nbId: nb.id, isOwner: true };
+
+    /* ── Umgestellt, während das Dokument zu war ─────────────────────
+       Wie sich aneinanderstossende Texte verhalten, entscheidet der
+       Besitzer für alle (canvas/text.js). Geschrieben wird es beim
+       Sichern – wer die Einstellung aber ändert, ohne danach etwas zu
+       tippen, sicherte nie: die anderen sähen die Seite weiterhin
+       anders als er, bis er zufällig ein Zeichen anfasst.
+
+       Deshalb hier der Abgleich beim Übernehmen des Raums. Nur, wenn
+       sich wirklich etwas unterscheidet – sonst schriebe jedes Öffnen
+       eines freigegebenen Hefts ohne Grund in die Cloud. */
+    const meineArt = (typeof Settings !== 'undefined' && Settings.get('textFluss')) || 'elastisch';
+    if ((loaded.head.textFluss || '') !== meineArt) {
+      nb.textFluss = meineArt;
+      // Über den üblichen Weg, damit der Takt dafür auch anläuft
+      if (typeof window.markSharedDocDirty === 'function') window.markSharedDocDirty(nb.id);
+    }
     rememberFingerprint(entry.docId, loaded.fingerprint);
 
     applyReadOnlyChrome(false, {
