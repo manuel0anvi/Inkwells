@@ -97,6 +97,15 @@
     if (typeof syncAll === 'function') syncAll();
     if (!S.activeNbId) { toast(t('savedShort')); return; }
 
+    /* Ein fremdes Dokument hat keine Datei – es gehoert in seinen Raum.
+       ui/saveStatus.js kennt beide Wege; hier ginge sonst der Weg fuer
+       die eigene Platte an und meldete am Ende „gespeichert", ohne dass
+       irgendwo etwas geschrieben worden waere. */
+    if (typeof isSharedNotebook === 'function' && isSharedNotebook(S.activeNbId)) {
+      if (typeof window.saveNowWithFeedback === 'function') window.saveNowWithFeedback();
+      return;
+    }
+
     AutoSave.saveNow(S.activeNbId)
       .then(r => toast(r?.success === false ? t('saveError') + ': ' + r.error : t('savedShort'), r?.success === false))
       .catch(err => toast(t('saveError') + ': ' + err.message, true));

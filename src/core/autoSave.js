@@ -95,6 +95,24 @@ class AutoSaveEngine {
   // Cloud, ohne den Mindestabstand abzuwarten – anders als das automatische
   // Speichern im Hintergrund.
   async saveNow(nbId = null) {
+    /* ══════════════════════════════════════════════════════════════
+       EIN FREMDES DOKUMENT WIRD HIER GAR NICHT ERST ANGEFASST
+
+       markDirty steigt dafür schon aus, und FileManager weist es noch
+       einmal ab – aber „von Hand speichern" ging an beidem vorbei: das
+       Tastenkürzel, der Knopf im Sync-Fenster und „Speichern und
+       Abgleichen" rufen hier unmittelbar an. Von dort lief der ganze
+       Weg an: syncAll, Pfad suchen, Datei schreiben, Registry, örtlicher
+       Verlauf. Ein Dokument, das jemand anderem gehört, hat weder Datei
+       noch Pfad; was dabei herauskam, war ein Fehler beim Speichern für
+       etwas, das gar nicht gespeichert werden soll. Genau so gemeldet.
+
+       Sein Zuhause ist der Raum, und dorthin schreibt ui/sharedDocs.js.
+       ══════════════════════════════════════════════════════════════ */
+    if (nbId && typeof isSharedNotebook === 'function' && isSharedNotebook(nbId)) {
+      return { success: true, shared: true };
+    }
+
     if (nbId) {
       const timer = this._debounceTimers.get(nbId);
       if (timer) clearTimeout(timer);
