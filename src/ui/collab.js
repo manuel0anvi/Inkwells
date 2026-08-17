@@ -1960,7 +1960,7 @@
        jedem Einspielen neu gerechnet (canvas/text.js). Ohne das liefen
        zwei Absätze auf einer Zeile beim EMPFÄNGER ineinander, während
        sie beim Schreiber sauber nebeneinander stehen. */
-    if (typeof begrenzeFreieAbsaetze === 'function') begrenzeFreieAbsaetze(textDiv);
+    if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv);
 
     // Kommentar-Marken aus dem fremden Text wiederfinden
     if (pgEl && typeof ensureCommentsFromMarkers === 'function') {

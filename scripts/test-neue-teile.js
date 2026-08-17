@@ -528,6 +528,25 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
   check('Der blosse Klick raeumt sich wieder weg',
     /function raeumeVorlaeufiges/.test(textQuelle)
     && /_nimmZurueck\(el\);\s*\n\s*el\.remove\(\)/.test(textQuelle), true);
+
+  /* 7. Wenn zwei Texte aneinanderstossen: drei Arten, waehlbar. */
+  check('Drei Arten, wenn Texte aneinanderstossen',
+    /function ordneFreieAbsaetze/.test(textQuelle)
+    && /function verschmelzeBeruehrende/.test(textQuelle)
+    && /const fest = \(wahl === 'fest'\)/.test(textQuelle), true);
+  check('Waagerecht UND senkrecht wird ausgewichen',
+    /style\.marginLeft = schub/.test(textQuelle)
+    && /style\.marginTop = schub/.test(textQuelle), true);
+  check('Das Ausweichen wird gerechnet, nicht gespeichert',
+    /p\.style\.marginLeft = '';\s*\n\s*p\.style\.marginTop = '';/.test(lies('src', 'app.js')), true);
+  check('Die Wahl steht in den Einstellungen',
+    /textFluss: 'elastisch'/.test(lies('src', 'core', 'settings.js'))
+    && /text-fluss/.test(lies('src', 'index.html')), true);
+  check('Im fremden Dokument gilt die des Besitzers',
+    /nb\.origin === 'shared' && nb\.textFluss/.test(textQuelle)
+    && /textFluss: \(data\.textFluss/.test(lies('src', 'core', 'share.js')), true);
+  check('Und nur der Besitzer schreibt sie in den Kopf',
+    /isOwner && notebook\.textFluss \? \{ textFluss/.test(lies('src', 'core', 'share.js')), true);
 }
 
 console.log('\nWer schreibt, hat die Vollmacht ueber seine Zeile\n');

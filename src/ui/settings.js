@@ -13,6 +13,8 @@
   
   const settingsVersion = E('settings-version');
   const chatNotifyChk = E('chat-notify-on');
+  const textFlussSel = E('text-fluss');
+  const textFlussHinweis = E('text-fluss-hinweis');
   // Cloud UI elements
   const cloudEnabledChk = E('cloud-enabled');
   const cloudConfigRow = E('cloud-config-row');
@@ -193,6 +195,11 @@
        „nicht bekannt" muss hier „an" heissen. */
     if (chatNotifyChk) chatNotifyChk.checked = !settings.chatNotifyOff;
 
+    if (textFlussSel) {
+      textFlussSel.value = settings.textFluss || 'elastisch';
+      zeigeFlussHinweis();
+    }
+
     if (cloudEnabledChk) cloudEnabledChk.checked = !!settings.cloudEnabled;
     if (cloudConfigRow) cloudConfigRow.style.display = settings.cloudEnabled ? 'flex' : 'none';
     
@@ -207,6 +214,28 @@
     }
   }
   
+  /* Der Satz unter der Auswahl sagt, was die gewählte Art tut – und in
+     einem fremden Dokument, dass sie dort gar nichts tut: darin gilt
+     die Wahl des Besitzers, solange man darin ist (canvas/text.js,
+     ausweichArt). Eine Auswahl, die stillschweigend wirkungslos wäre,
+     ist schlimmer als keine. */
+  function zeigeFlussHinweis() {
+    if (!textFlussHinweis || !textFlussSel) return;
+    const nb = (typeof getNb === 'function') ? getNb() : null;
+    const fremdBestimmt = !!(nb && nb.textFluss);
+    const schluessel = {
+      elastisch: 'textFlussHinweisElastisch',
+      fest: 'textFlussHinweisFest',
+      verschmelzen: 'textFlussHinweisVerschmelzen'
+    }[textFlussSel.value] || 'textFlussHinweisElastisch';
+
+    textFlussHinweis.textContent = t(schluessel)
+      + (fremdBestimmt ? ' ' + t('textFlussGeteilt') : '');
+    textFlussHinweis.dataset.i18n = schluessel;
+  }
+
+  textFlussSel?.addEventListener('change', zeigeFlussHinweis);
+
   function refreshCloudUI() {
     if (!cloudSignupForm || !cloudSignOutBtn || !cloudStatus || !window.CloudSync_) return;
     const isAuth = window.CloudSync_.isAuthenticated();
@@ -238,8 +267,16 @@
     // Cloud settings
     if (cloudEnabledChk) updates.cloudEnabled = !!cloudEnabledChk.checked;
     if (chatNotifyChk) updates.chatNotifyOff = !chatNotifyChk.checked;
+    if (textFlussSel) updates.textFluss = textFlussSel.value;
 
     await Settings.update(updates);
+
+    /* ── Sofort sichtbar, und im geteilten Heft auch beim anderen ────
+       Die Wahl greift beim nächsten Ordnen der freien Absätze. Ohne
+       diesen Anstoss sähe man sie erst beim nächsten Anschlag – und im
+       geteilten Dokument nie, weil der Kopf nur beim Sichern hinausgeht
+       (ui/sharedDocs.js schreibt textFluss nur als Besitzer). */
+    if (typeof window.wendeTextFlussAn === 'function') window.wendeTextFlussAn();
 
     // If cloud enabled, init CloudSync
     try {

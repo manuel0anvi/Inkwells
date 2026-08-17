@@ -970,6 +970,16 @@ function describeDoc(docId, data) {
        aus der Zeit davor – dann wird nicht gesperrt. Siehe
        versionPasst() weiter unten. */
     appVersion: typeof data.appVersion === 'string' ? data.appVersion : '',
+    /* ── Was geschieht, wenn zwei Texte aneinanderstossen ───────────
+       Die Entscheidung des BESITZERS (Einstellungen, textFluss). Sie
+       gilt für alle, solange sie in diesem Dokument sind – sonst sähe
+       dieselbe Seite bei jedem anders aus.
+
+       Nur der Besitzer schreibt sie (saveDocumentContent); die Regeln
+       lassen einem Bearbeiter am Kopf ohnehin nur die Seitenliste durch.
+       Leer heisst: aus der Zeit davor, dann gilt die eigene Wahl. */
+    textFluss: (data.textFluss === 'fest' || data.textFluss === 'verschmelzen'
+                || data.textFluss === 'elastisch') ? data.textFluss : '',
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
     updatedAt: toDate(data.updatedAt),
     createdAt: toDate(data.createdAt),
@@ -1607,7 +1617,9 @@ async function saveDocumentContent(docId, notebook, options = {}) {
       pageCount: parts.head.pageCount,
       sections: parts.head.sections,
       revision: rev,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      // Die Entscheidung des Besitzers reist mit – siehe describeDoc
+      ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
     }));
     return { revision: rev, fingerprint, written: parts.pages.length };
   }
@@ -1663,7 +1675,9 @@ async function saveDocumentContent(docId, notebook, options = {}) {
     pageCount: parts.head.pageCount,
     sections: parts.head.sections,
     revision,
-    updatedAt: serverTimestamp()
+    updatedAt: serverTimestamp(),
+    // Die Entscheidung des Besitzers reist mit – siehe describeDoc
+    ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
   }));
 
   return { revision, fingerprint, written };

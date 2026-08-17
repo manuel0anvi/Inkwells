@@ -91,8 +91,8 @@ function _applyPageSnapshot(page, snap) {
   if (textDiv) {
     textDiv.innerHTML = sanitizePageHtml(page.textContent);
     // Die Spaltenbreite der freien Absätze gehört nicht ins Heft, sie
-    // wird gerechnet – siehe begrenzeFreieAbsaetze in canvas/text.js
-    if (typeof begrenzeFreieAbsaetze === 'function') begrenzeFreieAbsaetze(textDiv);
+    // wird gerechnet – siehe ordneFreieAbsaetze in canvas/text.js
+    if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv);
   }
 
   // Entlastete Zeichenflächen erst wieder aufbauen, sonst geht das Zeichnen ins Leere
@@ -167,17 +167,23 @@ function ohneGriffe(textDiv) {
 
   const griffe = textDiv.querySelector(GRIFF_WAHL);
   const marken = textDiv.querySelector(MARKEN_WAHL);
-  /* Die Spaltenbreite eines frei stehenden Absatzes ist das Dritte
-     dieser Art: sie steht im style, ist aber nichts Geschriebenes –
-     sie folgt daraus, wo der Nachbar steht (begrenzeFreieAbsaetze in
-     canvas/text.js) und wird bei jeder Änderung neu gerechnet. Käme sie
+  /* Das AUSWEICHEN eines frei stehenden Absatzes ist das Dritte dieser
+     Art: es steht im style, ist aber nichts Geschriebenes – es folgt
+     daraus, wo die Nachbarn stehen (ordneFreieAbsaetze in
+     canvas/text.js), und wird bei jeder Änderung neu gerechnet. Käme es
      mit, stünde in zwei Heften derselbe Text mit verschiedenen Massen,
-     und der Abgleich hätte ohne Grund etwas zu tun. */
-  const breiten = textDiv.querySelector('p.j-frei[style*="max-width"]');
-  if (!griffe && !marken && !breiten) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
+     und der Abgleich hätte ohne Grund etwas zu tun.
+
+     Gemeint sind margin-left/-top und max-width. In left/top steht
+     dagegen die gewählte Stelle – die gehört ins Heft. */
+  const geschoben = textDiv.querySelector(
+    'p.j-frei[style*="margin"], p.j-frei[style*="max-width"]');
+  if (!griffe && !marken && !geschoben) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
 
   const kopie = textDiv.cloneNode(true);
   kopie.querySelectorAll('p.j-frei').forEach(p => {
+    p.style.marginLeft = '';
+    p.style.marginTop = '';
     p.style.maxWidth = '';
     if (!p.getAttribute('style')) p.removeAttribute('style');
   });
@@ -190,6 +196,36 @@ function ohneGriffe(textDiv) {
   });
   return kopie.innerHTML;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE EINSTELLUNG WIRKT SOFORT – UND IM GETEILTEN HEFT BEI ALLEN
+
+   Aufgerufen, wenn jemand in den Einstellungen umstellt, wie sich
+   aneinanderstossende Texte verhalten (ui/settings.js), und wenn die
+   Umstellung eines Besitzers hereinkommt (ui/sharedDocs.js).
+
+   Zwei der drei Arten ändern dabei wirklich etwas am Text – 'fest'
+   schreibt die neue Lage hinein, 'verschmelzen' macht aus zwei Absätzen
+   einen. Deshalb geht für sie ein 'input' hinaus: daran hängt alles
+   Weitere (ins Heft schreiben, an die anderen melden, sichern). Bei
+   'elastisch' bleibt der Text, wie er ist – dort wird nur neu gerechnet.
+   ══════════════════════════════════════════════════════════════════════ */
+window.wendeTextFlussAn = function wendeTextFlussAn() {
+  if (typeof ordneFreieAbsaetze !== 'function') return;
+  const art = (typeof ausweichArt === 'function') ? ausweichArt(getNb()) : 'elastisch';
+
+  document.querySelectorAll('.j-text').forEach(textDiv => {
+    ordneFreieAbsaetze(textDiv, art);
+    if (art !== 'elastisch') textDiv.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  /* Als Besitzer eines offenen geteilten Dokuments: die Wahl gehört
+     jetzt hinaus, nicht erst bei der nächsten Änderung am Text. */
+  const nb = getNb();
+  if (nb && nb.origin !== 'shared' && typeof window.forceSharedDocSave === 'function') {
+    window.forceSharedDocSave().catch(() => { /* der nächste Takt holt es nach */ });
+  }
+};
 
 /** Sichert den aktuellen Zustand einer Seite, bevor sie verändert wird. */
 function pushPageHistory(page) {
@@ -598,8 +634,8 @@ function appendPageDOM(page, index) {
      Ein Bild später, weil die Seite hier noch gebaut wird: solange sie
      nicht hängt, sind alle offsetLeft null und es gäbe nichts zu
      rechnen. */
-  if (typeof begrenzeFreieAbsaetze === 'function') {
-    requestAnimationFrame(() => begrenzeFreieAbsaetze(textDiv));
+  if (typeof ordneFreieAbsaetze === 'function') {
+    requestAnimationFrame(() => ordneFreieAbsaetze(textDiv));
   }
 
   textDiv.querySelectorAll('h1,h2,h3').forEach(h => {
@@ -640,7 +676,7 @@ function appendPageDOM(page, index) {
     if (typeof richteFreieAbsaetze === 'function') richteFreieAbsaetze(textDiv);
     /* Und die Breite: ein wachsender Absatz reicht nur bis zu seinem
        Nachbarn und bricht dort um, statt in ihn hineinzulaufen. */
-    if (typeof begrenzeFreieAbsaetze === 'function') begrenzeFreieAbsaetze(textDiv);
+    if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv);
     S._lastPgAction = S._lastPgAction || {};
     S._lastPgAction[page.id] = 'text';
     // Der Sicherungspunkt wird schon in 'beforeinput' gesetzt (pushTypingHistory),

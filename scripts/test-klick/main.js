@@ -63,6 +63,11 @@ app.on('ready', async () => {
     width: 1400, height: 950, show: true, backgroundColor: '#12121a',
     webPreferences: { preload: path.join(ROOT, 'preload.js'), contextIsolation: true }
   });
+  /* Ein Fehler im Fenster erklaert mehr als jede fehlgeschlagene
+     Pruefung – ohne das sucht man ihn im Dunkeln. */
+  win.webContents.on('console-message', (e, stufe, text) => {
+    if (stufe >= 2) zeilen.push('  [Fenster] ' + text);
+  });
   await win.loadFile(path.join(ROOT, 'src', 'index.html'));
   await new Promise(r => setTimeout(r, 2000));
   const dbg = win.webContents.debugger;
@@ -204,37 +209,70 @@ app.on('ready', async () => {
        return true; })()`),
     await inhalt());
 
-  // ── 4b  Zwei Texte auf einer Zeile laufen nicht ineinander ────────
-  zeilen.push('\n  4b Ein wachsender Absatz laeuft nicht in seinen Nachbarn');
-  await js(`(() => { const td = document.querySelector('.j-text'); td.innerHTML = ''; return true; })()`);
-  await klick(feld.l + 60, zeileY(2));
-  await tippe('links');
-  await klick(feld.l + 460, zeileY(2));
-  await tippe('rechter');
-  const ortRechts = await wortOrt('rechter');
+  // ── 4c  Die drei Arten, aneinanderzustossen ──────────────────────
+  /* Zwei Absaetze auf einer Zeile, dann im linken so viel schreiben,
+     dass er den rechten wirklich erreicht – und danach wieder loeschen. */
+  const NACHSCHUB = 'undnochvielmehrtextalsdazwischenpasst';
 
-  // In den linken zurueck und viel schreiben
-  await js(`(() => { const p = document.querySelector('.j-text p.j-frei');
-    const rg = document.createRange(); rg.selectNodeContents(p); rg.collapse(false);
-    const s = getSelection(); s.removeAllRanges(); s.addRange(rg);
-    document.querySelector('.j-text').focus(); return true; })()`);
-  await tippe('sehr viel mehr text als hier zwischen die beiden passt und noch mehr');
+  async function stossen(art) {
+    await js(`Settings.set ? Settings.set('textFluss', ${JSON.stringify(art)})
+              : Settings.update({ textFluss: ${JSON.stringify(art)} })`);
+    await js(`(() => { const td = document.querySelector('.j-text'); td.innerHTML = ''; return true; })()`);
+    await klick(feld.l + 60, zeileY(2));
+    await tippe('links');
+    await klick(feld.l + 430, zeileY(2));
+    await tippe('rechter');
+    const vorher = await wortOrt('rechter');
 
-  const masse = await js(
-    `(() => { const ps = [...document.querySelectorAll('.j-text p.j-frei')];
-       const a = ps[0].getBoundingClientRect(), b = ps[1].getBoundingClientRect();
-       return { aRechts: Math.round(a.right), aHoch: Math.round(a.height),
-                bLinks: Math.round(b.left), bOben: Math.round(b.top) }; })()`);
-  pruefe('Der linke Absatz hoert vor dem rechten auf',
-    masse.aRechts <= masse.bLinks + 1, JSON.stringify(masse));
-  pruefe('Er bricht dafuer um, statt weiterzulaufen',
-    masse.aHoch > feld.lh * 1.5, 'Hoehe ' + masse.aHoch + ', Zeile ' + Math.round(feld.lh));
-  pruefe('Und der rechte ist dabei nicht ausgewichen',
-    JSON.stringify(await wortOrt('rechter')) === JSON.stringify(ortRechts),
-    JSON.stringify(ortRechts) + ' -> ' + JSON.stringify(await wortOrt('rechter')));
-  pruefe('Die gerechnete Breite steht nicht im Heft', await js(
-    `!/max-width/.test(ohneGriffe(document.querySelector('.j-text')))`),
+    await js(`(() => { const p = document.querySelector('.j-text p.j-frei');
+      const rg = document.createRange(); rg.selectNodeContents(p); rg.collapse(false);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(rg);
+      document.querySelector('.j-text').focus(); return true; })()`);
+    await tippe(NACHSCHUB);
+    const nachher = await wortOrt('rechter');
+
+    // Und genau so viel wieder wegnehmen
+    for (let i = 0; i < NACHSCHUB.length; i++) {
+      await dbg.sendCommand('Input.dispatchKeyEvent',
+        { type: 'rawKeyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+      await dbg.sendCommand('Input.dispatchKeyEvent',
+        { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+    }
+    await new Promise(r => setTimeout(r, 400));
+    const zurueck = await wortOrt('rechter');
+    const bloecke = await js(`document.querySelectorAll('.j-text p.j-frei').length`);
+    return { vorher, nachher, zurueck, bloecke, html: await inhalt() };
+  }
+
+  zeilen.push('\n  4c Die drei Arten, wenn Texte aneinanderstossen');
+  const el = await stossen('elastisch');
+  pruefe('elastisch: der Nachbar weicht aus',
+    el.vorher && el.nachher && el.nachher.l > el.vorher.l + 10,
+    JSON.stringify(el.vorher) + ' -> ' + JSON.stringify(el.nachher));
+  pruefe('elastisch: und kommt wieder zurueck',
+    el.zurueck && Math.abs(el.zurueck.l - el.vorher.l) <= 2,
+    JSON.stringify(el.vorher) + ' -> ' + JSON.stringify(el.zurueck));
+  pruefe('elastisch: die gewaehlte Stelle steht unveraendert im Heft',
+    /left:\s*(43[0-9]|4[0-2][0-9])px/.test(el.html) || !/margin-left/.test(await js(
+      `ohneGriffe(document.querySelector('.j-text'))`)),
     await js(`ohneGriffe(document.querySelector('.j-text'))`));
+
+  const fe = await stossen('fest');
+  pruefe('fest: der Nachbar weicht aus',
+    fe.vorher && fe.nachher && fe.nachher.l > fe.vorher.l + 10,
+    JSON.stringify(fe.vorher) + ' -> ' + JSON.stringify(fe.nachher));
+  pruefe('fest: und bleibt, wo er hingerueckt ist',
+    fe.zurueck && fe.zurueck.l > fe.vorher.l + 10,
+    JSON.stringify(fe.nachher) + ' -> ' + JSON.stringify(fe.zurueck));
+
+  const ve = await stossen('verschmelzen');
+  pruefe('verschmelzen: aus zwei Absaetzen wird einer',
+    ve.bloecke === 1, ve.bloecke + ' Absaetze: ' + ve.html);
+  pruefe('verschmelzen: beide Texte stehen darin',
+    /links/.test(ve.html) && /rechter/.test(ve.html), ve.html);
+
+  await js(`Settings.set ? Settings.set('textFluss', 'elastisch')
+            : Settings.update({ textFluss: 'elastisch' })`);
 
   // ── 5  Ein blosser Klick hinterlaesst nichts ──────────────────────
   zeilen.push('\n  5  Der blosse Klick');
@@ -255,13 +293,8 @@ app.on('ready', async () => {
   pruefe('Die Farbe bleibt', /color/.test(gereinigt), gereinigt);
   pruefe('Ein unsinniges Mass faellt weg', !/9999999/.test(gereinigt), gereinigt);
 
-  const docx = await js(
-    `(() => { const p = htmlToParagraphs('<p class="j-frei" style="left:120px;top:83px">x</p>');
-       return JSON.stringify(p[0] && { einzugPx: p[0].einzugPx, obenPx: p[0].obenPx }); })()`)
-    .catch(() => null);
-  if (docx) {
-    pruefe('Word bekommt den Einzug des Klicks', /"einzugPx":120/.test(docx), docx);
-  }
+  /* Der Word-Export hat seinen eigenen Prüfstand (npm run test:docx) –
+     htmlToParagraphs steht im Fenster gar nicht global. */
 
   fertig(fehl ? 1 : 0);
  } catch (err) {

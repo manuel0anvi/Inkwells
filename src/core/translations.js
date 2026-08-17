@@ -266,6 +266,14 @@ const TRANSLATIONS = {
     chatNotify: 'Chat-Meldungen',
     chatNotifySetting: 'Bei neuen Nachrichten benachrichtigen',
     chatNotifyHint: 'Windows zeigt sie rechts unten – nur, wenn Inkwell gerade nicht im Vordergrund ist.',
+    textFlussTitel: 'Wenn Texte aneinanderstoßen',
+    textFlussElastisch: 'Ausweichen und zurückkommen',
+    textFlussFest: 'Ausweichen und dort bleiben',
+    textFlussVerschmelzen: 'Zusammenwachsen wie in Word',
+    textFlussHinweisElastisch: 'Der Nachbar rückt nur so weit zur Seite, dass ein Wortabstand bleibt – und geht von selbst zurück, sobald wieder Platz ist.',
+    textFlussHinweisFest: 'Der Nachbar rückt zur Seite und behält seine neue Stelle, auch wenn du den Text wieder kürzt.',
+    textFlussHinweisVerschmelzen: 'Berühren sich zwei Texte, werden sie einer. Ab da schiebt jedes Zeichen den Rest – zurück geht das nicht mehr.',
+    textFlussGeteilt: 'In diesem Dokument gilt die Einstellung des Besitzers.',
     
     // Save status
     saved: 'Gespeichert',
@@ -1078,6 +1086,14 @@ const TRANSLATIONS = {
     chatNotify: 'Chat notifications',
     chatNotifySetting: 'Notify me about new messages',
     chatNotifyHint: 'Windows shows them bottom right – only while Inkwell is not in the foreground.',
+    textFlussTitel: 'When texts meet',
+    textFlussElastisch: 'Move aside and come back',
+    textFlussFest: 'Move aside and stay there',
+    textFlussVerschmelzen: 'Grow together like in Word',
+    textFlussHinweisElastisch: 'The neighbour moves just far enough to keep a word of space – and returns by itself once there is room again.',
+    textFlussHinweisFest: 'The neighbour moves aside and keeps its new place, even when you shorten the text again.',
+    textFlussHinweisVerschmelzen: 'Once two texts touch they become one. From then on every character pushes the rest – there is no way back.',
+    textFlussGeteilt: 'The owner of this document decides this setting.',
     
     // Save status
     saved: 'Saved',
@@ -1877,6 +1893,14 @@ const TRANSLATIONS = {
     chatNotify: 'Notifiche chat',
     chatNotifySetting: 'Avvisami dei nuovi messaggi',
     chatNotifyHint: 'Windows le mostra in basso a destra – solo quando Inkwell non è in primo piano.',
+    textFlussTitel: 'Quando i testi si incontrano',
+    textFlussElastisch: 'Spostarsi e tornare indietro',
+    textFlussFest: 'Spostarsi e restare lì',
+    textFlussVerschmelzen: 'Unirsi come in Word',
+    textFlussHinweisElastisch: 'Il vicino si sposta solo quanto basta per lasciare lo spazio di una parola – e torna da solo appena c\'è di nuovo posto.',
+    textFlussHinweisFest: 'Il vicino si sposta e mantiene la nuova posizione, anche se accorci di nuovo il testo.',
+    textFlussHinweisVerschmelzen: 'Quando due testi si toccano diventano uno solo. Da lì in poi ogni carattere spinge il resto – non si torna indietro.',
+    textFlussGeteilt: 'In questo documento decide il proprietario.',
     
     // Save status
     saved: 'Salvato',

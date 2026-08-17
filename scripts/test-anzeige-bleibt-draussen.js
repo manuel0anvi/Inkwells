@@ -109,9 +109,9 @@ console.log('Kein roher Editor-Inhalt im Datenmodell\n');
      Seit dem 17.8.2026 sind es drei Fälle: dazu kam die gerechnete
      Spaltenbreite der frei stehenden Absätze (canvas/text.js). */
   check('Der Weg ohne Kopie fragt ALLE Fälle ab',
-    /if \(!griffe && !marken && !breiten\) return textDiv\.innerHTML;/.test(fn), true);
-  check('Und die gerechnete Breite bleibt draussen',
-    /p\.style\.maxWidth = '';/.test(fn), true);
+    /if \(!griffe && !marken && !geschoben\) return textDiv\.innerHTML;/.test(fn), true);
+  check('Und das gerechnete Ausweichen bleibt draussen',
+    /p\.style\.marginLeft = '';/.test(fn) && /p\.style\.maxWidth = '';/.test(fn), true);
 }
 
 console.log('');

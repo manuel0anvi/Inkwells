@@ -30,6 +30,21 @@ const DEFAULT_SETTINGS = {
      Gemeldet wird nur, solange das Fenster nicht vorne steht – das
      entscheidet main.js, nicht diese Einstellung. */
   chatNotifyOff: false,
+  /* ── Was geschieht, wenn zwei Texte aneinanderstossen? ─────────────
+     Ein angeklickter Absatz steht frei auf dem Blatt (canvas/text.js).
+     Beim Wachsen stösst er irgendwann an den nächsten:
+
+       'elastisch'     der Nachbar weicht aus und kommt wieder zurück
+       'fest'          er weicht aus und bleibt, wo er hingerückt ist
+       'verschmelzen'  beide werden ein Text, wie in Word
+
+     'elastisch' ist die Vorgabe, weil sie nichts endgültig macht: die
+     Stelle, die jemand gewählt hat, bleibt in jedem Fall gespeichert.
+
+     In einem GETEILTEN Dokument gilt die Wahl des Besitzers, solange
+     man darin ist (nb.textFluss, siehe ausweichArt). Sonst sähe die
+     Seite bei jedem Beteiligten anders aus. */
+  textFluss: 'elastisch',
   cloudEnabled: false,
   // Cloud-Anbieter: 'google' (Drive) oder 'microsoft' (OneDrive).
   // Siehe core/cloudConfig.js und core/providers/.

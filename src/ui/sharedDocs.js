@@ -620,6 +620,12 @@
     notebook.origin = 'shared';
     notebook.id = 'shared:' + fresh.docId;
 
+    /* Wie sich aneinanderstossende Texte verhalten, entscheidet der
+       Besitzer für alle (canvas/text.js, ausweichArt). Steht im Kopf
+       nichts, ist die Freigabe aus der Zeit davor – dann gilt die
+       eigene Wahl, wie bei jedem anderen Heft auch. */
+    if (fresh.textFluss) notebook.textFluss = fresh.textFluss;
+
     /* Von wem es stammt. Steht sonst nur in der Leiste über dem offenen
        Dokument (applyReadOnlyChrome) und in der Kachelliste – die Suche
        findet ihre Treffer aber quer über alles und braucht die Auskunft
@@ -1154,6 +1160,17 @@
         if (window.Collab?.setCanWrite) window.Collab.setCanWrite(!held && role === 'edit');
         toast(role === 'edit' ? t('sharedNowEdit') : t('sharedNowView'));
       }
+
+      /* Der Besitzer hat umgestellt, wie sich aneinanderstossende Texte
+         verhalten (Einstellungen, textFluss). Das gilt für alle in
+         diesem Dokument – sonst sähe dieselbe Seite bei jedem anders
+         aus. Ohne dieses Nachziehen erst beim nächsten Öffnen. */
+      const nb = getNb('shared:' + docId);
+      if (nb && head.textFluss && nb.textFluss !== head.textFluss) {
+        nb.textFluss = head.textFluss;
+        if (typeof window.wendeTextFlussAn === 'function') window.wendeTextFlussAn();
+      }
+
       S.sharedDoc.revision = head.revision;
     });
   }
@@ -1300,6 +1317,19 @@
     const base = baseline;
     const states = crdtState;
     const session = live;
+
+    /* ── Die eigene Wahl reist mit, aber nur als Besitzer ────────────
+       Wie sich aneinanderstossende Texte verhalten, gilt für alle in
+       diesem Dokument (canvas/text.js, ausweichArt). Der Besitzer legt
+       es fest; hier wird sein jetziger Stand angehängt, damit eine
+       Änderung in den Einstellungen beim nächsten Sichern hinausgeht.
+
+       Ein Bearbeiter fasst das Feld nicht an – die Firestore-Regel
+       lässt ihm am Kopf nur die Seitenliste durch, und ein fünfter
+       Schlüssel würde seinen ganzen Schreibvorgang abweisen. */
+    if (session.isOwner && typeof Settings !== 'undefined') {
+      nb.textFluss = Settings.get('textFluss') || 'elastisch';
+    }
 
     saving = true;
     dirty = false;

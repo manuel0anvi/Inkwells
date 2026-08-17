@@ -928,53 +928,186 @@ function richteFreieAbsaetze(textDiv) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   ZWEI TEXTE AUF EINER ZEILE LAUFEN NICHT INEINANDER
+   WENN ZWEI TEXTE AUF EINER ZEILE ANEINANDERSTOSSEN
 
-   >>> Was gemeldet wurde <<<
-   „Wenn man auf derselben Zeile an verschiedenen Stellen anfängt zu
-   schreiben, überlappen sich die Texte – man kann theoretisch so viel
-   schreiben, wie man will."
+   Ein frei stehender Absatz verschiebt beim ANLEGEN nichts – das ist
+   sein Sinn. Beim Wachsen stösst er aber irgendwann an den nächsten,
+   und dann muss etwas geschehen. Was genau, entscheidet der Nutzer
+   (Einstellungen, „Wenn Texte aneinanderstossen"):
 
-   Ein frei stehender Absatz verschiebt nichts (das ist sein Sinn), also
-   kann er auch nichts zur Seite drücken. Was bleibt, ist die Breite:
-   er reicht bis kurz VOR den nächsten Absatz rechts von ihm und bricht
-   dort um – wie eine Spalte. Was danach kommt, steht eine Zeile tiefer,
-   und zwar wieder an seiner eigenen linken Kante.
+     'elastisch'     Der Nachbar weicht nur so weit aus, dass ein
+                     Wortabstand bleibt – und kommt von selbst zurück,
+                     sobald wieder Platz ist. Seine gewählte Stelle
+                     bleibt gespeichert, das Ausweichen wird gerechnet.
+     'fest'          Dasselbe, aber der Nachbar behält seine neue Stelle.
+     'verschmelzen'  Berühren sich zwei, werden sie EIN Text. Ab da
+                     verhält sich die Zeile wie in Word.
 
-   Gerechnet wird in Seiten-Pixeln (offsetLeft/-Top/-Height): die Seite
-   wird über transform gezoomt, das lässt diese Werte unberührt.
+   >>> Warum das Ausweichen gerechnet und nicht gespeichert wird <<<
+   Weil sonst die Absicht verloren ginge. In `left`/`top` steht, wohin
+   jemand geklickt hat; wo der Absatz dann wirklich landet, ergibt sich
+   aus den Nachbarn und ändert sich mit jedem Anschlag. Gerechnet wird
+   es in `margin-left`/`margin-top` – die nimmt ohneGriffe (app.js)
+   wieder heraus, bevor der Text ins Heft geht.
 
-   Die Breite wird nicht mitgespeichert – sie ergibt sich aus der Lage
-   der Nachbarn und wird hier bei jeder Änderung neu bestimmt. Ins Heft
-   gehört, was jemand geschrieben hat, nicht, was daraus folgt
-   (ohneGriffe in app.js nimmt sie wieder heraus).
+   Gerechnet wird in Seiten-Pixeln (offsetLeft/-Top/-Width/-Height): die
+   Seite wird über transform gezoomt, das lässt diese Werte unberührt.
+
+   Senkrecht gilt dieselbe Regel wie waagerecht: wer von oben in einen
+   anderen hineinwächst, schiebt ihn nach unten. Damit überlappt auf der
+   Seite nie etwas.
    ══════════════════════════════════════════════════════════════════════ */
-const FREI_ABSTAND_PX = 8;      // Luft zum Nachbarn, damit es nicht klebt
-const FREI_MINDEST_PX = 48;     // schmaler wird eine Spalte nie
 
-function begrenzeFreieAbsaetze(textDiv) {
+/* Luft zum Nachbarn – ungefähr ein Wortabstand. Ohne sie klebten zwei
+   Texte zusammen und sähen aus wie einer. */
+const FREI_LUFT_PX = 10;
+
+/* So nah gilt als „berührt" – dort wird verschmolzen (und nur dort;
+   sonst zöge ein Absatz auf halber Seite den nächsten an sich). */
+const FREI_BERUEHRT_PX = 12;
+
+/** @returns {'elastisch'|'fest'|'verschmelzen'} */
+function ausweichArt(nb) {
+  /* Ein FREMDES Dokument bringt die Entscheidung seines Besitzers mit.
+     Sie gilt, solange man darin ist – sonst sähe die Seite bei jedem
+     Beteiligten anders aus, und das ist bei gemeinsamer Arbeit
+     schlimmer als eine Voreinstellung, die einem nicht gefällt.
+
+     Im eigenen Heft gilt immer die eigene Wahl, auch wenn es freigegeben
+     ist: dort steht zwar dasselbe Feld (es wird in den Kopf geschrieben,
+     ui/sharedDocs.js), aber es ist nur die Abschrift der Einstellung und
+     könnte zwischen zwei Sicherungen veraltet sein. */
+  if (nb && nb.origin === 'shared' && nb.textFluss) return nb.textFluss;
+  const wahl = (typeof Settings !== 'undefined' && Settings)
+    ? Settings.get('textFluss') : '';
+  return (wahl === 'fest' || wahl === 'verschmelzen') ? wahl : 'elastisch';
+}
+
+/** Die freien Absätze, so wie sie gerade auf dem Blatt liegen. */
+function _freieKaesten(alle) {
+  return alle.map(p => ({
+    p,
+    links: p.offsetLeft,
+    oben: p.offsetTop,
+    breit: p.offsetWidth,
+    hoch: p.offsetHeight || 32
+  }));
+}
+
+/**
+ * Bringt die frei stehenden Absätze so auseinander, dass nichts
+ * überlappt – auf die Art, die eingestellt ist.
+ *
+ * @param {HTMLElement} textDiv
+ * @param {string} [art] siehe ausweichArt(); ohne Angabe die Einstellung
+ */
+function ordneFreieAbsaetze(textDiv, art) {
   if (!textDiv || !textDiv.querySelectorAll) return;
-  const alle = [...textDiv.querySelectorAll('p.j-frei')];
-  if (alle.length < 2) {
-    for (const p of alle) p.style.maxWidth = '';
-    return;
+  const wahl = art || ausweichArt(typeof getNb === 'function' ? getNb() : null);
+
+  let alle = [...textDiv.querySelectorAll('p.j-frei')];
+  if (!alle.length) return;
+
+  /* Zuerst zurück auf die gewählte Lage. Ohne das rechnete die nächste
+     Runde mit dem Ergebnis der vorigen weiter, und die Absätze wanderten
+     bei jedem Anschlag ein Stück weiter nach rechts. */
+  for (const p of alle) {
+    p.style.marginLeft = '';
+    p.style.marginTop = '';
+    p.style.maxWidth = '';
+  }
+  if (alle.length < 2) return;
+
+  if (wahl === 'verschmelzen') {
+    verschmelzeBeruehrende(textDiv);
+    alle = [...textDiv.querySelectorAll('p.j-frei')];
+    if (alle.length < 2) return;
   }
 
-  const kaesten = alle.map(p => ({
-    p, links: p.offsetLeft, oben: p.offsetTop, hoch: p.offsetHeight || 32
-  }));
+  const fest = (wahl === 'fest');
 
-  for (const a of kaesten) {
-    let grenze = null;
-    for (const b of kaesten) {
-      if (b === a || b.links <= a.links) continue;
-      // Nur, wer auf derselben Höhe steht, ist im Weg
-      if (b.oben + b.hoch <= a.oben || b.oben >= a.oben + a.hoch) continue;
-      if (grenze === null || b.links < grenze) grenze = b.links;
+  /* ── Waagerecht ────────────────────────────────────────────────────
+     Von links nach rechts: jeder muss hinter allen bleiben, die schon
+     stehen und sich mit ihm auf derselben Höhe befinden. */
+  let kaesten = _freieKaesten(alle).sort((a, b) => a.links - b.links);
+  const gesetzt = [];
+  for (const k of kaesten) {
+    let mindest = k.links;
+    for (const v of gesetzt) {
+      if (v.oben + v.hoch <= k.oben || v.oben >= k.oben + k.hoch) continue;
+      mindest = Math.max(mindest, v.links + v.breit + FREI_LUFT_PX);
     }
-    a.p.style.maxWidth = grenze === null
-      ? ''
-      : Math.max(FREI_MINDEST_PX, grenze - a.links - FREI_ABSTAND_PX) + 'px';
+    const schub = Math.max(0, Math.round(mindest - k.links));
+    if (schub > 0) {
+      if (fest) k.p.style.left = _abstandWert((parseFloat(k.p.style.left) || 0) + schub) + 'px';
+      else k.p.style.marginLeft = schub + 'px';
+      k.links += schub;
+    }
+    gesetzt.push(k);
+  }
+
+  /* ── Und senkrecht dasselbe ────────────────────────────────────────
+     Neu gemessen, weil ein nach rechts gerückter Absatz schmaler werden
+     und damit umbrechen kann – dann ist er höher als vorher. */
+  kaesten = _freieKaesten([...textDiv.querySelectorAll('p.j-frei')])
+    .sort((a, b) => a.oben - b.oben);
+  const drüber = [];
+  for (const k of kaesten) {
+    let mindest = k.oben;
+    for (const v of drüber) {
+      if (v.links + v.breit <= k.links || v.links >= k.links + k.breit) continue;
+      mindest = Math.max(mindest, v.oben + v.hoch);
+    }
+    const schub = Math.max(0, Math.round(mindest - k.oben));
+    if (schub > 0) {
+      if (fest) k.p.style.top = _abstandWert((parseFloat(k.p.style.top) || 0) + schub) + 'px';
+      else k.p.style.marginTop = schub + 'px';
+      k.oben += schub;
+    }
+    drüber.push(k);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   BERÜHREN HEISST ZUSAMMENWACHSEN
+
+   Die dritte Art. Sobald der rechte Absatz den linken berührt, wird aus
+   beiden einer: der Abstand dazwischen bleibt als Abstandshalter stehen
+   (siehe _neueLuecke), der Text wandert hinüber, der leere Absatz
+   verschwindet.
+
+   Das ist die einzige der drei Arten, die sich nicht zurücknehmen lässt
+   – zusammengewachsen ist zusammengewachsen. Dafür verhält sich die
+   Zeile danach wie in jedem Textprogramm: jedes Zeichen schiebt den
+   Rest.
+   ══════════════════════════════════════════════════════════════════════ */
+function verschmelzeBeruehrende(textDiv) {
+  for (let runde = 0; runde < 8; runde++) {
+    const kaesten = _freieKaesten([...textDiv.querySelectorAll('p.j-frei')])
+      .sort((a, b) => (a.oben - b.oben) || (a.links - b.links));
+
+    let paar = null;
+    for (let i = 0; i < kaesten.length && !paar; i++) {
+      for (let j = 0; j < kaesten.length; j++) {
+        const a = kaesten[i], b = kaesten[j];
+        if (a === b || b.links < a.links) continue;
+        // Auf derselben Zeile?
+        if (Math.abs(a.oben - b.oben) > 4) continue;
+        if (b.links > a.links + a.breit + FREI_BERUEHRT_PX) continue;
+        paar = { a: a.p, b: b.p, luecke: b.links - (a.links + a.breit) };
+        break;
+      }
+    }
+    if (!paar) return;
+
+    if (paar.luecke > 3) paar.a.appendChild(_neueLuecke(paar.luecke));
+    while (paar.b.firstChild) {
+      const kind = paar.b.firstChild;
+      // Der leere Umbruch eines frischen Absatzes gehört nicht mit
+      if (kind.tagName === 'BR' && !kind.nextSibling) { kind.remove(); break; }
+      paar.a.appendChild(kind);
+    }
+    paar.b.remove();
   }
 }
 
@@ -1069,7 +1202,7 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
   neu[VORLAEUFIG] = true;
   textDiv.appendChild(neu);
   // Steht rechts davon schon etwas, reicht er nur bis dorthin
-  begrenzeFreieAbsaetze(textDiv);
+  ordneFreieAbsaetze(textDiv);
 
   const range = document.createRange();
   _setRangeEndOfNode(range, neu);

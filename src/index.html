@@ -1415,6 +1415,25 @@
           </div>
         </div>
       </div>
+
+      <!-- ══ WENN ZWEI TEXTE ANEINANDERSTOSSEN ═══════════════════════
+           Wer auf eine freie Stelle klickt und schreibt, setzt dort
+           einen Absatz, der frei auf dem Blatt steht (canvas/text.js).
+           Beim Wachsen stoesst er irgendwann an den naechsten – was
+           dann geschieht, entscheidet der Nutzer.
+
+           In einem geteilten Dokument gilt die Wahl des Besitzers,
+           solange man darin ist; sonst saehe die Seite bei jedem
+           Beteiligten anders aus. -->
+      <div class="settings-group">
+        <label class="settings-label" for="text-fluss" data-i18n="textFlussTitel">Wenn Texte aneinanderstoßen</label>
+        <select id="text-fluss" class="settings-select">
+          <option value="elastisch" data-i18n="textFlussElastisch">Ausweichen und zurückkommen</option>
+          <option value="fest" data-i18n="textFlussFest">Ausweichen und dort bleiben</option>
+          <option value="verschmelzen" data-i18n="textFlussVerschmelzen">Zusammenwachsen wie in Word</option>
+        </select>
+        <p class="settings-hint" id="text-fluss-hinweis" data-i18n="textFlussHinweisElastisch">Der Nachbar rückt nur so weit zur Seite, dass ein Wortabstand bleibt – und geht von selbst zurück, sobald wieder Platz ist.</p>
+      </div>
       <!-- Cloud Sync (Moved to Profile Menu) -->
     </div>
 
