@@ -1955,6 +1955,13 @@
     textDiv.innerHTML = nextText;   // schon bereinigt, siehe oben
     entry.applying = false;
 
+    /* Die Spaltenbreite der frei stehenden Absätze steht nicht im Text –
+       sie ergibt sich aus der Lage der Nachbarn und wird deshalb bei
+       jedem Einspielen neu gerechnet (canvas/text.js). Ohne das liefen
+       zwei Absätze auf einer Zeile beim EMPFÄNGER ineinander, während
+       sie beim Schreiber sauber nebeneinander stehen. */
+    if (typeof begrenzeFreieAbsaetze === 'function') begrenzeFreieAbsaetze(textDiv);
+
     // Kommentar-Marken aus dem fremden Text wiederfinden
     if (pgEl && typeof ensureCommentsFromMarkers === 'function') {
       ensureCommentsFromMarkers(pgEl);

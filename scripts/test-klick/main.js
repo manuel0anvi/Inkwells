@@ -204,6 +204,38 @@ app.on('ready', async () => {
        return true; })()`),
     await inhalt());
 
+  // ── 4b  Zwei Texte auf einer Zeile laufen nicht ineinander ────────
+  zeilen.push('\n  4b Ein wachsender Absatz laeuft nicht in seinen Nachbarn');
+  await js(`(() => { const td = document.querySelector('.j-text'); td.innerHTML = ''; return true; })()`);
+  await klick(feld.l + 60, zeileY(2));
+  await tippe('links');
+  await klick(feld.l + 460, zeileY(2));
+  await tippe('rechter');
+  const ortRechts = await wortOrt('rechter');
+
+  // In den linken zurueck und viel schreiben
+  await js(`(() => { const p = document.querySelector('.j-text p.j-frei');
+    const rg = document.createRange(); rg.selectNodeContents(p); rg.collapse(false);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(rg);
+    document.querySelector('.j-text').focus(); return true; })()`);
+  await tippe('sehr viel mehr text als hier zwischen die beiden passt und noch mehr');
+
+  const masse = await js(
+    `(() => { const ps = [...document.querySelectorAll('.j-text p.j-frei')];
+       const a = ps[0].getBoundingClientRect(), b = ps[1].getBoundingClientRect();
+       return { aRechts: Math.round(a.right), aHoch: Math.round(a.height),
+                bLinks: Math.round(b.left), bOben: Math.round(b.top) }; })()`);
+  pruefe('Der linke Absatz hoert vor dem rechten auf',
+    masse.aRechts <= masse.bLinks + 1, JSON.stringify(masse));
+  pruefe('Er bricht dafuer um, statt weiterzulaufen',
+    masse.aHoch > feld.lh * 1.5, 'Hoehe ' + masse.aHoch + ', Zeile ' + Math.round(feld.lh));
+  pruefe('Und der rechte ist dabei nicht ausgewichen',
+    JSON.stringify(await wortOrt('rechter')) === JSON.stringify(ortRechts),
+    JSON.stringify(ortRechts) + ' -> ' + JSON.stringify(await wortOrt('rechter')));
+  pruefe('Die gerechnete Breite steht nicht im Heft', await js(
+    `!/max-width/.test(ohneGriffe(document.querySelector('.j-text')))`),
+    await js(`ohneGriffe(document.querySelector('.j-text'))`));
+
   // ── 5  Ein blosser Klick hinterlaesst nichts ──────────────────────
   zeilen.push('\n  5  Der blosse Klick');
   const vorher = await inhalt();

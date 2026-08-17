@@ -927,6 +927,57 @@ function richteFreieAbsaetze(textDiv) {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ZWEI TEXTE AUF EINER ZEILE LAUFEN NICHT INEINANDER
+
+   >>> Was gemeldet wurde <<<
+   „Wenn man auf derselben Zeile an verschiedenen Stellen anfängt zu
+   schreiben, überlappen sich die Texte – man kann theoretisch so viel
+   schreiben, wie man will."
+
+   Ein frei stehender Absatz verschiebt nichts (das ist sein Sinn), also
+   kann er auch nichts zur Seite drücken. Was bleibt, ist die Breite:
+   er reicht bis kurz VOR den nächsten Absatz rechts von ihm und bricht
+   dort um – wie eine Spalte. Was danach kommt, steht eine Zeile tiefer,
+   und zwar wieder an seiner eigenen linken Kante.
+
+   Gerechnet wird in Seiten-Pixeln (offsetLeft/-Top/-Height): die Seite
+   wird über transform gezoomt, das lässt diese Werte unberührt.
+
+   Die Breite wird nicht mitgespeichert – sie ergibt sich aus der Lage
+   der Nachbarn und wird hier bei jeder Änderung neu bestimmt. Ins Heft
+   gehört, was jemand geschrieben hat, nicht, was daraus folgt
+   (ohneGriffe in app.js nimmt sie wieder heraus).
+   ══════════════════════════════════════════════════════════════════════ */
+const FREI_ABSTAND_PX = 8;      // Luft zum Nachbarn, damit es nicht klebt
+const FREI_MINDEST_PX = 48;     // schmaler wird eine Spalte nie
+
+function begrenzeFreieAbsaetze(textDiv) {
+  if (!textDiv || !textDiv.querySelectorAll) return;
+  const alle = [...textDiv.querySelectorAll('p.j-frei')];
+  if (alle.length < 2) {
+    for (const p of alle) p.style.maxWidth = '';
+    return;
+  }
+
+  const kaesten = alle.map(p => ({
+    p, links: p.offsetLeft, oben: p.offsetTop, hoch: p.offsetHeight || 32
+  }));
+
+  for (const a of kaesten) {
+    let grenze = null;
+    for (const b of kaesten) {
+      if (b === a || b.links <= a.links) continue;
+      // Nur, wer auf derselben Höhe steht, ist im Weg
+      if (b.oben + b.hoch <= a.oben || b.oben >= a.oben + a.hoch) continue;
+      if (grenze === null || b.links < grenze) grenze = b.links;
+    }
+    a.p.style.maxWidth = grenze === null
+      ? ''
+      : Math.max(FREI_MINDEST_PX, grenze - a.links - FREI_ABSTAND_PX) + 'px';
+  }
+}
+
 function _setRangeEndOfNode(range, node) {
   if (node.lastChild && node.lastChild.nodeType === Node.TEXT_NODE) {
     range.setStart(node.lastChild, node.lastChild.nodeValue.length);
@@ -1017,6 +1068,8 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
   const neu = _freierAbsatz(linksPx, pt + zeile * lh);
   neu[VORLAEUFIG] = true;
   textDiv.appendChild(neu);
+  // Steht rechts davon schon etwas, reicht er nur bis dorthin
+  begrenzeFreieAbsaetze(textDiv);
 
   const range = document.createRange();
   _setRangeEndOfNode(range, neu);

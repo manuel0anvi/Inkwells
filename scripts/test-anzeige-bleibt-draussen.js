@@ -105,9 +105,13 @@ console.log('Kein roher Editor-Inhalt im Datenmodell\n');
   check('j-resolved bleibt stehen', /j-resolved/.test(liste), false);
 
   /* Der schnelle Weg ohne Kopie darf nur greifen, wenn es wirklich
-     nichts aufzuräumen gibt – sonst käme die Anzeige doch durch. */
-  check('Der Weg ohne Kopie fragt BEIDE Fälle ab',
-    /if \(!griffe && !marken\) return textDiv\.innerHTML;/.test(fn), true);
+     nichts aufzuräumen gibt – sonst käme die Anzeige doch durch.
+     Seit dem 17.8.2026 sind es drei Fälle: dazu kam die gerechnete
+     Spaltenbreite der frei stehenden Absätze (canvas/text.js). */
+  check('Der Weg ohne Kopie fragt ALLE Fälle ab',
+    /if \(!griffe && !marken && !breiten\) return textDiv\.innerHTML;/.test(fn), true);
+  check('Und die gerechnete Breite bleibt draussen',
+    /p\.style\.maxWidth = '';/.test(fn), true);
 }
 
 console.log('');

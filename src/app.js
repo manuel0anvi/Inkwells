@@ -88,7 +88,12 @@ function _applyPageSnapshot(page, snap) {
   if (!pgEl) return;
 
   const textDiv = pgEl.querySelector('.j-text');
-  if (textDiv) textDiv.innerHTML = sanitizePageHtml(page.textContent);
+  if (textDiv) {
+    textDiv.innerHTML = sanitizePageHtml(page.textContent);
+    // Die Spaltenbreite der freien Absätze gehört nicht ins Heft, sie
+    // wird gerechnet – siehe begrenzeFreieAbsaetze in canvas/text.js
+    if (typeof begrenzeFreieAbsaetze === 'function') begrenzeFreieAbsaetze(textDiv);
+  }
 
   // Entlastete Zeichenflächen erst wieder aufbauen, sonst geht das Zeichnen ins Leere
   if (window.PageCanvases) PageCanvases.ensure(page.id);
@@ -162,9 +167,20 @@ function ohneGriffe(textDiv) {
 
   const griffe = textDiv.querySelector(GRIFF_WAHL);
   const marken = textDiv.querySelector(MARKEN_WAHL);
-  if (!griffe && !marken) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
+  /* Die Spaltenbreite eines frei stehenden Absatzes ist das Dritte
+     dieser Art: sie steht im style, ist aber nichts Geschriebenes –
+     sie folgt daraus, wo der Nachbar steht (begrenzeFreieAbsaetze in
+     canvas/text.js) und wird bei jeder Änderung neu gerechnet. Käme sie
+     mit, stünde in zwei Heften derselbe Text mit verschiedenen Massen,
+     und der Abgleich hätte ohne Grund etwas zu tun. */
+  const breiten = textDiv.querySelector('p.j-frei[style*="max-width"]');
+  if (!griffe && !marken && !breiten) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
 
   const kopie = textDiv.cloneNode(true);
+  kopie.querySelectorAll('p.j-frei').forEach(p => {
+    p.style.maxWidth = '';
+    if (!p.getAttribute('style')) p.removeAttribute('style');
+  });
   kopie.querySelectorAll(GRIFF_WAHL).forEach(g => g.remove());
   kopie.querySelectorAll(MARKEN_WAHL).forEach(m => {
     m.removeAttribute('title');
@@ -575,6 +591,16 @@ function appendPageDOM(page, index) {
     + ';white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word';
   // Fremder Seitentext geht immer durch die Bereinigung (core/sanitize.js)
   textDiv.innerHTML = sanitizePageHtml(page.textContent);
+  /* Die Breite der frei stehenden Absätze steht nicht im Heft – sie
+     ergibt sich aus der Lage der Nachbarn (canvas/text.js). Ohne diesen
+     Aufruf liefen sie nach dem Öffnen ineinander, bis jemand tippt.
+
+     Ein Bild später, weil die Seite hier noch gebaut wird: solange sie
+     nicht hängt, sind alle offsetLeft null und es gäbe nichts zu
+     rechnen. */
+  if (typeof begrenzeFreieAbsaetze === 'function') {
+    requestAnimationFrame(() => begrenzeFreieAbsaetze(textDiv));
+  }
 
   textDiv.querySelectorAll('h1,h2,h3').forEach(h => {
     const p = document.createElement('p');
@@ -612,6 +638,9 @@ function appendPageDOM(page, index) {
     /* Auffangnetz für alles, was doch einen freien Absatz kopiert hat –
        Einfügen aus der Zwischenablage etwa (canvas/text.js). */
     if (typeof richteFreieAbsaetze === 'function') richteFreieAbsaetze(textDiv);
+    /* Und die Breite: ein wachsender Absatz reicht nur bis zu seinem
+       Nachbarn und bricht dort um, statt in ihn hineinzulaufen. */
+    if (typeof begrenzeFreieAbsaetze === 'function') begrenzeFreieAbsaetze(textDiv);
     S._lastPgAction = S._lastPgAction || {};
     S._lastPgAction[page.id] = 'text';
     // Der Sicherungspunkt wird schon in 'beforeinput' gesetzt (pushTypingHistory),
