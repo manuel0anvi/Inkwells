@@ -164,6 +164,63 @@ function buildIco(entries) {
   return Buffer.concat([directory, ...entries.map(e => e.body)]);
 }
 
+/* ── Kacheln für das Store-Paket (MSIX/appx) ─────────────────────────
+   Der Store zeigt das Zeichen in mehreren Größen: im Startmenü, in der
+   Taskleiste, in der Store-Liste und beim Starten. Fehlt eine davon,
+   legt electron-builder sein eigenes Beispielbild unter – dann stünde
+   im Startmenü das Electron-Zeichen statt unserem.
+
+   Die Kacheln sind NICHT alle quadratisch. Das Zeichen wird deshalb
+   mittig auf die jeweilige Fläche gelegt, statt es zu verzerren.
+
+   Luft ringsum ist Absicht: Windows zeichnet um die Kachel herum keinen
+   Rand. Ohne Abstand klebt das Zeichen an der Kante.
+   ─────────────────────────────────────────────────────────────────── */
+
+const APPX_DIR = path.join(ROOT, 'build', 'appx');
+
+/* Anteil der kürzeren Kante, den das Zeichen einnimmt. Die kleinen
+   Größen bekommen mehr, sonst bleibt bei 44 Bildpunkten zu wenig übrig,
+   um noch etwas zu erkennen. */
+const APPX_TILES = [
+  { name: 'Square44x44Logo.png',   w:  44, h:  44, anteil: 0.90 },
+  { name: 'StoreLogo.png',         w:  50, h:  50, anteil: 0.90 },
+  { name: 'Square71x71Logo.png',   w:  71, h:  71, anteil: 0.75 },
+  { name: 'Square150x150Logo.png', w: 150, h: 150, anteil: 0.66 },
+  { name: 'Square310x310Logo.png', w: 310, h: 310, anteil: 0.66 },
+  { name: 'Wide310x150Logo.png',   w: 310, h: 150, anteil: 0.66 },
+  { name: 'SplashScreen.png',      w: 620, h: 300, anteil: 0.55 }
+];
+
+/** Legt das quadratische Zeichen mittig auf eine durchsichtige Fläche. */
+function aufFlaeche(square, breite, hoehe, anteil) {
+  const kante = Math.max(1, Math.round(Math.min(breite, hoehe) * anteil));
+  const scaled = png.resize(square, kante, kante);
+
+  const data = Buffer.alloc(breite * hoehe * 4);   // alloc: rundum durchsichtig
+  const offsetX = Math.round((breite - kante) / 2);
+  const offsetY = Math.round((hoehe - kante) / 2);
+
+  for (let y = 0; y < kante; y++) {
+    const from = y * kante * 4;
+    const to = ((offsetY + y) * breite + offsetX) * 4;
+    scaled.data.copy(data, to, from, from + kante * 4);
+  }
+
+  return { width: breite, height: hoehe, data };
+}
+
+function writeAppxAssets(square) {
+  fs.mkdirSync(APPX_DIR, { recursive: true });
+
+  for (const tile of APPX_TILES) {
+    const bild = aufFlaeche(square, tile.w, tile.h, tile.anteil);
+    fs.writeFileSync(path.join(APPX_DIR, tile.name), png.encode(bild));
+  }
+
+  console.log('geschrieben: build/appx/ (' + APPX_TILES.length + ' Kacheln)');
+}
+
 /* ── Ablauf ─────────────────────────────────────────────────────────── */
 
 function main() {
@@ -191,6 +248,8 @@ function main() {
   fs.writeFileSync(path.join(ROOT, 'website', 'icon.ico'), ico);
   fs.writeFileSync(path.join(ROOT, 'icon.ico'), ico);
   console.log('geschrieben: website/icon.ico und icon.ico (' + ICO_SIZES.join(', ') + ')');
+
+  writeAppxAssets(square);
 }
 
 main();
