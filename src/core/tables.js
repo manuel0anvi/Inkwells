@@ -666,14 +666,20 @@ function tabelleOhneMarke() {
   const textDiv = pgEl && pgEl.querySelector('.j-text');
   if (!textDiv) return null;
 
-  const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
-  const r = textDiv.getBoundingClientRect();
-  if (typeof placeCaretAnywhere === 'function') {
-    placeCaretAnywhere(textDiv, r.left + r.width / 2, r.top + r.height / 2,
-      true, info && info.page);
-  } else {
-    textDiv.focus();
-  }
+  /* ── Die Marke ans Ende des Vorhandenen ───────────────────────────
+     Hier stand ein Klick in die MITTE der Seite. Seit ein Klick auf
+     freie Fläche einen frei stehenden Absatz setzt (canvas/text.js),
+     entstünde dabei einer mitten auf dem Blatt – und die Tabelle käme
+     hinein. Eine Tabelle gehört aber ans Ende dessen, was schon da
+     steht; genau dorthin setzt jedes Textprogramm sie auch. */
+  textDiv.focus();
+  try {
+    const bereich = document.createRange();
+    bereich.selectNodeContents(textDiv);
+    bereich.collapse(false);
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(bereich); }
+  } catch (err) { /* dann steht sie, wo sie steht */ }
   return document.activeElement === textDiv ? textDiv : null;
 }
 

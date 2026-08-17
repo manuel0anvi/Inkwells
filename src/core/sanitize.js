@@ -93,7 +93,7 @@
      Alternative, von einem style bleibt unten allein die Farbe uebrig.
      Gebraucht wird sie vor allem beim Oeffnen von Word-Dokumenten –
      dort ist eine zentrierte Ueberschrift der Normalfall. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke)$/;
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke|frei)$/;
 
   /* ── Abstand statt Leerzeichen ──────────────────────────────────────
      `j-luecke` ist der Abstandshalter, den ein Klick rechts neben schon
@@ -233,14 +233,24 @@
         const links = el.style && el.style.marginLeft;
         const oben = el.style && el.style.marginTop;
         const breite = el.style && el.style.width;
+        const vonLinks = el.style && el.style.left;
+        const vonOben = el.style && el.style.top;
         const istBlock = BLOCK_TAGS.has(el.tagName);
         const istHalter = el.tagName === 'SPAN' && el.classList.contains('j-luecke');
+        /* Ein frei stehender Absatz traegt seine Lage im style. Sie MUSS
+           durchkommen: ohne sie stuende er beim naechsten Abgleich in der
+           linken oberen Ecke, und zwar bei allen Beteiligten. Gepruefte
+           Pixelzahl wie der Einzug auch – ein Mass kann nichts ausfuehren,
+           und die Obergrenze haelt ihn auf dem Blatt. */
+        const istFrei = istBlock && el.classList.contains('j-frei');
 
         el.removeAttribute('style');
         if (istFarbe(farbe)) el.style.color = farbe;
         if (istBlock && istAbstand(links)) el.style.marginLeft = links;
         if (istBlock && istAbstand(oben)) el.style.marginTop = oben;
         if (istHalter && istAbstand(breite)) el.style.width = breite;
+        if (istFrei && istAbstand(vonLinks)) el.style.left = vonLinks;
+        if (istFrei && istAbstand(vonOben)) el.style.top = vonOben;
         continue;
       }
 

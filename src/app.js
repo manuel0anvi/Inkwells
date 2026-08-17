@@ -609,6 +609,9 @@ function appendPageDOM(page, index) {
   textDiv.addEventListener('input', () => {
     if (S._isUndoingOrRedoing) return;
     if (typeof markiereBleibend === 'function') markiereBleibend(textDiv);
+    /* Auffangnetz für alles, was doch einen freien Absatz kopiert hat –
+       Einfügen aus der Zwischenablage etwa (canvas/text.js). */
+    if (typeof richteFreieAbsaetze === 'function') richteFreieAbsaetze(textDiv);
     S._lastPgAction = S._lastPgAction || {};
     S._lastPgAction[page.id] = 'text';
     // Der Sicherungspunkt wird schon in 'beforeinput' gesetzt (pushTypingHistory),
@@ -755,6 +758,20 @@ function appendPageDOM(page, index) {
         if (isPlainTextEditable(textDiv)) {
           const nextText = raw.slice(0, caretOffset) + '\n' + indent + raw.slice(caretOffset);
           commitPlainTextEdit(nextText, caretOffset + 1 + indent.length);
+        } else if (typeof imFreienAbsatz === 'function' && imFreienAbsatz(textDiv)) {
+          /* ── Umbruch IN einem frei stehenden Absatz ──────────────────
+             Ein Absatz, der frei auf dem Blatt steht (left/top, siehe
+             canvas/text.js), ist ein Kästchen und keine Zeile im Fluss.
+             Teilte man ihn, bekäme die zweite Hälfte Klasse und Lage der
+             ersten mit – beide sässen genau aufeinander, der Text läge
+             übereinander.
+
+             Also wächst das Kästchen nach unten, statt sich zu teilen.
+             Auf Papier ist es genauso: man schreibt unter der Zeile
+             weiter, nicht in einem neuen Absatz. */
+          document.execCommand('insertLineBreak');
+          if (indent) document.execCommand('insertText', false, indent);
+          setTimeout(() => checkPageOverflow(textDiv, page), 20);
         } else {
           document.execCommand('insertParagraph', false, null);
           const sel = window.getSelection();

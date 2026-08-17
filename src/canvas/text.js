@@ -695,21 +695,48 @@ function _abstandWert(px) {
   return Math.max(0, Math.min(MAX_ABSTAND_PX, Math.round(px)));
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN KLICK SETZT EINEN FREI STEHENDEN ABSATZ
+
+   >>> Warum er nicht mehr im Textfluss steht <<<
+   Er stand dort, mit Einzug und Abstand nach oben. Solange nur unter
+   allem Geschriebenen geklickt wurde, ging das gut. Sobald aber schon
+   etwas darunter stand, war jede Antwort falsch:
+
+     · Absatz einfügen  -> er braucht seine Zeile, und alles darunter
+                           rutscht tiefer. Im geteilten Heft bei allen.
+     · nichts einfügen  -> die Marke springt ans nächste Wort, und man
+                           kann nicht mehr schreiben, wo man möchte.
+
+   Beides ist gemeldet worden, und beides ist dieselbe Sache: im Fluss
+   hängt jede Zeile an der davor. Ein A4-Blatt ist aber kein Fluss. Wer
+   auf Papier zwischen zwei Zeilen etwas hinschreibt, schiebt damit
+   nichts nach unten.
+
+   Deshalb steht so ein Absatz jetzt NEBEN dem Fluss: mit left und top
+   auf dem Blatt, wie die frei gesetzte Tabelle (css/pages.css). Er
+   verschiebt nichts, weil er im Fluss keinen Platz einnimmt – und er
+   lässt sich überall hinsetzen, auch dorthin, wo im Fluss gar kein
+   Platz wäre.
+
+   Der obere Wert rastet auf ganze Zeilen ein, damit der Text auf den
+   Linien des Papiers sitzt und nicht dazwischen.
+   ══════════════════════════════════════════════════════════════════════ */
+
 /**
- * Ein leerer Absatz, der an der gewünschten Stelle beginnt.
+ * Ein leerer Absatz, der frei auf dem Blatt steht.
  *
- * @param {number} linksPx  Einzug von links, in Seiten-Pixeln
- * @param {number} obenPx   Abstand nach oben, in Seiten-Pixeln
+ * @param {number} linksPx  von links, in Seiten-Pixeln
+ * @param {number} obenPx   von oben, in Seiten-Pixeln
  */
-function _neuerAbsatz(linksPx = 0, obenPx = 0) {
+function _freierAbsatz(linksPx = 0, obenPx = 0) {
   const p = document.createElement('p');
+  p.className = 'j-frei';
   /* Ein <br> muss hinein: ein leerer Absatz hat sonst keine Höhe, und
      die Schreibmarke findet in ihm keinen Platz. */
   p.appendChild(document.createElement('br'));
-  const links = _abstandWert(linksPx);
-  const oben = _abstandWert(obenPx);
-  if (links > 0) p.style.marginLeft = links + 'px';
-  if (oben > 0) p.style.marginTop = oben + 'px';
+  p.style.left = _abstandWert(linksPx) + 'px';
+  p.style.top = _abstandWert(obenPx) + 'px';
   return p;
 }
 
@@ -854,48 +881,50 @@ function _teileLuecke(halter, clientX, scaleX) {
   return zweiter;
 }
 
-/** Der Block dieser Seite, in dem die Marke stünde – oder null. */
-function _blockVon(range, textDiv) {
-  let n = range.startContainer;
+/** Steht die Schreibmarke gerade in einem frei stehenden Absatz? */
+function imFreienAbsatz(textDiv) {
+  const sel = window.getSelection && window.getSelection();
+  if (!sel || !sel.rangeCount) return false;
+  let n = sel.getRangeAt(0).startContainer;
   if (n && n.nodeType === Node.TEXT_NODE) n = n.parentElement;
-  while (n && n !== textDiv && n.parentElement && n.parentElement !== textDiv) {
-    n = n.parentElement;
-  }
-  return (n && n !== textDiv && n.parentElement === textDiv) ? n : null;
+  if (!n || !n.closest || !textDiv || !textDiv.contains(n)) return false;
+  return !!n.closest('p.j-frei');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   LINKS NEBEN GESCHRIEBENEN TEXT
+   ZWEI FREIE ABSÄTZE AUF DERSELBEN STELLE
 
-   >>> Was gemeldet wurde <<<
-   „Sobald etwas geschrieben wurde, kann man nicht mehr hin, wo man
-   möchte: die Marke geht an den Anfang des ersten oder ans Ende des
-   letzten Zeichens der Zeile."
+   Ein Umbruch wird gar nicht erst zu einem zweiten Absatz (app.js). Aus
+   der Zwischenablage kann trotzdem einer kommen, der Klasse und Lage
+   eines vorhandenen geerbt hat – und der sässe genau auf ihm.
 
-   Rechts davon hilft ein Halter (siehe _neueLuecke). Links half er
-   nicht: dort steht kein Text, an den er sich hängen könnte – dort
-   steht der EINZUG des Absatzes.
+   Erkannt wird die Kopie daran, dass sie unmittelbar folgt und BEIDE
+   Masse gleich sind; zwei Absätze, die jemand von Hand an dieselbe
+   Stelle gesetzt hat, gibt es praktisch nicht, und eine eigene Stelle
+   unterscheidet sich schon in einem Pixel.
 
-   Also rückt der Absatz nach links, bis zum Klick, und bekommt an
-   seinen Anfang einen Halter, der genau so breit ist wie das
-   Weggenommene. Unter dem Strich steht jedes vorhandene Zeichen danach
-   auf demselben Bildpunkt wie vorher – und davor ist Platz zum
-   Schreiben.
+   Gerechnet wird gegen die Lage, die der Vorgänger VOR dieser Runde
+   hatte: sonst bliebe bei drei Kopien hintereinander die dritte liegen,
+   weil die zweite gerade weggerückt ist.
    ══════════════════════════════════════════════════════════════════════ */
-function _einzugWeichtNachLinks(block, textDiv, clientX, scaleX) {
-  if (!block || !block.style) return null;
-  const jetzt = parseFloat(block.style.marginLeft) || 0;
-  if (jetzt <= 0) return null;                  // links ist gar kein Einzug
+function richteFreieAbsaetze(textDiv) {
+  if (!textDiv || !textDiv.querySelectorAll) return;
+  let vorEl = null;
+  let vorAltOben = null;
 
-  const r = textDiv.getBoundingClientRect();
-  const neu = _abstandWert(Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX)));
-  if (neu >= jetzt - 1) return null;            // schon links genug
+  for (const p of textDiv.querySelectorAll('p.j-frei')) {
+    const oben = parseFloat(p.style.top) || 0;
+    const istKopie = !!vorEl && p.previousElementSibling === vorEl
+      && (vorEl.style.left || '') === (p.style.left || '')
+      && oben === vorAltOben;
 
-  const halter = _neueLuecke(jetzt - neu);
-  _merkeZurueck(halter, block, 'marginLeft', block.style.marginLeft);
-  block.style.marginLeft = neu > 0 ? neu + 'px' : '';
-  block.insertBefore(halter, block.firstChild);
-  return halter;
+    vorAltOben = oben;
+    if (istKopie) {
+      const hoehe = vorEl.offsetHeight || 32;
+      p.style.top = _abstandWert((parseFloat(vorEl.style.top) || 0) + hoehe) + 'px';
+    }
+    vorEl = p;
+  }
 }
 
 function _setRangeEndOfNode(range, node) {
@@ -907,332 +936,93 @@ function _setRangeEndOfNode(range, node) {
   range.collapse(true);
 }
 
+/**
+ * Setzt die Schreibmarke dorthin, wo gezeigt wurde – auch wenn dort noch
+ * gar nichts steht.
+ *
+ * @param {boolean} forceManual  Der Klick liegt auf FREIER Fläche.
+ *   Trifft er wirklich ein Zeichen, macht das der Browser selbst und
+ *   besser (canvas/input.js, isFreeEditorAreaClick).
+ * @returns {boolean} ob dafür etwas angelegt wurde
+ */
 function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page = null) {
-  if (!textDiv) return;
-  let didPad = false;
+  if (!textDiv) return false;
   /* Was der vorige Klick angelegt und niemand beschrieben hat, gehört
      weg, bevor der nächste etwas Neues anlegt (siehe VORLAEUFIG). */
   raeumeVorlaeufiges(textDiv);
   textDiv.focus();
+
   const r = textDiv.getBoundingClientRect();
   const cs = getComputedStyle(textDiv);
   const scaleX = textDiv.offsetWidth > 0 ? (r.width / textDiv.offsetWidth) : 1;
   const scaleY = textDiv.offsetHeight > 0 ? (r.height / textDiv.offsetHeight) : 1;
-  const lh = (parseFloat(cs.lineHeight) || 32) * scaleY;
-  const cw = approxCharWidth(textDiv) * scaleX;
-  const pt = (parseFloat(cs.paddingTop) || 0) * scaleY;
+  const lh = parseFloat(cs.lineHeight) || 32;            // Seiten-Pixel
+  const pt = parseFloat(cs.paddingTop) || 0;             // Seiten-Pixel
 
-  if (!isPlainTextEditable(textDiv)) {
-    /* Mitten in einen schon vorhandenen Abstand geklickt? Dann wird der
-       geteilt und die Marke kommt dazwischen (siehe _teileLuecke).
-       Zuerst gefragt, weil der Browser für einen Punkt IN einem nicht
-       bearbeitbaren Stück immer nur dessen Rand zurückgibt – und damit
-       wäre die Marke wieder am Anfang oder Ende der Zeile. */
-    const getroffeneLuecke = _lueckeUnter(textDiv, clientX, clientY);
-    if (getroffeneLuecke) {
-      const zweiter = _teileLuecke(getroffeneLuecke, clientX, scaleX);
+  /* ── Mitten in einen Abstandshalter geklickt ──────────────────────
+     Den setzten ältere Fassungen rechts neben geschriebenen Text; in
+     schon geschriebenen Heften steht er weiterhin. Ein Punkt IN einem
+     nicht bearbeitbaren Stück liefert immer nur dessen Rand – also wäre
+     die Marke wieder am Anfang oder Ende der Zeile. Deshalb wird er
+     geteilt, und die Marke kommt dazwischen. */
+  const getroffeneLuecke = _lueckeUnter(textDiv, clientX, clientY);
+  if (getroffeneLuecke) {
+    const zweiter = _teileLuecke(getroffeneLuecke, clientX, scaleX);
+    const rg = document.createRange();
+    if (zweiter) {
+      zweiter[VORLAEUFIG] = true;
+      rg.setStartBefore(zweiter);
+    } else {
+      rg.setStartAfter(getroffeneLuecke);
+    }
+    rg.collapse(true);
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(rg); }
+    return !!zweiter;
+  }
+
+  /* ── Der Klick sitzt auf einem Zeichen ────────────────────────────
+     Dann weiss der Browser genau, an welche Stelle im Wort die Marke
+     gehört – besser, als es sich hier aus Zeilenhöhe und Zeichenbreite
+     ausrechnen liesse. Bei der Maus setzt er sie gleich selbst.
+
+     Ein FINGERTIPP kommt aber ohne ihn hier an: über dem Text liegt das
+     Zeichenblatt und fängt ihn ab (canvas/input.js, tippAufText). Für
+     ihn wird die Stelle deshalb hier gesetzt – gemessen an derselben
+     Stelle, die der Browser nehmen würde. */
+  if (!forceManual) {
+    const treffer = document.caretPositionFromPoint
+      ? document.caretPositionFromPoint(clientX, clientY)
+      : (document.caretRangeFromPoint ? document.caretRangeFromPoint(clientX, clientY) : null);
+    const knoten = treffer ? (treffer.offsetNode || treffer.startContainer) : null;
+    if (knoten && textDiv.contains(knoten)) {
       const rg = document.createRange();
-      if (zweiter) {
-        zweiter[VORLAEUFIG] = true;
-        rg.setStartBefore(zweiter);
-      } else {
-        rg.setStartAfter(getroffeneLuecke);
-      }
+      rg.setStart(knoten, treffer.offset !== undefined ? treffer.offset : treffer.startOffset);
       rg.collapse(true);
       const sel = window.getSelection();
       if (sel) { sel.removeAllRanges(); sel.addRange(rg); }
-      return !!zweiter;
     }
-
-    let range = null;
-    const isInside = node => !!node && (node === textDiv || textDiv.contains(node));
-    const blocks = [...textDiv.children].filter(el => el.nodeType === Node.ELEMENT_NODE);
-    const lastRect = blocks.length ? blocks[blocks.length - 1].getBoundingClientRect() : null;
-    const clickedClearlyBelow = !!lastRect && clientY > (lastRect.bottom + Math.max(4, lh * 0.2));
-
-    if (!clickedClearlyBelow) {
-      const pos = document.caretPositionFromPoint?.(clientX, clientY);
-      const rPoint = document.caretRangeFromPoint?.(clientX, clientY);
-      if (pos && isInside(pos.offsetNode)) {
-        range = document.createRange();
-        range.setStart(pos.offsetNode, pos.offset);
-        range.collapse(true);
-      } else if (rPoint && isInside(rPoint.startContainer)) {
-        range = rPoint;
-        range.collapse(true);
-      }
-    }
-
-    if (range) {
-      if (range.startContainer === textDiv) {
-        const targetBlock = textDiv.childNodes[Math.min(range.startOffset, textDiv.childNodes.length - 1)];
-        if (targetBlock && targetBlock.nodeType === Node.ELEMENT_NODE) {
-          range.selectNodeContents(targetBlock);
-          range.collapse(false);
-        }
-      }
-
-      if (forceManual) {
-        const block = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
-        if (block?.nodeType === Node.ELEMENT_NODE && block !== textDiv) {
-          const rect = block.getBoundingClientRect();
-          if (clientY > rect.bottom + 4 || clientY < rect.top - 4) range = null;
-        }
-      }
-
-      if (range) {
-        let lineEndX = r.left;
-        const ctrs = range.getClientRects();
-        if (ctrs.length > 0 && ctrs[0].right > 0) lineEndX = ctrs[0].right;
-        else if (range.getBoundingClientRect()?.right > 0) lineEndX = range.getBoundingClientRect().right;
-
-        /* Rechts neben schon geschriebenem Text: ein Abstandshalter, kein
-           Leerzeichenblock. Er trägt nur eine Breite, und die stimmt
-           genau – anders als „ungefähr vierzig Leerzeichen" in einer
-           Schrift mit ungleich breiten Zeichen. */
-        if (clientX > lineEndX + cw * 0.7) {
-          const halter = _neueLuecke((clientX - lineEndX) / Math.max(0.01, scaleX));
-          halter[VORLAEUFIG] = true;
-          range.insertNode(halter);
-          // Die Marke gehört HINTER den Halter, sonst tippt man davor
-          range.setStartAfter(halter);
-          range.collapse(true);
-          didPad = true;
-        } else if (clientX < lineEndX - cw * 0.7) {
-          /* Links neben den Text geklickt – siehe _einzugWeichtNachLinks.
-             Nur auf der ERSTEN Zeile des Absatzes: bei einem umbrochenen
-             Absatz gehört der Rand der zweiten Zeile nicht zum Einzug. */
-          const block = _blockVon(range, textDiv);
-          const bRect = block ? block.getBoundingClientRect() : null;
-          if (bRect && clientY < bRect.top + lh) {
-            const halter = _einzugWeichtNachLinks(block, textDiv, clientX, scaleX);
-            if (halter) {
-              halter[VORLAEUFIG] = true;
-              // Davor, nicht dahinter: geschrieben wird links vom Halter
-              range.setStartBefore(halter);
-              range.collapse(true);
-              didPad = true;
-            }
-          }
-        }
-      }
-    }
-
-    if (!range && forceManual) {
-      /* Der Einzug rechnet in Seiten-Pixeln, nicht in Bildschirm-Pixeln:
-         die Seite ist gezoomt, der gespeicherte Wert darf das nicht sein. */
-      const linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
-
-      if (clickedClearlyBelow && blocks.length) {
-        const pxBelow = Math.max(0, clientY - blocks[blocks.length - 1].getBoundingClientRect().bottom);
-        /* Auf ganze Zeilenhöhen gerundet, sonst sässe der Text zwischen
-           den Linien des Papiers. Genau das taten die leeren Absätze von
-           selbst, die hier vorher entstanden – nur brauchte es dafür bis
-           zu vierzig davon. */
-        const zeilen = Math.min(40, Math.max(0, Math.round(pxBelow / Math.max(12, lh))));
-        const neu = _neuerAbsatz(linksPx, zeilen * lh / Math.max(0.01, scaleY));
-        neu[VORLAEUFIG] = true;
-        textDiv.appendChild(neu);
-        didPad = true;
-        range = document.createRange();
-        _setRangeEndOfNode(range, neu);
-      } else {
-        /* ══════════════════════════════════════════════════════════════
-           ZWISCHEN ZWEI ABSÄTZEN: DER PLATZ WIRD GENOMMEN, NICHT GEMACHT
-
-           >>> Was gemeldet wurde <<<
-           „Wenn man irgendwo schreibt, wo darunter bereits etwas ist,
-           dann wird beim Klick auf die Zeile alles, was darunter ist,
-           eine Zeile nach unten verschoben."
-
-           Genau das tat der Absatz, der hier vorher entstand: er wurde
-           zwischen zwei vorhandene gesetzt und brauchte seine Zeile
-           zusätzlich. Alles darunter rutschte um eine Zeilenhöhe – und
-           im geteilten Dokument bei allen mit.
-
-           Die Lücke, in die geklickt wird, gehört aber schon jemandem:
-           sie ist der obere Abstand des Absatzes DARUNTER. Der neue
-           Absatz nimmt seinen Platz von dort, statt einen neuen zu
-           schaffen. Was darunter steht, bleibt damit auf den Pixel
-           genau, wo es war.
-
-           Und wenn dort keine Lücke ist, entsteht auch kein Absatz: die
-           Marke geht ans Ende der Zeile darüber. Ein Klick soll nichts
-           verschieben, was jemand geschrieben hat.
-           ══════════════════════════════════════════════════════════════ */
-        const lhSeite = lh / Math.max(0.01, scaleY);
-        const nach = blocks.find(b => b.getBoundingClientRect().top >= clientY - 1) || null;
-        const vor = nach ? (blocks[blocks.indexOf(nach) - 1] || null) : blocks[blocks.length - 1];
-        const obenKante = vor
-          ? vor.getBoundingClientRect().bottom
-          : (r.top + (parseFloat(cs.paddingTop) || 0) * scaleY);
-
-        /* Wie viel Luft steht zwischen den beiden? Sie steckt im oberen
-           Abstand des unteren – etwas anderes setzt sie nicht (alle
-           Ränder stehen auf null, siehe css/base.css). */
-        const altOben = nach ? nach.style.marginTop : '';
-        const altObenPx = parseFloat(altOben) || 0;
-        const luftSeite = nach
-          ? Math.max(0, nach.getBoundingClientRect().top - obenKante) / Math.max(0.01, scaleY)
-          : 0;
-
-        if (nach && luftSeite >= lhSeite * 0.9 && altObenPx >= lhSeite * 0.9) {
-          // Wohin genau – in ganzen Zeilen, damit der Text auf den Linien sitzt
-          const wunsch = Math.max(0, clientY - obenKante) / Math.max(0.01, scaleY);
-          const hoechstens = Math.max(0, altObenPx - lhSeite);
-          const obenPx = Math.min(hoechstens, Math.round(wunsch / lhSeite) * lhSeite);
-
-          const neu = _neuerAbsatz(linksPx, obenPx);
-          neu[VORLAEUFIG] = true;
-          _merkeZurueck(neu, nach, 'marginTop', altOben);
-          nach.style.marginTop = Math.max(0, altObenPx - obenPx - lhSeite) + 'px';
-          nach.parentNode.insertBefore(neu, nach);
-          didPad = true;
-          range = document.createRange();
-          _setRangeEndOfNode(range, neu);
-        } else {
-          // Kein Platz: dann wird auch keiner geschaffen
-          range = document.createRange();
-          const ziel = vor || nach;
-          if (ziel && vor) _setRangeEndOfNode(range, ziel);
-          else if (ziel) { range.selectNodeContents(ziel); range.collapse(true); }
-          else { range.selectNodeContents(textDiv); range.collapse(false); }
-        }
-      }
-    }
-
-    if (!range) {
-      range = document.createRange();
-      range.selectNodeContents(textDiv);
-      range.collapse(false);
-    }
-
-    const sel = window.getSelection();
-    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
-    return didPad;
-  }
-
-  // Handle plain text mode
-  const targetLine = Math.max(0, Math.floor((clientY - r.top - pt) / lh));
-  let targetCol = Math.max(0, Math.floor((clientX - r.left) / cw));
-  const nearLeftEdge = (clientX - r.left) <= Math.max(14, cw * 2.0);
-  if (nearLeftEdge) targetCol = 0;
-
-  const rawText = (textDiv.innerText || textDiv.textContent || '').replace(/\r/g, '');
-  const lines = rawText.length ? rawText.split('\n') : [''];
-  const isExistingLine = targetLine < lines.length;
-  const colAnchor = (!forceManual && Number.isFinite(textDiv._colAnchor)) ? textDiv._colAnchor : null;
-
-  if (nearLeftEdge && isExistingLine) {
-    let idx = 0;
-    for (let i = 0; i < targetLine; i++) idx += (lines[i]?.length || 0) + 1;
-    setPlainCaret(textDiv, idx);
-    textDiv._colAnchor = 0;
     return false;
   }
 
-  if (!forceManual && isExistingLine && lines[targetLine].length > 0) {
-    const farRight = clientX > (r.left + (lines[targetLine].length * cw) + cw * 0.7);
-    if (!farRight) {
-      const selPlain = window.getSelection();
-      const pos = document.caretPositionFromPoint?.(clientX, clientY) || document.caretRangeFromPoint?.(clientX, clientY);
-      const node = pos?.offsetNode || pos?.startContainer;
-      
-      if (pos && node && (node === textDiv || textDiv.contains(node)) && selPlain) {
-        const range = document.createRange();
-        range.setStart(node, pos.offset ?? pos.startOffset);
-        range.collapse(true);
-        selPlain.removeAllRanges();  
-        selPlain.addRange(range);
-        
-        const caret = getCaretTextOffset(textDiv);
-        if (caret !== null) {
-          textDiv._colAnchor = Math.max(0, caret - (rawText.lastIndexOf('\n', Math.max(0, caret - 1)) + 1));
-        }
-        return false;
-      }
-    }
-  }
+  /* ── Sonst: ein freier Absatz genau dort ──────────────────────────
+     Waagerecht auf den Punkt, senkrecht auf die Zeile gerastet – der
+     Text soll auf den Linien des Papiers sitzen. Beides in
+     Seiten-Pixeln: die Seite ist gezoomt, der gespeicherte Wert darf
+     das nicht sein. */
+  const linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
+  const obenRoh = (clientY - r.top) / Math.max(0.01, scaleY);
+  const zeile = Math.max(0, Math.floor((obenRoh - pt) / lh));
 
-  if (colAnchor !== null && Math.abs(targetCol - colAnchor) <= 2) targetCol = colAnchor;
+  const neu = _freierAbsatz(linksPx, pt + zeile * lh);
+  neu[VORLAEUFIG] = true;
+  textDiv.appendChild(neu);
 
-  /* ══════════════════════════════════════════════════════════════════
-     AUCH AUF EINER REINEN TEXTSEITE: ABSTAND STATT LEERZEICHEN
-
-     Hier standen zwei Schleifen: leere Zeilen anhängen, bis die geklickte
-     Zeile existiert, und dann Leerzeichen, bis die Spalte stimmt. Genau
-     das ist die gemeldete Sache.
-
-     Eine reine Textseite (nur Textknoten und <br>) hat aber gar nichts,
-     woran ein Einzug hängen könnte. Deshalb bekommt sie an dieser Stelle
-     ihren ersten Absatz – und zwar NUR sie, der vorhandene Text bleibt
-     unangetastet. Die Seite ist damit von da an eine gewöhnliche
-     Absatzseite, und das ist sie ohnehin, sobald jemand eine Überschrift
-     oder eine Aufzählung benutzt.
-
-     Umgebaut wird nur, wenn wirklich aufgefüllt werden müsste. Wer in
-     vorhandenen Text klickt, merkt von alldem nichts – dieser Zweig wird
-     dann gar nicht erreicht (siehe die beiden Rückgaben oben).
-     ══════════════════════════════════════════════════════════════════ */
-  const brauchtZeilen = targetLine >= lines.length;
-  const brauchtSpalten = (lines[targetLine] || '').length < targetCol;
-
-  let zeilenAnfang = 0;
-  for (let i = 0; i < Math.min(targetLine, lines.length); i++) zeilenAnfang += lines[i].length + 1;
-
-  /* ── Unter allem, was schon dasteht ────────────────────────────────
-     Ein neuer Absatz mit Abstand nach oben und nach links. Er ist der
-     erste Block dieser Seite; der vorhandene Text bleibt unangetastet. */
-  if (brauchtZeilen) {
-    const linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
-    /* Wie weit unter dem vorhandenen Text? In ganzen Zeilen, damit der
-       Text auf den Linien des Papiers sitzt. */
-    const zeilenDrunter = Math.max(0, targetLine - lines.length + (rawText.length ? 0 : 1));
-    const neu = _neuerAbsatz(linksPx, zeilenDrunter * lh / Math.max(0.01, scaleY));
-    neu[VORLAEUFIG] = true;
-    textDiv.appendChild(neu);
-
-    const range = document.createRange();
-    _setRangeEndOfNode(range, neu);
-    const sel = window.getSelection();
-    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
-    textDiv._colAnchor = targetCol;
-    return true;
-  }
-
-  /* ── Rechts neben eine Zeile, die es schon gibt ────────────────────
-     Hier half kein Einzug: der Text der Zeile steht ja schon links. Ein
-     Abstandshalter ans Ende dieser Zeile bringt die Marke genau dorthin,
-     wo gezeigt wurde – mit einem Element statt vierzig Leerzeichen. */
-  if (brauchtSpalten) {
-    const ende = zeilenAnfang + lines[targetLine].length;
-    const rand = rangeForTextOffset(textDiv, ende);
-    if (rand) {
-      const bis = rand.getBoundingClientRect();
-      const rechts = (bis && bis.right > 0) ? bis.right : r.left;
-      if (clientX > rechts + cw * 0.7) {
-        const halter = _neueLuecke((clientX - rechts) / Math.max(0.01, scaleX));
-        halter[VORLAEUFIG] = true;
-        rand.insertNode(halter);
-        rand.setStartAfter(halter);
-        rand.collapse(true);
-        const sel = window.getSelection();
-        if (sel) { sel.removeAllRanges(); sel.addRange(rand); }
-        textDiv._colAnchor = targetCol;
-        return true;
-      }
-    }
-    // Zu nah dran, um einen Abstand zu rechtfertigen: ans Zeilenende
-    setPlainCaret(textDiv, ende);
-    textDiv._colAnchor = lines[targetLine].length;
-    return false;
-  }
-
-  if (isExistingLine) targetCol = Math.min(targetCol, lines[targetLine].length);
-
-  setPlainCaret(textDiv, zeilenAnfang + targetCol);
-  textDiv._colAnchor = targetCol;
-  return false;
+  const range = document.createRange();
+  _setRangeEndOfNode(range, neu);
+  const sel = window.getSelection();
+  if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+  return true;
 }
 
 function isPlainTextEditable(textDiv) {

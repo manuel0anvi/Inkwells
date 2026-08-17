@@ -641,6 +641,14 @@
 
     let current = null;
 
+    /* Unterkante des zuletzt gesehenen frei stehenden Absatzes, in
+       Seiten-Pixeln – oder null, solange keiner kam. Daraus wird sein
+       Abstand zum naechsten (siehe unten). Eine Zeilenhoehe genuegt als
+       Mass: mehrzeilige freie Absaetze sind selten, und der Fehler
+       waere ein zu grosser Abstand, kein verlorener Text. */
+    let letzteFreiUnten = null;
+    const FREI_ZEILE_PX = 32;
+
     const openParagraph = (style) => {
       current = { style, runs: [] };
       paragraphs.push(current);
@@ -723,6 +731,20 @@
           // Wo der Klick hingezeigt hat – siehe pxAusStil
           absatz.einzugPx = pxAusStil(child, 'marginLeft');
           absatz.obenPx = pxAusStil(child, 'marginTop');
+
+          /* ── Ein frei stehender Absatz ────────────────────────────
+             Er traegt seine Lage absolut (left/top), Word kennt aber
+             nur Abstaende von einem Absatz zum naechsten. Umgerechnet
+             wird deshalb in den ABSTAND zum vorigen freien Absatz –
+             bei einer Seite, die nur aus Klicks entstanden ist (der
+             uebliche Fall), kommt der Text damit in Word auf dieselben
+             Zeilen wie im Heft. */
+          if (child.classList && child.classList.contains('j-frei')) {
+            const obenAbs = pxAusStil(child, 'top');
+            absatz.einzugPx = pxAusStil(child, 'left');
+            absatz.obenPx = Math.max(0, obenAbs - (letzteFreiUnten === null ? obenAbs : letzteFreiUnten));
+            letzteFreiUnten = obenAbs + FREI_ZEILE_PX;
+          }
 
           if (tag === 'LI' && liste) {
             liste.n++;

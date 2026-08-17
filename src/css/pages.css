@@ -770,6 +770,30 @@ body.touch-draw .j-canvas {
   user-select: none
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN ABSATZ, DER FREI AUF DEM BLATT STEHT
+
+   Er entsteht, wenn jemand auf eine freie Stelle klickt und dort
+   schreibt (canvas/text.js). Seine Lage steht in left und top, in
+   Seiten-Pixeln – die Seite selbst wird über transform gezoomt, also
+   stimmt sie in jeder Vergrösserung.
+
+   >>> Warum absolut und nicht im Fluss <<<
+   Im Fluss braucht jeder Absatz seine Zeile, und alles darunter rückt
+   nach. Genau das war gemeldet: „beim Klick verschiebt sich alles, was
+   darunter ist, eine Zeile nach unten". Ein Blatt Papier tut das nicht.
+
+   Keine Breite gesetzt: ein absolut gesetzter Kasten ohne width ist so
+   breit wie sein Inhalt, höchstens aber bis zum rechten Rand des
+   Blattes. Damit bricht eine lange Zeile dort um, wo sie es auch im
+   Fluss täte – und ein Klick RECHTS neben den Text trifft nicht mehr
+   den Kasten, sondern freie Fläche.
+   ══════════════════════════════════════════════════════════════════════ */
+.j-text p.j-frei {
+  position: absolute;
+  margin: 0
+}
+
 .j-text h1,
 .j-text p.j-title-1 {
   font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;

@@ -3,26 +3,28 @@
    WO MAN HINKLICKT, KANN MAN AUCH SCHREIBEN
 
    Der Sinn von Inkwell ist, dass man irgendwo hindrückt und dort
-   schreibt. Zweimal ist gemeldet worden, dass das nicht mehr geht:
+   schreibt. Zweimal ist gemeldet worden, dass das nicht geht:
 
      · „sobald etwas geschrieben wurde, kann man nicht mehr hin, wo man
-       möchte – der Cursor geht an den Anfang oder ans Ende der Zeile"
-     · „beim Klick verschiebt sich alles, was darunter steht, eine
-       Zeile nach unten"
+       möchte – der Cursor springt an den Anfang des einen oder ans Ende
+       des anderen Wortes"
+     · „beim Klick verschiebt sich alles, was darunter steht"
 
-   Beides lässt sich nur mit echten Klicks in einem echten Fenster
-   feststellen: es hängt an der Geometrie des Textes, und die kennt
-   allein der Browser. scripts/test-neue-teile.js prüft daneben die
-   Quelle – das fängt den stillen Rückfall ab, dieser Prüfstand die
-   Wirkung.
+   Beides hing daran, dass ein angeklickter Absatz IM TEXTFLUSS stand.
+   Seit dem 17.8.2026 steht er frei auf dem Blatt (left/top). Dieser
+   Prüfstand misst genau die zwei Versprechen:
 
-   Läuft mit `npm run test:klick`. Das Fenster muss dabei sichtbar
-   bleiben; ohne Bild misst man Chromiums gedrosselte Darstellung.
+     1. der Text steht dort, wo geklickt wurde
+     2. und nichts, was schon dastand, bewegt sich dabei
+
+   Mit echten Klicks in einem echten Fenster – anders ist das nicht
+   festzustellen, es hängt an der Geometrie des Textes.
+   `npm run test:klick`; das Fenster muss sichtbar bleiben.
    ══════════════════════════════════════════════════════════════════════ */
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const os = require('os');
-const ROOT = 'c:/Users/emili/Desktop/code local/Inkwells';
+const ROOT = path.resolve(__dirname, '..', '..');
 
 const zeilen = [];
 let fehl = 0;
@@ -30,12 +32,9 @@ const pruefe = (name, ok, info) => {
   zeilen.push((ok ? '  ok   ' : '  FEHL ') + name + (ok ? '' : '  -> ' + (info === undefined ? '' : info)));
   if (!ok) fehl++;
 };
-const BERICHT = path.join(__dirname, 'bericht.txt');
 function fertig(code) {
-  const text = '\n===PROBE===\n' + zeilen.join('\n') + '\n\n'
-    + (fehl ? fehl + ' Pruefung(en) fehlgeschlagen.' : 'Alle Pruefungen bestanden.') + '\n';
-  try { require('fs').writeFileSync(BERICHT, text); } catch (e) { /* dann nur stdout */ }
-  process.stdout.write(text);
+  process.stdout.write('\n' + zeilen.join('\n') + '\n\n'
+    + (fehl ? fehl + ' Pruefung(en) fehlgeschlagen.' : 'Alle Pruefungen bestanden.') + '\n');
   app.exit(code);
 }
 setTimeout(() => { zeilen.push('  ABBRUCH: Zeitgrenze'); fehl++; fertig(2); }, 120000);
@@ -91,155 +90,150 @@ app.on('ready', async () => {
     }
     await new Promise(r => setTimeout(r, 300));
   }
+  async function enter() {
+    await dbg.sendCommand('Input.dispatchKeyEvent',
+      { type: 'rawKeyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await dbg.sendCommand('Input.dispatchKeyEvent',
+      { type: 'char', text: '\r', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await dbg.sendCommand('Input.dispatchKeyEvent',
+      { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await new Promise(r => setTimeout(r, 300));
+  }
+
   const inhalt = () => js(`document.querySelector('.j-text').innerHTML`);
   const roherText = () => js(`document.querySelector('.j-text').textContent`);
 
-  /** Setzt den Seiteninhalt und gibt den Kasten des Textfeldes zurueck. */
-  async function seite(html) {
-    await js(`(() => { const td = document.querySelector('.j-text');
-      td.innerHTML = ${JSON.stringify(html)}; return true; })()`);
-    await new Promise(r => setTimeout(r, 250));
-    return await js(`(() => { const r = document.querySelector('.j-text').getBoundingClientRect();
-      return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
-  }
-  const obenVon = (wahl) => js(
-    `(() => { const el = document.querySelector('.j-text ' + ${JSON.stringify(wahl)});
-       return el ? Math.round(el.getBoundingClientRect().top) : null; })()`);
-  const linksVon = (wahl) => js(
-    `(() => { const el = document.querySelector('.j-text ' + ${JSON.stringify(wahl)});
-       return el ? Math.round(el.getBoundingClientRect().left) : null; })()`);
+  /** Wo steht das Wort auf dem Bildschirm? {l, t} oder null */
+  const wortOrt = (wort) => js(
+    `(() => { const td = document.querySelector('.j-text');
+       const lauf = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+       for (let n = lauf.nextNode(); n; n = lauf.nextNode()) {
+         const i = n.nodeValue.indexOf(${JSON.stringify(wort)});
+         if (i < 0) continue;
+         const rg = document.createRange();
+         rg.setStart(n, i); rg.setEnd(n, i + ${wort.length});
+         const r = rg.getBoundingClientRect();
+         return { l: Math.round(r.left), t: Math.round(r.top) };
+       }
+       return null; })()`);
 
-  // ── 4  Was darunter steht, bleibt stehen ──────────────────────────
-  zeilen.push('\n  4  Klick in die Luecke ueber vorhandenem Text');
-  let r = await seite('<p id="unten" style="margin-top:224px">Einkaufsliste</p>');
-  const untenVorher = await obenVon('#unten');
-  await klick(r.l + 120, r.t + 100);
-  await tippe('Hallo');
-  const untenNachher = await obenVon('#unten');
+  const feld = await js(
+    `(() => { const r = document.querySelector('.j-text').getBoundingClientRect();
+       const cs = getComputedStyle(document.querySelector('.j-text'));
+       const td = document.querySelector('.j-text');
+       const zoom = td.offsetHeight > 0 ? r.height / td.offsetHeight : 1;
+       return { l: r.left, t: r.top, w: r.width,
+                lh: parseFloat(cs.lineHeight) * zoom,
+                pt: parseFloat(cs.paddingTop) * zoom }; })()`);
+  // Mitte der n-ten Zeile auf dem Bildschirm
+  const zeileY = n => feld.t + feld.pt + n * feld.lh + feld.lh / 2;
 
-  pruefe('Der Text darunter steht noch genau dort',
-    untenVorher === untenNachher, untenVorher + ' -> ' + untenNachher);
-  pruefe('Das Getippte steht ueber ihm',
-    (await roherText()).indexOf('Hallo') === 0, JSON.stringify(await roherText()));
-  pruefe('Und wirklich auf der Hoehe des Klicks', await js(
-    `(() => { const p = document.querySelector('.j-text p');
-       return Math.abs(p.getBoundingClientRect().top - ${r.t + 100}) < 34; })()`),
+  // ── 1  Zwei Wörter, jedes dort, wo geklickt wurde ─────────────────
+  zeilen.push('\n  1  Zwei Woerter an zwei gewaehlten Stellen');
+  await klick(feld.l + 160, zeileY(2));
+  await tippe('wort1');
+  const ort1 = await wortOrt('wort1');
+  pruefe('„wort1" steht, wo geklickt wurde',
+    ort1 && Math.abs(ort1.l - (feld.l + 160)) < 14 && Math.abs(ort1.t - (zeileY(2) - feld.lh / 2)) < 14,
+    JSON.stringify(ort1) + ' statt ' + Math.round(feld.l + 160) + ',' + Math.round(zeileY(2) - feld.lh / 2));
+
+  await klick(feld.l + 520, zeileY(4));
+  await tippe('wort2');
+  const ort2 = await wortOrt('wort2');
+  pruefe('„wort2" ebenso',
+    ort2 && Math.abs(ort2.l - (feld.l + 520)) < 14, JSON.stringify(ort2));
+  pruefe('Und „wort1" hat sich dabei nicht bewegt',
+    JSON.stringify(await wortOrt('wort1')) === JSON.stringify(ort1),
+    JSON.stringify(ort1) + ' -> ' + JSON.stringify(await wortOrt('wort1')));
+  pruefe('Kein Leerzeichen im Text', !/[  ]/.test(await roherText()),
+    JSON.stringify(await roherText()));
+
+  // ── 2  Dazwischen – die gemeldete Stelle ──────────────────────────
+  zeilen.push('\n  2  Zwischen die beiden geklickt');
+  await klick(feld.l + 330, zeileY(3));
+  await tippe('mitte');
+  const ortM = await wortOrt('mitte');
+  pruefe('Das Wort steht zwischen den beiden, wo gezeigt wurde',
+    ortM && Math.abs(ortM.l - (feld.l + 330)) < 14, JSON.stringify(ortM));
+  pruefe('Es springt nicht an „wort1"', ortM && ortM.l > ort1.l + 20, JSON.stringify(ortM));
+  pruefe('Und nicht an „wort2"', ortM && ortM.t < ort2.t - 5, JSON.stringify(ortM));
+  pruefe('„wort1" steht immer noch still',
+    JSON.stringify(await wortOrt('wort1')) === JSON.stringify(ort1));
+  pruefe('„wort2" auch',
+    JSON.stringify(await wortOrt('wort2')) === JSON.stringify(ort2),
+    JSON.stringify(ort2) + ' -> ' + JSON.stringify(await wortOrt('wort2')));
+
+  // ── 3  Rechts neben ein Wort, links neben das andere ──────────────
+  zeilen.push('\n  3  Rechts neben das eine, links neben das andere');
+  await klick(feld.l + 300, zeileY(2));            // rechts neben wort1
+  await tippe('rechts');
+  const ortR = await wortOrt('rechts');
+  pruefe('Rechts neben „wort1" steht es rechts davon',
+    ortR && Math.abs(ortR.l - (feld.l + 300)) < 14 && Math.abs(ortR.t - ort1.t) < 6,
+    JSON.stringify(ortR) + ' zu ' + JSON.stringify(ort1));
+
+  await klick(feld.l + 300, zeileY(4));            // links neben wort2
+  await tippe('links');
+  const ortL = await wortOrt('links');
+  pruefe('Links neben „wort2" steht es links davon',
+    ortL && ortL.l < ort2.l - 20 && Math.abs(ortL.t - ort2.t) < 6,
+    JSON.stringify(ortL) + ' zu ' + JSON.stringify(ort2));
+  pruefe('Und „wort2" ist nicht ausgewichen',
+    JSON.stringify(await wortOrt('wort2')) === JSON.stringify(ort2),
+    JSON.stringify(ort2) + ' -> ' + JSON.stringify(await wortOrt('wort2')));
+  pruefe('Nirgends ein Leerzeichen', !/[  ]/.test(await roherText()),
+    JSON.stringify(await roherText()));
+
+  // ── 4  Der Umbruch teilt den freien Absatz nicht ──────────────────
+  zeilen.push('\n  4  Umbruch in einem freien Absatz');
+  const vorUmbruch = (await js(`document.querySelectorAll('.j-text p.j-frei').length`));
+  await enter();
+  await tippe('zweite');
+  pruefe('Es entsteht kein zweiter Absatz auf derselben Stelle',
+    (await js(`document.querySelectorAll('.j-text p.j-frei').length`)) === vorUmbruch,
+    'vorher ' + vorUmbruch + ', nachher ' + await js(`document.querySelectorAll('.j-text p.j-frei').length`));
+  const ortZ = await wortOrt('zweite');
+  pruefe('Die neue Zeile steht eine Zeile tiefer',
+    ortZ && ortL && Math.abs((ortZ.t - ortL.t) - feld.lh) < 6,
+    JSON.stringify(ortL) + ' -> ' + JSON.stringify(ortZ));
+  pruefe('Zwei freie Absaetze liegen nie aufeinander', await js(
+    `(() => { const ps = [...document.querySelectorAll('.j-text p.j-frei')];
+       const gesehen = new Set();
+       for (const p of ps) { const k = p.style.left + '|' + p.style.top;
+         if (gesehen.has(k)) return false; gesehen.add(k); }
+       return true; })()`),
     await inhalt());
-  pruefe('Kein Leerzeichen dabei', !/[  ]/.test(await roherText()), JSON.stringify(await roherText()));
 
-  // ── 4b  Ohne Luecke wird auch keine gemacht ───────────────────────
-  zeilen.push('\n  4b Klick zwischen zwei Absaetze ohne Luft');
-  r = await seite('<p>Erste</p><p id="zwei">Zweite</p>');
-  const zweiVorher = await obenVon('#zwei');
-  await klick(r.l + 300, zweiVorher - 2);
-  await tippe('X');
-  pruefe('Der zweite Absatz bleibt, wo er war',
-    zweiVorher === await obenVon('#zwei'), zweiVorher + ' -> ' + await obenVon('#zwei'));
-
-  // ── 2a  Rechts neben den Text ─────────────────────────────────────
-  zeilen.push('\n  2a Rechts neben geschriebenen Text');
-  r = await seite('<p>Milch</p>');
-  const rechtsVomWort = await js(
-    `(() => { const p = document.querySelector('.j-text p');
-       const rg = document.createRange(); rg.selectNodeContents(p);
-       const rr = rg.getBoundingClientRect();
-       return { r: rr.right, y: rr.top + rr.height / 2 }; })()`);
-  await klick(rechtsVomWort.r + 230, rechtsVomWort.y);
-  await tippe('12');
-  let html = await inhalt();
-  let text = await roherText();
-  pruefe('Ein Abstandshalter statt Leerzeichen', /j-luecke/.test(html), html);
-  pruefe('Kein Leerzeichen im Text', !/[  ]/.test(text), JSON.stringify(text));
-  pruefe('Das Getippte steht dahinter', /12$/.test(text.trim()), JSON.stringify(text));
-  pruefe('Und wirklich dort, wo geklickt wurde', await js(
-    `(() => { const h = document.querySelector('.j-luecke');
-       return Math.abs(h.getBoundingClientRect().right - ${rechtsVomWort.r + 230}) < 14; })()`),
-    html);
-
-  // ── 2b  Links neben den Text ──────────────────────────────────────
-  zeilen.push('\n  2b Links neben eingerueckten Text');
-  r = await seite('<p id="satz" style="margin-left:320px">Hallo</p>');
-  const satzLinksVorher = await linksVon('#satz span, #satz');
-  const satzWortVorher = await js(
-    `(() => { const p = document.querySelector('#satz');
-       const rg = document.createRange(); rg.selectNodeContents(p);
-       return Math.round(rg.getBoundingClientRect().left); })()`);
-  await klick(r.l + 90, (await obenVon('#satz')) + 14);
-  /* Gemessen wird VOR dem Tippen: dass geschriebene Zeichen die Zeile
-     nach rechts schieben, ist richtig so – der blosse Klick darf es nicht. */
-  const satzWortNachKlick = await js(
-    `(() => { const p = document.querySelector('#satz');
-       const t = [...p.childNodes].find(n => n.nodeType === 3 && n.nodeValue.includes('Hallo'));
-       if (!t) return null;
-       const rg = document.createRange(); rg.selectNodeContents(t);
-       return Math.round(rg.getBoundingClientRect().left); })()`);
-  await tippe('Ab');
-  html = await inhalt();
-  text = await roherText();
-  const satzWortNachher = await js(
-    `(() => { const p = document.querySelector('#satz');
-       const t = [...p.childNodes].find(n => n.nodeType === 3 && n.nodeValue.includes('Hallo'));
-       if (!t) return null;
-       const rg = document.createRange(); rg.selectNodeContents(t);
-       return Math.round(rg.getBoundingClientRect().left); })()`);
-
-  pruefe('„Hallo" steht nach dem Klick noch genau dort',
-    satzWortVorher !== null && Math.abs(satzWortNachKlick - satzWortVorher) <= 2,
-    satzWortVorher + ' -> ' + satzWortNachKlick + '  ' + html);
-  pruefe('Und rueckt danach genau um das Geschriebene',
-    satzWortNachher > satzWortNachKlick && satzWortNachher - satzWortNachKlick < 40,
-    satzWortNachKlick + ' -> ' + satzWortNachher);
-  pruefe('Das Getippte steht links davon', /^Ab/.test(text.replace(/\u200b/g, '')),
-    JSON.stringify(text));
-  pruefe('Kein Leerzeichen dabei', !/[  ]/.test(text), JSON.stringify(text));
-  pruefe('Und an der geklickten Stelle', await js(
-    `(() => { const p = document.querySelector('#satz');
-       return Math.abs(p.getBoundingClientRect().left - ${r.l + 90}) < 14; })()`),
-    html);
-
-  // ── 2c  Mitten in einen vorhandenen Abstand ───────────────────────
-  zeilen.push('\n  2c Mitten in einen vorhandenen Abstand');
-  r = await seite('<p>A<span class="j-luecke" contenteditable="false" style="width:300px">\u200b</span>B</p>');
-  const bVorher = await js(
-    `(() => { const p = document.querySelector('.j-text p');
-       const t = [...p.childNodes].find(n => n.nodeType === 3 && n.nodeValue === 'B');
-       const rg = document.createRange(); rg.selectNodeContents(t);
-       return Math.round(rg.getBoundingClientRect().left); })()`);
-  const luecke = await js(
-    `(() => { const h = document.querySelector('.j-luecke').getBoundingClientRect();
-       return { l: h.left, r: h.right, y: h.top + h.height / 2 }; })()`);
-  await klick(luecke.l + (luecke.r - luecke.l) / 2, luecke.y);
-  await tippe('M');
-  html = await inhalt();
-  text = await roherText();
-  pruefe('Aus einem Abstand sind zwei geworden',
-    (html.match(/j-luecke/g) || []).length === 2, html);
-  pruefe('Das Getippte steht dazwischen',
-    /A[^BM]*M[^A]*B/.test(text.replace(/\u200b/g, '')), JSON.stringify(text));
-  pruefe('Kein Leerzeichen dabei', !/[  ]/.test(text), JSON.stringify(text));
-
-  // ── 3  Ein blosser Klick raeumt sich wieder weg ───────────────────
-  zeilen.push('\n  3  Der blosse Klick hinterlaesst nichts');
-  r = await seite('<p id="unten2" style="margin-top:224px">Einkaufsliste</p>');
-  const vorherHtml = await inhalt();
-  const vorherOben = await obenVon('#unten2');
-  await klick(r.l + 200, r.t + 96);
-  pruefe('Der Klick legt etwas an', (await inhalt()) !== vorherHtml);
+  // ── 5  Ein blosser Klick hinterlaesst nichts ──────────────────────
+  zeilen.push('\n  5  Der blosse Klick');
+  const vorher = await inhalt();
+  await klick(feld.l + 600, zeileY(9));
+  pruefe('Der Klick legt eine Stelle zum Schreiben an', (await inhalt()) !== vorher);
   await js(`(() => { document.querySelector('.j-text').blur(); return true; })()`);
-  await new Promise(r2 => setTimeout(r2, 300));
-  /* Verglichen ohne Leerraum und Strichpunkte: das Zuruecksetzen schreibt
-     den Stil neu, und der Browser schreibt ihn dabei in seiner eigenen
-     Schreibweise ("margin-top: 224px;"). Gemeint ist derselbe Wert. */
-  const gleichArtig = (s) => String(s).replace(/[\s;]+/g, '');
-  pruefe('Ohne Tippen ist es danach wieder weg',
-    gleichArtig(await inhalt()) === gleichArtig(vorherHtml),
-    'vorher: ' + JSON.stringify(vorherHtml) + '  nachher: ' + JSON.stringify(await inhalt()));
-  pruefe('Und der Abstand darunter ist wiederhergestellt',
-    vorherOben === await obenVon('#unten2'), vorherOben + ' -> ' + await obenVon('#unten2'));
+  await new Promise(r => setTimeout(r, 300));
+  pruefe('Ohne Tippen ist sie danach wieder weg', (await inhalt()) === vorher, await inhalt());
+
+  // ── 6  Was der Rest der App daraus macht ──────────────────────────
+  zeilen.push('\n  6  Sanitizer und Word-Export');
+  const gereinigt = await js(
+    `sanitizePageHtml('<p class="j-frei" style="left:120px;top:83px;color:#c04040">x</p>'
+                    + '<p class="j-frei" style="left:9999999px;top:0px">y</p>')`);
+  pruefe('Die Lage kommt durch', /left:\s*120px/.test(gereinigt) && /top:\s*83px/.test(gereinigt), gereinigt);
+  pruefe('Die Klasse auch', /j-frei/.test(gereinigt), gereinigt);
+  pruefe('Die Farbe bleibt', /color/.test(gereinigt), gereinigt);
+  pruefe('Ein unsinniges Mass faellt weg', !/9999999/.test(gereinigt), gereinigt);
+
+  const docx = await js(
+    `(() => { const p = htmlToParagraphs('<p class="j-frei" style="left:120px;top:83px">x</p>');
+       return JSON.stringify(p[0] && { einzugPx: p[0].einzugPx, obenPx: p[0].obenPx }); })()`)
+    .catch(() => null);
+  if (docx) {
+    pruefe('Word bekommt den Einzug des Klicks', /"einzugPx":120/.test(docx), docx);
+  }
 
   fertig(fehl ? 1 : 0);
  } catch (err) {
-  zeilen.push('  ABBRUCH: ' + (err && err.message));
+  zeilen.push('  ABBRUCH: ' + (err && err.stack));
   fehl++;
   fertig(2);
  }

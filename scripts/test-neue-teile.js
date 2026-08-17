@@ -420,16 +420,14 @@ console.log('\nAbstand statt Leerzeichen\n');
   check('Und keine leeren Zeilen zum Auffuellen',
     !/while \(lines\.length <= targetLine\)/.test(textQuelle), true);
 
-  check('Stattdessen ein Absatz mit Abstand',
-    /function _neuerAbsatz/.test(textQuelle)
-    && /style\.marginLeft/.test(textQuelle) && /style\.marginTop/.test(textQuelle), true);
-  check('Und ein Abstandshalter fuer die Mitte der Zeile',
-    /function _neueLuecke/.test(textQuelle) && /j-luecke/.test(textQuelle), true);
+  check('Stattdessen ein Absatz mit einer Lage auf dem Blatt',
+    /function _freierAbsatz/.test(textQuelle)
+    && /p\.style\.left/.test(textQuelle) && /p\.style\.top/.test(textQuelle), true);
 
-  /* Der Abstand nach oben rastet auf ganze Zeilen ein, sonst saesse der
+  /* Die Lage rastet senkrecht auf ganze Zeilen ein, sonst saesse der
      Text zwischen den Linien des Papiers. */
-  check('Der Abstand nach oben rastet auf ganze Zeilen ein',
-    /Math\.round\(pxBelow \/ Math\.max\(12, lh\)\)/.test(textQuelle), true);
+  check('Senkrecht rastet sie auf ganze Zeilen ein',
+    /Math\.floor\(\(obenRoh - pt\) \/ lh\)/.test(textQuelle), true);
 
   /* Ein blosser Klick darf nichts hinterlassen (Stufe C). */
   check('Angelegtes gilt erst als vorlaeufig',
@@ -447,7 +445,10 @@ console.log('\nAbstand statt Leerzeichen\n');
   check('Der Sanitizer laesst Einzug und Abstand durch',
     /el\.style\.marginLeft = links/.test(sauberQuelle)
     && /el\.style\.marginTop = oben/.test(sauberQuelle), true);
-  check('Und nur als geprueftes Mass',
+  check('Und die Lage eines freien Absatzes',
+    /el\.style\.left = vonLinks/.test(sauberQuelle)
+    && /el\.style\.top = vonOben/.test(sauberQuelle), true);
+  check('Nur als geprueftes Mass',
     /const istAbstand = \(wert\) => \/\^\\d\{1,4\}/.test(sauberQuelle), true);
   check('Der Abstandshalter bleibt ein Stueck',
     /name === 'contenteditable'/.test(sauberQuelle), true);
@@ -458,6 +459,9 @@ console.log('\nAbstand statt Leerzeichen\n');
     /w:ind w:left="\$\{klickEinzug\}"/.test(docxQuelle), true);
   check('Und einen echten Abstand nach oben',
     /w:spacing w:before="\$\{oben\}"/.test(docxQuelle), true);
+  check('Auch fuer einen frei stehenden Absatz',
+    /pxAusStil\(child, 'left'\)/.test(docxQuelle)
+    && /letzteFreiUnten/.test(docxQuelle), true);
 
   /* Das Nullbreiten-Leerzeichen haelt den Halter am Leben, ist aber
      kein Inhalt: gezaehlt gehoert es nicht. */
@@ -489,26 +493,40 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
   check('Und nicht mehr ueber den ganzen Inhalt',
     !/range\.selectNodeContents\(textDiv\);\s*\n\s*const rects/.test(eingabeQuelle), true);
 
-  /* 2. Links neben eingerueckten Text: der Absatz rueckt nach, ein
-     Halter haelt das Vorhandene an seinem Platz. */
-  check('Links neben den Text weicht der Einzug',
-    /function _einzugWeichtNachLinks/.test(textQuelle), true);
-  check('Und ein Halter haelt das Geschriebene fest',
-    /_merkeZurueck\(halter, block, 'marginLeft'/.test(textQuelle), true);
+  /* 2. Der angeklickte Absatz steht NEBEN dem Fluss und nicht darin –
+     nur so verschiebt er nichts, was schon dasteht. */
+  check('Der angeklickte Absatz steht frei auf dem Blatt',
+    /function _freierAbsatz/.test(textQuelle)
+    && /p\.className = 'j-frei'/.test(textQuelle), true);
+  check('Und die Anzeige stellt ihn auch so',
+    /\.j-text p\.j-frei \{\s*\n\s*position: absolute/.test(lies('src', 'css', 'pages.css')), true);
+  check('Er wird nie mehr in den Fluss eingehaengt',
+    !/insertAdjacentElement\('beforebegin'/.test(textQuelle), true);
 
-  /* 3. Mitten in einen vorhandenen Abstand: der wird geteilt. */
+  /* 3. Mitten in einen Abstand aus einem aelteren Heft: der wird
+     geteilt, statt die Marke an seinen Rand springen zu lassen. */
   check('Ein vorhandener Abstand laesst sich teilen',
     /function _teileLuecke/.test(textQuelle)
     && /function _lueckeUnter/.test(textQuelle), true);
 
-  /* 4. Zwischen zwei Absaetzen wird kein Platz geschaffen, sondern
-     genommen – sonst rutscht alles darunter eine Zeile tiefer. */
-  check('Der neue Absatz nimmt seinen Platz von unten',
-    /nach\.style\.marginTop = Math\.max\(0, altObenPx - obenPx - lhSeite\)/.test(textQuelle), true);
-  check('Ohne Luft entsteht gar kein Absatz',
-    /Kein Platz: dann wird auch keiner geschaffen/.test(textQuelle), true);
-  check('Und der blosse Klick nimmt beides zurueck',
-    /function _nimmZurueck/.test(textQuelle)
+  /* 4. Der Browser darf die Marke danach nicht noch einmal setzen. */
+  check('Der Browser setzt die Marke nicht noch einmal',
+    /addEventListener\('mousedown'/.test(eingabeQuelle)
+    && /if \(!isFreeEditorAreaClick\(e\.clientX, e\.clientY\)\) return;\s*\n\s*e\.preventDefault\(\)/.test(eingabeQuelle), true);
+  check('Und von Hand gesetzt wird nur auf freier Flaeche',
+    /placeCaretAnywhere\(textDiv, clientX, clientY, forceManual, page\)/.test(eingabeQuelle), true);
+
+  /* 5. Der Umbruch teilt einen freien Absatz nicht – sonst saessen
+     beide Haelften auf derselben Stelle. */
+  check('Der Umbruch laesst den freien Absatz wachsen',
+    /imFreienAbsatz\(textDiv\)/.test(lies('src', 'app.js'))
+    && /insertLineBreak/.test(lies('src', 'app.js')), true);
+  check('Und zwei freie Absaetze werden auseinandergerueckt',
+    /function richteFreieAbsaetze/.test(textQuelle), true);
+
+  /* 6. Ein blosser Klick hinterlaesst nichts. */
+  check('Der blosse Klick raeumt sich wieder weg',
+    /function raeumeVorlaeufiges/.test(textQuelle)
     && /_nimmZurueck\(el\);\s*\n\s*el\.remove\(\)/.test(textQuelle), true);
 }
 

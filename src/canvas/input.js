@@ -53,8 +53,17 @@ function attachInput(canvas, textDiv, objLayer, page) {
       return;
     }
 
-    const richMode = !isPlainTextEditable(textDiv);
-    placeCaretAnywhere(textDiv, clientX, clientY, forceManual || richMode, page);
+    /* >>> Weitergereicht wird jetzt die ehrliche Auskunft <<<
+       Hier stand `forceManual || richMode`: auf einer Seite mit Absätzen
+       wurde die Marke IMMER von Hand gesetzt, auch mitten in einem Wort.
+       placeCaretAnywhere musste sich die Stelle im Wort dann aus
+       Zeilenhöhe und Zeichenbreite ausrechnen – und rechnete sie bei
+       jeder Schrift, die nicht gleichmässig breit ist, daneben.
+
+       Trifft der Klick ein Zeichen, weiss der Browser die Stelle genau.
+       Von Hand gesetzt wird nur, was auf FREIER Fläche liegt – und dort
+       gibt es kein Zeichen, das man verfehlen könnte. */
+    placeCaretAnywhere(textDiv, clientX, clientY, forceManual, page);
     setActivePg(page.id);
   }
 
@@ -880,6 +889,61 @@ function attachInput(canvas, textDiv, objLayer, page) {
     page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
     if (!abgebrochen.isEraser && window.Collab) Collab.noteStroke(page.id, abgebrochen);
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     DER BROWSER DARF DIE MARKE NICHT NOCH EINMAL SETZEN
+
+     Nach 'pointerdown' kommt 'mousedown', und dessen Voreinstellung ist:
+     Marke an die nächstgelegene Textstelle. Sie lief also JEDES MAL nach
+     unserer und überschrieb sie.
+
+     Aufgefallen ist das erst mit dem frei stehenden Absatz: der ist im
+     Augenblick des Klicks noch leer und damit null Pixel breit, der
+     Treffertest des Browsers geht durch ihn hindurch und landet beim
+     nächsten geschriebenen Wort. Getippt wurde dann dort – „ich klicke
+     zwischen die Wörter und lande am Anfang des anderen".
+
+     Nur auf freier Fläche. Wer auf ein Zeichen klickt oder über Text
+     zieht, soll den Browser weiter machen lassen: Markieren, Doppelklick
+     aufs Wort, Ziehen über mehrere Zeilen kommen alle von dort.
+     ══════════════════════════════════════════════════════════════════ */
+  textDiv.addEventListener('mousedown', e => {
+    if (S.mode !== 'cursor' || S.readOnly || e.button !== 0) return;
+    if (!textDiv.contains(e.target)) return;
+    if (!isFreeEditorAreaClick(e.clientX, e.clientY)) return;
+    e.preventDefault();
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     MIT DEM FINGER GILT DASSELBE VERSPRECHEN
+
+     In der Zeigerstellung liegt das Zeichenblatt auf `pointer-events:
+     none`, ein Fingertipp geht also unmittelbar an den Text. Der Browser
+     setzt die Marke dann an das nächstgelegene Zeichen – auf einer fast
+     leeren Seite ist das irgendwo weit weg von der Stelle, auf die
+     jemand getippt hat.
+
+     Ein Tipp auf freie Fläche setzt deshalb auch hier die Stelle selbst.
+     Ein SCHIEBEN nicht: das ist Scrollen, und wer scrollt, will nichts
+     schreiben. Deshalb wird beim Aufsetzen gemerkt und erst beim Abheben
+     entschieden. */
+  let tippAufFrei = null;
+
+  textDiv.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || S.mode !== 'cursor' || S.readOnly) { tippAufFrei = null; return; }
+    tippAufFrei = { x: e.clientX, y: e.clientY, frei: isFreeEditorAreaClick(e.clientX, e.clientY) };
+  }, true);
+
+  textDiv.addEventListener('pointercancel', () => { tippAufFrei = null; });
+
+  textDiv.addEventListener('pointerup', e => {
+    const anfang = tippAufFrei;
+    tippAufFrei = null;
+    if (!anfang || !anfang.frei) return;
+    if (Math.abs(e.clientX - anfang.x) > TIPP_WEG
+        || Math.abs(e.clientY - anfang.y) > TIPP_WEG) return;   // geschoben
+    activateTextEditingAt(e.clientX, e.clientY, true);
   });
 
   textDiv.addEventListener('pointerdown', e => {
