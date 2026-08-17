@@ -72,25 +72,61 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
 
     try {
-      const range = document.createRange();
-      range.selectNodeContents(textDiv);
-      const rects = Array.from(range.getClientRects());
+      const rects = beschriebeneKaesten();
+      if (!rects.length) return true;
 
-      if (!rects.length) {
-        return true;
-      }
-
-      const hitsVisibleText = rects.some(rc => (
+      const trifftText = rects.some(rc => (
         rc.width > 1 &&
         clientX >= rc.left - 2 &&
         clientX <= rc.right + 2 &&
         clientY >= rc.top - 1 &&
         clientY <= rc.bottom + 1
       ));
-      return !hitsVisibleText;
+      return !trifftText;
     } catch (err) {
       return true;
     }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WO STEHEN AUF DIESER SEITE WIRKLICH ZEICHEN?
+
+     >>> Warum nicht mehr über den ganzen Inhalt <<<
+     Hier stand ein Bereich über den gesamten Inhalt von .j-text und
+     dessen getClientRects(). Für einen ABSATZ liefert das aber den
+     ganzen Kasten – über die volle Breite der Seite, auch dort, wo
+     hinter dem letzten Wort nichts mehr steht.
+
+     Damit galt jeder Klick auf der Höhe einer beschriebenen Zeile als
+     Klick auf Text, und die Marke ging an das nächstgelegene Zeichen –
+     an den Anfang oder ans Ende der Zeile. Genau so wurde es gemeldet:
+     „sobald etwas geschrieben wurde, kann man nicht mehr hin, wo man
+     möchte."
+
+     Gefragt wird deshalb Textknoten für Textknoten. Deren Rechtecke
+     liegen eng um die Zeichen; rechts und links davon ist wieder freie
+     Fläche, und dort setzt placeCaretAnywhere die Marke genau dorthin,
+     wo gezeigt wurde.
+
+     Bilder, Tabellen und Trennlinien tragen keinen Text, sind aber
+     trotzdem etwas: sie zählen mit ihrem Kasten mit.
+     ══════════════════════════════════════════════════════════════════ */
+  function beschriebeneKaesten() {
+    const kaesten = [];
+    const lauf = document.createTreeWalker(textDiv,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    const bereich = document.createRange();
+
+    for (let n = lauf.nextNode(); n; n = lauf.nextNode()) {
+      if (n.nodeType === Node.TEXT_NODE) {
+        if (!n.nodeValue || !n.nodeValue.length) continue;
+        bereich.selectNodeContents(n);
+        for (const rc of bereich.getClientRects()) kaesten.push(rc);
+      } else if (n.tagName === 'IMG' || n.tagName === 'TABLE' || n.tagName === 'HR') {
+        kaesten.push(n.getBoundingClientRect());
+      }
+    }
+    return kaesten;
   }
 
   /**

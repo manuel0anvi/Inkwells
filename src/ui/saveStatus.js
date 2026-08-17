@@ -88,6 +88,27 @@
     const nb = getNb(S.activeNbId);
     if (!nb) { toast(t('notebookNotFound'), true); return false; }
 
+    /* ── Ein fremdes Dokument geht in seinen Raum, nicht auf die Platte ──
+       Es hat keine Datei und bekommt keine (core/data.js). Von Hand
+       speichern heisst hier also: das, was noch aussteht, jetzt in den
+       Raum schreiben, statt vier Sekunden zu warten. Vorher lief der
+       Weg für die eigene Datei an und meldete am Ende „gespeichert" –
+       geschrieben worden war nichts. */
+    if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) {
+      try {
+        const ok = (typeof window.forceSharedDocSave === 'function')
+          ? await window.forceSharedDocSave()
+          : false;
+        // Ging nichts hinaus, hat saveOpenDocument den Grund schon gesagt
+        if (ok) toast(t('notebookSaved'));
+        if (window.updateSaveStatus) window.updateSaveStatus();
+        return true;
+      } catch (err) {
+        console.error('[SaveStatus] Geteiltes Dokument nicht gesichert:', err);
+        return false;
+      }
+    }
+
     try {
       const result = await AutoSave.saveNow(S.activeNbId);
       if (result && result.success) {

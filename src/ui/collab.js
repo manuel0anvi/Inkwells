@@ -1308,9 +1308,14 @@
    * und die darauf folgende – aber nur, solange sie auch wirklich tippt.
    */
   function lockSpanFor(pageId, textDiv, offset) {
-    if (!canWrite || S.readOnly) return null;
-    if (!schreibtGerade(pageId)) return null;
-    if (typeof flatTextOf !== 'function') return null;
+    /* Bei jedem dieser Abbrüche gehört der gemerkte Anspruch weg und
+       nicht bloss abgelaufen: er ist die Vollmacht über die eigene Zeile
+       (eigeneSperreDeckt). Blieb er nach dem Aufhören liegen, wirkte er
+       noch bis zu zehn Sekunden weiter – und deckte dabei womöglich eine
+       Zeile, in die man inzwischen ganz woanders geklickt hatte. */
+    if (!canWrite || S.readOnly) { eigeneSperre.delete(pageId); return null; }
+    if (!schreibtGerade(pageId)) { eigeneSperre.delete(pageId); return null; }
+    if (typeof flatTextOf !== 'function') { eigeneSperre.delete(pageId); return null; }
 
     let span = null;
     try { span = visualLineSpan(textDiv, offset); } catch (err) { return null; }
@@ -1352,7 +1357,78 @@
     const eigen = eigeneSperre.get(pageId);
     if (!eigen) return false;
     if (Date.now() - eigen.at > LOCK_TTL_MS) return false;
-    return stelle >= eigen.from && stelle <= eigen.to;
+    if (stelle < eigen.from || stelle > eigen.to) return false;
+
+    /* ── Und die Zeile, in der ein anderer WIRKLICH sitzt, nie ────────
+       Der eigene Anspruch umfasst die eigene Zeile und die nächste. Steht
+       in dieser nächsten inzwischen jemand anderes und schreibt dort, ist
+       sie seine – der eigene Anspruch von vorhin gilt dort nicht mehr.
+
+       Ohne diese Frage liess sich die Sperre aushebeln, und genau so ist
+       es gemeldet worden: „öfter auf die gesperrte Zeile drücken und
+       dabei tippen, irgendwann geht es doch". Der Weg dahin:
+
+         B schreibt in Zeile 4, sein Anspruch reicht bis Zeile 5.
+         A schreibt in Zeile 5 – die ist gesperrt.
+         B klickt in Zeile 5. Sein eigener Anspruch deckt sie ja noch,
+         also liess ihn trifftSperrband durch, editBlockedBy liess ihn
+         schreiben, und der Takt liess seine Marke stehen.
+
+       Die Zusatzzeile ist eine Höflichkeit (siehe ohneFremdeStellen) –
+       sie endet, sobald sie jemandem gehört. Gefragt wird nach der
+       Zeile, in der die fremde Marke steht, NICHT nach seinem ganzen
+       Sperrbereich: dessen Zusatzzeile ist genauso wenig ein Recht, und
+       sie über die eigene zu legen war der Fehler von letztem Mal. */
+    return !fremdeZeileDeckt(pageId, stelle);
+  }
+
+  /* Kurzgedächtnis für fremdeZeile(). Die Frage kommt bei jedem Anschlag,
+     und jede Antwort kostet ein Dutzend Messungen im Text. 300 ms sind
+     kurz genug, dass sie beim Tippen des anderen nicht veraltet – seine
+     Meldungen kommen ohnehin seltener. */
+  const zeilenMerk = new Map();
+  const ZEILEN_MERK_MS = 300;
+
+  /**
+   * Die Zeile, in der die Marke dieser Person steht – ohne die
+   * Zusatzzeile ihres Anspruchs.
+   */
+  function fremdeZeile(person, textDiv) {
+    let stelle = Number(person.offset);
+    if (!Number.isFinite(stelle) || stelle < 0) stelle = Number(person.lockFrom);
+    if (!Number.isFinite(stelle) || stelle < 0) return null;
+
+    const jetzt = Date.now();
+    const schluessel = (person.uid || '?') + ':' + stelle;
+    const alt = zeilenMerk.get(schluessel);
+    if (alt && jetzt - alt.at < ZEILEN_MERK_MS) return alt.zeile;
+
+    let zeile = { from: stelle, to: stelle };
+    try {
+      const gemessen = visualLineSpan(textDiv, stelle, 0);
+      if (gemessen) zeile = gemessen;
+    } catch (err) { /* dann gilt wenigstens die Stelle selbst */ }
+
+    // Damit die Karte bei langen Sitzungen nicht wächst
+    if (zeilenMerk.size > 64) zeilenMerk.clear();
+    zeilenMerk.set(schluessel, { at: jetzt, zeile });
+    return zeile;
+  }
+
+  /** Liegt diese Stelle in der Zeile eines anderen, der gerade schreibt? */
+  function fremdeZeileDeckt(pageId, stelle) {
+    const sperren = activeLocks(pageId);
+    if (!sperren.length) return false;
+
+    const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
+    const textDiv = pgEl ? pgEl.querySelector('.j-text') : null;
+    if (!textDiv) return false;
+
+    for (const person of sperren) {
+      const zeile = fremdeZeile(person, textDiv);
+      if (zeile && stelle >= zeile.from && stelle <= zeile.to) return true;
+    }
+    return false;
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -1702,10 +1778,17 @@
    * der gemeldete Bereich: hielt sich die Anzeige nicht daran, sah es
    * aus, als sei etwas gesperrt, was niemand anfasst.
    */
-  function visualLineSpan(textDiv, offset) {
+  /**
+   * @param {number} [zeilenDanach=1] Wie viele Zeilen NACH der eigenen noch
+   *   dazugehören. 1 ist der Anspruch beim Schreiben (eigene Zeile plus die
+   *   nächste), 0 fragt nach der blossen Zeile, in der die Stelle liegt –
+   *   das braucht ohneFremdeStellen, um die Zeile eines anderen ganz
+   *   auszusparen und nicht nur den Punkt, an dem seine Marke gerade steht.
+   */
+  function visualLineSpan(textDiv, offset, zeilenDanach = 1) {
     const text = flatTextOf(textDiv);
     // Nie über den Absatz hinaus: ein Umbruch beendet die Sperre ohnehin
-    const grenze = flatLineSpan(text, offset, 1);
+    const grenze = flatLineSpan(text, offset, zeilenDanach);
 
     const caret = caretRectAt(textDiv, offset, text);
     if (!caret) return null;
@@ -1737,10 +1820,11 @@
        Zeilenhöhe tiefer sitzt. Gibt es keine nächste Zeile, bleibt es
        beim Ende der eigenen. */
     let lo2 = offset, hi2 = grenze.to;
+    const untenBis = mitte + lh * (0.5 + zeilenDanach);
     while (lo2 < hi2) {
       const mid = (lo2 + hi2 + 1) >> 1;
       const m = zeilenMitte(mid);
-      if (m !== null && m < mitte + lh * 1.5) lo2 = mid;
+      if (m !== null && m < untenBis) lo2 = mid;
       else hi2 = mid - 1;
     }
     const bis = lo2;

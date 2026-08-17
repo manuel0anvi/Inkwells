@@ -23,6 +23,7 @@
     "test:docx": "electron scripts/test-docx-import",
     "test:touch": "electron scripts/test-touch",
     "test:caret": "electron scripts/test-caret-geometry",
+    "test:klick": "electron scripts/test-klick",
     "test:lasso": "electron scripts/test-lasso",
     "test:stift": "electron scripts/test-stift",
     "test:live": "electron scripts/test-collab-live"

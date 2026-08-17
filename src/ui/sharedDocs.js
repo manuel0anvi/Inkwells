@@ -612,6 +612,8 @@
     baseline = fingerprint;
     crdtState = crdt || {};
     dirty = false;
+    // Ein neues Dokument, ein neuer Versuch – siehe keinSchreibrecht
+    keinSchreibrecht = false;
 
     // Als geteiltes Dokument kennzeichnen, BEVOR es in S.notebooks landet:
     // sonst greifen die Bremsen in fileManager/registry/cloudSync nicht.
@@ -1246,20 +1248,43 @@
    * wieder aus.
    */
   window.forceSharedDocSave = async function forceSharedDocSave() {
-    if (!live || S.readOnly) return;
+    if (!live || S.readOnly) return false;
 
     // Auf einen laufenden Vorgang warten – der kennt den jetzigen Stand nicht
     for (let guard = 0; inFlight && guard < 20; guard++) {
       try { await inFlight; } catch (err) { /* der nächste Versuch zählt */ }
     }
-    if (!live || S.readOnly) return;
+    if (!live || S.readOnly) return false;
 
     dirty = true;
-    await startSave();
+    return await startSave();
   };
 
+  /* ══════════════════════════════════════════════════════════════════
+     WENN DAS RECHT FEHLT, WIRD NICHT WEITER GEKLOPFT
+
+     Ein abgewiesener Schreibversuch setzte `dirty` zurück auf wahr. Die
+     nächste Änderung stiess damit sofort den nächsten an, der genauso
+     abgewiesen wurde – alle vier Sekunden eine rote Meldung, und keine
+     davon sagte etwas Neues.
+
+     Fehlt das Recht (die Rolle wurde entzogen, oder die Freigabe gilt
+     nur zum Lesen), ändert sich daran auch beim zwanzigsten Versuch
+     nichts. Dann wird einmal gesagt, warum, und danach Ruhe gegeben.
+     Ein Netzfehler ist etwas anderes: der geht vorbei, dort bleibt es
+     beim erneuten Versuch.
+     ══════════════════════════════════════════════════════════════════ */
+  let keinSchreibrecht = false;
+
+  function rechtFehlt(err) {
+    const msg = String(err?.message || '');
+    if (msg === 'NOT_ALLOWED') return true;
+    return /permission[-_ ]denied/i.test(msg) || err?.code === 'permission-denied';
+  }
+
+  /** @returns {boolean} ob wirklich geschrieben wurde */
   async function saveOpenDocument() {
-    if (saving || !live || S.readOnly || !dirty) return;
+    if (saving || !live || S.readOnly || !dirty || keinSchreibrecht) return false;
     const open = S.sharedDoc || { docId: live.docId };
     const nb = getNb(live.nbId);
     if (!nb) return;
@@ -1331,11 +1356,18 @@
       open.revision = result.revision;
       outdatedWarned = false;
       if (result.written) console.log('[SharedDocs]', result.written, 'Teil(e) geschrieben');
+      return true;
     } catch (err) {
-      // Nicht angekommen heißt: es steht weiterhin etwas aus.
-      if (live === session) dirty = true;
+      /* Nicht angekommen heißt: es steht weiterhin etwas aus – ausser
+         das Recht fehlt, dann bringt kein weiterer Versuch etwas. */
+      if (live === session && !rechtFehlt(err)) dirty = true;
 
-      if (err?.message === 'DOC_OUTDATED') {
+      if (rechtFehlt(err)) {
+        keinSchreibrecht = true;
+        clearTimeout(saveTimer);
+        console.warn('[SharedDocs] Kein Schreibrecht – es wird nicht weiter versucht');
+        toast(t('sharedNoRight'), true);
+      } else if (err?.message === 'DOC_OUTDATED') {
         // Nur noch bei Freigaben aus der Zeit vor dem zerlegten Modell.
         if (!outdatedWarned) {
           outdatedWarned = true;
@@ -1348,6 +1380,7 @@
     } finally {
       saving = false;
     }
+    return false;
   }
 
   /* Der Knopf „Freigabe verlassen" in der Leiste über dem Dokument ist
@@ -1440,6 +1473,7 @@
     baseline = null;
     crdtState = {};
     dirty = false;
+    keinSchreibrecht = false;
   }
 
   /**
