@@ -43,7 +43,7 @@ const MAX_REDIRECTS = 5;
 
 function fetchJson(url, rest = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Inkwell-Updater' } }, res => {
+    https.get(url, { headers: { 'User-Agent': 'Inkwells-Updater' } }, res => {
       let data = '';
       if (res.statusCode === 301 || res.statusCode === 302) {
         res.resume();   // sonst bleibt die Verbindung offen
@@ -163,8 +163,8 @@ async function getLatestGitHubRelease() {
 
 let win;
 let pendingFilePath = null; // File to open when app is ready
-let pendingDeepLink = null; // Protocol deep link (inkwell://) received before renderer ready
-// Freigabe-Link (inkwell://share/<linkId>), der vor dem Fensterstart ankam
+let pendingDeepLink = null; // Protocol deep link (inkwells://) received before renderer ready
+// Freigabe-Link (inkwells://share/<linkId>), der vor dem Fensterstart ankam
 let pendingShareLink = null;
 
 /* Bis wann ein Anmeldefenster STILL bleiben soll. Als Zeitpunkt und nicht
@@ -175,7 +175,7 @@ const SILENT_AUTH_MS = 10000;
 let stilleAnmeldungBis = 0;
 
 /* ── Zweites Exemplar mit eigenen Daten ───────────────────────────────
-   Inkwell läuft normalerweise nur einmal: ein zweiter Start meldet sich
+   Inkwells läuft normalerweise nur einmal: ein zweiter Start meldet sich
    beim ersten und beendet sich selbst. Das ist richtig so – zwei Fenster
    auf denselben Dateien wären eine Fehlerquelle.
 
@@ -183,12 +183,12 @@ let stilleAnmeldungBis = 0;
    Exemplare nebeneinander, mit ZWEI verschiedenen Konten. Dafür gibt es
    ein eigenes Profil:
 
-       Inkwell.exe --profile=zweite
-       set INKWELL_PROFILE=zweite && Inkwell.exe
+       Inkwells.exe --profile=zweite
+       set INKWELLS_PROFILE=zweite && Inkwells.exe
        npm start -- --profile=zweite
 
    Ein Profil bekommt einen eigenen Ordner unter
-   %LOCALAPPDATA%\Inkwell\Profiles\<name> – eigene Einstellungen, eigene
+   %LOCALAPPDATA%\Inkwells\Profiles\<name> – eigene Einstellungen, eigene
    Anmeldung, eigene Heft-Übersicht. Damit ist es für Firebase eine
    andere Person, und man kann sich selbst etwas freigeben.
 
@@ -197,7 +197,7 @@ let stilleAnmeldungBis = 0;
    ─────────────────────────────────────────────────────────────────── */
 function readProfileName() {
   const fromArgs = process.argv.find(a => typeof a === 'string' && a.startsWith('--profile='));
-  const raw = fromArgs ? fromArgs.slice('--profile='.length) : (process.env.INKWELL_PROFILE || '');
+  const raw = fromArgs ? fromArgs.slice('--profile='.length) : (process.env.INKWELLS_PROFILE || '');
   // Der Name wird ein Ordnername – nur Unverfängliches durchlassen
   return String(raw).trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
 }
@@ -232,7 +232,7 @@ function getFileFromArgs(args) {
 pendingFilePath = getFileFromArgs(process.argv);
 // Capture any protocol deep-link passed on startup (Windows: first run with protocol)
 for (const a of process.argv) {
-  if (typeof a === 'string' && a.startsWith('inkwell://')) {
+  if (typeof a === 'string' && a.startsWith('inkwells://')) {
     pendingDeepLink = a;
     console.log('[main] Captured startup deep-link:', pendingDeepLink);
     break;
@@ -248,12 +248,135 @@ function ensureWritableDir(dirPath) {
 /** Wo dieses Exemplar seine Daten ablegt. Ohne Profil wie eh und je. */
 function storageRootFor(profile) {
   const localRoot = process.env.LOCALAPPDATA || app.getPath('temp');
-  const base = path.join(localRoot, 'Inkwell');
+  const base = path.join(localRoot, 'Inkwells');
   return profile ? path.join(base, 'Profiles', profile) : base;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   UMZUG VON "Inkwell" NACH "Inkwells"
+
+   Die App hiess bis 1.1.1 Inkwell und legte ihre Sachen unter
+   %LOCALAPPDATA%\Inkwell ab. Wer aktualisiert, haette danach in einen
+   leeren Ordner geschaut: Hefte, Einstellungen und Anmeldung waeren
+   scheinbar weg - in Wahrheit nur unerreichbar.
+
+   Deshalb wird EINMAL umgezogen, bevor irgendetwas den Ordner anfasst.
+
+   >>> Warum umbenennen und nicht kopieren <<<
+   Ein Kopiervorgang laesst zwei Staende nebeneinander liegen. Wer danach
+   einmal die alte Fassung startet, schreibt in den alten - und beim
+   naechsten Start der neuen ist diese Aenderung nicht da. Umbenennen
+   kennt diesen Zustand nicht.
+
+   >>> Warum bei Misserfolg nichts geloescht wird <<<
+   Schlaegt der Umzug fehl (Ordner offen, Virenwaechter, volle Platte),
+   bleibt der alte Stand unangetastet liegen. Die App startet dann mit
+   leerem Ordner - aergerlich, aber nichts ist verloren, und ein zweiter
+   Versuch beim naechsten Start kann noch gelingen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Benennt eine Datei um, wenn es sie gibt. Fehler sind nicht schlimm. */
+function benenneUm(vonPfad, nachPfad) {
+  try {
+    if (fs.existsSync(vonPfad) && !fs.existsSync(nachPfad)) {
+      fs.renameSync(vonPfad, nachPfad);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Umzug] ' + path.basename(vonPfad) + ':', err.message);
+  }
+  return false;
+}
+
+/**
+ * Holt den Datenordner der Fassungen bis 1.1.1 herueber.
+ * Tut nichts, wenn es den neuen Ordner schon gibt oder den alten nicht.
+ */
+function migriereAltenDatenordner() {
+  if (process.platform !== 'win32') return;
+
+  const localRoot = process.env.LOCALAPPDATA;
+  if (!localRoot) return;
+
+  const alt = path.join(localRoot, 'Inkwell');
+  const neu = path.join(localRoot, 'Inkwells');
+
+  try {
+    if (fs.existsSync(neu)) return;      // schon umgezogen
+    if (!fs.existsSync(alt)) return;     // nichts da, frische Installation
+
+    fs.renameSync(alt, neu);
+    console.log('[Umzug] Datenordner Inkwell -> Inkwells');
+  } catch (err) {
+    // Nichts loeschen, nichts anlegen - beim naechsten Start neu versuchen
+    console.error('[Umzug] Datenordner blieb liegen:', err.message);
+    return;
+  }
+
+  /* Die Dateien darin tragen den Namen ebenfalls. Sie liegen im
+     UserData-Ordner des Hauptexemplars UND in jedem Profil darunter. */
+  const ordner = [path.join(neu, 'UserData')];
+  try {
+    const profile = path.join(neu, 'Profiles');
+    if (fs.existsSync(profile)) {
+      for (const name of fs.readdirSync(profile)) {
+        ordner.push(path.join(profile, name, 'UserData'));
+      }
+    }
+  } catch (err) { /* dann eben nur das Hauptexemplar */ }
+
+  let umbenannt = 0;
+  for (const userData of ordner) {
+    for (const kurz of ['settings', 'registry', 'papierkorb']) {
+      if (benenneUm(path.join(userData, 'inkwell-' + kurz + '.json'),
+                    path.join(userData, 'inkwells-' + kurz + '.json'))) umbenannt++;
+    }
+  }
+  if (umbenannt) console.log('[Umzug]', umbenannt, 'Dateien umbenannt');
+
+  /* Zum Schluss die Pfade IN den Dateien. saveLocation und die Eintraege
+     der Uebersicht stehen dort absolut; zeigt einer davon in den alten
+     Ordner, findet die App die Hefte sonst nicht mehr. */
+  for (const userData of ordner) {
+    for (const datei of ['inkwells-settings.json', 'inkwells-registry.json']) {
+      const voll = path.join(userData, datei);
+      try {
+        if (!fs.existsSync(voll)) continue;
+        const roh = fs.readFileSync(voll, 'utf-8');
+
+        /* Nur den Ordnernamen tauschen, nicht jedes Vorkommen von "Inkwell".
+
+           >>> Und zwar in BEIDEN Schreibweisen <<<
+           In der JSON-Datei steht der Pfad mit verdoppelten Trennzeichen
+           ("C:\\\\Users\\\\...\\\\Inkwell"), weil JSON den Backslash
+           maskiert. Ein Vergleich mit dem einfachen Pfad findet dort gar
+           nichts - der Eintrag bliebe stehen und die Uebersicht zeigte
+           auf einen Ordner, den es nicht mehr gibt. Genau das hat der
+           Test in scripts/test-umzug.js aufgedeckt.
+
+           Erst die maskierte Form, dann die einfache: nach dem ersten
+           Durchgang kann die einfache nicht mehr versehentlich greifen. */
+        const maskiert = (p) => JSON.stringify(p).slice(1, -1);
+        const neuRoh = roh
+          .split(maskiert(alt)).join(maskiert(neu))
+          .split(alt).join(neu);
+        if (neuRoh !== roh) {
+          fs.writeFileSync(voll, neuRoh, 'utf-8');
+          console.log('[Umzug] Pfade angepasst in', datei);
+        }
+      } catch (err) {
+        console.warn('[Umzug] Pfade in ' + datei + ':', err.message);
+      }
+    }
+  }
 }
 
 function configureAppStoragePaths() {
   if (process.platform !== 'win32') return;
+
+  // MUSS vor dem ersten Zugriff stehen, sonst legt ensureWritableDir
+  // einen leeren neuen Ordner an und der Umzug findet ihn schon vor.
+  migriereAltenDatenordner();
 
   const storageRoot = storageRootFor(PROFILE);
 
@@ -437,7 +560,7 @@ function startUiServer() {
  */
 function preferredUiPort() {
   let hash = 0x811c9dc5;
-  for (const ch of `inkwell-ui:${PROFILE || ''}`) {
+  for (const ch of `inkwells-ui:${PROFILE || ''}`) {
     hash ^= ch.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
@@ -449,7 +572,7 @@ function createWindow() {
     width: 1440, height: 900, minWidth: 820, minHeight: 600,
     // Mit Profil steht der Name im Fenstertitel – sonst sind zwei
     // Exemplare in der Taskleiste nicht auseinanderzuhalten.
-    title: PROFILE ? `Inkwell — ${PROFILE}` : 'Inkwell',
+    title: PROFILE ? `Inkwells — ${PROFILE}` : 'Inkwells',
     // Use default frame on Windows — our custom titlebar sits inside the window
     frame: true,
     titleBarStyle: 'hidden',
@@ -462,13 +585,13 @@ function createWindow() {
     }
   });
 
-  /* Die Seite trägt <title>Inkwell</title> und überschreibt damit den
+  /* Die Seite trägt <title>Inkwells</title> und überschreibt damit den
      Titel, den das Fenster mitbekommen hat. Bei einem Profil muss der
      Name aber stehen bleiben – sonst heißen beide Fenster gleich. */
   if (PROFILE) {
     win.on('page-title-updated', (event) => {
       event.preventDefault();
-      win.setTitle(`Inkwell — ${PROFILE}`);
+      win.setTitle(`Inkwells — ${PROFILE}`);
     });
   }
 
@@ -640,7 +763,7 @@ ipcMain.on('confirm-quit', () => {
    Aus dem Store installiert Windows die App als versiegeltes Paket unter
    Program Files\WindowsApps. Dort kann der NSIS-Installierer nichts
    ersetzen - er wuerde stattdessen eine zweite Installation unter
-   LOCALAPPDATA anlegen. Der Nutzer haette Inkwell dann doppelt, mit
+   LOCALAPPDATA anlegen. Der Nutzer haette Inkwells dann doppelt, mit
    getrennten Heften, und wuesste nicht warum.
 
    Der Riegel steht hier UND in src/ui/update.js. Doppelt, weil die
@@ -718,9 +841,9 @@ ipcMain.handle('install-and-restart', async () => {
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 /* ══════════════════════════════════════════════════════════════════════
-   EINE CHAT-NACHRICHT, WÄHREND INKWELL IM HINTERGRUND LIEGT
+   EINE CHAT-NACHRICHT, WÄHREND INKWELLS IM HINTERGRUND LIEGT
 
-   Wer zu zweit an einem Heft schreibt, hat Inkwell nicht dauernd vorne.
+   Wer zu zweit an einem Heft schreibt, hat Inkwells nicht dauernd vorne.
    Eine Nachricht kam bisher nur im Fenster an – man sah sie, wenn man
    ohnehin schon hinsah, und sonst nie.
 
@@ -740,7 +863,7 @@ ipcMain.handle('notify-chat', (_, daten = {}) => {
   // Vorne und nicht minimiert: dann sieht man die Nachricht ohnehin
   if (win && !win.isDestroyed() && win.isFocused() && !win.isMinimized()) return false;
 
-  const titel = String(daten.title || 'Inkwell').slice(0, 120);
+  const titel = String(daten.title || 'Inkwells').slice(0, 120);
   const text = String(daten.body || '').slice(0, 300);
   if (!text) return false;
 
@@ -801,7 +924,7 @@ ipcMain.handle('open-external', async (_, url) => {
    DEN BROWSER WIRKLICH NACH VORN HOLEN
 
    shell.openExternal oeffnet die Seite verlaesslich – aber unter Windows
-   blieb Inkwell davor stehen, und der Reiter ging unsichtbar im
+   blieb Inkwells davor stehen, und der Reiter ging unsichtbar im
    Hintergrund auf.
 
    >>> Warum das so ist <<<
@@ -811,9 +934,9 @@ ipcMain.handle('open-external', async (_, url) => {
    Recht nicht. Der Reiter entsteht, das Fenster bleibt hinten.
 
    >>> Was NICHT funktioniert hat <<<
-   win.blur(). Damit gibt Inkwell den Vordergrund ab, aber Windows
+   win.blur(). Damit gibt Inkwells den Vordergrund ab, aber Windows
    vergibt ihn dann nach der Stapelreihenfolge – man landete in dem
-   Programm, das VOR Inkwell dran war, und der Browser blieb hinten.
+   Programm, das VOR Inkwells dran war, und der Browser blieb hinten.
    Genau so wurde es gemeldet.
 
    >>> Was funktioniert <<<
@@ -932,9 +1055,9 @@ ipcMain.handle('get-pending-share-link', () => {
   return link || null;
 });
 
-/* ── Weiche für inkwell:// ─────────────────────────────────────────────
+/* ── Weiche für inkwells:// ─────────────────────────────────────────────
    Bisher landete JEDER Aufruf des Protokolls beim OAuth-Rückruf. Seit es
-   geteilte Dokumente gibt, kommt auch "inkwell://share/<linkId>" an – das
+   geteilte Dokumente gibt, kommt auch "inkwells://share/<linkId>" an – das
    ist keine Anmeldung, sondern ein Dokument, das geöffnet werden soll.
 
    Rückgabe: 'share' (mit Kennung) oder 'oauth'.
@@ -942,7 +1065,7 @@ ipcMain.handle('get-pending-share-link', () => {
 function classifyDeepLink(urlStr) {
   if (!urlStr || typeof urlStr !== 'string') return { kind: 'oauth' };
 
-  const match = /^inkwell:\/\/share\/([^/?#]+)/i.exec(urlStr.trim());
+  const match = /^inkwells:\/\/share\/([^/?#]+)/i.exec(urlStr.trim());
   if (!match) return { kind: 'oauth' };
 
   let linkId = match[1];
@@ -1040,7 +1163,7 @@ ipcMain.handle('start-oauth-server', async () => {
           <html lang="de">
             <head>
               <meta charset="utf-8">
-              <title>Inkwell — Anmeldung</title>
+              <title>Inkwells — Anmeldung</title>
               <style>
                 body { font-family: system-ui, sans-serif; background:#12121a; color:#ede8e0;
                        display:flex; align-items:center; justify-content:center;
@@ -1076,7 +1199,7 @@ ipcMain.handle('start-oauth-server', async () => {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: search.substring(1)
                   }).then(() => {
-                    msg.innerHTML = 'Anmeldung erfolgreich! Du kannst dieses Fenster schlie&szlig;en und zu <span class="gold">Inkwell</span> zur&uuml;ckkehren.';
+                    msg.innerHTML = 'Anmeldung erfolgreich! Du kannst dieses Fenster schlie&szlig;en und zu <span class="gold">Inkwells</span> zur&uuml;ckkehren.';
                     setTimeout(() => window.close(), 1500);
                   }).catch((err) => {
                     msg.innerHTML = 'Fehler bei der Anmeldung.';
@@ -1090,7 +1213,7 @@ ipcMain.handle('start-oauth-server', async () => {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: hash.substring(1)
                   }).then(() => {
-                    msg.innerHTML = 'Anmeldung erfolgreich! Du kannst dieses Fenster schlie&szlig;en und zu <span class="gold">Inkwell</span> zur&uuml;ckkehren.';
+                    msg.innerHTML = 'Anmeldung erfolgreich! Du kannst dieses Fenster schlie&szlig;en und zu <span class="gold">Inkwells</span> zur&uuml;ckkehren.';
                     setTimeout(() => window.close(), 1500);
                   }).catch((err) => {
                     msg.innerHTML = 'Fehler bei der Anmeldung.';
@@ -1174,12 +1297,12 @@ ipcMain.handle('start-oauth-server', async () => {
 
 /* Ensure custom protocol is registered.
 
-   Ein Exemplar mit Profil meldet sich NICHT an. inkwell://-Adressen
+   Ein Exemplar mit Profil meldet sich NICHT an. inkwells://-Adressen
    sollen weiter bei der gewöhnlichen Installation landen; ein zum
    Ausprobieren nebenherlaufendes zweites Exemplar würde die Anmeldung
    sonst an sich reißen und behielte sie auch, nachdem es beendet ist. */
 if (PROFILE) {
-  console.log('[main] Profil "' + PROFILE + '" – Protokoll inkwell:// wird nicht beansprucht');
+  console.log('[main] Profil "' + PROFILE + '" – Protokoll inkwells:// wird nicht beansprucht');
 } else if (process.defaultApp) {
   if (process.argv.length >= 2) {
     const args = [path.resolve(process.argv[1])];
@@ -1190,10 +1313,10 @@ if (PROFILE) {
       args.push('--disk-cache-dir=' + path.join(storageRoot, 'Cache'));
       args.push('--disable-gpu-shader-disk-cache');
     }
-    app.setAsDefaultProtocolClient('inkwell', process.execPath, args);
+    app.setAsDefaultProtocolClient('inkwells', process.execPath, args);
   }
 } else {
-  app.setAsDefaultProtocolClient('inkwell');
+  app.setAsDefaultProtocolClient('inkwells');
 }
 
 app.whenReady().then(async () => {
@@ -1208,7 +1331,7 @@ app.whenReady().then(async () => {
     await startUiServer();
   } catch (err) {
     console.error('[UI] Örtlicher Server konnte nicht starten:', err);
-    dialog.showErrorBox('Inkwell', 'Die Oberfläche konnte nicht gestartet werden:\n' + err.message);
+    dialog.showErrorBox('Inkwells', 'Die Oberfläche konnte nicht gestartet werden:\n' + err.message);
     app.quit();
     return;
   }
@@ -1243,7 +1366,7 @@ app.on('second-instance', (event, argv) => {
   win.focus();
   
   // Custom protocol deep link: entweder Anmeldung oder ein Freigabe-Link
-  const urlArg = argv.find(arg => arg.startsWith('inkwell://'));
+  const urlArg = argv.find(arg => arg.startsWith('inkwells://'));
   if (urlArg) {
     routeDeepLink(urlArg);
     return;
@@ -1258,7 +1381,7 @@ app.on('second-instance', (event, argv) => {
 });
 app.on('open-url', (event, url) => {
   event.preventDefault();
-  if (url && url.startsWith('inkwell://')) routeDeepLink(url);
+  if (url && url.startsWith('inkwells://')) routeDeepLink(url);
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -1349,9 +1472,9 @@ ipcMain.handle('pick-document', async () => {
 
 ipcMain.handle('export-pdf', async (_, html, defaultName) => {
   const r = await dialog.showSaveDialog(win, {
-    // Der Heftname als Vorschlag – „inkwell.pdf" für jedes Heft war beim
+    // Der Heftname als Vorschlag – „inkwells.pdf" für jedes Heft war beim
     // Exportieren mehrerer Hefte reichlich unbrauchbar.
-    defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : 'inkwell.pdf',
+    defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : 'inkwells.pdf',
     filters: [{name:'PDF', extensions:['pdf']}]
   });
   if (r.canceled) return null;
@@ -1359,7 +1482,7 @@ ipcMain.handle('export-pdf', async (_, html, defaultName) => {
   // Über eine temporäre Datei statt data:-URL. Mit eingebetteter Handschrift
   // und Bildern wird das HTML schnell viele MB groß – als data:-URL scheitert
   // das Laden dann stillschweigend.
-  const tmpHtml = path.join(app.getPath('temp'), `inkwell-export-${Date.now()}.html`);
+  const tmpHtml = path.join(app.getPath('temp'), `inkwells-export-${Date.now()}.html`);
   const w = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
 
   try {
@@ -1403,7 +1526,7 @@ ipcMain.handle('save-binary', async (_, payload = {}) => {
 
   const ext = typeof extension === 'string' && extension ? extension : 'bin';
   const r = await dialog.showSaveDialog(win, {
-    defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : `inkwell.${ext}`,
+    defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : `inkwells.${ext}`,
     filters: [{ name: filterName || ext.toUpperCase(), extensions: [ext] }]
   });
   if (r.canceled) return null;
@@ -1419,8 +1542,8 @@ ipcMain.handle('save-binary', async (_, payload = {}) => {
 
 ipcMain.handle('save', async (_, data) => {
   const r = await dialog.showSaveDialog(win, {
-    defaultPath: 'inkwell.jrnl',
-    filters: [{name:'Inkwell', extensions:['jrnl']}]
+    defaultPath: 'inkwells.jrnl',
+    filters: [{name:'Inkwells', extensions:['jrnl']}]
   });
   if (r.canceled) return null;
   fs.writeFileSync(r.filePath, JSON.stringify(data));
@@ -1429,7 +1552,7 @@ ipcMain.handle('save', async (_, data) => {
 
 ipcMain.handle('load', async () => {
   const r = await dialog.showOpenDialog(win, {
-    filters: [{name:'Inkwell', extensions:['jrnl']}],
+    filters: [{name:'Inkwells', extensions:['jrnl']}],
     properties: ['openFile']
   });
   if (r.canceled) return null;
@@ -1456,7 +1579,7 @@ ipcMain.handle('load', async () => {
 });
 
 // Settings management
-const settingsPath = path.join(app.getPath('userData'), 'inkwell-settings.json');
+const settingsPath = path.join(app.getPath('userData'), 'inkwells-settings.json');
 
 /* Die Einstellungen enthalten cloudAccessToken und cloudRefreshToken. Sie
    standen hier im Klartext im Protokoll – und main.js reicht zusätzlich
@@ -1479,13 +1602,13 @@ console.log('[Settings] Settings file path:', settingsPath);
 
 ipcMain.handle('get-default-save-path', () => {
   const documentsPath = app.getPath('documents');
-  const inkwellPath = path.join(documentsPath, 'Inkwell');
-  console.log('[Settings] Default save path:', inkwellPath);
-  if (!fs.existsSync(inkwellPath)) {
-    fs.mkdirSync(inkwellPath, { recursive: true });
-    console.log('[Settings] Created Inkwell directory');
+  const inkwellsPath = path.join(documentsPath, 'Inkwells');
+  console.log('[Settings] Default save path:', inkwellsPath);
+  if (!fs.existsSync(inkwellsPath)) {
+    fs.mkdirSync(inkwellsPath, { recursive: true });
+    console.log('[Settings] Created Inkwells directory');
   }
-  return inkwellPath;
+  return inkwellsPath;
 });
 
 ipcMain.handle('load-settings', () => {
@@ -1539,7 +1662,7 @@ ipcMain.handle('pick-folder', async (_, defaultPath) => {
    dem anderen liegt, wird abgewiesen.
 
    Der Vergleich läuft über path.resolve und mit dem Trennzeichen dahinter
-   – sonst käme "…\Inkwell-heimlich" an "…\Inkwell" vorbei.
+   – sonst käme "…\Inkwells-heimlich" an "…\Inkwells" vorbei.
    ══════════════════════════════════════════════════════════════════════ */
 
 function liegtUnter(kandidat, ordner) {
@@ -1561,6 +1684,16 @@ function erlaubteOrdner() {
     }
   } catch (err) { /* dann bleibt es beim Datenordner */ }
   // Der Vorgabeort gilt immer, auch bevor er zum ersten Mal gespeichert ist
+  try { ordner.push(path.join(app.getPath('documents'), 'Inkwells')); } catch (err) {}
+
+  /* Und der Vorgabeort der Fassungen bis 1.1.1, als die App noch Inkwell
+     hiess. Dort liegen die Hefte bestehender Nutzer weiterhin - dieser
+     Ordner wird NICHT umgezogen, weil die Uebersicht absolute Pfade
+     speichert und ein Umbenennen sie alle ins Leere zeigen liesse.
+
+     Wer nie einen Speicherort gesichert hat, haette ihn sonst nicht mehr
+     in der Liste und bekaeme beim Speichern des eigenen Hefts eine
+     Absage. */
   try { ordner.push(path.join(app.getPath('documents'), 'Inkwell')); } catch (err) {}
   return ordner;
 }
@@ -1642,7 +1775,7 @@ ipcMain.handle('check-internet', async () => {
 });
 
 // Registry management
-const registryPath = path.join(app.getPath('userData'), 'inkwell-registry.json');
+const registryPath = path.join(app.getPath('userData'), 'inkwells-registry.json');
 console.log('[Registry] Registry file path:', registryPath);
 
 ipcMain.handle('load-registry', () => {
