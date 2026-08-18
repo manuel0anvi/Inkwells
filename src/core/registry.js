@@ -1,5 +1,5 @@
 // Notebook Registry - Persists which notebooks appear in the overview
-// Stored in inkwell-registry.json in userData folder
+// Stored in inkwells-registry.json in userData folder
 
 const Registry = {
   _entries: [],

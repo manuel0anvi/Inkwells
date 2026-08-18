@@ -69,9 +69,9 @@ E('btn-new-nb').addEventListener('click', () => openNbModal(null));
 /* ══════════════════════════════════════════════════════════════════════
    WAS ANGEKOMMEN IST – UND WAS NICHT
 
-   Ein Word-Dokument bringt Dinge mit, die Inkwell nicht kennt:
+   Ein Word-Dokument bringt Dinge mit, die Inkwells nicht kennt:
    Schriftgrößen, Zeilenabstände, Kopfzeilen. Die gehen verloren, und
-   das ist keine Nachlässigkeit, sondern die Bauart – Inkwell schreibt
+   das ist keine Nachlässigkeit, sondern die Bauart – Inkwells schreibt
    auf liniertes Papier mit fester Zeilenhöhe.
 
    Ohne diesen Hinweis sucht man den verlorenen Zeilenabstand für einen
@@ -521,7 +521,7 @@ E('nb-modal-ok').addEventListener('click', async () => {
     }
   }
   else { 
-    // Ensure we have a save location; if not, prompt the user (default: Documents/Inkwell)
+    // Ensure we have a save location; if not, prompt the user (default: Documents/Inkwells)
     let saveLocation = Settings.get('saveLocation');
     if (!saveLocation) {
       try {

@@ -6,7 +6,7 @@
    Bedient den Dialog #ov-share und den Eintrag „Heft freigeben" im
    Kontextmenü der Startseite. Die eigentliche Arbeit macht
    core/share.js (Firestore), das als ES-Modul geladen wird und sich
-   unter window.InkwellShare meldet.
+   unter window.InkwellsShare meldet.
 
    ── Zwei Wege in einem Dialog ───────────────────────────────────────
    Oben der Link („Jeder mit dem Link" + Rolle), darunter einzelne
@@ -97,12 +97,12 @@
      bricht der Aufruf nach 15 Sekunden mit einer klaren Meldung ab.
      ─────────────────────────────────────────────────────────────── */
   function whenShareReady() {
-    if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+    if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), 15000);
-      document.addEventListener('inkwell-share-ready', () => {
+      document.addEventListener('inkwells-share-ready', () => {
         clearTimeout(timer);
-        if (window.InkwellShare) resolve(window.InkwellShare);
+        if (window.InkwellsShare) resolve(window.InkwellsShare);
         else reject(new Error('SHARE_OFFLINE'));
       }, { once: true });
     });
@@ -245,7 +245,7 @@
      @returns {HTMLElement|null} null, wenn er hier nichts brächte
      ══════════════════════════════════════════════════════════════════ */
   function microsoftLinkButton(danach) {
-    // Nur bei Microsoft, und nur wenn man in Inkwell überhaupt angemeldet
+    // Nur bei Microsoft, und nur wenn man in Inkwells überhaupt angemeldet
     // ist – sonst ist der Ausgangszustand ein anderer und der Klick liefe leer.
     if (window.CloudSync_?.getProviderId?.() !== 'microsoft') return null;
     if (!window.CloudSync_?.isAuthenticated?.()) return null;
@@ -596,7 +596,7 @@
   function highestAccess() {
     if (!head) return 'off';
     if (head.linkMode === 'edit') return 'edit';
-    const roles = window.InkwellShare.listMembers(head).map(p => p.role);
+    const roles = window.InkwellsShare.listMembers(head).map(p => p.role);
     if (roles.includes('edit')) return 'edit';
     if (head.linkMode === 'view' || roles.length) return 'view';
     return 'off';
@@ -627,7 +627,7 @@
 
     if (head.linkMode !== 'off' && head.linkId) {
       linkRow.style.display = 'flex';
-      linkInput.value = window.InkwellShare.docUrlFor(head.linkId);
+      linkInput.value = window.InkwellsShare.docUrlFor(head.linkId);
     } else {
       linkRow.style.display = 'none';
       linkInput.value = '';
@@ -640,7 +640,7 @@
     peopleEl.innerHTML = '';
     if (!head) return;
 
-    const api = window.InkwellShare;
+    const api = window.InkwellsShare;
     const rows = api.listMembers(head);
 
     if (!rows.length && !head.blockedEmails.length) {
@@ -959,13 +959,13 @@
     const all = registry();
     const live = Object.entries(all).filter(([, entry]) => entry?.mode === 'live' && entry?.shareId);
     if (!live.length) return;
-    if (!window.InkwellShare) return;   // ohne Netz einfach beim nächsten Mal
+    if (!window.InkwellsShare) return;   // ohne Netz einfach beim nächsten Mal
 
     for (const [nbId, entry] of live) {
       const nb = getNb(nbId);
       if (!nb) continue;
       try {
-        await window.InkwellShare.publishNotebook(nb, { mode: 'live', shareId: entry.shareId });
+        await window.InkwellsShare.publishNotebook(nb, { mode: 'live', shareId: entry.shareId });
         console.log('[Share] Freigabe mitgeschrieben:', nb.name);
       } catch (err) {
         // Nicht mehr unsere Freigabe (anderes Gerät) -> aus der Liste nehmen

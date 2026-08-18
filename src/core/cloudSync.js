@@ -17,11 +17,11 @@
 // wird gebremst, weil jedes Mal das komplette Notizbuch übertragen wird.
 const MIN_UPLOAD_INTERVAL_MS = 60 * 1000;
 
-// Unterordner für gelöschte Hefte, innerhalb des Inkwell-Ordners
+// Unterordner für gelöschte Hefte, innerhalb des Inkwells-Ordners
 const CLOUD_TRASH_FOLDER = 'Papierkorb';
 
 // Gemeinsame Liste der gelöschten Hefte
-const TRASH_INDEX_NAME = 'inkwell-papierkorb.json';
+const TRASH_INDEX_NAME = 'inkwells-papierkorb.json';
 
 // So lange vor Ablauf wird ein erneuerbares Token still ausgetauscht.
 // Großzügig gewählt, damit ein einzelner fehlgeschlagener Versuch (kurz
@@ -193,7 +193,7 @@ class CloudSyncManager {
     // bevor der Intervall-Wecker wieder zum Zug kommt. Sobald das Fenster
     // wieder sichtbar ist, deshalb sofort nachsehen.
     /* Und beim Zurückkommen sofort, nicht erst im nächsten Takt. Wer vom
-       Laptop an den PC wechselt, klickt Inkwell an und will DANN den
+       Laptop an den PC wechselt, klickt Inkwells an und will DANN den
        neuen Stand sehen – 45 Sekunden zu warten fühlt sich kaputt an. */
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) return;
@@ -313,7 +313,7 @@ class CloudSyncManager {
            frischen ID-Token nachgeholt. Genau das ist der übliche Fall
            nach dem Update: das ID-Token wird beim Anmelden eingesammelt,
            und wer schon angemeldet war, hatte nie eines. */
-        if (tokens.idToken && window.InkwellShare && !window.InkwellShare.hasRealIdentity()) {
+        if (tokens.idToken && window.InkwellsShare && !window.InkwellsShare.hasRealIdentity()) {
           await this._linkFirebaseIdentity(
             this.getProviderId(),
             tokens.idToken,
@@ -503,11 +503,11 @@ class CloudSyncManager {
        Abfrage auf den Prüfwert – im Implicit-Flow gibt es gar keinen
        Prüfwert, und ohne diese Trennung wäre die Anmeldung genau dort
        ungeschützt geblieben, wo sie es am nötigsten hat. */
-    try { sessionStorage.setItem('inkwell_auth_state', state); } catch (e) {}
-    try { sessionStorage.setItem('inkwell_pkce_redirect', redirectUri); } catch (e) {}
+    try { sessionStorage.setItem('inkwells_auth_state', state); } catch (e) {}
+    try { sessionStorage.setItem('inkwells_pkce_redirect', redirectUri); } catch (e) {}
     if (request.verifier) {
-      try { sessionStorage.setItem('inkwell_pkce_verifier', request.verifier); } catch (e) {}
-      try { sessionStorage.setItem('inkwell_auth_nonce', request.nonce || ''); } catch (e) {}
+      try { sessionStorage.setItem('inkwells_pkce_verifier', request.verifier); } catch (e) {}
+      try { sessionStorage.setItem('inkwells_auth_nonce', request.nonce || ''); } catch (e) {}
     }
 
     window.location.href = request.url;
@@ -595,7 +595,7 @@ class CloudSyncManager {
        Beobachtung der Freigaben. Blieb die Meldung aus, lief sie weiter
        – und man bekam nach dem Abmelden noch Hinweise auf Dokumente,
        die einem gerade jemand freigegeben hatte. */
-    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
 
     this._notify();
   }
@@ -620,7 +620,7 @@ class CloudSyncManager {
          untergeschobene Fehlermeldung wuerde sonst eine laufende, echte
          Anmeldung mit einem Fehlertoast abbrechen. Siehe _neuerState(). */
       const erwartet = pending.state
-        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwell_auth_state') : '');
+        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwells_auth_state') : '');
       const gekommen = params.get('state') || '';
 
       if (erwartet && gekommen !== erwartet) {
@@ -646,21 +646,21 @@ class CloudSyncManager {
       if (oauthError) throw new Error(provider.describeAuthError(oauthError));
 
       const verifier = pending.verifier
-        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwell_pkce_verifier') : null);
+        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwells_pkce_verifier') : null);
       const redirectUri = pending.redirectUri
-        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwell_pkce_redirect') : null);
+        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwells_pkce_redirect') : null);
       const nonce = pending.nonce
-        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwell_auth_nonce') : '');
+        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('inkwells_auth_nonce') : '');
 
       const tokens = await provider.completeAuth({ params, redirectUri, verifier, nonce });
       if (!tokens?.accessToken) throw new Error('Kein Zugriffstoken erhalten');
 
       this._pendingAuth = null;
       try {
-        sessionStorage.removeItem('inkwell_pkce_verifier');
-        sessionStorage.removeItem('inkwell_pkce_redirect');
-        sessionStorage.removeItem('inkwell_auth_nonce');
-        sessionStorage.removeItem('inkwell_auth_state');
+        sessionStorage.removeItem('inkwells_pkce_verifier');
+        sessionStorage.removeItem('inkwells_pkce_redirect');
+        sessionStorage.removeItem('inkwells_auth_nonce');
+        sessionStorage.removeItem('inkwells_auth_state');
       } catch (e) {}
 
       await this._applyTokens(tokens);
@@ -767,7 +767,7 @@ class CloudSyncManager {
           console.warn('[CloudSync] Freigaben übernehmen fehlgeschlagen:', err?.message || err);
         }
 
-        document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+        document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
         return true;
       })
       .catch(err => {
@@ -905,7 +905,7 @@ class CloudSyncManager {
       /* Dieselbe Adresse gehört hier schon zu einer Anmeldung über Google.
          Kein Fehler, sondern ein zweiter Schritt – und der braucht einen
          eigenen Klick, weil er wieder ein Fenster öffnet (core/share.js). */
-      if (code === 'inkwell/microsoft-needs-google') {
+      if (code === 'inkwells/microsoft-needs-google') {
         console.log('[CloudSync] Adresse gehört schon zu einer Google-Anmeldung –',
           'es fehlt die Bestätigung über Google');
         this.identityProblem = 'needsGoogle';
@@ -960,7 +960,7 @@ class CloudSyncManager {
    */
   microsoftNeedsGoogle() {
     if (this.identityProblem === 'needsGoogle') return true;
-    try { return !!window.InkwellShare?.microsoftWartetAufGoogle?.(); }
+    try { return !!window.InkwellsShare?.microsoftWartetAufGoogle?.(); }
     catch (err) { return false; }
   }
 
@@ -985,7 +985,7 @@ class CloudSyncManager {
     this.identityProblem = null;
     this.identityError = '';
     console.log('[CloudSync] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
-    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
     this._notify();
   }
 
@@ -1025,7 +1025,7 @@ class CloudSyncManager {
       this.identityProblem = null;
       this.identityError = '';
       console.log('[CloudSync] Firebase-Kennung still hergestellt:', api.currentIdentity()?.email || '?');
-      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
       this._notify();
       return true;
     } catch (err) {
@@ -1039,12 +1039,12 @@ class CloudSyncManager {
 
   /** core/share.js ist ein ES-Modul und läuft nach den klassischen Scripts. */
   _whenShareReady(timeoutMs = 15000) {
-    if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+    if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), timeoutMs);
-      document.addEventListener('inkwell-share-ready', () => {
+      document.addEventListener('inkwells-share-ready', () => {
         clearTimeout(timer);
-        if (window.InkwellShare) resolve(window.InkwellShare);
+        if (window.InkwellsShare) resolve(window.InkwellsShare);
         else reject(new Error('SHARE_OFFLINE'));
       }, { once: true });
     });
@@ -1088,7 +1088,7 @@ class CloudSyncManager {
        sie. Die Empfänger entscheiden selbst, was sie damit tun –
        ui/sharedDocs.js fragt danach ausdrücklich CloudSync_, ob noch
        jemand angemeldet ist. */
-    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
 
     this._notify();
   }
@@ -1817,7 +1817,7 @@ class CloudSyncManager {
    */
   async _fileBelongsTo(file, nbId) {
     if (this.provider.matchesNotebook(file, { id: nbId, name: '' })) return true;
-    if (file.inkwellId) return false;
+    if (file.inkwellsId) return false;
 
     try {
       const json = await this.provider.downloadFile(this._http, file.id);
@@ -2178,7 +2178,7 @@ class CloudSyncManager {
       // Derselbe Rückfall wie in matchesNotebook: ohne eigene Kennung ist
       // der Dateiname ohne Endung die Kennung.
       return files
-        .map(f => f.inkwellId || String(f.name || '').replace(/\.(json|jrnl)$/i, ''))
+        .map(f => f.inkwellsId || String(f.name || '').replace(/\.(json|jrnl)$/i, ''))
         .filter(Boolean);
     } catch (err) {
       console.warn('[CloudSync] Hauptordner nicht lesbar:', err.message);
@@ -2369,7 +2369,7 @@ class CloudSyncManager {
 
   async restoreVersion(nbId, fileId, versionId) {
     const json = await this.loadVersion(fileId, versionId);
-    const notebook = this._denormalizeNotebook(json, { inkwellId: nbId });
+    const notebook = this._denormalizeNotebook(json, { inkwellsId: nbId });
     if (!notebook) throw new Error('Diese Fassung lässt sich nicht lesen.');
 
     notebook.id = nbId;
@@ -2558,7 +2558,7 @@ class CloudSyncManager {
     if (!raw || typeof raw !== 'object') return null;
 
     const notebook = JSON.parse(JSON.stringify(raw));
-    notebook.id = notebook.id || file?.inkwellId || file?.id;
+    notebook.id = notebook.id || file?.inkwellsId || file?.id;
     notebook.name = notebook.name
       || (file?.name || 'Untitled').replace(/\.(json|jrnl)$/i, '').split('__')[0];
     notebook.updatedAt = notebook.updatedAt || file?.modifiedTime || new Date().toISOString();

@@ -38,9 +38,9 @@
 
     try {
       const html = buildPdf(nb, options);
-      const defaultName = (typeof window.InkwellDocx?.safeFileName === 'function'
-        ? InkwellDocx.safeFileName(nb.name)
-        : 'inkwell') + '.pdf';
+      const defaultName = (typeof window.InkwellsDocx?.safeFileName === 'function'
+        ? InkwellsDocx.safeFileName(nb.name)
+        : 'inkwells') + '.pdf';
       const result = await window.api.exportPdf(html, defaultName);
 
       if (!result) return;                       // abgebrochen

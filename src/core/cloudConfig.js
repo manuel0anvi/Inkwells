@@ -3,7 +3,7 @@
 /* ══════════════════════════════════════════════════════════════════════
    CLOUD-KONFIGURATION  ―  HIER DIE ZUGANGSDATEN EINTRAGEN
 
-   Inkwell kann die Notizbücher in Google Drive oder in Microsoft OneDrive
+   Inkwells kann die Notizbücher in Google Drive oder in Microsoft OneDrive
    sichern. Beide sind unabhängig voneinander; es genügt, einen davon
    einzurichten. Anleitung: CLOUD_SETUP.md im Projekt-Hauptordner.
    ══════════════════════════════════════════════════════════════════════ */
@@ -56,7 +56,7 @@ const GOOGLE_CONFIG = {
   USERINFO_ENDPOINT: 'https://www.googleapis.com/oauth2/v3/userinfo',
   REVOKE_ENDPOINT: 'https://oauth2.googleapis.com/revoke',
 
-  DRIVE_FOLDER: 'Inkwell',
+  DRIVE_FOLDER: 'Inkwells',
 
   /** Kann die Google-Sitzung still erneuert werden? */
   get CAN_REFRESH() {
@@ -105,7 +105,7 @@ const MICROSOFT_CONFIG = {
 
   // Der App-Ordner heißt in OneDrive immer wie die Anwendung; dieser Name
   // wird nur für Anzeigen gebraucht.
-  DRIVE_FOLDER: 'Inkwell'
+  DRIVE_FOLDER: 'Inkwells'
 };
 
 const CLOUD_PROVIDERS = ['google', 'microsoft'];

@@ -62,7 +62,7 @@ const GoogleDrive = loadProvider('src/core/providers/googleDrive.js', 'GoogleDri
 
 /** Baut den Eintrag so, wie listNotebookFiles ihn liefert. */
 function oneDriveFile(name) {
-  return { id: 'graph-1', name, inkwellId: OneDrive._idFromFileName(name) };
+  return { id: 'graph-1', name, inkwellsId: OneDrive._idFromFileName(name) };
 }
 
 (async () => {
@@ -96,16 +96,16 @@ function oneDriveFile(name) {
   console.log('\nVon OneDrive umbenannte Datei');
 
   const renamed = oneDriveFile('Mein Heft__abc123 1.json');
-  check('Der Name gibt die falsche Kennung her', renamed.inkwellId, 'abc123 1');
+  check('Der Name gibt die falsche Kennung her', renamed.inkwellsId, 'abc123 1');
   check('Über den Namen ist sie nicht zu finden',
     OneDrive.matchesNotebook(renamed, { id: 'abc123' }), false);
 
   console.log('\nGoogle Drive: derselbe Rückfall');
 
   check('Über die Kennung',
-    GoogleDrive.matchesNotebook({ inkwellId: 'abc123', name: 'x.json' }, { id: 'abc123' }), true);
+    GoogleDrive.matchesNotebook({ inkwellsId: 'abc123', name: 'x.json' }, { id: 'abc123' }), true);
   check('Über den Namen',
-    GoogleDrive.matchesNotebook({ inkwellId: null, name: 'abc123.json' }, { id: 'abc123' }), true);
+    GoogleDrive.matchesNotebook({ inkwellsId: null, name: 'abc123.json' }, { id: 'abc123' }), true);
 
   if (failed > 0) {
     console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);

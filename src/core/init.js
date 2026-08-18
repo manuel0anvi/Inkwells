@@ -127,13 +127,13 @@
       CloudSync_.ensureFirebaseIdentity().then(async ok => {
         console.log('[Init] Firebase-Kennung:', ok ? 'vorhanden' : ('fehlt (' + (CloudSync_.identityProblem || '?') + ')'));
 
-        /* Fehlt sie und ist der Nutzer einverstanden, holt Inkwell den
+        /* Fehlt sie und ist der Nutzer einverstanden, holt Inkwells den
            zweiten Microsoft-Schritt still nach – sonst müsste er dafür
            jedes Mal den Knopf drücken. linkMicrosoftSilently() prüft
            Anbieter und Einstellung selbst und tut sonst nichts. */
         if (!ok) ok = await CloudSync_.linkMicrosoftSilently();
 
-        if (ok) document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+        if (ok) document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
       }).catch(err => console.warn('[Init] Firebase-Kennung:', err?.message || err));
     }
   } catch (err) {
@@ -315,7 +315,7 @@ function registriereBeendenHandler() {
       }
 
       try {
-        sageStand('quittingClosing', 'Fertig — Inkwell schließt.');
+        sageStand('quittingClosing', 'Fertig — Inkwells schließt.');
       } catch (e) { /* siehe oben */ }
 
       window.api.confirmQuit();

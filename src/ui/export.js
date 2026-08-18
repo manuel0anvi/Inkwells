@@ -241,7 +241,7 @@
   /* ── Word ─────────────────────────────────────────────────────────── */
 
   async function exportAsDocx(nb, chosen) {
-    if (!window.InkwellDocx) { toast(t('docxUnavailable'), true); return; }
+    if (!window.InkwellsDocx) { toast(t('docxUnavailable'), true); return; }
     if (!window.api?.saveBinary) { toast(t('electronOnly'), true); return; }
 
     toast(t('docxBuilding'));
@@ -257,7 +257,7 @@
     }));
 
     try {
-      const bytes = await InkwellDocx.build(docxEntries, {
+      const bytes = await InkwellsDocx.build(docxEntries, {
         title: nb.name,
         onProgress: (done, total) => {
           statusEl.textContent = `${t('docxBuilding')} ${done}/${total}`;
@@ -265,7 +265,7 @@
       });
 
       const result = await window.api.saveBinary({
-        defaultName: InkwellDocx.safeFileName(nb.name) + '.docx',
+        defaultName: InkwellsDocx.safeFileName(nb.name) + '.docx',
         filterName: 'Word',
         extension: 'docx',
         data: bytes

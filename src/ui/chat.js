@@ -558,7 +558,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     WINDOWS SAGT BESCHEID, WENN INKWELL NICHT VORNE IST
+     WINDOWS SAGT BESCHEID, WENN INKWELLS NICHT VORNE IST
 
      Der Punkt an der Ikone reicht nur, solange man hinsieht. Wer neben
      dem Heft an etwas anderem arbeitet, hat das Fenster gar nicht auf

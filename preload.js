@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('api', {
      Dort aktualisiert der Store selbst. Der eigene Updater darf gar
      nicht erst auftauchen: sein Installierer koennte das versiegelte
      Store-Paket nicht ersetzen, sondern legte eine ZWEITE Installation
-     daneben - der Nutzer haette Inkwell doppelt, mit getrennten Daten. */
+     daneben - der Nutzer haette Inkwells doppelt, mit getrennten Daten. */
   istStorefassung: process.windowsStore === true,
 
   // Updater controls
@@ -52,7 +52,7 @@ contextBridge.exposeInMainWorld('api', {
   onOAuthCallback: (cb) => ipcRenderer.on('oauth-callback', (e, url) => cb(url)),
   getPendingDeepLink: () => ipcRenderer.invoke('get-pending-deep-link'),
 
-  // Freigabe-Link (inkwell://share/<linkId>). Früher landete jeder Aufruf
+  // Freigabe-Link (inkwells://share/<linkId>). Früher landete jeder Aufruf
   // des Protokolls beim OAuth-Rückruf; jetzt gibt es dafür einen eigenen Weg.
   onOpenShare: (cb) => ipcRenderer.on('open-share', (e, linkId) => cb(linkId)),
   getPendingShareLink: () => ipcRenderer.invoke('get-pending-share-link'),
@@ -67,7 +67,7 @@ contextBridge.exposeInMainWorld('api', {
 
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
-  /* Eine Chat-Nachricht melden, solange Inkwell im Hintergrund liegt.
+  /* Eine Chat-Nachricht melden, solange Inkwells im Hintergrund liegt.
      Ob wirklich gemeldet wird, entscheidet der Hauptprozess – nur der
      weiss, ob das Fenster gerade vorne steht (siehe dort). */
   notifyChat: (daten) => ipcRenderer.invoke('notify-chat', daten),

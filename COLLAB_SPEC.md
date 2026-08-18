@@ -14,7 +14,7 @@ Die Wunschliste ist umsetzbar, aber drei Dinge stehen dem heutigen Stand
 grundsätzlich im Weg. Sie sind keine Details, sondern bestimmen, was
 überhaupt gebaut werden kann.
 
-### 0.1 Inkwell kennt bei Firebase niemanden
+### 0.1 Inkwells kennt bei Firebase niemanden
 
 Angemeldet wird über Google bzw. Microsoft — aber **nicht bei Firebase**.
 Für die Freigabe meldet sich das Gerät bei Firebase *anonym* an
@@ -95,7 +95,7 @@ Firestore-Regeln zur Verfügung — auf der Website *und* in der App.
 
 4. **Bestandsschutz.** Freigaben, die heute existieren, gehören einer
    anonymen UID. Beim ersten Anmelden mit echter Identität die eigenen
-   Einträge aus `Settings.get('shares')` bzw. `localStorage.inkwell_shares`
+   Einträge aus `Settings.get('shares')` bzw. `localStorage.inkwells_shares`
    durchgehen und den `owner` auf die neue UID umschreiben. Die Regel für
    `update` erlaubt das dem bisherigen Besitzer.
 
@@ -279,17 +279,17 @@ allow update: if request.auth != null
 ```
 
 **Fall 2 — in der App öffnen**
-Die Grundlage ist schon da: `inkwell://` ist als Protokoll registriert
+Die Grundlage ist schon da: `inkwells://` ist als Protokoll registriert
 ([`main.js:553`](main.js#L553)), Aufrufe kommen über `second-instance`,
 `open-url` und `getPendingDeepLink` an.
 
 Zu tun:
 - In [`main.js`](main.js) die Weiche einbauen. Heute landet **jeder**
-  `inkwell://`-Aufruf beim Ereignis `oauth-callback`. Künftig:
-  `inkwell://share/<linkId>` → eigenes Ereignis `open-share`.
+  `inkwells://`-Aufruf beim Ereignis `oauth-callback`. Künftig:
+  `inkwells://share/<linkId>` → eigenes Ereignis `open-share`.
 - In [`preload.js`](preload.js): `onOpenShare(cb)` ergänzen.
-- Auf der Seite `/s/` einen Knopf **„In Inkwell öffnen"**, der auf
-  `inkwell://share/<linkId>` zeigt. Der Browser fragt dann selbst, ob die
+- Auf der Seite `/s/` einen Knopf **„In Inkwells öffnen"**, der auf
+  `inkwells://share/<linkId>` zeigt. Der Browser fragt dann selbst, ob die
   App geöffnet werden soll.
 - Ist in der App niemand angemeldet: Dokument im Nur-Lese-Modus zeigen und
   einen Hinweis einblenden, dass Bearbeiten eine Anmeldung braucht.
@@ -353,8 +353,8 @@ linkId          wird beim Erneuern ausgetauscht
 
 > **Nur in der App.** Auf der Website bleiben geteilte Dokumente immer
 > schreibgeschützt — auch für Personen mit Bearbeitungsrecht. Dort steht
-> stattdessen ein Hinweis „Zum Bearbeiten in der Inkwell-App öffnen" mit
-> Knopf auf `inkwell://share/<linkId>`.
+> stattdessen ein Hinweis „Zum Bearbeiten in der Inkwells-App öffnen" mit
+> Knopf auf `inkwells://share/<linkId>`.
 >
 > Das spart den gesamten Abschnitt 5 auf der Website: keine Anwesenheit,
 > keine Sperren, kein CRDT im Browser. Die Leseansicht muss lediglich
@@ -517,7 +517,7 @@ ohnehin schon, wen sie betrifft.
 | ✅ **1** | Firebase-Identität (Abschnitt 1) | Regeln kennen E-Mails; Freigabe hängt am Konto, nicht am Gerät | `share.js`, `providers/*`, `cloudSync.js` |
 | ✅ **2** | Tab „Geteilte Dokumente" + Link mit Leserecht | Geteiltes taucht von selbst auf und verschwindet wieder | `ui/sharedDocs.js`, `dashboard.js` |
 | ✅ **3** | Freigabe per E-Mail + Rollen + Entfernen | Sperrliste und „Link erneuern" inbegriffen | `ui/share.js`, `dashboard.js` |
-| ✅ **4** | `inkwell://share/<id>` + „In Inkwell öffnen" | Weiche in `main.js`, Ereignis `open-share` | `main.js`, `preload.js`, `s/index.html` |
+| ✅ **4** | `inkwells://share/<id>` + „In Inkwells öffnen" | Weiche in `main.js`, Ereignis `open-share` | `main.js`, `preload.js`, `s/index.html` |
 | ✅ **5** | Benachrichtigung in der App | Zähler am Reiter, Meldung beim Start | `ui/sharedDocs.js` |
 | ✅ **6** | Datenmodell zerlegen (Abschnitt 2) | Seiten, Handschrift und Bilder einzeln; nur Geändertes geht hoch | `share.js`, `scripts/test-doc-split.js` |
 | ✅ **7** | Anwesenheit + Marker + Schreibmarken | Leiste oben, Marker am Seitenrand, farbige Cursor mit Namen im Text | `ui/collab.js`, `database.rules.json` |
@@ -782,7 +782,7 @@ Stufe 8 mit stand, ist bereits in Stufe 2 gebaut worden.
    Yjs ist eine *Entwicklungs*-Abhängigkeit: `scripts/build-yjs.js` bündelt
    es einmalig zu `src/lib/yjs.bundle.js`, und nur diese Datei wird
    ausgeliefert. Nötig, weil Yjs seine Teile über Kurznamen aus `lib0`
-   holt, die ein Browser nicht auflösen kann — die Oberfläche von Inkwell
+   holt, die ein Browser nicht auflösen kann — die Oberfläche von Inkwells
    besteht aber bewusst aus klassischen `<script>`-Dateien ohne Bauschritt.
 
    Wie der Text durch Yjs geht, steht in Abschnitt 5.2.

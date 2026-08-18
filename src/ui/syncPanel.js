@@ -568,7 +568,7 @@
     if (overlay.style.display !== 'none') render();
   }, 5000);
 
-  document.addEventListener('inkwell-identity-changed', refreshButton);
+  document.addEventListener('inkwells-identity-changed', refreshButton);
   /* Der Sprachwechsel setzt die Beschriftungen aus data-i18n-title neu –
      und ueberschreibt damit die, die refreshButton je nach Zustand
      gesetzt hat. Deshalb hier noch einmal hinterher. */

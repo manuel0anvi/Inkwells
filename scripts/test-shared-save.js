@@ -6,7 +6,7 @@
 
    Prüft ui/sharedDocs.js – die Stelle, an der Änderungen an einem
    geteilten Dokument nach Firestore gehen. Firestore selbst kommt nicht
-   vor: InkwellShare ist nachgebaut und schreibt nur mit, WAS verlangt
+   vor: InkwellsShare ist nachgebaut und schreibt nur mit, WAS verlangt
    wurde.
 
    Warum ausgerechnet hier ein eigener Test steht: der schwerste Fehler
@@ -150,7 +150,7 @@ function makeApp(setup = {}) {
     roleFor: () => 'edit'
   };
 
-  ctx.window.InkwellShare = {
+  ctx.window.InkwellsShare = {
     currentIdentity: () => ({ uid: 'u1', email: 'ich@example.com', name: 'Ich', anonymous: false }),
     hasRealIdentity: () => true,
     whenIdentityReady: async () => ({ email: 'ich@example.com' }),

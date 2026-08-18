@@ -151,7 +151,7 @@
 
        http:  und  https:   das gewoehnliche Netz
        mailto:              eine Mailadresse
-       inkwell:             die eigene Adresse der App, ueber die ein
+       inkwells:             die eigene Adresse der App, ueber die ein
                             Freigabe-Link geoeffnet wird (main.js)
 
      Gepruefte wird ueber den URL-Parser des Browsers und nicht mit einem
@@ -165,7 +165,7 @@
      Seite ergibt in einem Heft keinen Sinn und waere nur ein Weg, auf
      Dateien der Oberflaeche zu zeigen.
      ══════════════════════════════════════════════════════════════════ */
-  const ERLAUBTE_SCHEMATA = new Set(['http:', 'https:', 'mailto:', 'inkwell:']);
+  const ERLAUBTE_SCHEMATA = new Set(['http:', 'https:', 'mailto:', 'inkwells:']);
 
   function istAdresse(wert) {
     if (typeof wert !== 'string') return false;
@@ -210,7 +210,7 @@
          VOM style BLEIBT DIE FARBE – UND DER ABSTAND
 
          Lange blieb hier nur die Farbe stehen. Dazugekommen sind drei
-         Masse, mit denen Inkwell seit der Umstellung auf „Abstand statt
+         Masse, mit denen Inkwells seit der Umstellung auf „Abstand statt
          Leerzeichen" die Stelle hält, an die jemand geklickt hat
          (canvas/text.js):
 

@@ -33,7 +33,7 @@ function pruefe(was, bedingung, hinweis) {
   zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
 }
 
-const I = InkwellDocxImport.__intern;
+const I = InkwellsDocxImport.__intern;
 const utf8 = (s) => new TextEncoder().encode(s);
 
 /* ── Ein Archiv bauen, wie Word es schreibt ─────────────────────────
@@ -164,7 +164,7 @@ window.__fertig = (async function () {
 
     /* Ein Dokument bauen, wie Word es schreibt. Bewusst von Hand und
        nicht über core/docx.js: hier sollen gerade die Formen geprüft
-       werden, die Inkwell selbst NIE erzeugt – ausdrückliches „nicht
+       werden, die Inkwells selbst NIE erzeugt – ausdrückliches „nicht
        fett", Nummerierung über zwei Ecken, verbundene Zellen. */
     const NS = 'xmlns:w="' + I.W + '" xmlns:r="' + I.R + '"';
 
@@ -176,7 +176,7 @@ window.__fertig = (async function () {
       for (const [name, text] of Object.entries(extra || {})) {
         teile.push({ name, data: typeof text === 'string' ? utf8(text) : text });
       }
-      return InkwellDocxImport.lese(await packe(teile, true));
+      return InkwellsDocxImport.lese(await packe(teile, true));
     }
 
     const htmlVon = (erg) => erg.bloecke.map(b => b.html).join('');
@@ -260,8 +260,8 @@ window.__fertig = (async function () {
     pruefe('Leerzeilen bleiben', htmlVon(e) === '<p>a</p><p><br></p><p>b</p>', htmlVon(e));
 
     // Ein Link behaelt seinen Text, verliert aber die Adresse
-    e = await lies('<w:p><w:hyperlink r:id="rId9"><w:r><w:t>Inkwell</w:t></w:r></w:hyperlink></w:p>');
-    pruefe('Linktext bleibt, Adresse geht', htmlVon(e) === '<p>Inkwell</p>'
+    e = await lies('<w:p><w:hyperlink r:id="rId9"><w:r><w:t>Inkwells</w:t></w:r></w:hyperlink></w:p>');
+    pruefe('Linktext bleibt, Adresse geht', htmlVon(e) === '<p>Inkwells</p>'
       && e.bericht.verloren.includes('links'), htmlVon(e));
 
     /* ══ 3. DER SANITIZER ═══════════════════════════════════════════ */
@@ -289,7 +289,7 @@ window.__fertig = (async function () {
     /* ══ 4. DER SEITENUMBRUCH ═══════════════════════════════════════ */
     abschnitt('Der Seitenumbruch');
 
-    const P = InkwellDocxPaginate;
+    const P = InkwellsDocxPaginate;
     const NUTZ = P.nutzhoehe(1123);
 
     /** Wie hoch wird dieser Seiteninhalt wirklich? Mit echtem Satz. */
@@ -378,7 +378,7 @@ window.__fertig = (async function () {
        muss herauskommen, was hineinging.
 
        Was der Rundlauf NICHT beweist: dass echte Word-Dateien gelesen
-       werden. Der Export schreibt nur die Formen, die Inkwell selbst
+       werden. Der Export schreibt nur die Formen, die Inkwells selbst
        kennt. Dafuer stehen die Bausteine oben, von Hand gebaut.
        ═══════════════════════════════════════════════════════════════ */
     abschnitt('Rundlauf gegen den eigenen Export');
@@ -398,8 +398,8 @@ window.__fertig = (async function () {
       }]
     };
 
-    const datei = await InkwellDocx.build([{ page: heft.pages[0], bg: 'ruled' }], { scale: 1 });
-    const zurueck = await InkwellDocxImport.lese(datei);
+    const datei = await InkwellsDocx.build([{ page: heft.pages[0], bg: 'ruled' }], { scale: 1 });
+    const zurueck = await InkwellsDocxImport.lese(datei);
     const rundHtml = zurueck.bloecke.map(b => b.html).join('');
 
     /* Der Export malt die Listenmarke als Text davor und setzt einen

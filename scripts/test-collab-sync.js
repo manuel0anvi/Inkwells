@@ -183,7 +183,7 @@ function makeClient(name, uid, notebook) {
   /* Der nachgebaute Raum. Anwesenheit läuft wie in Wirklichkeit über eine
      eigene Ablage: jeder schreibt seinen Eintrag, alle bekommen die Liste
      ohne den eigenen. Daran hängen Schreibmarken und Zeilensperren. */
-  ctx.window.InkwellShare = {
+  ctx.window.InkwellsShare = {
     joinDocRoom: async () => ({
       me: { uid },
       setPage(pageId, offset, lock) {
@@ -865,7 +865,7 @@ function check(label, actual, expected) {
   console.log('\nOhne Live-Verbindung');
 
   const lonely = makeClient('Allein', 'uidL', makeNotebook());
-  lonely.ctx.window.InkwellShare.joinDocRoom = async () => { throw new Error('RTDB_UNAVAILABLE'); };
+  lonely.ctx.window.InkwellsShare.joinDocRoom = async () => { throw new Error('RTDB_UNAVAILABLE'); };
   await lonely.Collab.start('doc4', lonely.notebook, {}, true);
 
   check('Meldet sich als nicht live', lonely.Collab.isLive(), false);

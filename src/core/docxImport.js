@@ -13,7 +13,7 @@
    Tabellenhöhen. Die gibt es hier nicht, und eine halbe Nachbildung
    wäre schlechter als eine ehrliche Übersetzung.
 
-   Stattdessen wird der INHALT in Inkwell-Text übersetzt und neu
+   Stattdessen wird der INHALT in Inkwells-Text übersetzt und neu
    umbrochen. Das Ergebnis ist änderbar wie jeder andere Heftinhalt –
    das ist der Sinn der Sache. Was dabei nicht mitkommt, sagt der
    Bericht am Ende (ui/homeGrid.js).
@@ -29,7 +29,7 @@
    ── Aufbau ──────────────────────────────────────────────────────────
      1. entpacke()      ZIP lesen (Verfahren 0 und 8)
      2. leseBeziehungen/leseNummerierung/leseVorlagen
-     3. baueHtml()      w:p, w:r, w:tbl → Inkwell-HTML
+     3. baueHtml()      w:p, w:r, w:tbl → Inkwells-HTML
      4. Bilder sammeln, Platz im Text freihalten
    Der Seitenumbruch steht in core/docxPaginate.js – er braucht ein
    sichtbares Fenster zum Messen und gehört deshalb nicht hierher.
@@ -466,7 +466,7 @@
 
      Zwei Dinge brauchen einen zweiten Blick:
 
-     · Die SPALTENBREITEN stehen in Twips im tblGrid. Inkwell trägt sie
+     · Die SPALTENBREITEN stehen in Twips im tblGrid. Inkwells trägt sie
        als Zahl an <col> (core/tables.js) – ein style hielte den
        Sanitizer nicht aus.
      · Verbundene Zellen ÜBER Zeilen hinweg stehen in Word nicht als
@@ -578,7 +578,7 @@
         continue;
       }
 
-      /* Eine Tabelle in einer Tabelle kann Inkwell nicht – der Editor
+      /* Eine Tabelle in einer Tabelle kann Inkwells nicht – der Editor
          verbietet sie beim Einfuegen aus demselben Grund (core/tables.js).
          Der Text bleibt, das Gitter geht. */
       if (el.localName === 'tbl') {
@@ -667,7 +667,7 @@
     const leer = !inhalt;
     if (leer) inhalt = '<br>';   // sonst fiele die Zeile beim Anzeigen zusammen
 
-    /* Inkwell kennt drei Überschriftsebenen. Tiefere gibt es in Word
+    /* Inkwells kennt drei Überschriftsebenen. Tiefere gibt es in Word
        (bis 9); sie werden zur dritten – eine vierte Ebene sähe aus wie
        gewöhnlicher Text, und die Gliederung ginge ganz verloren. */
     if (ebene !== null && ebene >= 0 && ebene <= 8 && !leer) {
@@ -867,7 +867,7 @@
     };
   }
 
-  global.InkwellDocxImport = {
+  global.InkwellsDocxImport = {
     lese,
     __intern: {
       entpacke, alsText, alsXml, leseBeziehungen, leseNummerierung, leseVorlagen,

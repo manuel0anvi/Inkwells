@@ -8,7 +8,7 @@
    Sitzung hier deutlich länger als bei Google.
 
    Gespeichert wird im App-Ordner (`/me/drive/special/approot`). Der liegt
-   im OneDrive des Nutzers sichtbar unter "Apps/Inkwell", die Berechtigung
+   im OneDrive des Nutzers sichtbar unter "Apps/Inkwells", die Berechtigung
    reicht aber nur für genau diesen Ordner.
 
    Besonderheit: OneDrive kennt keine unsichtbaren Zusatzeigenschaften wie
@@ -32,7 +32,7 @@ function describeMicrosoftTokenError(detail) {
   if (/AADSTS90023|Cross-origin token redemption/i.test(text)) {
     return 'Die Weiterleitungs-Adresse ist in Azure als Plattform „Web" eingetragen. '
       + 'Für die Anmeldung aus dem Browser muss sie unter „Single-page application" stehen: '
-      + 'Azure Portal → App-Registrierungen → Inkwell → Authentifizierung → die Adresse unter '
+      + 'Azure Portal → App-Registrierungen → Inkwells → Authentifizierung → die Adresse unter '
       + '„Web" entfernen und unter „Single-page application" (SPA) neu hinzufügen. '
       + 'Siehe CLOUD_SETUP.md, Abschnitt B2.';
   }
@@ -314,14 +314,14 @@ const OneDriveProvider = {
       for (const item of (data.value || [])) {
         if (item.folder) continue;
         if (!item.name?.endsWith('.json') && !item.name?.endsWith('.jrnl')) continue;
-        if (item.name.startsWith('inkwell-')) continue;   // Index-Dateien
+        if (item.name.startsWith('inkwells-')) continue;   // Index-Dateien
 
         out.push({
           id: item.id,
           name: item.name,
           modifiedTime: item.lastModifiedDateTime,
           size: Number(item.size) || 0,
-          inkwellId: this._idFromFileName(item.name)
+          inkwellsId: this._idFromFileName(item.name)
         });
       }
       url = data['@odata.nextLink'] || null;
@@ -350,7 +350,7 @@ const OneDriveProvider = {
   },
 
   matchesNotebook(file, notebook) {
-    if (file.inkwellId) return file.inkwellId === notebook.id;
+    if (file.inkwellsId) return file.inkwellsId === notebook.id;
 
     /* Ohne Trenner im Namen: die Form, die Google Drive schreibt. Solche
        Dateien liegen hier, wenn zwischen den Anbietern gewechselt wurde.

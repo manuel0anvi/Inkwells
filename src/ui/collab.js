@@ -1338,7 +1338,7 @@
      verhindert, dass ein Zusammenstoss ENTSTEHT, hier, dass er noch
      etwas anrichtet, wenn er trotzdem entstanden ist – weil die fremde
      Sperre einen Augenblick älter ist, oder weil am anderen Ende eine
-     ältere Fassung von Inkwell läuft, die die Zusatzzeile noch ohne
+     ältere Fassung von Inkwells läuft, die die Zusatzzeile noch ohne
      Rücksicht beansprucht.
 
      >>> Warum nicht einfach „ich tippe gerade" <<<
@@ -2881,7 +2881,7 @@
     }
 
     try {
-      room = await window.InkwellShare.joinDocRoom(id, {
+      room = await window.InkwellsShare.joinDocRoom(id, {
         isOwner: !!opts.isOwner,
         ownerUid: opts.ownerUid || '',
         /* Der Name des Live-Raums aus dem Kopf. Ohne Angabe ist es die

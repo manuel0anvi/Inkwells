@@ -6,7 +6,7 @@
 
    Prüft versionPasst() aus core/share.js – die Sperre, die ein geteiltes
    Dokument zumacht, wenn Besitzer und Gast nicht dieselbe Fassung von
-   Inkwell haben.
+   Inkwells haben.
 
    >>> Warum in BEIDE Richtungen gesperrt wird <<<
    Ein geteiltes Dokument ist kein Dateiformat, das man verträglich

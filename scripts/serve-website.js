@@ -109,7 +109,7 @@ server.on('error', (err) => {
 
 server.listen(PORT, HOST, () => {
   console.log('');
-  console.log('  Inkwell Website läuft');
+  console.log('  Inkwells Website läuft');
   console.log('  ─────────────────────────────────────────────');
   console.log(`  Startseite   http://${HOST}:${PORT}/`);
   console.log(`  Dashboard    http://${HOST}:${PORT}/dashboard/`);

@@ -284,7 +284,7 @@ const GoogleDriveProvider = {
 
   /* ── Dateien ───────────────────────────────────────────────────── */
 
-  /** Einheitliche Form: { id, name, modifiedTime, size, inkwellId } */
+  /** Einheitliche Form: { id, name, modifiedTime, size, inkwellsId } */
   async listNotebookFiles(http, folderId) {
     const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
     const data = await http.json(
@@ -294,17 +294,17 @@ const GoogleDriveProvider = {
     const files = Array.isArray(data.files) ? data.files : [];
     return files
       .filter(f => {
-        if (f.appProperties?.inkwellKind === 'index') return false;
-        if (f.name?.startsWith('inkwell-') && f.name?.endsWith('.json')) return false;
+        if (f.appProperties?.inkwellsKind === 'index') return false;
+        if (f.name?.startsWith('inkwells-') && f.name?.endsWith('.json')) return false;
         if (f.mimeType === 'application/vnd.google-apps.folder') return false;
-        return f.name?.endsWith('.json') || f.name?.endsWith('.jrnl') || !!f.appProperties?.inkwellId;
+        return f.name?.endsWith('.json') || f.name?.endsWith('.jrnl') || !!f.appProperties?.inkwellsId;
       })
       .map(f => ({
         id: f.id,
         name: f.name,
         modifiedTime: f.modifiedTime,
         size: Number(f.size) || 0,
-        inkwellId: f.appProperties?.inkwellId || null
+        inkwellsId: f.appProperties?.inkwellsId || null
       }));
   },
 
@@ -321,7 +321,7 @@ const GoogleDriveProvider = {
 
   /** Findet die Datei zu einem Heft, auch nach Umbenennen. */
   matchesNotebook(file, notebook) {
-    return file.inkwellId === notebook.id || file.name === `${notebook.id}.json`;
+    return file.inkwellsId === notebook.id || file.name === `${notebook.id}.json`;
   },
 
   async upsertNotebook(http, { folderId, notebook, existingFileId }) {
@@ -330,9 +330,9 @@ const GoogleDriveProvider = {
       name: this.fileNameFor(notebook),
       mimeType: 'application/json',
       appProperties: {
-        inkwellId: notebook.id,
-        inkwellName: String(notebook.name || ''),
-        inkwellUpdatedAt: notebook.updatedAt || ''
+        inkwellsId: notebook.id,
+        inkwellsName: String(notebook.name || ''),
+        inkwellsUpdatedAt: notebook.updatedAt || ''
       }
     };
     if (!existingFileId) metadata.parents = [folderId];
@@ -345,7 +345,7 @@ const GoogleDriveProvider = {
       return this._uploadResumable(http, { metadata, content, existingFileId });
     }
 
-    const boundary = '-------inkwell' + Date.now();
+    const boundary = '-------inkwells' + Date.now();
     const body =
       `\r\n--${boundary}\r\n`
       + 'Content-Type: application/json; charset=UTF-8\r\n\r\n'
@@ -453,11 +453,11 @@ const GoogleDriveProvider = {
     const metadata = {
       name,
       mimeType: 'application/json',
-      appProperties: { inkwellKind: 'index' }
+      appProperties: { inkwellsKind: 'index' }
     };
     if (!existingId) metadata.parents = [folderId];
 
-    const boundary = '-------inkwellidx' + Date.now();
+    const boundary = '-------inkwellsidx' + Date.now();
     const body =
       `\r\n--${boundary}\r\n`
       + 'Content-Type: application/json; charset=UTF-8\r\n\r\n'

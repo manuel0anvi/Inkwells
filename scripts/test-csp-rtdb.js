@@ -97,7 +97,7 @@ function scriptSrcKopfzeile(direktive) {
  *
  * Beruecksichtigt den Platzhalter am Anfang, denn genau so steht es in
  * der CSP: https://*.firebasedatabase.app deckt die regionale Adresse
- * inkwell-…-default-rtdb.europe-west1.firebasedatabase.app ab.
+ * inkwells-…-default-rtdb.europe-west1.firebasedatabase.app ab.
  */
 function laesstDurch(quellen, host) {
   if (!quellen) return false;

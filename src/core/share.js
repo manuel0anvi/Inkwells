@@ -309,7 +309,7 @@ function hasRealIdentity() {
 
 /**
  * Auch bei Firebase abmelden. Beim Abmelden aufgerufen – in der App von
- * CloudSync.signOut(), auf der Website von inkwellLogout().
+ * CloudSync.signOut(), auf der Website von inkwellsLogout().
  *
  * Ohne das blieb die Firebase-Sitzung nach dem Abmelden bestehen. Wer sich
  * danach mit einer anderen Adresse anmeldete, bekam die geteilten Dokumente
@@ -347,7 +347,7 @@ async function signInMicrosoftInteractive(loginHint = '') {
   const provider = new OAuthProvider('microsoft.com');
   provider.addScope('email');
 
-  /* Nur persönliche Konten, wie überall sonst in Inkwell (TENANT in
+  /* Nur persönliche Konten, wie überall sonst in Inkwells (TENANT in
      src/core/cloudConfig.js bzw. website/js/config.js). Ein Geschäfts-
      oder Schulkonto liefe hier sonst in dieselbe unerklärte Fehlerseite
      wie bei der Anmeldung. */
@@ -374,7 +374,7 @@ async function signInMicrosoftInteractive(loginHint = '') {
        Auflösen lässt sich das nur so, wie Firebase es vorsieht: einmal
        mit dem BEKANNTEN Anbieter anmelden und die Microsoft-Anmeldung
        daran anhängen. Danach gehören beide Wege zu einem Konto, und
-       Inkwell sieht dieselbe Person – wichtig, weil die Freigaben an der
+       Inkwells sieht dieselbe Person – wichtig, weil die Freigaben an der
        Adresse hängen, nicht an der Anmeldeart.
 
        Der Anhang bleibt hier liegen, statt gleich weiterzumachen: das
@@ -396,7 +396,7 @@ async function signInMicrosoftInteractive(loginHint = '') {
       at: Date.now()
     };
     const fehler = new Error('MICROSOFT_NEEDS_GOOGLE');
-    fehler.code = 'inkwell/microsoft-needs-google';
+    fehler.code = 'inkwells/microsoft-needs-google';
     fehler.email = offeneVerknuepfung.email;
     throw fehler;
   }
@@ -588,7 +588,7 @@ function docUrlFor(linkId) {
 
 /** Adresse, die statt des Browsers die App öffnet (siehe main.js). */
 function appUrlFor(linkId) {
-  return `inkwell://share/${encodeURIComponent(linkId)}`;
+  return `inkwells://share/${encodeURIComponent(linkId)}`;
 }
 
 /**
@@ -828,7 +828,7 @@ async function isOwnShare(shareId) {
    VERSIONSSPERRE
 
    Wer ein geteiltes Dokument öffnen will, muss dieselbe Fassung von
-   Inkwell haben wie der Besitzer. Sonst kommt er gar nicht hinein – auch
+   Inkwells haben wie der Besitzer. Sonst kommt er gar nicht hinein – auch
    nicht zum Lesen, und auch nicht über einen Link.
 
    >>> Warum so streng, und warum in BEIDE Richtungen <<<
@@ -966,7 +966,7 @@ function describeDoc(docId, data) {
        und trägt ihn in den Kopf ein (joinDocRoom). Der Besetzer sitzt
        dann in einem Raum, in den niemand mehr kommt. */
     roomKey: typeof data.roomKey === 'string' && data.roomKey ? data.roomKey : docId,
-    /* Mit welcher Fassung von Inkwell der Besitzer arbeitet. Leer heisst:
+    /* Mit welcher Fassung von Inkwells der Besitzer arbeitet. Leer heisst:
        aus der Zeit davor – dann wird nicht gesperrt. Siehe
        versionPasst() weiter unten. */
     appVersion: typeof data.appVersion === 'string' ? data.appVersion : '',
@@ -2396,7 +2396,7 @@ const CHAT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
    noch vollständig vor – die Frist stand zwar auf einem Tag, sie kam
    aber nie zum Tragen, weil sie niemand auslöste.
 
-   Ein Dienst, der das ohne Beteiligte täte, gibt es hier nicht: Inkwell
+   Ein Dienst, der das ohne Beteiligte täte, gibt es hier nicht: Inkwells
    hat keinen Server, nur Firebase und die Geräte der Beteiligten. Also
    auf zwei Wegen:
 
@@ -3490,7 +3490,7 @@ const CHAT_QUOTE_LEN = 140;
    globalen Gültigkeitsbereich), dieses Modul ist ein ES-Modul.
    ─────────────────────────────────────────────────────────────────── */
 
-const InkwellShare = {
+const InkwellsShare = {
   // Lesekopien (unverändert)
   publishNotebook,
   loadSharedNotebook,
@@ -3564,11 +3564,11 @@ const InkwellShare = {
 };
 
 if (typeof window !== 'undefined') {
-  window.InkwellShare = InkwellShare;
-  document.dispatchEvent(new Event('inkwell-share-ready'));
+  window.InkwellsShare = InkwellsShare;
+  document.dispatchEvent(new Event('inkwells-share-ready'));
 }
 
-export default InkwellShare;
+export default InkwellsShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,

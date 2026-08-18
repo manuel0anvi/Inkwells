@@ -1,6 +1,6 @@
-# Inkwell - Notizen & Handschrift App
+# Inkwells - Notizen & Handschrift App
 
-Inkwell ist eine hybride Notiz-App, die es ermöglicht, sowohl getippten Text als auch handschriftliche Notizen in einer Oberfläche zu vereinen.
+Inkwells ist eine hybride Notiz-App, die es ermöglicht, sowohl getippten Text als auch handschriftliche Notizen in einer Oberfläche zu vereinen.
 
 ## Funktionen
 - **Text & Handschrift:** Kombiniere klassische Textnotizen mit handschriftlichen Zeichnungen direkt auf einem digitalen Canvas.

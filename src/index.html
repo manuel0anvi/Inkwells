@@ -8,7 +8,7 @@
      dort stehen. Warum apis.google.com dabei ist: ausfuehrlich in main.js
      ueber UI_CSP. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'">
-<title>Inkwell</title>
+<title>Inkwells</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="dns-prefetch" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -44,7 +44,7 @@
   </div>
   <div class="tbar-c" id="tbar-title">
     <span class="tbar-title-accent" id="tbar-title-accent" style="display:none"></span>
-    <span id="tbar-title-text">Inkwell</span>
+    <span id="tbar-title-text">Inkwells</span>
   </div>
   <div class="tbar-r">
     <button class="titlebar-update-btn" id="btn-update" style="display:none">
@@ -1106,8 +1106,8 @@
 <div class="overlay" id="ov-ms-hint" style="display:none">
   <div class="modal confirm-modal">
     <h3 style="margin:0 0 12px 0" data-i18n="msHintTitle">Nur mit privatem Microsoft-Konto</h3>
-    <p class="confirm-msg" data-i18n="msHintBody">Inkwell ist für persönliche Microsoft-Konten eingerichtet — also Outlook.com, Hotmail, Live oder MSN.</p>
-    <p class="confirm-note" data-i18n="msHintNote">Mit einem Geschäfts- oder Schulkonto schlägt die Anmeldung fehl. Diese Konten verwaltet deine Organisation, und sie müsste Inkwell erst freigeben.</p>
+    <p class="confirm-msg" data-i18n="msHintBody">Inkwells ist für persönliche Microsoft-Konten eingerichtet — also Outlook.com, Hotmail, Live oder MSN.</p>
+    <p class="confirm-note" data-i18n="msHintNote">Mit einem Geschäfts- oder Schulkonto schlägt die Anmeldung fehl. Diese Konten verwaltet deine Organisation, und sie müsste Inkwells erst freigeben.</p>
     <div class="modal-btns">
       <button id="ms-hint-cancel" data-i18n="cancel">Abbrechen</button>
       <button id="ms-hint-ok" class="ok-btn" data-i18n="msHintConfirm">Verstanden, weiter</button>
@@ -1411,7 +1411,7 @@
           </label>
           <div style="display:flex; flex-direction:column; gap:2px;">
             <span class="toggle-label" data-i18n="chatNotifySetting">Bei neuen Nachrichten benachrichtigen</span>
-            <span class="settings-hint" style="margin:0" data-i18n="chatNotifyHint">Windows zeigt sie rechts unten – nur, wenn Inkwell gerade nicht im Vordergrund ist.</span>
+            <span class="settings-hint" style="margin:0" data-i18n="chatNotifyHint">Windows zeigt sie rechts unten – nur, wenn Inkwells gerade nicht im Vordergrund ist.</span>
           </div>
         </div>
       </div>
@@ -1503,7 +1503,7 @@
       </button>
 
       <div id="auth-provider-hint" style="font-size:11px; color:var(--text-muted); line-height:1.5;" data-i18n="providerHint">
-        Der Login öffnet sich im Standard-Browser. Inkwell erhält nur Zugriff auf die Dateien, die es selbst im Ordner „Inkwell“ anlegt.
+        Der Login öffnet sich im Standard-Browser. Inkwells erhält nur Zugriff auf die Dateien, die es selbst im Ordner „Inkwells“ anlegt.
       </div>
 
       <div id="auth-separate-hint" style="font-size:11px; color:var(--text-muted); line-height:1.5;" data-i18n="providerSeparateHint">
@@ -1607,7 +1607,7 @@
            describeIdentityProblem(); der Text hier ist nur die Anzeige,
            solange niemand ihn gesetzt hat. -->
       <p id="share-needs-account" style="display:none; font-size:12px; color:var(--md); line-height:1.6; border:1px solid rgba(224,166,58,0.35); background:rgba(224,166,58,0.08); border-radius:6px; padding:10px; margin:0;">
-        Zum Teilen musst du in Inkwell mit deinem Google- oder Microsoft-Konto angemeldet sein.
+        Zum Teilen musst du in Inkwells mit deinem Google- oder Microsoft-Konto angemeldet sein.
       </p>
 
       <!-- Bei Microsoft fehlt die Firebase-Kennung nicht aus Versehen: sie
@@ -1700,7 +1700,7 @@
             <input type="radio" name="export-format" value="pdf" checked>
             <span class="opt-radio-body">
               <span class="opt-radio-title" data-i18n="exportFormatPdf">PDF</span>
-              <span class="opt-radio-hint" data-i18n="exportFormatPdfHint">Zum Ansehen und Drucken. Sieht genau aus wie in Inkwell.</span>
+              <span class="opt-radio-hint" data-i18n="exportFormatPdfHint">Zum Ansehen und Drucken. Sieht genau aus wie in Inkwells.</span>
             </span>
           </label>
 
@@ -1817,7 +1817,7 @@
   <div class="quitting-box">
     <div class="auth-spinner"></div>
     <div class="quitting-title" id="quitting-title" data-i18n="quittingTitle">Wird gesichert …</div>
-    <div class="quitting-hint" id="quitting-hint" data-i18n="quittingHint">Deine Änderungen werden gespeichert, dann schließt Inkwell.</div>
+    <div class="quitting-hint" id="quitting-hint" data-i18n="quittingHint">Deine Änderungen werden gespeichert, dann schließt Inkwells.</div>
   </div>
 </div>
 
@@ -1919,7 +1919,7 @@
   <script src="core/docxPaginate.js"></script>
   <!-- Freigabe: Firestore-Zugriff als Modul, Oberfläche als klassisches Script.
        Das Modul läuft nach den klassischen Scripts und meldet sich über
-       das Ereignis "inkwell-share-ready". -->
+       das Ereignis "inkwells-share-ready". -->
   <script type="module" src="core/share.js"></script>
   <script src="ui/share.js"></script>
   <!-- Tab „Geteilte Dokumente": Liste, Öffnen, Zurückschreiben, Hinweise -->

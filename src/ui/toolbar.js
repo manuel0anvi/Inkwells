@@ -1141,7 +1141,7 @@ window.addEventListener('resize', () => {
    linksbündig, zentriert, rechtsbündig und Blocksatz.
 
    >>> Warum es das nicht mehr gibt <<<
-   Inkwell ist ein Heft: man tippt irgendwohin und schreibt los. Wo der
+   Inkwells ist ein Heft: man tippt irgendwohin und schreibt los. Wo der
    Text steht, entscheidet die Stelle, an der man angefangen hat – nicht
    eine Einstellung, die man vorher an einem Absatz gesetzt hat. Beides
    nebeneinander widerspricht sich: eine gesetzte Ausrichtung zieht den
@@ -1153,7 +1153,7 @@ window.addEventListener('resize', () => {
    Blocksatz mit (core/docxImport.js), und die sollen aussehen wie im
    Original – css/pages.css richtet sie weiterhin aus, core/sanitize.js
    lässt sie durch, und core/docx.js schreibt sie beim Ausgeben wieder
-   nach OOXML zurück. Nur ANLEGEN kann sie in Inkwell niemand mehr.
+   nach OOXML zurück. Nur ANLEGEN kann sie in Inkwells niemand mehr.
    ══════════════════════════════════════════════════════════════════════ */
 
 /* Die zuletzt gewählte Form überdauert das Schließen der App. Beim Laden

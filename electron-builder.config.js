@@ -1,12 +1,12 @@
 const os = require('os');
 const path = require('path');
 
-const outputDir = path.join(os.homedir(), 'AppData', 'Local', 'Inkwell', 'dist');
+const outputDir = path.join(os.homedir(), 'AppData', 'Local', 'Inkwells', 'dist');
 
 /* ── Store-Bau (MSIX/appx) ────────────────────────────────────────────
    Der gewoehnliche "npm run build" baut wie bisher NUR den
    NSIS-Installierer. Das Store-Paket entsteht mit "npm run build-store"
-   und setzt dafuer INKWELL_STORE.
+   und setzt dafuer INKWELLS_STORE.
 
    Warum getrennt: das MSIX ist ohne die drei Kennungen unten wertlos,
    und wer nur schnell eine Fassung zum Weitergeben braucht, soll nicht
@@ -23,7 +23,7 @@ const outputDir = path.join(os.homedir(), 'AppData', 'Local', 'Inkwell', 'dist')
 
    scripts/build-release.js bricht ab, solange hier noch PLATZHALTER
    steht - sonst entstuende ein Paket, das der Store stumm zurueckweist. */
-const STORE = process.env.INKWELL_STORE === '1';
+const STORE = process.env.INKWELLS_STORE === '1';
 
 const APPX_IDENTITY = {
   identityName: 'Inkwells.Inkwells',
@@ -32,8 +32,8 @@ const APPX_IDENTITY = {
 };
 
 module.exports = {
-  appId: 'com.inkwell.app',
-  productName: 'Inkwell',
+  appId: 'com.inkwells.app',
+  productName: 'Inkwells',
   icon: 'icon.ico',
   win: {
     target: STORE
@@ -43,8 +43,8 @@ module.exports = {
     fileAssociations: [
       {
         ext: 'jrnl',
-        name: 'Inkwell Notebook',
-        description: 'Inkwell Notebook File',
+        name: 'Inkwells Notebook',
+        description: 'Inkwells Notebook File',
         icon: 'icon.ico',
         role: 'Editor'
       }
@@ -65,22 +65,21 @@ module.exports = {
      languages: die App spricht diese drei, siehe website/js/i18n.js.
      Der Store zeigt die Eintragung danach in den passenden Maerkten.
 
-     >>> Warum displayName "Inkwells" heisst und productName "Inkwell" <<<
-     "Inkwell" war im Store schon vergeben, reserviert ist "Inkwells".
-     Partner Center prueft beim Hochladen, ob der Anzeigename im Paket zu
-     einem reservierten Namen passt - sonst wird es abgelehnt.
+     >>> Warum die App "Inkwells" heisst und nicht "Inkwell" <<<
+     "Inkwell" war im Store schon vergeben. Partner Center prueft beim
+     Hochladen, ob der Anzeigename im Paket zu einem reservierten Namen
+     passt - deshalb hiess zuerst nur der Store-Eintrag so.
 
-     Der Unterschied ist Absicht und KEIN Versehen: productName steckt im
-     Dateinamen, im Programmordner und in der Kennung der Installation.
-     Ihn mitzuziehen haette Folgen fuer alle, die schon installiert haben.
-     Die App umzubenennen ist ein eigener Schritt fuer spaeter. */
+     Inzwischen traegt die ganze App den Namen: Programmdatei, Datenordner,
+     Protokoll, appId. Wer von einer aelteren Fassung kommt, wird beim
+     Start umgezogen (migriereAltenDatenordner in main.js). */
   appx: {
     ...APPX_IDENTITY,
-    applicationId: 'Inkwell',
+    applicationId: 'Inkwells',
     displayName: 'Inkwells',
     backgroundColor: '#0c0e18',
     languages: ['de-DE', 'en-US', 'it-IT'],
-    artifactName: 'Inkwell ${version}.${ext}'
+    artifactName: 'Inkwells ${version}.${ext}'
   },
   // node_modules steht hier bewusst NICHT.
   //

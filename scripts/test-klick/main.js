@@ -2,7 +2,7 @@
 /* ══════════════════════════════════════════════════════════════════════
    WO MAN HINKLICKT, KANN MAN AUCH SCHREIBEN
 
-   Der Sinn von Inkwell ist, dass man irgendwo hindrückt und dort
+   Der Sinn von Inkwells ist, dass man irgendwo hindrückt und dort
    schreibt. Zweimal ist gemeldet worden, dass das nicht geht:
 
      · „sobald etwas geschrieben wurde, kann man nicht mehr hin, wo man

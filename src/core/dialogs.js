@@ -232,7 +232,7 @@ function buildBgRow(cont, cur, onChange) {
 
 function setTitleBar(name, color) {
   const txt = E('tbar-title-text');
-  if (txt) txt.textContent = name || 'Inkwell';
+  if (txt) txt.textContent = name || 'Inkwells';
   const accent = E('tbar-title-accent');
   if (!accent) return;
   if (color) {
@@ -287,7 +287,7 @@ function showHome() {
   E('view-journal').style.display = 'none';
   E('btn-home').style.display = 'none';
   E('app-logo').style.display = '';
-  setTitleBar('Inkwell', null);
+  setTitleBar('Inkwells', null);
   /* Reihenfolge: erst aufräumen, dann den Nur-Lese-Modus abschalten.
      Das Aufräumen schreibt noch ausstehende Änderungen weg und braucht
      dafür S.sharedDoc – applyReadOnlyChrome(false, null) setzt es auf null. */

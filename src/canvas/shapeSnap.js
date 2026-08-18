@@ -256,7 +256,7 @@
     return null;
   }
 
-  global.InkwellShapeSnap = { erkenneForm };
+  global.InkwellsShapeSnap = { erkenneForm };
 
   // Für Tests unter Node
   if (typeof module !== 'undefined' && module.exports) {

@@ -190,7 +190,7 @@ function makeRange() {
                            other.startContainer, other.startOffset);
     },
     /* Nur für den einfachen Fall gedacht: EIN Textknoten, der die ganze
-       Zeile trägt. Genau so sieht eine Seite in Inkwell meistens aus. */
+       Zeile trägt. Genau so sieht eine Seite in Inkwells meistens aus. */
     getClientRects() {
       if (this.startContainer !== this.endContainer) return [];
       if (this.startContainer.nodeType !== TEXT_NODE) return [];

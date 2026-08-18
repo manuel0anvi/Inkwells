@@ -74,7 +74,7 @@
 
     try {
       const u = new URL(roh);
-      if (!['http:', 'https:', 'mailto:', 'inkwell:'].includes(u.protocol)) return '';
+      if (!['http:', 'https:', 'mailto:', 'inkwells:'].includes(u.protocol)) return '';
       return u.href;
     } catch (err) {
       return '';
@@ -84,9 +84,9 @@
   /* ══════════════════════════════════════════════════════════════════
      EIN VERWEIS AUF EINE SEITE IM HEFT
 
-     Er sieht aus wie „inkwell://page/12" und ist damit ein ganz
+     Er sieht aus wie „inkwells://page/12" und ist damit ein ganz
      gewöhnlicher Verweis: er läuft durch dieselbe Prüfung in
-     core/sanitize.js (das Schema inkwell: war dort schon erlaubt,
+     core/sanitize.js (das Schema inkwells: war dort schon erlaubt,
      wegen der Freigabe-Links) und überlebt jeden Abgleich.
 
      Warum kein eigenes Attribut: ein data-Attribut müsste in der
@@ -95,7 +95,7 @@
      ist es überall schon richtig behandelt; wer das Heft als PDF
      exportiert, bekommt einen toten Verweis statt einer kaputten Seite.
      ══════════════════════════════════════════════════════════════════ */
-  const SEITE_MUSTER = /^inkwell:\/\/page\/(\d{1,5})$/i;
+  const SEITE_MUSTER = /^inkwells:\/\/page\/(\d{1,5})$/i;
 
   function seiteAusAdresse(href) {
     const m = SEITE_MUSTER.exec(String(href || '').trim());
@@ -103,7 +103,7 @@
   }
 
   function adresseFuerSeite(nr) {
-    return 'inkwell://page/' + Math.max(1, Math.floor(nr));
+    return 'inkwells://page/' + Math.max(1, Math.floor(nr));
   }
 
   /** Wie viele Seiten hat das offene Heft? Für die Prüfung der Eingabe. */
@@ -496,8 +496,8 @@
     }
 
     // Ein Freigabe-Link gehört in die App selbst, nicht in den Browser
-    if (ziel.startsWith('inkwell://') && typeof window.openSharedDocumentByLink === 'function') {
-      const treffer = /^inkwell:\/\/share\/([^/?#]+)/i.exec(ziel);
+    if (ziel.startsWith('inkwells://') && typeof window.openSharedDocumentByLink === 'function') {
+      const treffer = /^inkwells:\/\/share\/([^/?#]+)/i.exec(ziel);
       if (treffer) { window.openSharedDocumentByLink(decodeURIComponent(treffer[1])); return; }
     }
 

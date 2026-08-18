@@ -4,7 +4,7 @@
    DEN TEXT AUF SEITEN VERTEILEN
 
    Word ist ein durchlaufender Text: eine Seite ist dort das Ergebnis
-   des Umbruchs, kein Behälter. Inkwell hat feste Seiten, jede mit
+   des Umbruchs, kein Behälter. Inkwells hat feste Seiten, jede mit
    eigenem contenteditable. Wer ein Word-Dokument öffnet, muss den
    Umbruch also selbst rechnen.
 
@@ -392,7 +392,7 @@
     return neuerKoerper.rows.length > (kopf ? 1 : 0) ? zweite : null;
   }
 
-  global.InkwellDocxPaginate = {
+  global.InkwellsDocxPaginate = {
     verteile,
     zeilenhoeheFuer,
     nutzhoehe,

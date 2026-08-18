@@ -4,7 +4,7 @@
    PNG lesen und schreiben — ohne fremde Pakete
 
    Gebraucht von scripts/make-icons.js. Absichtlich klein gehalten: es
-   muss genau das können, was das Inkwell-Zeichen verlangt — 8 Bit je
+   muss genau das können, was das Inkwells-Zeichen verlangt — 8 Bit je
    Kanal, nicht verschachtelt, RGB oder RGBA. Alles andere lehnt es ab,
    statt still etwas Falsches zu liefern.
    ══════════════════════════════════════════════════════════════════════ */

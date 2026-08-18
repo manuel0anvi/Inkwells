@@ -542,7 +542,7 @@ abschnitt('Word-Export');
 
 /** Die Marken, die in den Absaetzen landen. */
 function absatzMarken(html) {
-  return InkwellDocx.htmlToParagraphs(html)
+  return InkwellsDocx.htmlToParagraphs(html)
     .filter(p => p.indentPx)
     .map(p => p.runs[0].text);
 }
@@ -570,7 +570,7 @@ pruefe('Roemisch',
 
 /* Eine eingerueckte Liste faengt bei 1 an – und die aeussere zaehlt
    danach weiter, nicht von vorn. */
-const gemischt = InkwellDocx.htmlToParagraphs(
+const gemischt = InkwellsDocx.htmlToParagraphs(
   '<ol class="j-list-decimal"><li>eins<ol class="j-list-decimal">'
   + '<li>tief eins</li><li>tief zwei</li></ol></li><li>zwei</li></ol>');
 pruefe('Die eingerueckte Nummerierung faengt neu an',
@@ -580,13 +580,13 @@ pruefe('Und der Einzug waechst mit der Ebene',
   JSON.stringify(gemischt.map(p => p.indentPx)) === JSON.stringify([32, 64, 64, 32]),
   JSON.stringify(gemischt.map(p => p.indentPx)));
 
-const einer = InkwellDocx.htmlToParagraphs('<ul class="j-list-check"><li>fertig</li></ul>')[0];
+const einer = InkwellsDocx.htmlToParagraphs('<ul class="j-list-check"><li>fertig</li></ul>')[0];
 pruefe('Zwischen Marke und Text steht ein Tabulator',
   einer.runs.length === 3 && einer.runs[0].text === '✓'
   && einer.runs[1].tab === true && einer.runs[2].text === 'fertig',
   JSON.stringify(einer.runs));
 
-const ohne = InkwellDocx.htmlToParagraphs('<p>gewoehnlich</p>')[0];
+const ohne = InkwellsDocx.htmlToParagraphs('<p>gewoehnlich</p>')[0];
 pruefe('Ein gewoehnlicher Absatz bekommt keinen Einzug',
   !ohne.indentPx && ohne.runs.length === 1, JSON.stringify(ohne));
 

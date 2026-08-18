@@ -29,7 +29,7 @@ function istHarmlos(html) {
       if (a.name.toLowerCase() === 'href' && el.tagName === 'A') {
         let schema = '';
         try { schema = new URL(a.value).protocol; } catch (e) { return false; }
-        if (!['http:', 'https:', 'mailto:', 'inkwell:'].includes(schema)) return false;
+        if (!['http:', 'https:', 'mailto:', 'inkwells:'].includes(schema)) return false;
         continue;
       }
       if (/^(src|href|srcset|formaction|data|xlink:href)$/i.test(a.name)) return false;
@@ -107,11 +107,11 @@ bleibt('Einrueckung/Leerraum','<p>  zwei Leerzeichen</p>', ['zwei Leerzeichen'])
 /* Verweise. Sie standen frueher unter „Angriffe" und wurden komplett
    ausgepackt – seit ui/links.js gehoeren sie dazu. Der Text muss auch
    dann stehen bleiben, wenn die Adresse durchfaellt. */
-bleibt('Verweis https',       '<a href="https://inkwells.me">Inkwell</a>',
-  ['<a', 'href="https://inkwells.me', 'Inkwell']);
+bleibt('Verweis https',       '<a href="https://inkwells.me">Inkwells</a>',
+  ['<a', 'href="https://inkwells.me', 'Inkwells']);
 bleibt('Verweis http',        '<a href="http://example.org/x?y=1">Text</a>', ['href="http://example.org']);
 bleibt('Verweis mailto',      '<a href="mailto:wer@example.org">Mail</a>', ['href="mailto:']);
-bleibt('Verweis inkwell',     '<a href="inkwell://share/abc">Heft</a>', ['href="inkwell://share/abc']);
+bleibt('Verweis inkwells',     '<a href="inkwells://share/abc">Heft</a>', ['href="inkwells://share/abc']);
 bleibt('Verweis mit target',  '<a href="https://a.example" target="_blank" rel="noopener noreferrer">x</a>',
   ['target="_blank"', 'rel="noopener noreferrer"']);
 

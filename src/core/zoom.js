@@ -130,7 +130,7 @@ function _applyZoom() {
    gemeldet.
    ══════════════════════════════════════════════════════════════════════ */
 function meldeZoom() {
-  window.dispatchEvent(new CustomEvent('inkwell:zoom', { detail: { zoom: _zoom } }));
+  window.dispatchEvent(new CustomEvent('inkwells:zoom', { detail: { zoom: _zoom } }));
 }
 
 function rerenderCanvasesForZoom() {

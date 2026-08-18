@@ -7,7 +7,7 @@ const { execFileSync } = require('child_process');
    die entscheidet beim Laden, welches Ziel gebaut wird. Und sie wird an
    electron-builder weitergereicht, das die Datei ein zweites Mal liest. */
 const STORE = process.argv.includes('--store');
-if (STORE) process.env.INKWELL_STORE = '1';
+if (STORE) process.env.INKWELLS_STORE = '1';
 
 const rootDir = path.resolve(__dirname, '..');
 const configPath = path.join(rootDir, 'electron-builder.config.js');
@@ -40,10 +40,10 @@ const electronBuilderCli = require.resolve('electron-builder/out/cli/cli.js');
    wuerde es ohnehin nie – der Updater in main.js fragt die
    GitHub-Releases-API und laedt die .exe unmittelbar. */
 const artifacts = STORE
-  ? [`Inkwell ${packageJson.version}.appx`]
+  ? [`Inkwells ${packageJson.version}.appx`]
   : [
-      `Inkwell Setup ${packageJson.version}.exe`,
-      `Inkwell Setup ${packageJson.version}.exe.blockmap`
+      `Inkwells Setup ${packageJson.version}.exe`,
+      `Inkwells Setup ${packageJson.version}.exe.blockmap`
     ];
 
 execFileSync(process.execPath, [electronBuilderCli, '--config', 'electron-builder.config.js', '--win', '--x64'], {

@@ -477,7 +477,7 @@ function pdfBloeckeAusZeilen(zeilen, normal) {
  *   leer = das PDF hatte keine Textebene (eingescannt)
  */
 async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
-  if (typeof InkwellDocxPaginate === 'undefined') throw new Error('NO_DOCX_MODULE');
+  if (typeof InkwellsDocxPaginate === 'undefined') throw new Error('NO_DOCX_MODULE');
 
   const base64 = String(dataUrl).split(',')[1] || '';
   const roh = window.atob(base64);
@@ -524,7 +524,7 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
   if (!bloecke.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
 
   const bg = nb.defaultBg || 'ruled';
-  const seiten = InkwellDocxPaginate.verteile(bloecke, {
+  const seiten = InkwellsDocxPaginate.verteile(bloecke, {
     breite: CFG.PAGE_W, hoehe: CFG.PAGE_H, bg
   });
 
@@ -563,13 +563,13 @@ function dataUrlZuBytes(dataUrl) {
 }
 
 async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
-  if (typeof InkwellDocxImport === 'undefined' || typeof InkwellDocxPaginate === 'undefined') {
+  if (typeof InkwellsDocxImport === 'undefined' || typeof InkwellsDocxPaginate === 'undefined') {
     throw new Error('NO_DOCX_MODULE');
   }
 
   const bg = nb.defaultBg || 'ruled';
-  const zeilenhoehe = InkwellDocxPaginate.zeilenhoeheFuer(bg);
-  const nutz = InkwellDocxPaginate.nutzhoehe(CFG.PAGE_H);
+  const zeilenhoehe = InkwellsDocxPaginate.zeilenhoeheFuer(bg);
+  const nutz = InkwellsDocxPaginate.nutzhoehe(CFG.PAGE_H);
 
   /* Die Kennungen aus dem Auspacker in etwas uebersetzen, das man lesen
      kann. Sie kamen bisher roh bis in die Meldung durch – „ZIP_BROKEN"
@@ -578,7 +578,7 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
      irrefuehrend: die Datei ist ja klein, nur ihr Inhalt nicht. */
   let gelesen;
   try {
-    gelesen = await InkwellDocxImport.lese(dataUrlZuBytes(dataUrl), {
+    gelesen = await InkwellsDocxImport.lese(dataUrlZuBytes(dataUrl), {
       zeilenhoehe,
       maxBildHoehe: nutz
     });
@@ -594,7 +594,7 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
 
   if (!bloecke.length) throw new Error(t('docxEmpty') || 'Das Dokument ist leer.');
 
-  const seiten = InkwellDocxPaginate.verteile(bloecke, {
+  const seiten = InkwellsDocxPaginate.verteile(bloecke, {
     breite: CFG.PAGE_W,
     hoehe: CFG.PAGE_H,
     bg,

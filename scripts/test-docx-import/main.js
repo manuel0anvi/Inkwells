@@ -10,7 +10,7 @@
      · DAS ARCHIV. Hin und zurück, mit beiden Verfahren – gespeichert
        (so schreibt core/docx.js) und deflate (so schreibt Word).
      · DER RUNDLAUF gegen den eigenen Export: ein Heft durch
-       InkwellDocx.build() und wieder zurück. Das ist der schärfste
+       InkwellsDocx.build() und wieder zurück. Das ist der schärfste
        Test, den es ohne Word gibt, weil beide Seiten im Haus sind.
      · DIE ÜBERSETZUNG einzelner Word-Bausteine: Überschriften über
        w:outlineLvl (nicht über den Vorlagennamen – der ist in jeder

@@ -261,13 +261,13 @@
     const quota = CloudSync_.getDriveQuota();
     const own = CloudSync_.getStorageUsage();
 
-    ownEl.textContent = `${t('storageOwnShare') || 'Davon Inkwell-Notizbücher:'} ${formatBytes(own)}`;
+    ownEl.textContent = `${t('storageOwnShare') || 'Davon Inkwells-Notizbücher:'} ${formatBytes(own)}`;
 
     if (!quota || quota.usage == null) {
       // Drive konnte die Gesamtbelegung nicht liefern
       text.textContent = formatBytes(own);
       track.style.display = 'none';
-      freeEl.textContent = (t('storageFolderHint') || 'Notizbücher liegen in {provider} im Ordner „Inkwell“.')
+      freeEl.textContent = (t('storageFolderHint') || 'Notizbücher liegen in {provider} im Ordner „Inkwells“.')
         .replace('{provider}', CloudSync_.providerLabel());
       return;
     }

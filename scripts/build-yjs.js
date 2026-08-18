@@ -8,7 +8,7 @@
    Yjs wird als ES-Modul geliefert und holt sich intern Dutzende Teile
    aus dem Paket „lib0" über Kurznamen (import … from 'lib0/observable').
    Solche Kurznamen kann ein Browser nicht auflösen – dafür braucht es
-   einen Bündler. Die Oberfläche von Inkwell besteht bewusst aus
+   einen Bündler. Die Oberfläche von Inkwells besteht bewusst aus
    klassischen <script>-Dateien ohne Bauschritt; deshalb wird Yjs EINMAL
    hier gebündelt und das Ergebnis mitgeliefert.
 

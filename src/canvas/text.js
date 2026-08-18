@@ -654,7 +654,7 @@ function getRenderedContentBottom(textDiv, top, pt, lh) {
    ABSTAND STATT LEERZEICHEN
 
    Wer in einem Heft irgendwohin tippt und dort zu schreiben anfängt,
-   soll das können – das ist der Kern von Inkwell. Bis hierher wurde der
+   soll das können – das ist der Kern von Inkwells. Bis hierher wurde der
    Weg dorthin mit ECHTEN ZEICHEN aufgefüllt: Zeilenumbrüche nach unten,
    Leerzeichen nach rechts. Das hatte Folgen, die niemand wollte:
 
@@ -802,14 +802,14 @@ const LUECKEN_ZEICHEN = '\u200b';
    Die Markierung steht in einer Eigenschaft am Element und nicht als
    Attribut: sie soll nie in page.textContent landen.
    ══════════════════════════════════════════════════════════════════════ */
-const VORLAEUFIG = '_inkwellVorlaeufig';
+const VORLAEUFIG = '_inkwellsVorlaeufig';
 
 /* ── Was das vorläufige Stück ANDERSWO verändert hat ─────────────────
    Ein neuer Absatz zwischen zweien nimmt seinen Platz aus dem Abstand
    des unteren; ein Absatz, der nach links rückt, gibt seinen Einzug an
    einen Halter ab. Beides muss beim Wegräumen zurückgenommen werden,
    sonst bliebe von einem blossen Klick eine verschobene Seite. */
-const ZURUECK = '_inkwellZurueck';
+const ZURUECK = '_inkwellsZurueck';
 
 function _merkeZurueck(el, ziel, name, alterWert) {
   el[ZURUECK] = { ziel, name, alterWert };

@@ -1,13 +1,13 @@
 # Cloud-Anmeldung einrichten
 
-Inkwell hat keine eigene Benutzerverwaltung. Man meldet sich wahlweise bei
+Inkwells hat keine eigene Benutzerverwaltung. Man meldet sich wahlweise bei
 **Google** oder bei **Microsoft** an; die Notizbücher liegen dann im jeweils
 eigenen Cloud-Speicher.
 
 | Anbieter  | Anmeldung               | Speicherort               | Sitzung hält (App) | Sitzung hält (Website) |
 |-----------|-------------------------|---------------------------|--------------------|------------------------|
-| Google    | OAuth 2.0 (Implicit)    | Google Drive → `Inkwell`  | ~1 Stunde \*       | dauerhaft (still erneuert) |
-| Microsoft | OAuth 2.0 (Code + PKCE) | OneDrive → `Apps/Inkwell` | ~90 Tage           | ~24 Stunden            |
+| Google    | OAuth 2.0 (Implicit)    | Google Drive → `Inkwells`  | ~1 Stunde \*       | dauerhaft (still erneuert) |
+| Microsoft | OAuth 2.0 (Code + PKCE) | OneDrive → `Apps/Inkwells` | ~90 Tage           | ~24 Stunden            |
 
 \* verlängerbar — siehe [Abschnitt 4](#4-sitzungsdauer).
 
@@ -46,14 +46,14 @@ Eingetragen wird jeweils an **zwei** Stellen:
 ## 1. OAuth-Client in der Google Cloud Console anlegen
 
 1. <https://console.cloud.google.com/> öffnen und ein Projekt auswählen
-   oder neu anlegen (Name z. B. `Inkwell`).
+   oder neu anlegen (Name z. B. `Inkwells`).
 
 2. **APIs & Dienste → Bibliothek** → nach „Google Drive API" suchen →
    **Aktivieren**.
 
 3. **APIs & Dienste → OAuth-Zustimmungsbildschirm**
    - Nutzertyp: **Extern**
-   - App-Name: `Inkwell`, Support-E-Mail eintragen
+   - App-Name: `Inkwells`, Support-E-Mail eintragen
    - **Bereiche (Scopes)** hinzufügen:
      - `openid`
      - `.../auth/userinfo.email`
@@ -61,7 +61,7 @@ Eingetragen wird jeweils an **zwei** Stellen:
      - `.../auth/drive.file`
 
      > `drive.file` ist kein sensibler Scope – es gibt Zugriff **nur** auf
-     > Dateien, die Inkwell selbst anlegt. Deshalb ist keine aufwendige
+     > Dateien, die Inkwells selbst anlegt. Deshalb ist keine aufwendige
      > Google-Überprüfung nötig.
    - Solange die App im Status **Testing** ist: unter **Testnutzer** alle
      Google-Konten eintragen, die sich anmelden dürfen (max. 100).
@@ -70,7 +70,7 @@ Eingetragen wird jeweils an **zwei** Stellen:
 4. **APIs & Dienste → Anmeldedaten → Anmeldedaten erstellen →
    OAuth-Client-ID**
    - Anwendungstyp: **Webanwendung** ← wichtig, nicht „Desktop"!
-   - Name: `Inkwell`
+   - Name: `Inkwells`
 
    Die beiden Listen haben **unterschiedliche Regeln** und werden leicht
    verwechselt — sie stehen direkt untereinander:
@@ -93,7 +93,7 @@ Eingetragen wird jeweils an **zwei** Stellen:
    > **Eigene Domain:** Die Website läuft unter `inkwells.me` (eingestellt in
    > `website/CNAME`). Falls ihr zusätzlich die GitHub-Adresse offen halten
    > wollt, kommen `https://manuel0anvi.github.io` (Quelle) und
-   > `https://manuel0anvi.github.io/Inkwell/` (Weiterleitung) dazu.
+   > `https://manuel0anvi.github.io/Inkwells/` (Weiterleitung) dazu.
    >
    > **`localhost` ≠ `127.0.0.1`:** Für Google sind das zwei verschiedene
    > Adressen. Die Desktop-App verwendet `127.0.0.1` – fehlt der Eintrag,
@@ -146,7 +146,7 @@ roten Hinweis statt still zu scheitern.
 2. Der System-Browser öffnet sich mit der Google-Anmeldung
 3. Nach der Bestätigung leitet Google auf `http://127.0.0.1:3000/callback`
    zurück; die App fängt das ab und schließt die Anmeldung ab
-4. Notizbücher werden nach `Google Drive → Inkwell` synchronisiert
+4. Notizbücher werden nach `Google Drive → Inkwells` synchronisiert
 
 **Website**
 1. *Anmelden* → *Mit Google anmelden*
@@ -208,7 +208,7 @@ Steht ein Secret darin, wechselt die App automatisch vom Implicit-Flow zu
 still im Hintergrund — genau wie bei Microsoft.
 
 Das Secret steht in der Cloud Console beim **selben** OAuth-Client
-(Anmeldedaten → Inkwell → *Clientschlüssel*). Es muss derselbe Client bleiben:
+(Anmeldedaten → Inkwells → *Clientschlüssel*). Es muss derselbe Client bleiben:
 `drive.file` gilt pro Client, mit einer zweiten Client-ID würde die Website die
 Hefte der App nicht mehr sehen.
 
@@ -227,13 +227,13 @@ Dienst und erneuert ohne Secret (siehe oben).
 
 ## 5. Was in Google Drive angelegt wird
 
-Im Ordner `Inkwell` deines Drive liegen:
+Im Ordner `Inkwells` deines Drive liegen:
 
 | Was | Wozu |
 |-----|------|
 | `<Heftname>.json` | je ein Notizbuch |
 | `Papierkorb/` | gelöschte Hefte, 30 Tage lang |
-| `inkwell-papierkorb.json` | Liste der gelöschten Hefte |
+| `inkwells-papierkorb.json` | Liste der gelöschten Hefte |
 
 Gelöschte Hefte landen bewusst **nicht** im Papierkorb von Google, sondern im
 eigenen Unterordner. Dadurch ist die Aufbewahrung unabhängig von Googles
@@ -381,7 +381,7 @@ bei der Anmeldung ohnehin mitliefern, an Firebase weitergereicht.
 Firebase Console → Projekt `inkwell-53ab9` → **Authentication** →
 **Sign-in method** → **Google** → *Aktivieren* → Support-E-Mail wählen.
 
-**Der Punkt, an dem es sonst scheitert:** Inkwell benutzt einen eigenen
+**Der Punkt, an dem es sonst scheitert:** Inkwells benutzt einen eigenen
 OAuth-Client, der in einem *anderen* Google-Cloud-Projekt liegt als
 Firebase:
 
@@ -428,7 +428,7 @@ Ohne diesen Eintrag lautet der Fehler beim Anmelden sinngemäß
 > Der Grund ist bauartbedingt: Google ist bei Firebase ein eigenständiger
 > Anbieter, dessen Token direkt geprüft werden. Microsoft ist ein
 > generischer OAuth-Anbieter — dessen Anmeldung muss Firebase **selbst**
-> begonnen haben. Inkwell besorgt das Token aber selbst, für OneDrive.
+> begonnen haben. Inkwells besorgt das Token aber selbst, für OneDrive.
 >
 > Die Fehlermeldung lautet ausgerechnet
 > `invalid-credential-or-provider-id` — dieselbe wie bei einem
@@ -456,7 +456,7 @@ Ohne diesen Eintrag lautet der Fehler beim Anmelden sinngemäß
 Zuerst in Azure ein Geheimnis anlegen (Firebase verlangt eines, auch wenn
 die App selbst ohne auskommt):
 
-Azure Portal → **App-Registrierungen** → *Inkwell* → **Zertifikate & Geheimnisse**
+Azure Portal → **App-Registrierungen** → *Inkwells* → **Zertifikate & Geheimnisse**
 → *Neuer geheimer Clientschlüssel* → Beschreibung + Laufzeit → *Hinzufügen*
 → den **Wert** sofort kopieren (er wird nur einmal angezeigt).
 
@@ -567,7 +567,7 @@ ab, dort eintragen und `npm run sync-share` laufen lassen.
 
 > **Grenze, die man kennen muss:** Bearbeitet wird nur in der App. Auf der
 > Website bleibt ein geteiltes Dokument immer schreibgeschützt — dort
-> steht stattdessen ein Knopf „In Inkwell öffnen".
+> steht stattdessen ein Knopf „In Inkwells öffnen".
 
 ## C6. Wo der Code liegt
 
@@ -602,7 +602,7 @@ alles andere funktioniert normal weiter.
 1. <https://portal.azure.com> öffnen → **Microsoft Entra ID** →
    **App-Registrierungen** → **Neue Registrierung**
 
-2. **Name:** `Inkwell`
+2. **Name:** `Inkwells`
 
 3. **Unterstützte Kontotypen:**
    > *Konten in einem beliebigen Organisationsverzeichnis und persönliche
@@ -709,7 +709,7 @@ Files.ReadWrite.AppFolder
 Kontos. Ohne diese Berechtigung antwortet Microsoft Graph mit `403`.
 
 `Files.ReadWrite.AppFolder` gibt Zugriff **nur** auf den eigenen Ordner
-`Apps/Inkwell` — nicht auf das übrige OneDrive. Anders als bei Google ist
+`Apps/Inkwells` — nicht auf das übrige OneDrive. Anders als bei Google ist
 dieser Ordner für den Nutzer sichtbar. Eine Administrator-Zustimmung ist
 dafür normalerweise nicht nötig.
 
@@ -740,13 +740,13 @@ deployen — fertig.
 
 ## B5. Was in OneDrive angelegt wird
 
-Unter `OneDrive/Apps/Inkwell`:
+Unter `OneDrive/Apps/Inkwells`:
 
 | Was | Wozu |
 |-----|------|
 | `<Heftname>__<id>.json` | je ein Notizbuch |
 | `Papierkorb/` | gelöschte Hefte, 30 Tage lang |
-| `inkwell-papierkorb.json` | Liste der gelöschten Hefte |
+| `inkwells-papierkorb.json` | Liste der gelöschten Hefte |
 
 > Die Kennung im Dateinamen ist nötig, weil OneDrive keine unsichtbaren
 > Zusatzeigenschaften kennt wie Google Drive. Beim Umbenennen eines Hefts

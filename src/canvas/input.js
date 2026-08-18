@@ -242,8 +242,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
          Ein Marker wird nie zur Form: mit ihm fährt man um Wörter
          herum, um sie hervorzuheben, nicht um einen Kreis zu malen. */
-      const form = (!stroke.isHL && typeof InkwellShapeSnap !== 'undefined')
-        ? InkwellShapeSnap.erkenneForm(stroke) : null;
+      const form = (!stroke.isHL && typeof InkwellsShapeSnap !== 'undefined')
+        ? InkwellsShapeSnap.erkenneForm(stroke) : null;
 
       if (form && machDarausEinObjekt(stroke, form)) return;
 

@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════
    MIT FINGER UND STIFT BEDIENBAR
 
-   Inkwell wird auf umklappbaren Laptops benutzt: Trackpad, Touchscreen
+   Inkwells wird auf umklappbaren Laptops benutzt: Trackpad, Touchscreen
    und Stift am selben Geraet, mal aufgeklappt, mal als Tablet. Was mit
    der Maus geht, geht deshalb noch lange nicht.
 

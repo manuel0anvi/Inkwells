@@ -53,12 +53,12 @@
      Scripts. Ohne Internet kommt es gar nicht hoch.
      ─────────────────────────────────────────────────────────────── */
   function whenShareReady(timeoutMs = 15000) {
-    if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+    if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), timeoutMs);
-      document.addEventListener('inkwell-share-ready', () => {
+      document.addEventListener('inkwells-share-ready', () => {
         clearTimeout(timer);
-        if (window.InkwellShare) resolve(window.InkwellShare);
+        if (window.InkwellsShare) resolve(window.InkwellsShare);
         else reject(new Error('SHARE_OFFLINE'));
       }, { once: true });
     });
@@ -264,7 +264,7 @@
   /* ── Liste ──────────────────────────────────────────────────────── */
 
   function myEmail() {
-    const api = window.InkwellShare;
+    const api = window.InkwellsShare;
     return api?.currentIdentity()?.email || '';
   }
 
@@ -300,7 +300,7 @@
       return;
     }
 
-    const api = window.InkwellShare;
+    const api = window.InkwellsShare;
     const signedIn = !!(api && api.hasRealIdentity());
 
     /* >>> Warum hier so viel Text steht <<<
@@ -569,7 +569,7 @@
      Warum das nötig ist, steht bei versionPasst() in core/share.js.
      ══════════════════════════════════════════════════════════════════ */
   async function versionsSperre(head) {
-    const api = window.InkwellShare;
+    const api = window.InkwellsShare;
     if (!api || typeof api.versionPasst !== 'function') return false;
 
     const urteil = await api.versionPasst(head);
@@ -577,10 +577,10 @@
 
     const satz = urteil.wer === 'besitzer'
       ? (t('versionLockOwnerOlder')
-          || 'Der Besitzer arbeitet mit einer älteren Fassung von Inkwell ({ihre}) als du ({meine}). '
+          || 'Der Besitzer arbeitet mit einer älteren Fassung von Inkwells ({ihre}) als du ({meine}). '
            + 'Solange das so ist, lässt sich das Dokument nicht öffnen.')
       : (t('versionLockYouOlder')
-          || 'Dieses Dokument gehört zu Inkwell {ihre}, du hast {meine}. '
+          || 'Dieses Dokument gehört zu Inkwells {ihre}, du hast {meine}. '
            + 'Bitte aktualisiere die App, dann kannst du es öffnen.');
 
     const text = satz.replace('{ihre}', urteil.ihre).replace('{meine}', urteil.meine);
@@ -1026,7 +1026,7 @@
    *   Abschnitte); sonst nur diese Seite.
    */
   window.noteRemoteApplied = function noteRemoteApplied(pageId) {
-    const api = window.InkwellShare;
+    const api = window.InkwellsShare;
     if (!live || !baseline || !api) return;
 
     const nb = getNb(live.nbId);
@@ -1130,7 +1130,7 @@
    */
   function watchOpenDocument(docId) {
     if (unwatchOpen) { unwatchOpen(); unwatchOpen = null; }
-    const api = window.InkwellShare;
+    const api = window.InkwellsShare;
     if (!api) return;
 
     unwatchOpen = api.watchDocument(docId, (head) => {
@@ -1148,8 +1148,8 @@
              die Rollenliste des Raums aufnehmen. Ohne dieses Nachziehen
              bekaeme ein frisch Eingeladener bis zum naechsten Oeffnen
              keinen Live-Betrieb. */
-          if (window.Collab?.refreshRoomRoles && window.InkwellShare?.roomRolesFrom) {
-            window.Collab.refreshRoomRoles(window.InkwellShare.roomRolesFrom(head));
+          if (window.Collab?.refreshRoomRoles && window.InkwellsShare?.roomRolesFrom) {
+            window.Collab.refreshRoomRoles(window.InkwellsShare.roomRolesFrom(head));
           }
         }
         return;
@@ -1435,7 +1435,7 @@
      der Übersicht (zeigeKartenMenue weiter oben). */
 
   /* ── Aus dem Browser heraus geöffnet ────────────────────────────────
-     main.js schickt inkwell://share/<linkId> als eigenes Ereignis. Das
+     main.js schickt inkwells://share/<linkId> als eigenes Ereignis. Das
      landete früher beim OAuth-Rückruf und lief dort ins Leere.
      ─────────────────────────────────────────────────────────────── */
 
@@ -1473,7 +1473,7 @@
   /* ── Verdrahtung ────────────────────────────────────────────────── */
 
   // Nach einer Anmeldung (oder deren Verlust) die Liste neu aufbauen
-  document.addEventListener('inkwell-identity-changed', () => {
+  document.addEventListener('inkwells-identity-changed', () => {
     refreshTabVisibility();
     startWatching().catch(() => {});
   });

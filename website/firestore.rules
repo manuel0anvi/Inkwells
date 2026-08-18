@@ -32,7 +32,7 @@
    Dazugekommen sind:
      · Löschen von Beiträgen und Antworten, nur für das Adminkonto,
      · geschützte Anzeigenamen: niemand außer dem Admin darf unter
-       „Inkwell Team" o. Ä. schreiben (isReservedName),
+       „Inkwells Team" o. Ä. schreiben (isReservedName),
      · site_content: die auf der Website bearbeitete Fassung der
        Datenschutzerklärung. Öffentlich lesbar, nur vom Admin schreibbar.
 
@@ -97,7 +97,7 @@ service cloud.firestore {
     }
 
     /* ── Geschützte Anzeigenamen ──────────────────────────────────────
-       Ohne diese Sperre könnte sich jeder „Inkwell Team" nennen und im
+       Ohne diese Sperre könnte sich jeder „Inkwells Team" nennen und im
        Namen des Projekts antworten. Für Leser wäre das nicht zu
        unterscheiden – und genau deshalb gehört die Prüfung hierher und
        nicht nur ins Formular.
@@ -109,6 +109,12 @@ service cloud.firestore {
 
        matches() vergleicht immer die GANZE Zeichenkette, deshalb die
        Punkte außen herum – sonst müsste der Name exakt „inkwell" lauten.
+
+       >>> Warum hier „inkwell" steht und nicht „inkwells" <<<
+       Die App heißt inzwischen Inkwells. Die Sperre trägt trotzdem die
+       KURZE Form: sie wird als Teilzeichenfolge gesucht, und „inkwell"
+       fängt „inkwells" damit mit ab. Andersherum nicht – wer hier auf
+       „inkwells" umstellt, gibt den Namen „Inkwell Team" wieder frei.
 
        Die Ziffernschreibweisen stehen einzeln in der Liste. Die Website
        übersetzt sie vorher zurück (normalizeAuthorName in js/config.js)
@@ -129,7 +135,7 @@ service cloud.firestore {
 
       /* Anlegen darf jeder – aber niemand unter einem geschützten Namen.
          Der Admin ist ausgenommen, sonst könnte ausgerechnet er nicht als
-         „Inkwell Team" antworten. */
+         „Inkwells Team" antworten. */
       allow create: if request.resource.data.keys()
                           .hasOnly(['type', 'title', 'author', 'content', 'created_at'])
                     && request.resource.data.type in ['question', 'bug']

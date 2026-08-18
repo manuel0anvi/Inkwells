@@ -134,7 +134,7 @@ console.log('1. Abgemeldet heisst still\n');
   /* ── Die Meldung geht auch ohne Netz hinaus ─────────────────────── */
   const abmelden = methode(cloudQuelle, 'signOut');
   const wurf = abmelden.indexOf('catch (err)');
-  const meldung = abmelden.indexOf("new CustomEvent('inkwell-identity-changed')");
+  const meldung = abmelden.indexOf("new CustomEvent('inkwells-identity-changed')");
   check('signOut meldet den Wechsel', meldung > -1, true);
   check('Und zwar ausserhalb des try um die Firebase-Abmeldung',
     meldung > wurf, true);
@@ -143,7 +143,7 @@ console.log('1. Abgemeldet heisst still\n');
      Hand – hier fehlte die Meldung ganz. */
   const abgelaufen = methode(cloudQuelle, '_handleExpiredToken');
   check('Auch die abgelaufene Sitzung meldet den Wechsel',
-    /new CustomEvent\('inkwell-identity-changed'\)/.test(abgelaufen), true);
+    /new CustomEvent\('inkwells-identity-changed'\)/.test(abgelaufen), true);
 }
 
 console.log('\n2. Waehrend der Live-Freigabe gleicht sich nichts ab\n');

@@ -40,7 +40,7 @@ Der Besitzer legt beim Erstellen fest, was der Link erlaubt:
 * *Im Browser geöffnet:* Das Dokument wird angezeigt. Ist der Besucher
   angemeldet, landet es zusätzlich automatisch in seinem Tab „Geteilte
   Dokumente" — der Link wird danach nicht mehr gebraucht.
-* *In der App geöffnet:* Der Browser fragt, ob Inkwell geöffnet werden soll.
+* *In der App geöffnet:* Der Browser fragt, ob Inkwells geöffnet werden soll.
   Danach liegt das Dokument ebenfalls im Tab. Erlaubt der Link nur Lesen,
   ist es schreibgeschützt. Erlaubt er Bearbeiten und der Nutzer ist in der
   App angemeldet, kann er sofort mitarbeiten.
@@ -69,7 +69,7 @@ auf einen Schlag alle Link-Zugänge ungültig zu machen.
 
 Auf der Website sind geteilte Dokumente **immer schreibgeschützt**, auch
 wenn die Person Bearbeitungsrecht hat. Dort steht dann ein deutlicher
-Hinweis: „Zum Bearbeiten in der Inkwell-App öffnen" mit Knopf.
+Hinweis: „Zum Bearbeiten in der Inkwells-App öffnen" mit Knopf.
 
 In der App, während mehrere gleichzeitig arbeiten:
 
@@ -145,7 +145,7 @@ des Auftrags — **ohne C2 anzufassen**. Nur A4 braucht C2.
    — die dürfen weiterhin nur lesen.
 4. Bestehende Freigaben umschreiben: beim ersten Anmelden mit echter
    Identität den `owner` der eigenen Einträge auf die neue UID setzen
-   (Quelle: `Settings.get('shares')` bzw. `localStorage.inkwell_shares`).
+   (Quelle: `Settings.get('shares')` bzw. `localStorage.inkwells_shares`).
 
 **Fertig, wenn:** in den Firestore-Regeln `request.auth.token.email` steht
 und eine bestehende Freigabe sich auch auf einem zweiten Gerät aufheben
@@ -177,13 +177,13 @@ lässt.
 * Adressen vor dem Speichern kleinschreiben und trimmen, sonst greift
   `array-contains` nicht. Zusätzlich `email_verified` prüfen.
 
-### Stufe 4 — „In Inkwell öffnen" *(A2 Weg 1, Fall 2)*
+### Stufe 4 — „In Inkwells öffnen" *(A2 Weg 1, Fall 2)*
 
-* Das Protokoll `inkwell://` ist bereits registriert (`main.js`), aber
+* Das Protokoll `inkwells://` ist bereits registriert (`main.js`), aber
   **jeder** Aufruf landet heute beim OAuth-Callback. Eine Weiche für
-  `inkwell://share/<linkId>` einbauen, eigenes Ereignis `open-share`,
+  `inkwells://share/<linkId>` einbauen, eigenes Ereignis `open-share`,
   in `preload.js` ein `onOpenShare(cb)`.
-* Auf `/s/` einen Knopf **„In Inkwell öffnen"**.
+* Auf `/s/` einen Knopf **„In Inkwells öffnen"**.
 * Ist in der App niemand angemeldet: schreibgeschützt zeigen mit Hinweis.
 
 ### Stufe 5 — Benachrichtigung in der App *(A5)*
@@ -258,7 +258,7 @@ auf der die Person gerade ist.
   `capturePage()` aufrufen. Überlauf messen mit
   `document.documentElement.scrollWidth` gegen `clientWidth`.
 * Dashboard ohne echtes Konto: Sitzung in `localStorage` vortäuschen
-  (`inkwell_cloud_token/uid/expiry/email/provider`). Die Cloud-Abfrage
+  (`inkwells_cloud_token/uid/expiry/email/provider`). Die Cloud-Abfrage
   scheitert dann, die Oberfläche baut sich trotzdem auf.
 * **Die App nicht einfach starten** — sie läuft gegen echte Notizbücher und
   ein echtes Cloud-Konto und gleicht beim Start ab.

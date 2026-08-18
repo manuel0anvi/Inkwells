@@ -4,7 +4,7 @@
    Erzeugt eine echte .docx-Datei – ohne Bibliothek, ohne Server. Eine
    .docx ist ein ZIP-Archiv mit XML darin; beides steht weiter unten.
 
-   ── Wie das Ergebnis 1:1 wie Inkwell aussieht ───────────────────────
+   ── Wie das Ergebnis 1:1 wie Inkwells aussieht ───────────────────────
    Ein Word-Dokument kann Text nicht frei auf der Seite platzieren wie
    der Browser. Deshalb wird jede Heftseite zweigeteilt ausgegeben:
 
@@ -610,7 +610,7 @@
   /* ══════════════════════════════════════════════════════════════════
      ABSTAND STATT LEERZEICHEN – UND IN WORD ECHTE EINZÜGE
 
-     Wer in Inkwell irgendwohin klickt und dort schreibt, bekommt seit
+     Wer in Inkwells irgendwohin klickt und dort schreibt, bekommt seit
      der Umstellung keinen Block aus Leerzeichen mehr, sondern einen
      Einzug am Absatz (canvas/text.js). Word kennt genau das:
 
@@ -705,7 +705,7 @@
         }
 
         /* ── Der Abstandshalter mitten in einer Zeile ──────────────────
-           In Inkwell ist er ein leeres Element mit einer Breite
+           In Inkwells ist er ein leeres Element mit einer Breite
            (canvas/text.js). Word kennt so etwas nicht: dort gibt es
            mitten in einer Zeile nur Zeichen und Tabulatoren, und ein
            Tabulator bräuchte einen Anschlag an einer Stelle, die sich
@@ -848,7 +848,7 @@
       + `<wp:extent cx="${cx}" cy="${cy}"/>`
       + '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
       + '<wp:wrapNone/>'
-      + `<wp:docPr id="${id}" name="Inkwell-Seite ${id}"/>`
+      + `<wp:docPr id="${id}" name="Inkwells-Seite ${id}"/>`
       + '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
       + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
       + '<pic:pic>'
@@ -1035,8 +1035,8 @@
       + 'xmlns:dc="http://purl.org/dc/elements/1.1/" '
       + 'xmlns:dcterms="http://purl.org/dc/terms/" '
       + 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-      + `<dc:title>${esc(options.title || 'Inkwell')}</dc:title>`
-      + '<dc:creator>Inkwell</dc:creator>'
+      + `<dc:title>${esc(options.title || 'Inkwells')}</dc:title>`
+      + '<dc:creator>Inkwells</dc:creator>'
       + `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>`
       + `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>`
       + '</cp:coreProperties>';
@@ -1054,8 +1054,8 @@
 
   /** Dateiname ohne Zeichen, die Windows nicht erlaubt. */
   function safeFileName(name) {
-    return String(name || 'Inkwell').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Inkwell';
+    return String(name || 'Inkwells').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Inkwells';
   }
 
-  global.InkwellDocx = { build, safeFileName, htmlToParagraphs, lhForBg };
+  global.InkwellsDocx = { build, safeFileName, htmlToParagraphs, lhForBg };
 })(typeof window !== 'undefined' ? window : globalThis);

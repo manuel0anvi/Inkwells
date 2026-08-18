@@ -6,51 +6,51 @@ if (typeof window.api === 'undefined') {
     platform: 'web',
     
     saveSettings: async (settings) => {
-      localStorage.setItem('inkwell_settings', JSON.stringify(settings));
+      localStorage.setItem('inkwells_settings', JSON.stringify(settings));
     },
     
     loadSettings: async () => {
       try { 
-        return JSON.parse(localStorage.getItem('inkwell_settings')); 
+        return JSON.parse(localStorage.getItem('inkwells_settings')); 
       } catch(e) { return null; }
     },
     
     getDefaultSavePath: async () => 'browser-local-storage',
     
     saveToPath: async (path, data) => {
-      localStorage.setItem('inkwell_file_' + path, JSON.stringify(data));
+      localStorage.setItem('inkwells_file_' + path, JSON.stringify(data));
       return { success: true };
     },
     
     loadFromPath: async (path) => {
       try {
-        const d = localStorage.getItem('inkwell_file_' + path);
+        const d = localStorage.getItem('inkwells_file_' + path);
         if (d) return { success: true, data: JSON.parse(d) };
         return { success: false, error: 'File not found' };
       } catch (e) { return { success: false, error: e.message }; }
     },
     
-    fileExists: async (path) => localStorage.getItem('inkwell_file_' + path) !== null,
+    fileExists: async (path) => localStorage.getItem('inkwells_file_' + path) !== null,
 
     moveFile: async (oldPath, newPath) => {
-      const data = localStorage.getItem('inkwell_file_' + oldPath);
+      const data = localStorage.getItem('inkwells_file_' + oldPath);
       if (data === null) return { success: false, error: 'File not found' };
-      localStorage.setItem('inkwell_file_' + newPath, data);
-      localStorage.removeItem('inkwell_file_' + oldPath);
+      localStorage.setItem('inkwells_file_' + newPath, data);
+      localStorage.removeItem('inkwells_file_' + oldPath);
       return { success: true };
     },
 
     deleteFile: async (path) => {
-      localStorage.removeItem('inkwell_file_' + path);
+      localStorage.removeItem('inkwells_file_' + path);
       return { success: true };
     },
 
     loadRegistry: async () => {
-      try { return JSON.parse(localStorage.getItem('inkwell_registry')); } catch(e){ return null; }
+      try { return JSON.parse(localStorage.getItem('inkwells_registry')); } catch(e){ return null; }
     },
     
     saveRegistry: async (data) => {
-      localStorage.setItem('inkwell_registry', JSON.stringify(data));
+      localStorage.setItem('inkwells_registry', JSON.stringify(data));
       return { success: true };
     },
     

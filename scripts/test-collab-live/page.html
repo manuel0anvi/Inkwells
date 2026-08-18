@@ -124,7 +124,7 @@ ipcRenderer.on('praesenz', (_e, liste) => {
 });
 ipcRenderer.on('op', (_e, op) => { if (opCb) opCb(op); });
 
-window.InkwellShare = {
+window.InkwellsShare = {
   joinDocRoom: async () => ({
     me: meineKarte,
     setPage(pageId, offset, lock, anchor) {

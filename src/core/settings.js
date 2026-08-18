@@ -174,7 +174,7 @@ class SettingsManager {
 
        Ein Dialog, auf den das Programm wartet, gehoert nicht in den
        Start. Genommen wird deshalb sofort der Standardordner
-       (Dokumente\Inkwell), und die Frage kommt danach - siehe
+       (Dokumente\Inkwells), und die Frage kommt danach - siehe
        frageNachSpeicherort() unten. Wer nichts aussucht, hat trotzdem
        einen brauchbaren Ort. */
     if (!this.settings.saveLocation) {

@@ -531,7 +531,7 @@
     aktualisiereLinealPos();   // holt es nötigenfalls ins Sichtfeld zurück
   }
 
-  window.addEventListener('inkwell:zoom', beimZoomen);
+  window.addEventListener('inkwells:zoom', beimZoomen);
 
   /* ── Knöpfe in der Leiste ──────────────────────────────────────────── */
 
