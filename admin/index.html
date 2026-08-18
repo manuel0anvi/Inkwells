@@ -102,36 +102,86 @@ body[data-admin="yes"] .admin-gate { display: none; }
 }
 
 /* ── Nachrichten ────────────────────────────────────────────────────
-   Mehrere Eingabefelder je Feldgruppe (drei Sprachen) brauchen Abstand
-   untereinander; die Regel oben setzt nur die Breite. */
-.admin-field input + input,
-.admin-field textarea + textarea { margin-top: 8px; }
+   Liste zuerst, Formular dahinter. */
+.nachricht-kopfzeile { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
 
+.nachricht-formular {
+  border: 0.5px solid var(--navy-border); border-radius: 6px;
+  padding: 20px; margin-bottom: 26px; background: var(--navy-card);
+}
+
+.ziel-gitter {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 2px 18px;
+}
 .admin-check {
   display: flex; align-items: center; gap: 9px; cursor: pointer;
   font-family: 'Jost', sans-serif; font-weight: 300; font-size: 14px;
-  color: var(--cream); margin-bottom: 7px; text-transform: none;
+  color: var(--cream); margin-bottom: 5px; text-transform: none;
   letter-spacing: normal;
 }
 .admin-check input { width: auto; margin: 0; flex: none; }
 
-.nachricht-zeile {
-  display: grid; grid-template-columns: 1fr auto; gap: 4px 14px;
-  align-items: start; padding: 12px 0;
+/* Sprachreiter im Formular – kleiner als die Hauptreiter oben, damit die
+   Rangfolge stimmt. */
+.sprach-reiter {
+  display: flex; gap: 4px; margin: 22px 0 0;
   border-bottom: 0.5px solid var(--navy-border);
 }
-.nachricht-zeile:last-child { border-bottom: none; }
-.nachricht-zeile .kopf { font-weight: 500; }
-.nachricht-zeile .unten {
-  grid-column: 1; font-family: 'Jost', sans-serif; font-size: 11px;
-  letter-spacing: .06em; color: var(--text-muted);
+.sprach-tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-muted); font-family: 'Jost', sans-serif; font-size: 12px;
+  letter-spacing: .08em; text-transform: uppercase; padding: 8px 14px;
+  cursor: pointer; margin-bottom: -1px;
 }
-.nachricht-zeile .marke {
-  display: inline-block; border: 0.5px solid var(--gold); color: var(--gold-light);
-  border-radius: 3px; padding: 1px 6px; margin-right: 6px; font-size: 10px;
-  letter-spacing: .08em; text-transform: uppercase;
+.sprach-tab:hover { color: var(--gold-light); }
+.sprach-tab.active { color: var(--gold-light); border-bottom-color: var(--gold); }
+
+.sprach-blatt { display: none; padding-top: 18px; }
+.sprach-blatt.active { display: block; }
+
+/* Die Liste. <details> bringt das Aufklappen selbst mit. */
+.nachricht-eintrag {
+  border-bottom: 0.5px solid var(--navy-border);
+  padding: 4px 0;
 }
-.nachricht-zeile .abgelaufen { border-color: var(--navy-border); color: var(--text-muted); }
+.nachricht-eintrag:last-child { border-bottom: none; }
+
+.nachricht-eintrag > summary {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 4px; cursor: pointer; list-style: none;
+}
+.nachricht-eintrag > summary::-webkit-details-marker { display: none; }
+.nachricht-eintrag > summary::before {
+  content: '▸'; color: var(--gold); font-size: 11px; flex: none;
+  transition: transform .15s;
+}
+.nachricht-eintrag[open] > summary::before { transform: rotate(90deg); }
+.nachricht-eintrag > summary:hover { color: var(--gold-light); }
+
+.n-titel { font-weight: 500; flex: 1 1 16rem; }
+.n-marken { display: flex; gap: 5px; flex-wrap: wrap; }
+
+.marke {
+  display: inline-block; border-radius: 3px; padding: 2px 7px;
+  font-family: 'Jost', sans-serif; font-size: 10px;
+  letter-spacing: .07em; text-transform: uppercase; white-space: nowrap;
+}
+.marke.wie { border: 0.5px solid var(--gold); color: var(--gold-light); }
+.marke.wen { border: 0.5px solid var(--navy-border); color: var(--text-muted); }
+.marke.abgelaufen { border: 0.5px solid var(--navy-border); color: var(--text-muted); opacity: .7; }
+
+.n-koerper { padding: 4px 4px 18px 22px; }
+.n-zeit {
+  font-family: 'Jost', sans-serif; font-size: 11px; letter-spacing: .06em;
+  color: var(--text-muted); margin: 0 0 14px;
+}
+.n-sprache { margin-bottom: 14px; }
+.n-sprache-kopf {
+  font-family: 'Jost', sans-serif; font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--gold-light); margin-bottom: 4px;
+}
+.n-text { white-space: pre-wrap; line-height: 1.6; }
 </style>
 </head>
 <body data-admin="pending">
@@ -283,8 +333,9 @@ body[data-admin="yes"] .admin-gate { display: none; }
     </section>
 
     <!-- ── Nachrichten an die App ───────────────────────────────────
-         Eine Nachricht geht an jede Installation mit Internet - auch an
-         die ohne Konto, denn die App meldet jedes Geraet anonym an.
+         Zuerst die Liste des Verschickten, das Formular liegt dahinter.
+         So sieht man beim Hereinkommen, was los ist, statt in ein leeres
+         Formular zu blicken.
 
          ACHTUNG: Die Nachrichten liegen in einem oeffentlich lesbaren
          Dokument. Der Empfaengerkreis wird von der App ausgewertet, nicht
@@ -293,59 +344,100 @@ body[data-admin="yes"] .admin-gate { display: none; }
     <section class="admin-panel" id="panel-nachrichten">
       <p class="admin-hint" data-i18n="admin_nachrichten_hint"></p>
 
-      <div class="admin-field">
-        <label for="nachricht-titel-de" data-i18n="admin_nachricht_titel">Überschrift</label>
-        <input type="text" id="nachricht-titel-de" maxlength="120" placeholder="Deutsch">
-        <input type="text" id="nachricht-titel-en" maxlength="120" placeholder="English (optional)">
-        <input type="text" id="nachricht-titel-it" maxlength="120" placeholder="Italiano (optional)">
-      </div>
-
-      <div class="admin-field">
-        <label for="nachricht-text-de" data-i18n="admin_nachricht_text">Text</label>
-        <textarea id="nachricht-text-de" rows="4" maxlength="2000" placeholder="Deutsch"></textarea>
-        <textarea id="nachricht-text-en" rows="3" maxlength="2000" placeholder="English (optional)"></textarea>
-        <textarea id="nachricht-text-it" rows="3" maxlength="2000" placeholder="Italiano (optional)"></textarea>
-      </div>
-
-      <div class="admin-field">
-        <label for="nachricht-art" data-i18n="admin_nachricht_art">Wie es erscheint</label>
-        <select id="nachricht-art">
-          <option value="fenster-start" data-i18n="admin_nachricht_art_start">Als Fenster, beim nächsten Start</option>
-          <option value="fenster-sofort" data-i18n="admin_nachricht_art_sofort">Als Fenster, sofort</option>
-          <option value="banner" data-i18n="admin_nachricht_art_banner">Nur im Postfach</option>
-        </select>
-      </div>
-
-      <div class="admin-field">
-        <label data-i18n="admin_nachricht_ziel">Wen es erreicht</label>
-        <label class="admin-check"><input type="checkbox" id="ziel-angemeldete">
-          <span data-i18n="admin_ziel_angemeldete">Nur angemeldete Nutzer</span></label>
-        <label class="admin-check"><input type="checkbox" id="ziel-store">
-          <span data-i18n="admin_ziel_store">Nur Fassung aus dem Microsoft Store</span></label>
-        <label class="admin-check"><input type="checkbox" id="ziel-website">
-          <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
-        <label class="admin-check"><input type="checkbox" id="ziel-google">
-          <span data-i18n="admin_ziel_google">Nur mit Google angemeldet</span></label>
-        <label class="admin-check"><input type="checkbox" id="ziel-microsoft">
-          <span data-i18n="admin_ziel_microsoft">Nur mit Microsoft/OneDrive angemeldet</span></label>
-        <label class="admin-check"><input type="checkbox" id="ziel-neue">
-          <span data-i18n="admin_ziel_neue">Nur beim allerersten Start</span></label>
-        <p class="admin-hint" data-i18n="admin_ziel_hint">Ohne Haken geht sie an alle. Mehrere Haken gelten zusammen.</p>
-      </div>
-
-      <div class="admin-field">
-        <label for="nachricht-bis" data-i18n="admin_nachricht_bis">Zustellen bis (freiwillig)</label>
-        <input type="date" id="nachricht-bis">
-        <p class="admin-hint" data-i18n="admin_nachricht_bis_hint">Leer lassen heißt: die Nachricht bleibt unbegrenzt stehen.</p>
-      </div>
-
-      <div class="admin-actions">
-        <button type="button" class="btn-p" id="nachricht-senden" data-i18n="admin_nachricht_senden">Verschicken</button>
+      <div class="nachricht-kopfzeile">
+        <button type="button" class="btn-p" id="nachricht-neu" data-i18n="admin_nachricht_neu">+ Neue Nachricht</button>
         <button type="button" class="btn-m" id="nachricht-aufraeumen" data-i18n="admin_nachricht_aufraeumen">Abgelaufene aufräumen</button>
       </div>
+
+      <!-- Das Formular. Bleibt zu, bis jemand "Neue Nachricht" drückt. -->
+      <div class="nachricht-formular" id="nachricht-formular" style="display:none">
+
+        <div class="admin-field">
+          <label for="nachricht-art" data-i18n="admin_nachricht_art">Wie es erscheint</label>
+          <select id="nachricht-art">
+            <option value="fenster-start" data-i18n="admin_nachricht_art_start">Als Fenster, beim nächsten Start</option>
+            <option value="fenster-sofort" data-i18n="admin_nachricht_art_sofort">Als Fenster, sofort</option>
+            <option value="banner" data-i18n="admin_nachricht_art_banner">Nur im Postfach</option>
+          </select>
+        </div>
+
+        <div class="admin-field">
+          <label data-i18n="admin_nachricht_ziel">Wen es erreicht</label>
+          <div class="ziel-gitter">
+            <label class="admin-check"><input type="checkbox" id="ziel-angemeldete">
+              <span data-i18n="admin_ziel_angemeldete">Nur angemeldete Nutzer</span></label>
+            <label class="admin-check"><input type="checkbox" id="ziel-neue">
+              <span data-i18n="admin_ziel_neue">Nur beim allerersten Start</span></label>
+            <label class="admin-check"><input type="checkbox" id="ziel-store">
+              <span data-i18n="admin_ziel_store">Nur Fassung aus dem Microsoft Store</span></label>
+            <label class="admin-check"><input type="checkbox" id="ziel-website">
+              <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
+            <label class="admin-check"><input type="checkbox" id="ziel-google">
+              <span data-i18n="admin_ziel_google">Nur mit Google angemeldet</span></label>
+            <label class="admin-check"><input type="checkbox" id="ziel-microsoft">
+              <span data-i18n="admin_ziel_microsoft">Nur mit Microsoft/OneDrive angemeldet</span></label>
+          </div>
+          <p class="admin-hint" data-i18n="admin_ziel_hint">Ohne Haken geht sie an alle. Mehrere Haken gelten zusammen.</p>
+        </div>
+
+        <div class="admin-field">
+          <label for="nachricht-bis" data-i18n="admin_nachricht_bis">Zustellen bis (freiwillig)</label>
+          <input type="date" id="nachricht-bis">
+          <p class="admin-hint" data-i18n="admin_nachricht_bis_hint">Leer lassen heißt: die Nachricht bleibt unbegrenzt stehen.</p>
+        </div>
+
+        <!-- Drei Sprachen als Reiter. Deutsch ist Pflicht und trägt den
+             Rückfall für alles, was leer bleibt. -->
+        <div class="sprach-reiter" id="sprach-reiter">
+          <button type="button" class="sprach-tab active" data-sprache="de">Deutsch</button>
+          <button type="button" class="sprach-tab" data-sprache="en">English</button>
+          <button type="button" class="sprach-tab" data-sprache="it">Italiano</button>
+        </div>
+
+        <div class="sprach-blatt active" data-sprache="de">
+          <div class="admin-field">
+            <label for="nachricht-titel-de" data-i18n="admin_nachricht_titel">Überschrift</label>
+            <input type="text" id="nachricht-titel-de" maxlength="120">
+          </div>
+          <div class="admin-field">
+            <label for="nachricht-text-de" data-i18n="admin_nachricht_text">Text</label>
+            <textarea id="nachricht-text-de" rows="6" maxlength="2000"></textarea>
+          </div>
+        </div>
+
+        <div class="sprach-blatt" data-sprache="en">
+          <div class="admin-field">
+            <label for="nachricht-titel-en" data-i18n="admin_nachricht_titel">Überschrift</label>
+            <input type="text" id="nachricht-titel-en" maxlength="120">
+          </div>
+          <div class="admin-field">
+            <label for="nachricht-text-en" data-i18n="admin_nachricht_text">Text</label>
+            <textarea id="nachricht-text-en" rows="6" maxlength="2000"></textarea>
+          </div>
+          <p class="admin-hint" data-i18n="admin_nachricht_rueckfall">Leer lassen: dann sieht diese Sprache den deutschen Text.</p>
+        </div>
+
+        <div class="sprach-blatt" data-sprache="it">
+          <div class="admin-field">
+            <label for="nachricht-titel-it" data-i18n="admin_nachricht_titel">Überschrift</label>
+            <input type="text" id="nachricht-titel-it" maxlength="120">
+          </div>
+          <div class="admin-field">
+            <label for="nachricht-text-it" data-i18n="admin_nachricht_text">Text</label>
+            <textarea id="nachricht-text-it" rows="6" maxlength="2000"></textarea>
+          </div>
+          <p class="admin-hint" data-i18n="admin_nachricht_rueckfall">Leer lassen: dann sieht diese Sprache den deutschen Text.</p>
+        </div>
+
+        <div class="admin-actions">
+          <button type="button" class="btn-p" id="nachricht-senden" data-i18n="admin_nachricht_senden">Verschicken</button>
+          <button type="button" class="btn-m" id="nachricht-abbrechen" data-i18n="admin_nachricht_abbrechen">Abbrechen</button>
+        </div>
+      </div>
+
       <p class="admin-status" id="nachricht-status"></p>
 
-      <div class="admin-field" style="margin-top:26px">
+      <div class="admin-field" style="margin-top:22px">
         <label data-i18n="admin_nachricht_verschickt">Verschickt</label>
         <div id="nachricht-liste"></div>
       </div>
@@ -540,30 +632,100 @@ async function nachrichtenZeichnen() {
   const jetzt = Date.now();
 
   for (const n of liste) {
-    const zeile = document.createElement('div');
-    zeile.className = 'nachricht-zeile';
+    /* <details> statt eigener Aufklapp-Logik: das Verhalten bringt der
+       Browser mit, es ist mit der Tastatur bedienbar und braucht kein
+       Skript. */
+    const eintrag = document.createElement('details');
+    eintrag.className = 'nachricht-eintrag';
 
-    const kopf = document.createElement('div');
-    kopf.className = 'kopf';
-    kopf.textContent = (n.titel && n.titel.de) || '(ohne Titel)';
+    const kopf = document.createElement('summary');
 
-    const unten = document.createElement('div');
-    unten.className = 'unten';
+    const titel = document.createElement('span');
+    titel.className = 'n-titel';
+    titel.textContent = (n.titel && n.titel.de) || '(ohne Titel)';
+    kopf.appendChild(titel);
 
     const abgelaufen = n.gueltigBis && !Number.isNaN(Date.parse(n.gueltigBis))
       && Date.parse(n.gueltigBis) < jetzt;
 
-    const marke = document.createElement('span');
-    marke.className = 'marke' + (abgelaufen ? ' abgelaufen' : '');
-    marke.textContent = abgelaufen
-      ? (t('admin_nachricht_abgelaufen') || 'abgelaufen')
-      : (n.art === 'banner' ? 'Postfach' : (n.sofort ? 'sofort' : 'Start'));
-    unten.appendChild(marke);
+    const marken = document.createElement('span');
+    marken.className = 'n-marken';
+
+    // WIE es erscheint
+    const wie = document.createElement('span');
+    wie.className = 'marke wie';
+    wie.textContent = n.art === 'banner'
+      ? (t('admin_marke_postfach') || 'Postfach')
+      : (n.sofort ? (t('admin_marke_sofort') || 'sofort')
+                  : (t('admin_marke_start') || 'beim Start'));
+    marken.appendChild(wie);
+
+    // WEN es erreicht – jeder Haken eine eigene Marke
+    for (const [feld, schluessel, rueckfall] of [
+      ['nurAngemeldete', 'admin_ziel_angemeldete', 'Angemeldete'],
+      ['nurGoogle', 'admin_marke_google', 'Google'],
+      ['nurMicrosoft', 'admin_marke_microsoft', 'Microsoft'],
+      ['nurStore', 'admin_marke_store', 'Store'],
+      ['nurWebsite', 'admin_marke_website', 'Website'],
+      ['nurNeue', 'admin_marke_neue', 'Erststart']
+    ]) {
+      if (!(n.ziel && n.ziel[feld])) continue;
+      const m = document.createElement('span');
+      m.className = 'marke wen';
+      m.textContent = t(schluessel) || rueckfall;
+      marken.appendChild(m);
+    }
+
+    if (!marken.querySelector('.wen')) {
+      const alle = document.createElement('span');
+      alle.className = 'marke wen';
+      alle.textContent = t('admin_ziel_alle') || 'Alle';
+      marken.appendChild(alle);
+    }
+
+    if (abgelaufen) {
+      const ab = document.createElement('span');
+      ab.className = 'marke abgelaufen';
+      ab.textContent = t('admin_nachricht_abgelaufen') || 'abgelaufen';
+      marken.appendChild(ab);
+    }
+
+    kopf.appendChild(marken);
+    eintrag.appendChild(kopf);
+
+    // Aufgeklappt: die Zeitangaben und der Text in allen gepflegten Sprachen
+    const koerper = document.createElement('div');
+    koerper.className = 'n-koerper';
 
     const wann = new Date(n.erstellt);
-    unten.append(document.createTextNode(
-      (Number.isNaN(wann.getTime()) ? '' : wann.toLocaleDateString() + ' · ') + zielText(n.ziel)
-    ));
+    const zeile = document.createElement('p');
+    zeile.className = 'n-zeit';
+    const teile = [];
+    if (!Number.isNaN(wann.getTime())) {
+      teile.push((t('admin_nachricht_am') || 'Verschickt am {d}')
+        .replace('{d}', wann.toLocaleDateString()));
+    }
+    teile.push(n.gueltigBis && !Number.isNaN(Date.parse(n.gueltigBis))
+      ? (t('admin_nachricht_bis_am') || 'zustellen bis {d}')
+        .replace('{d}', new Date(n.gueltigBis).toLocaleDateString())
+      : (t('admin_nachricht_unbegrenzt') || 'unbegrenzt'));
+    zeile.textContent = teile.join(' · ');
+    koerper.appendChild(zeile);
+
+    for (const [kuerzel, name] of [['de', 'Deutsch'], ['en', 'English'], ['it', 'Italiano']]) {
+      const txt = (n.text && n.text[kuerzel] || '').trim();
+      if (!txt) continue;
+      const block = document.createElement('div');
+      block.className = 'n-sprache';
+      const kopfz = document.createElement('div');
+      kopfz.className = 'n-sprache-kopf';
+      kopfz.textContent = name;
+      const inhalt = document.createElement('div');
+      inhalt.className = 'n-text';
+      inhalt.textContent = txt;
+      block.append(kopfz, inhalt);
+      koerper.appendChild(block);
+    }
 
     const weg = document.createElement('button');
     weg.type = 'button';
@@ -583,15 +745,54 @@ async function nachrichtenZeichnen() {
         showStatus('nachricht-status', describeAdminError(err), 'err');
       }
     });
+    koerper.appendChild(weg);
 
-    zeile.append(kopf, weg, unten);
-    kasten.appendChild(zeile);
+    eintrag.appendChild(koerper);
+    kasten.appendChild(eintrag);
   }
+}
+
+/* ── Formular auf und zu ─────────────────────────────────────────────
+   Es liegt hinter einem Knopf, damit man beim Hereinkommen die Liste
+   sieht und nicht ein leeres Formular. */
+function nachrichtFormularZeigen(offen) {
+  document.getElementById('nachricht-formular').style.display = offen ? 'block' : 'none';
+  document.getElementById('nachricht-neu').style.display = offen ? 'none' : '';
+  if (offen) document.getElementById('nachricht-titel-de').focus();
+}
+
+document.getElementById('nachricht-neu').addEventListener('click', () => {
+  nachrichtFormularLeeren();
+  sprachReiterWaehlen('de');
+  nachrichtFormularZeigen(true);
+});
+
+document.getElementById('nachricht-abbrechen').addEventListener('click', () => {
+  nachrichtFormularZeigen(false);
+});
+
+/* ── Sprachreiter ────────────────────────────────────────────────────
+   Drei Blaetter, eines sichtbar. Deutsch traegt den Rueckfall fuer alles,
+   was in den anderen leer bleibt. */
+function sprachReiterWaehlen(sprache) {
+  for (const tab of document.querySelectorAll('.sprach-tab')) {
+    tab.classList.toggle('active', tab.dataset.sprache === sprache);
+  }
+  for (const blatt of document.querySelectorAll('.sprach-blatt')) {
+    blatt.classList.toggle('active', blatt.dataset.sprache === sprache);
+  }
+}
+
+for (const tab of document.querySelectorAll('.sprach-tab')) {
+  tab.addEventListener('click', () => sprachReiterWaehlen(tab.dataset.sprache));
 }
 
 document.getElementById('nachricht-senden').addEventListener('click', async () => {
   const nachricht = nachrichtAusFormular();
   if (!nachricht) {
+    /* Ohne deutschen Text gibt es keinen Rueckfall - dann saehe ein Teil
+       der Nutzer eine leere Nachricht. */
+    sprachReiterWaehlen('de');
     showStatus('nachricht-status',
       t('admin_nachricht_fehlt') || 'Überschrift und Text auf Deutsch werden gebraucht.', 'err');
     return;
@@ -599,6 +800,7 @@ document.getElementById('nachricht-senden').addEventListener('click', async () =
   try {
     await adminApi.verschickeNachricht(nachricht);
     nachrichtFormularLeeren();
+    nachrichtFormularZeigen(false);
     showStatus('nachricht-status', t('admin_nachricht_weg') || 'Verschickt.', 'ok');
     await nachrichtenZeichnen();
   } catch (err) {
@@ -616,6 +818,7 @@ document.getElementById('nachricht-aufraeumen').addEventListener('click', async 
     showStatus('nachricht-status', describeAdminError(err), 'err');
   }
 });
+
 
 for (const tab of document.querySelectorAll('.admin-tab')) {
     tab.classList.toggle('active', tab.dataset.panel === name);
