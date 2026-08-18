@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('api', {
      daneben - der Nutzer haette Inkwells doppelt, mit getrennten Daten. */
   istStorefassung: process.windowsStore === true,
 
+  /* Postfach: der oertliche Merkzettel und der Erstvermerk.
+     Die Nachrichten selbst holt core/share.js aus Firestore. */
+  loadPostfach: () => ipcRenderer.invoke('load-postfach'),
+  savePostfach: (stand) => ipcRenderer.invoke('save-postfach', stand),
+  erstStart: () => ipcRenderer.invoke('erst-start'),
+
   // Updater controls
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate:  () => ipcRenderer.invoke('download-update'),

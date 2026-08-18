@@ -2252,3 +2252,89 @@ body.hat-konflikt .view {
   font-size: 11px;
   color: var(--lo);
 }
+
+/* ══ POSTFACH ═══════════════════════════════════════════════════════════
+   Zwei Fenster: die einzelne Nachricht beim Start, und das Fach mit
+   allem Bisherigen. Verdrahtet in ui/postfach.js. */
+
+.modal-nachricht { max-width: 520px; }
+
+.nachricht-datum {
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--md);
+  margin: -6px 0 14px;
+}
+
+/* pre-wrap, damit Absaetze aus dem Adminformular erhalten bleiben – der
+   Text wird als reiner Text eingesetzt, nicht als HTML (siehe
+   ui/postfach.js), sonst waere das eine Einladung fuer fremdes Markup. */
+.nachricht-text {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.modal-postfach { max-width: 560px; }
+
+.postfach-liste {
+  max-height: 52vh;
+  overflow-y: auto;
+  margin: 4px 0 14px;
+}
+
+.postfach-eintrag {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  align-items: start;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--sb);
+}
+.postfach-eintrag:last-child { border-bottom: none; }
+
+/* Ungelesenes bekommt einen Streifen statt Fettschrift – das bleibt
+   auch dann erkennbar, wenn der Titel selbst schon lang ist. */
+.postfach-eintrag.ungelesen {
+  border-left: 2px solid var(--gold);
+  padding-left: 10px;
+}
+
+.postfach-titel { font-weight: 600; }
+.postfach-datum {
+  grid-column: 1;
+  font-size: 11px;
+  color: var(--md);
+  letter-spacing: .05em;
+}
+.postfach-text {
+  grid-column: 1 / -1;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  margin-top: 6px;
+}
+
+.postfach-weg {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  background: none;
+  border: none;
+  color: var(--md);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.postfach-weg:hover, .postfach-weg:focus-visible {
+  color: var(--red);
+  background: var(--sh2);
+  outline: none;
+}
+
+.postfach-leer {
+  text-align: center;
+  color: var(--md);
+  padding: 28px 0;
+}

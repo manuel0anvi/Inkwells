@@ -3490,6 +3490,102 @@ const CHAT_QUOTE_LEN = 140;
    globalen Gültigkeitsbereich), dieses Modul ist ein ES-Modul.
    ─────────────────────────────────────────────────────────────────── */
 
+/* ══════════════════════════════════════════════════════════════════════
+   POSTFACH — Nachrichten holen, Gelesen-Stand abgleichen
+
+   Die Nachrichten stehen in EINEM oeffentlich lesbaren Dokument
+   (site_content/nachrichten). Das ist Absicht: site_content ist von den
+   Sicherheitsregeln schon abgedeckt - oeffentlich lesbar, nur vom Admin
+   beschreibbar. Fuer die Nachrichten selbst braucht es dort also keine
+   Aenderung.
+
+   >>> Der Empfaengerkreis ist eine Hoeflichkeit, keine Sperre <<<
+   Weil das Dokument oeffentlich lesbar ist, sieht jeder, der die
+   Datenbank direkt abfragt, ALLE Nachrichten - auch die "nur fuer
+   Angemeldete". Die Auswahl trifft die App, nicht der Server. Fuer
+   Ankuendigungen reicht das; Vertrauliches gehoert hier nicht hinein.
+
+   Der Gelesen-Stand dagegen liegt pro Kennung unter postfach/{uid} und
+   ist nur fuer den Eigentuemer les- und schreibbar. Dafuer gibt es eine
+   eigene Regel in website/firestore.rules.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const NACHRICHTEN_DOK = 'nachrichten';
+
+/** Alle Nachrichten, wie sie der Admin hinterlegt hat. */
+async function ladeNachrichten() {
+  try {
+    const snap = await getDoc(doc(db, 'site_content', NACHRICHTEN_DOK));
+    if (!snap.exists()) return [];
+    const daten = snap.data() || {};
+    return Array.isArray(daten.liste) ? daten.liste : [];
+  } catch (err) {
+    console.warn('[Postfach] Nachrichten nicht ladbar:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Horcht auf Aenderungen, damit "sofort" wirklich sofort ist.
+ * @returns {Function} zum Abbestellen
+ */
+function beobachteNachrichten(beiAenderung) {
+  try {
+    return onSnapshot(
+      doc(db, 'site_content', NACHRICHTEN_DOK),
+      (snap) => {
+        const daten = snap.exists() ? (snap.data() || {}) : {};
+        beiAenderung(Array.isArray(daten.liste) ? daten.liste : []);
+      },
+      (err) => console.warn('[Postfach] Beobachtung abgebrochen:', err.message)
+    );
+  } catch (err) {
+    console.warn('[Postfach] Beobachtung nicht moeglich:', err.message);
+    return () => {};
+  }
+}
+
+/** Der Gelesen-Stand dieser Kennung. Ohne Anmeldung: leer. */
+async function ladePostfachStand() {
+  const ich = currentIdentity();
+  if (!ich || !ich.uid) return { gelesen: [], geloescht: [] };
+  try {
+    const snap = await getDoc(doc(db, 'postfach', ich.uid));
+    if (!snap.exists()) return { gelesen: [], geloescht: [] };
+    const d = snap.data() || {};
+    return {
+      gelesen: Array.isArray(d.gelesen) ? d.gelesen : [],
+      geloescht: Array.isArray(d.geloescht) ? d.geloescht : []
+    };
+  } catch (err) {
+    console.warn('[Postfach] Stand nicht ladbar:', err.message);
+    return { gelesen: [], geloescht: [] };
+  }
+}
+
+/**
+ * Schreibt den Stand hoch.
+ *
+ * Immer den GESAMTEN vereinigten Stand, nicht nur das Neue: dadurch
+ * bringt derselbe Aufruf auch das mit, was auf diesem Rechner oertlich
+ * schon feststand, aber nach einem Kennungswechsel noch nie oben war.
+ */
+async function sichrePostfachStand(stand) {
+  const ich = currentIdentity();
+  if (!ich || !ich.uid) return false;
+  try {
+    await setDoc(doc(db, 'postfach', ich.uid), {
+      gelesen: (stand && stand.gelesen) || [],
+      geloescht: (stand && stand.geloescht) || [],
+      aktualisiert: serverTimestamp()
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.warn('[Postfach] Stand nicht sicherbar:', err.message);
+    return false;
+  }
+}
+
 const InkwellsShare = {
   // Lesekopien (unverändert)
   publishNotebook,
@@ -3555,6 +3651,12 @@ const InkwellsShare = {
   splitNotebook,
   assembleNotebook,
   fingerprintNotebook,
+
+  // Postfach
+  ladeNachrichten,
+  beobachteNachrichten,
+  ladePostfachStand,
+  sichrePostfachStand,
 
   // Live-Bearbeitung
   joinDocRoom,

@@ -1775,6 +1775,96 @@ ipcMain.handle('check-internet', async () => {
 });
 
 // Registry management
+/* ══════════════════════════════════════════════════════════════════════
+   POSTFACH — der oertliche Merkzettel
+
+   Welche Nachricht gelesen und welche geloescht ist, steht doppelt: hier
+   als Arbeitsstand und in der Cloud unter der Firebase-Kennung, damit es
+   auf einem zweiten Rechner ankommt.
+
+   >>> Warum ueberhaupt oertlich, wenn es die Cloud gibt <<<
+   Zwei Gruende. Erstens arbeitet das Postfach damit ohne Internet und
+   ohne Konto weiter. Zweitens - und das ist der eigentliche - wechselt
+   beim Anmelden auf einem ZWEITEN Geraet die Firebase-Kennung
+   (credential-already-in-use, siehe core/share.js). Das Dokument unter
+   der alten Kennung waere danach nicht mehr lesbar, denn die Regel gibt
+   jedem nur sein eigenes. Dieser Merkzettel haengt am Rechner statt an
+   der Kennung und ueberlebt den Wechsel.
+
+   erstStart haelt fest, wann diese Installation zum ersten Mal lief.
+   Daran haengt der Empfaengerkreis "nur Erstinstallation".
+   ══════════════════════════════════════════════════════════════════════ */
+const postfachPath = path.join(app.getPath('userData'), 'inkwells-postfach.json');
+
+const POSTFACH_LEER = { gelesen: [], geloescht: [], erstStart: null };
+
+ipcMain.handle('load-postfach', () => {
+  try {
+    if (fs.existsSync(postfachPath)) {
+      const stand = JSON.parse(fs.readFileSync(postfachPath, 'utf-8'));
+      return {
+        gelesen: Array.isArray(stand.gelesen) ? stand.gelesen : [],
+        geloescht: Array.isArray(stand.geloescht) ? stand.geloescht : [],
+        erstStart: stand.erstStart || null
+      };
+    }
+  } catch (err) {
+    console.error('[Postfach] Laden fehlgeschlagen:', err.message);
+  }
+  return { ...POSTFACH_LEER };
+});
+
+ipcMain.handle('save-postfach', (_, stand) => {
+  try {
+    const sauber = {
+      gelesen: Array.isArray(stand && stand.gelesen) ? stand.gelesen.map(String) : [],
+      geloescht: Array.isArray(stand && stand.geloescht) ? stand.geloescht.map(String) : [],
+      erstStart: (stand && stand.erstStart) || null
+    };
+    fs.writeFileSync(postfachPath, JSON.stringify(sauber, null, 2), 'utf-8');
+    return { ok: true };
+  } catch (err) {
+    console.error('[Postfach] Sichern fehlgeschlagen:', err.message);
+    return { ok: false, err: err.message };
+  }
+});
+
+/**
+ * Wann lief diese Installation zum ersten Mal - und ist das JETZT?
+ *
+ * Der Vermerk wird beim allerersten Aufruf gesetzt. Die Oberflaeche
+ * fragt einmal beim Start; "erstesMal" ist danach fuer die restliche
+ * Sitzung wahr, auch wenn nochmal gefragt wird.
+ */
+let erstesMalGemeldet = null;
+
+ipcMain.handle('erst-start', () => {
+  if (erstesMalGemeldet !== null) return erstesMalGemeldet;
+
+  let stand = { ...POSTFACH_LEER };
+  try {
+    if (fs.existsSync(postfachPath)) stand = JSON.parse(fs.readFileSync(postfachPath, 'utf-8'));
+  } catch (err) { /* dann gilt es als frisch */ }
+
+  const schonDa = !!stand.erstStart;
+  if (!schonDa) {
+    stand.erstStart = new Date().toISOString();
+    try {
+      fs.writeFileSync(postfachPath, JSON.stringify({
+        gelesen: stand.gelesen || [],
+        geloescht: stand.geloescht || [],
+        erstStart: stand.erstStart
+      }, null, 2), 'utf-8');
+      console.log('[Postfach] Erstinstallation vermerkt:', stand.erstStart);
+    } catch (err) {
+      console.error('[Postfach] Erstvermerk nicht sicherbar:', err.message);
+    }
+  }
+
+  erstesMalGemeldet = { erstesMal: !schonDa, seit: stand.erstStart };
+  return erstesMalGemeldet;
+});
+
 const registryPath = path.join(app.getPath('userData'), 'inkwells-registry.json');
 console.log('[Registry] Registry file path:', registryPath);
 

@@ -2,6 +2,11 @@
 
 const TRANSLATIONS = {
   de: {
+    // Postfach
+    postfach: 'Postfach',
+    postfachGelesen: 'Gelesen',
+    postfachLoeschen: 'Löschen',
+    postfachLeer: 'Hier ist noch nichts angekommen.',
     // Home view
     myNotebooks: 'Meine Hefte',
     newNotebook: 'Neues Heft',
@@ -828,6 +833,11 @@ const TRANSLATIONS = {
   },
   
   en: {
+    // Postfach
+    postfach: 'Messages',
+    postfachGelesen: 'Got it',
+    postfachLoeschen: 'Delete',
+    postfachLeer: 'Nothing has arrived yet.',
     // Home view
     myNotebooks: 'My Notebooks',
     newNotebook: 'New Notebook',
@@ -1635,6 +1645,11 @@ const TRANSLATIONS = {
   },
   
   it: {
+    // Postfach
+    postfach: 'Messaggi',
+    postfachGelesen: 'Ho capito',
+    postfachLoeschen: 'Elimina',
+    postfachLeer: 'Non è ancora arrivato nulla.',
     // Home view
     myNotebooks: 'I Miei Quaderni',
     newNotebook: 'Nuovo Quaderno',
