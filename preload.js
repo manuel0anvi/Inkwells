@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('api', {
   loadPostfach: () => ipcRenderer.invoke('load-postfach'),
   savePostfach: (stand) => ipcRenderer.invoke('save-postfach', stand),
   erstStart: () => ipcRenderer.invoke('erst-start'),
+  ersteAnmeldung: () => ipcRenderer.invoke('erste-anmeldung'),
 
   // Updater controls
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

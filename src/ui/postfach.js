@@ -33,7 +33,8 @@
 
   let nachrichten = [];                       // wie sie in Firestore stehen
   let stand = { gelesen: [], geloescht: [] }; // vereinigt, örtlich + Cloud
-  let lage = { angemeldet: false, anbieter: [], store: false, erstesMal: false };
+  let lage = { angemeldet: false, anbieter: [], store: false,
+               erstesMal: false, erstmalsAngemeldet: false };
   let bereit = false;
   let zeigtGerade = false;                    // ein Fenster nach dem anderen
   let letzteKennung = null;                   // gegen doppeltes Auswerten
@@ -256,11 +257,23 @@
       anbieter = (ich && ich.anbieter) || [];
     } catch (err) { /* dann gilt anonym */ }
 
+    /* Der Anmeldevermerk wird NUR gesetzt, wenn wirklich ein Konto
+       verbunden ist - die anonyme Geraetekennung hat jeder, damit waere
+       "neu angemeldet" schon beim ersten Start verbraucht. */
+    let erstmalsAngemeldet = false;
+    if (angemeldet) {
+      try {
+        const a = await window.api.ersteAnmeldung();
+        erstmalsAngemeldet = !!(a && a.erstmalsAngemeldet);
+      } catch (err) { /* dann eben nicht */ }
+    }
+
     return {
       angemeldet,
       anbieter,
       store: window.api.istStorefassung === true,
-      erstesMal
+      erstesMal,
+      erstmalsAngemeldet
     };
   }
 

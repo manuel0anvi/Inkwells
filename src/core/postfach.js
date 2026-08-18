@@ -69,7 +69,7 @@ function istGueltig(nachricht, jetzt) {
 /**
  * Geht diese Nachricht den hier sitzenden Nutzer an?
  *
- * lage = { angemeldet, anbieter, store, erstesMal }
+ * lage = { angemeldet, anbieter, store, erstesMal, erstmalsAngemeldet }
  *
  * Die Häkchen sind UND-verknüpft: „nur Angemeldete" plus „nur Store"
  * trifft angemeldete Store-Nutzer. Ohne Häkchen geht sie an alle.
@@ -88,6 +88,13 @@ function trifftZu(nachricht, lage) {
   if (ziel.nurStore && !l.store) return false;
   if (ziel.nurWebsite && l.store) return false;
   if (ziel.nurNeue && !l.erstesMal) return false;
+
+  /* "Neu angemeldet" ist das Gegenstueck zu "neu installiert", nur eine
+     Stufe spaeter: nicht wer die App zum ersten Mal oeffnet, sondern wer
+     zum ersten Mal ein Konto verbindet. Beides schliesst sich aus - im
+     Formular ist es derselbe Haken, dessen Bedeutung an der Zeile
+     darueber haengt. */
+  if (ziel.nurNeuAngemeldete && !l.erstmalsAngemeldet) return false;
 
   /* Womit angemeldet? Die Kennungen kommen unveraendert von Firebase
      (providerData), deshalb hier die vollen Namen und keine eigenen

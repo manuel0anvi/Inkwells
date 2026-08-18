@@ -1796,7 +1796,7 @@ ipcMain.handle('check-internet', async () => {
    ══════════════════════════════════════════════════════════════════════ */
 const postfachPath = path.join(app.getPath('userData'), 'inkwells-postfach.json');
 
-const POSTFACH_LEER = { gelesen: [], geloescht: [], erstStart: null };
+const POSTFACH_LEER = { gelesen: [], geloescht: [], erstStart: null, erstAnmeldung: null };
 
 ipcMain.handle('load-postfach', () => {
   try {
@@ -1805,7 +1805,8 @@ ipcMain.handle('load-postfach', () => {
       return {
         gelesen: Array.isArray(stand.gelesen) ? stand.gelesen : [],
         geloescht: Array.isArray(stand.geloescht) ? stand.geloescht : [],
-        erstStart: stand.erstStart || null
+        erstStart: stand.erstStart || null,
+        erstAnmeldung: stand.erstAnmeldung || null
       };
     }
   } catch (err) {
@@ -1819,7 +1820,8 @@ ipcMain.handle('save-postfach', (_, stand) => {
     const sauber = {
       gelesen: Array.isArray(stand && stand.gelesen) ? stand.gelesen.map(String) : [],
       geloescht: Array.isArray(stand && stand.geloescht) ? stand.geloescht.map(String) : [],
-      erstStart: (stand && stand.erstStart) || null
+      erstStart: (stand && stand.erstStart) || null,
+      erstAnmeldung: (stand && stand.erstAnmeldung) || null
     };
     fs.writeFileSync(postfachPath, JSON.stringify(sauber, null, 2), 'utf-8');
     return { ok: true };
@@ -1863,6 +1865,45 @@ ipcMain.handle('erst-start', () => {
 
   erstesMalGemeldet = { erstesMal: !schonDa, seit: stand.erstStart };
   return erstesMalGemeldet;
+});
+
+/**
+ * Wurde auf dieser Installation zum ERSTEN Mal ein Konto verbunden - und
+ * ist das jetzt gerade?
+ *
+ * Die Oberflaeche ruft das erst, wenn wirklich ein echtes Konto angemeldet
+ * ist; die anonyme Geraetekennung zaehlt nicht. Wie beim Erststart gilt
+ * die Antwort fuer die ganze Sitzung, damit ein zweites Nachfragen nicht
+ * ploetzlich "nein" sagt.
+ */
+let erstAnmeldungGemeldet = null;
+
+ipcMain.handle('erste-anmeldung', () => {
+  if (erstAnmeldungGemeldet !== null) return erstAnmeldungGemeldet;
+
+  let stand = { ...POSTFACH_LEER };
+  try {
+    if (fs.existsSync(postfachPath)) stand = JSON.parse(fs.readFileSync(postfachPath, 'utf-8'));
+  } catch (err) { /* dann gilt es als frisch */ }
+
+  const schonDa = !!stand.erstAnmeldung;
+  if (!schonDa) {
+    stand.erstAnmeldung = new Date().toISOString();
+    try {
+      fs.writeFileSync(postfachPath, JSON.stringify({
+        gelesen: stand.gelesen || [],
+        geloescht: stand.geloescht || [],
+        erstStart: stand.erstStart || null,
+        erstAnmeldung: stand.erstAnmeldung
+      }, null, 2), 'utf-8');
+      console.log('[Postfach] Erste Anmeldung vermerkt:', stand.erstAnmeldung);
+    } catch (err) {
+      console.error('[Postfach] Anmeldevermerk nicht sicherbar:', err.message);
+    }
+  }
+
+  erstAnmeldungGemeldet = { erstmalsAngemeldet: !schonDa, seit: stand.erstAnmeldung };
+  return erstAnmeldungGemeldet;
 });
 
 const registryPath = path.join(app.getPath('userData'), 'inkwells-registry.json');

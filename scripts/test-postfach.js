@@ -80,6 +80,17 @@ const nurNeue = nachricht('4', { ziel: { nurNeue: true } });
 check('Beim allerersten Start', P.trifftZu(nurNeue, { erstesMal: true }), true);
 check('Sonst nicht', P.trifftZu(nurNeue, { erstesMal: false }), false);
 
+/* "Neu angemeldet" ist die Stufe danach: nicht wer die App zum ersten Mal
+   oeffnet, sondern wer zum ersten Mal ein Konto verbindet. Im Formular
+   ist es derselbe Haken, dessen Bedeutung an der Anmelde-Zeile haengt. */
+const nurNeuAn = nachricht('13', { ziel: { nurNeuAngemeldete: true } });
+check('Beim ersten Anmelden', P.trifftZu(nurNeuAn, { erstmalsAngemeldet: true }), true);
+check('Beim zweiten nicht mehr', P.trifftZu(nurNeuAn, { erstmalsAngemeldet: false }), false);
+
+/* Der erste Start allein reicht nicht - erst das Verbinden eines Kontos. */
+check('Erster Start allein genuegt nicht',
+  P.trifftZu(nurNeuAn, { erstesMal: true, erstmalsAngemeldet: false }), false);
+
 /* Die Haken sind UND-verknuepft – das ist die Stelle, an der eine
    Nachricht sonst bei Leuten landet, fuer die sie nicht gedacht war. */
 const beides = nachricht('5', { ziel: { nurAngemeldete: true, nurStore: true } });
