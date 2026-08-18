@@ -309,7 +309,12 @@ function currentIdentity() {
     email: normalizeEmail(user.email),
     name: user.displayName || '',
     verified: !!user.emailVerified,
-    anonymous: !!user.isAnonymous
+    anonymous: !!user.isAnonymous,
+    /* Womit ist jemand angemeldet - 'google.com', 'microsoft.com'?
+       Firebase fuehrt das als Liste, weil ein Konto mit mehreren
+       Anbietern verknuepft sein kann (linkWithCredential). Anonym ist
+       sie leer. Das Postfach richtet daran seinen Empfaengerkreis aus. */
+    anbieter: (user.providerData || []).map(p => p && p.providerId).filter(Boolean)
   };
 }
 

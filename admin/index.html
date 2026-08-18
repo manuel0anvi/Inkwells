@@ -324,14 +324,19 @@ body[data-admin="yes"] .admin-gate { display: none; }
           <span data-i18n="admin_ziel_store">Nur Fassung aus dem Microsoft Store</span></label>
         <label class="admin-check"><input type="checkbox" id="ziel-website">
           <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
+        <label class="admin-check"><input type="checkbox" id="ziel-google">
+          <span data-i18n="admin_ziel_google">Nur mit Google angemeldet</span></label>
+        <label class="admin-check"><input type="checkbox" id="ziel-microsoft">
+          <span data-i18n="admin_ziel_microsoft">Nur mit Microsoft/OneDrive angemeldet</span></label>
         <label class="admin-check"><input type="checkbox" id="ziel-neue">
           <span data-i18n="admin_ziel_neue">Nur beim allerersten Start</span></label>
         <p class="admin-hint" data-i18n="admin_ziel_hint">Ohne Haken geht sie an alle. Mehrere Haken gelten zusammen.</p>
       </div>
 
       <div class="admin-field">
-        <label for="nachricht-bis" data-i18n="admin_nachricht_bis">Zustellen bis (JJJJ-MM-TT)</label>
+        <label for="nachricht-bis" data-i18n="admin_nachricht_bis">Zustellen bis (freiwillig)</label>
         <input type="date" id="nachricht-bis">
+        <p class="admin-hint" data-i18n="admin_nachricht_bis_hint">Leer lassen heißt: die Nachricht bleibt unbegrenzt stehen.</p>
       </div>
 
       <div class="admin-actions">
@@ -369,12 +374,11 @@ body[data-admin="yes"] .admin-gate { display: none; }
     </section>
   </div>
 
+  <!-- Im Verwaltungsbereich bleibt der Fuss leer: Community und
+       Datenschutz sind Seiten fuer Besucher. Wer hier arbeitet, kommt
+       ueber das Zeichen oben links zurueck. -->
   <footer>
     <p>© 2026 Inkwells · Anvi</p>
-    <div class="fl">
-      <a href="../community/" data-i18n="nav_community">Community</a>
-      <a href="../datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
-    </div>
   </footer>
 </div>
 
@@ -477,6 +481,8 @@ function nachrichtAusFormular() {
       nurAngemeldete: nachrichtFeld('ziel-angemeldete').checked,
       nurStore:       nachrichtFeld('ziel-store').checked,
       nurWebsite:     nachrichtFeld('ziel-website').checked,
+      nurGoogle:      nachrichtFeld('ziel-google').checked,
+      nurMicrosoft:   nachrichtFeld('ziel-microsoft').checked,
       nurNeue:        nachrichtFeld('ziel-neue').checked
     },
     /* Ende des Tages, nicht Mitternacht: sonst waere eine Nachricht am
@@ -491,7 +497,8 @@ function nachrichtFormularLeeren() {
                     'nachricht-bis']) {
     nachrichtFeld(id).value = '';
   }
-  for (const id of ['ziel-angemeldete', 'ziel-store', 'ziel-website', 'ziel-neue']) {
+  for (const id of ['ziel-angemeldete', 'ziel-store', 'ziel-website',
+                    'ziel-google', 'ziel-microsoft', 'ziel-neue']) {
     nachrichtFeld(id).checked = false;
   }
   nachrichtFeld('nachricht-art').value = 'fenster-start';
@@ -503,6 +510,8 @@ function zielText(ziel) {
   if (z.nurAngemeldete) teile.push(t('admin_ziel_angemeldete') || 'Nur Angemeldete');
   if (z.nurStore) teile.push(t('admin_ziel_store') || 'Nur Store');
   if (z.nurWebsite) teile.push(t('admin_ziel_website') || 'Nur Website');
+  if (z.nurGoogle) teile.push(t('admin_ziel_google') || 'Nur Google');
+  if (z.nurMicrosoft) teile.push(t('admin_ziel_microsoft') || 'Nur Microsoft');
   if (z.nurNeue) teile.push(t('admin_ziel_neue') || 'Nur Erststart');
   return teile.length ? teile.join(' · ') : (t('admin_ziel_alle') || 'Alle');
 }
