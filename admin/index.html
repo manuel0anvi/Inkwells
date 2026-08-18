@@ -112,6 +112,10 @@ body[data-admin="yes"] .admin-gate { display: none; }
 
 .ziel-zeile { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-bottom: 8px; }
 
+/* Datumsfeld und der Knopf zum Leeren nebeneinander. */
+.datum-zeile { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.datum-zeile input[type="date"] { flex: 0 1 15rem; }
+
 /* Die Anbieter-Auswahl haengt an der Zeile darueber und wird deshalb
    eingerueckt - der Strich links zeigt, wozu sie gehoert. */
 .ziel-unterzeile {
@@ -461,9 +465,12 @@ body[data-admin="yes"] .admin-gate { display: none; }
               <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
           </div>
 
+          <!-- Ein Haken, zwei Bedeutungen: ohne Anmelde-Einschraenkung
+               meint er neu Installierte, mit ihr neu Angemeldete. Die
+               Beschriftung wechselt mit, siehe neueHakenBeschriften(). -->
           <div class="ziel-zeile">
             <label class="admin-check"><input type="checkbox" id="ziel-neue">
-              <span data-i18n="admin_ziel_neue">Nur neu installierte</span></label>
+              <span id="ziel-neue-text" data-i18n="admin_ziel_neue">Nur neu installierte</span></label>
           </div>
 
           <p class="admin-hint" data-i18n="admin_ziel_hint">Die Zeilen gelten zusammen. Wer nichts einschränkt, erreicht alle.</p>
@@ -471,7 +478,13 @@ body[data-admin="yes"] .admin-gate { display: none; }
 
         <div class="admin-field">
           <label for="nachricht-bis" data-i18n="admin_nachricht_bis">Zustellen bis (freiwillig)</label>
-          <input type="date" id="nachricht-bis">
+          <div class="datum-zeile">
+            <input type="date" id="nachricht-bis">
+            <!-- Ein gesetztes Datum bekommt man sonst kaum wieder weg;
+                 der Kalender bietet dafuer nichts an. -->
+            <button type="button" class="btn-m" id="nachricht-bis-weg"
+                    data-i18n="admin_nachricht_bis_weg" style="display:none">Kein Datum</button>
+          </div>
           <p class="admin-hint" data-i18n="admin_nachricht_bis_hint">Leer lassen heißt: die Nachricht bleibt unbegrenzt stehen.</p>
         </div>
 
@@ -674,7 +687,10 @@ function nachrichtAusFormular() {
       nurMicrosoft:   anmeldung !== 'alle' && anbieter === 'microsoft',
       nurStore:       fassung === 'store',
       nurWebsite:     fassung === 'website',
-      nurNeue:        nachrichtFeld('ziel-neue').checked
+      /* Derselbe Haken, zwei Felder - welches gemeint ist, entscheidet
+         die Anmelde-Zeile darueber. */
+      nurNeue:           anmeldung === 'alle' && nachrichtFeld('ziel-neue').checked,
+      nurNeuAngemeldete: anmeldung !== 'alle' && nachrichtFeld('ziel-neue').checked
     },
     /* Ende des Tages, nicht Mitternacht: sonst waere eine Nachricht am
        eingetragenen Tag selbst schon abgelaufen. */
@@ -696,6 +712,7 @@ function nachrichtFormularLeeren() {
     if (el) el.checked = true;
   }
   anbieterZeileZeigen();
+  datumKnopfZeigen();
   nachrichtFeld('nachricht-art').value = 'fenster-start';
 }
 
@@ -772,7 +789,8 @@ async function nachrichtenZeichnen() {
       ['nurMicrosoft', 'admin_marke_microsoft', 'Microsoft'],
       ['nurStore', 'admin_marke_store', 'Store'],
       ['nurWebsite', 'admin_marke_website', 'Website'],
-      ['nurNeue', 'admin_marke_neue', 'Erststart']
+      ['nurNeue', 'admin_marke_neue', 'neu installiert'],
+      ['nurNeuAngemeldete', 'admin_marke_neu_angemeldet', 'neu angemeldet']
     ]) {
       if (!(n.ziel && n.ziel[feld])) continue;
       if (feld === 'nurAngemeldete' && (n.ziel.nurGoogle || n.ziel.nurMicrosoft)) continue;
@@ -864,7 +882,35 @@ function anbieterZeileZeigen() {
   const an = document.querySelector('input[name="ziel-anmeldung"]:checked');
   document.getElementById('ziel-anbieter-zeile').style.display =
     (an && an.value === 'angemeldet') ? 'flex' : 'none';
+  neueHakenBeschriften();
 }
+
+/* Der "neu"-Haken meint zweierlei, je nachdem, ob auf Angemeldete
+   eingeschraenkt ist: sonst waere "neu installiert UND nur angemeldete"
+   eine Kombination, die niemanden erreicht - beim allerersten Start ist
+   noch keiner angemeldet. */
+function neueHakenBeschriften() {
+  const an = document.querySelector('input[name="ziel-anmeldung"]:checked');
+  const angemeldet = an && an.value === 'angemeldet';
+  const feld = document.getElementById('ziel-neue-text');
+  const schluessel = angemeldet ? 'admin_ziel_neu_angemeldet' : 'admin_ziel_neue';
+  feld.dataset.i18n = schluessel;
+  feld.textContent = t(schluessel)
+    || (angemeldet ? 'Nur neu angemeldete' : 'Nur neu installierte');
+}
+
+/* Datum wieder loeschen. Sichtbar nur, wenn eines gesetzt ist. */
+function datumKnopfZeigen() {
+  document.getElementById('nachricht-bis-weg').style.display =
+    document.getElementById('nachricht-bis').value ? '' : 'none';
+}
+
+document.getElementById('nachricht-bis').addEventListener('change', datumKnopfZeigen);
+document.getElementById('nachricht-bis').addEventListener('input', datumKnopfZeigen);
+document.getElementById('nachricht-bis-weg').addEventListener('click', () => {
+  document.getElementById('nachricht-bis').value = '';
+  datumKnopfZeigen();
+});
 
 for (const el of document.querySelectorAll('input[name="ziel-anmeldung"]')) {
   el.addEventListener('change', anbieterZeileZeigen);
