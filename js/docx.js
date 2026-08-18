@@ -16,7 +16,7 @@
    Erzeugt eine echte .docx-Datei – ohne Bibliothek, ohne Server. Eine
    .docx ist ein ZIP-Archiv mit XML darin; beides steht weiter unten.
 
-   ── Wie das Ergebnis 1:1 wie Inkwell aussieht ───────────────────────
+   ── Wie das Ergebnis 1:1 wie Inkwells aussieht ───────────────────────
    Ein Word-Dokument kann Text nicht frei auf der Seite platzieren wie
    der Browser. Deshalb wird jede Heftseite zweigeteilt ausgegeben:
 
@@ -532,6 +532,12 @@
   const LIST_INDENT_PX = 32;      // = padding-left je Ebene in css/pages.css
   const LIST_HANGING_PX = 20;     // so weit steht die Marke davor
 
+  /* So breit wird ein Leerzeichen beim Ausgeben veranschlagt. Gebraucht
+     nur für den Abstandshalter mitten in einer Zeile (siehe dort) – ein
+     Näherungswert, denn wie breit Word es wirklich setzt, weiss nur
+     Word. Im Heft selbst wird nichts genähert. */
+  const LUECKE_ZEICHEN_PX = 4.5;
+
   function romanOf(n) {
     const paare = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
       [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
@@ -598,6 +604,42 @@
   }
 
   /**
+   * Die Ausrichtung eines Absatzes, als Wert für w:jc.
+   *
+   * Sie steht als Klasse am Block (ui/toolbar.js) und nicht als style:
+   * von einem style bleibt beim Bereinigen allein die Farbe stehen
+   * (core/sanitize.js). Linksbündig hat keine Klasse – das ist der
+   * Zustand ohne Auszeichnung – und braucht in Word auch kein w:jc.
+   */
+  function ausrichtungVon(el) {
+    const cls = typeof el.className === 'string' ? el.className : '';
+    if (cls.includes('j-align-center')) return 'center';
+    if (cls.includes('j-align-right')) return 'right';
+    if (cls.includes('j-align-justify')) return 'both';   // so heißt Blocksatz in OOXML
+    return null;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     ABSTAND STATT LEERZEICHEN – UND IN WORD ECHTE EINZÜGE
+
+     Wer in Inkwells irgendwohin klickt und dort schreibt, bekommt seit
+     der Umstellung keinen Block aus Leerzeichen mehr, sondern einen
+     Einzug am Absatz (canvas/text.js). Word kennt genau das:
+
+       margin-left  ->  w:ind w:left
+       margin-top   ->  w:spacing w:before
+
+     Das ist TREUER als vorher. Die Leerzeichen kamen in Words Schrift
+     anders heraus als in Inkwells – der Text stand im Export immer ein
+     Stück woanders. Ein Einzug ist ein Mass und überall dasselbe.
+     ══════════════════════════════════════════════════════════════════ */
+  function pxAusStil(el, name) {
+    const wert = el && el.style ? el.style[name] : '';
+    const zahl = Number.parseFloat(String(wert || ''));
+    return Number.isFinite(zahl) && zahl > 0 ? zahl : 0;
+  }
+
+  /**
    * @param {string} html Inhalt von page.textContent
    * @returns {Array<{style: string, runs: Array}>}
    */
@@ -610,6 +652,14 @@
     if (!root) return paragraphs;
 
     let current = null;
+
+    /* Unterkante des zuletzt gesehenen frei stehenden Absatzes, in
+       Seiten-Pixeln – oder null, solange keiner kam. Daraus wird sein
+       Abstand zum naechsten (siehe unten). Eine Zeilenhoehe genuegt als
+       Mass: mehrzeilige freie Absaetze sind selten, und der Fehler
+       waere ein zu grosser Abstand, kein verlorener Text. */
+    let letzteFreiUnten = null;
+    const FREI_ZEILE_PX = 32;
 
     const openParagraph = (style) => {
       current = { style, runs: [] };
@@ -666,8 +716,47 @@
           continue;
         }
 
+        /* ── Der Abstandshalter mitten in einer Zeile ──────────────────
+           In Inkwells ist er ein leeres Element mit einer Breite
+           (canvas/text.js). Word kennt so etwas nicht: dort gibt es
+           mitten in einer Zeile nur Zeichen und Tabulatoren, und ein
+           Tabulator bräuchte einen Anschlag an einer Stelle, die sich
+           hier nicht ausrechnen lässt (sie hängt davon ab, wie breit
+           der Text davor in WORDS Schrift wird).
+
+           Also Leerzeichen – aber nur hier, im Ausgegebenen. Im Heft
+           selbst steht weiterhin kein einziges. Das ist der Punkt der
+           ganzen Umstellung: der Verlust bleibt in der Kopie, statt im
+           Original zu stehen. */
+        if (tag === 'SPAN' && child.classList && child.classList.contains('j-luecke')) {
+          const px = pxAusStil(child, 'width');
+          if (px > 0) {
+            const anzahl = Math.max(1, Math.min(120, Math.round(px / LUECKE_ZEICHEN_PX)));
+            ensureParagraph().runs.push({ ...format, text: ' '.repeat(anzahl) });
+          }
+          continue;
+        }
+
         if (BLOCK_TAGS.has(tag)) {
           const absatz = openParagraph(paragraphStyleOf(child));
+          absatz.align = ausrichtungVon(child);
+          // Wo der Klick hingezeigt hat – siehe pxAusStil
+          absatz.einzugPx = pxAusStil(child, 'marginLeft');
+          absatz.obenPx = pxAusStil(child, 'marginTop');
+
+          /* ── Ein frei stehender Absatz ────────────────────────────
+             Er traegt seine Lage absolut (left/top), Word kennt aber
+             nur Abstaende von einem Absatz zum naechsten. Umgerechnet
+             wird deshalb in den ABSTAND zum vorigen freien Absatz –
+             bei einer Seite, die nur aus Klicks entstanden ist (der
+             uebliche Fall), kommt der Text damit in Word auf dieselben
+             Zeilen wie im Heft. */
+          if (child.classList && child.classList.contains('j-frei')) {
+            const obenAbs = pxAusStil(child, 'top');
+            absatz.einzugPx = pxAusStil(child, 'left');
+            absatz.obenPx = Math.max(0, obenAbs - (letzteFreiUnten === null ? obenAbs : letzteFreiUnten));
+            letzteFreiUnten = obenAbs + FREI_ZEILE_PX;
+          }
 
           if (tag === 'LI' && liste) {
             liste.n++;
@@ -771,7 +860,7 @@
       + `<wp:extent cx="${cx}" cy="${cy}"/>`
       + '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
       + '<wp:wrapNone/>'
-      + `<wp:docPr id="${id}" name="Inkwell-Seite ${id}"/>`
+      + `<wp:docPr id="${id}" name="Inkwells-Seite ${id}"/>`
       + '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
       + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
       + '<pic:pic>'
@@ -810,7 +899,8 @@
   function paragraphXml(paragraph, lh, options = {}) {
     const spec = styleSpec(paragraph.style, lh);
 
-    // Reihenfolge nach CT_PPr: pBdr, tabs, spacing, ind, sectPr
+    // Reihenfolge nach CT_PPr: pBdr, tabs, spacing, ind, jc, sectPr.
+    // Word ist da streng – steht jc vor ind, öffnet die Datei gar nicht.
     const props = [];
     if (spec.border) {
       props.push(`<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="${PAPER_LINE.slice(1).toUpperCase()}"/></w:pBdr>`);
@@ -823,10 +913,36 @@
     const einzug = Math.round((paragraph.indentPx || 0) * TWIPS_PER_PX);
     if (einzug) props.push(`<w:tabs><w:tab w:val="left" w:pos="${einzug}"/></w:tabs>`);
 
-    props.push(`<w:spacing w:before="0" w:after="0" w:line="${Math.round(lh * TWIPS_PER_PX)}" w:lineRule="exact"/>`);
+    /* Der Abstand nach oben, den ein Klick weiter unten gesetzt hat.
+       Er steht in ganzen Zeilenhöhen (canvas/text.js) und kommt damit in
+       Word auf dieselben Zeilen wie im Heft. */
+    const oben = Math.round((paragraph.obenPx || 0) * TWIPS_PER_PX);
+    props.push(`<w:spacing w:before="${oben}" w:after="0" w:line="${Math.round(lh * TWIPS_PER_PX)}" w:lineRule="exact"/>`);
+
+    /* Der Einzug eines Aufzählungspunktes hängt (die Marke steht davor);
+       der Einzug aus einem Klick ist ein gewöhnlicher linker Einzug.
+       Beides zugleich kommt nicht vor – ein Listenpunkt entsteht nicht
+       aus einem Klick ins Leere. */
+    const klickEinzug = Math.round((paragraph.einzugPx || 0) * TWIPS_PER_PX);
     props.push(einzug
       ? `<w:ind w:left="${einzug}" w:right="0" w:hanging="${Math.round(LIST_HANGING_PX * TWIPS_PER_PX)}"/>`
-      : '<w:ind w:left="0" w:right="0" w:firstLine="0"/>');
+      : `<w:ind w:left="${klickEinzug}" w:right="0" w:firstLine="0"/>`);
+    if (paragraph.align) props.push(`<w:jc w:val="${paragraph.align}"/>`);
+
+    /* ── Eine Überschrift ist auch in Word eine Überschrift ───────────
+       Bisher wurde nur ihr Aussehen geschrieben – größer, kursiv, mit
+       Strich darunter. Für Word war das ein gewöhnlicher Absatz, der
+       zufällig groß aussieht: nicht im Navigationsbereich, nicht im
+       Inhaltsverzeichnis, und beim Zurücklesen nicht wiederzuerkennen
+       (core/docxImport.js). Die Gliederungsebene sagt es ausdrücklich.
+
+       Direkt am Absatz und nicht über eine Formatvorlage: eine Vorlage
+       müsste in styles.xml angelegt und benannt werden, und ihr Name
+       ist in jeder Word-Sprache ein anderer. w:outlineLvl ist eine
+       Zahl und überall dieselbe. */
+    const ebene = { h1: 0, h2: 1, h3: 2 }[paragraph.style];
+    if (ebene !== undefined) props.push(`<w:outlineLvl w:val="${ebene}"/>`);
+
     if (options.sectPr) props.push(options.sectPr);
 
     const runs = (options.leadingXml || '')
@@ -931,8 +1047,8 @@
       + 'xmlns:dc="http://purl.org/dc/elements/1.1/" '
       + 'xmlns:dcterms="http://purl.org/dc/terms/" '
       + 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-      + `<dc:title>${esc(options.title || 'Inkwell')}</dc:title>`
-      + '<dc:creator>Inkwell</dc:creator>'
+      + `<dc:title>${esc(options.title || 'Inkwells')}</dc:title>`
+      + '<dc:creator>Inkwells</dc:creator>'
       + `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>`
       + `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>`
       + '</cp:coreProperties>';
@@ -950,8 +1066,8 @@
 
   /** Dateiname ohne Zeichen, die Windows nicht erlaubt. */
   function safeFileName(name) {
-    return String(name || 'Inkwell').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Inkwell';
+    return String(name || 'Inkwells').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Inkwells';
   }
 
-  global.InkwellDocx = { build, safeFileName, htmlToParagraphs, lhForBg };
+  global.InkwellsDocx = { build, safeFileName, htmlToParagraphs, lhForBg };
 })(typeof window !== 'undefined' ? window : globalThis);

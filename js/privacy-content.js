@@ -8,18 +8,18 @@
    Alle Felder außer h sind optional und können kombiniert werden.
 
    Beim Ändern der App bitte mitpflegen. Was hier stehen muss, ist alles,
-   was Inkwell speichert oder verschickt – also insbesondere:
+   was Inkwells speichert oder verschickt – also insbesondere:
      · die Einstellungsdatei der App (src/core/settings.js)
      · der localStorage der Website (website/js/common.js, i18n.js)
      · die Freigabe-Kopien in Firestore (website/js/share.js)
    ══════════════════════════════════════════════════════════════════════ */
 
-const PRIVACY_UPDATED = '2026-08-01';
+const PRIVACY_UPDATED = '2026-08-17';
 
 const PRIVACY = {
   de: {
     title: 'Datenschutz',
-    subtitle: 'Was Inkwell speichert, was nicht, und wo deine Notizen wirklich liegen.',
+    subtitle: 'Was Inkwells speichert, was nicht, und wo deine Notizen wirklich liegen.',
     updatedLabel: 'Stand',
     summaryTitle: 'Das Wichtigste in Kürze',
     summary: [
@@ -33,9 +33,9 @@ const PRIVACY = {
     ],
     sections: [
       {
-        h: '1. Wer hinter Inkwell steht',
+        h: '1. Wer hinter Inkwells steht',
         p: [
-          'Inkwell ist ein privates, quelloffenes Projekt und wird nicht kommerziell betrieben. Es gibt keine Firma, keine Werbevermarktung und keine Weitergabe von Daten an Dritte zu Werbezwecken.',
+          'Inkwells ist ein privates, quelloffenes Projekt und wird nicht kommerziell betrieben. Es gibt keine Firma, keine Werbevermarktung und keine Weitergabe von Daten an Dritte zu Werbezwecken.',
           'Fragen zum Datenschutz, Auskunftswünsche und Löschanfragen richtest du am einfachsten als Fehlerbericht im Community-Bereich der Website. Dort werden sie bearbeitet.'
         ],
         links: [
@@ -54,7 +54,7 @@ const PRIVACY = {
           rows: [
             ['Sprache, Speicherort, Auto-Speichern, eigene Tastenkürzel', 'Deine Einstellungen'],
             ['E-Mail, Name, Profil-ID und Profilbild-Adresse des Cloud-Kontos', 'Anzeige des angemeldeten Kontos und erneute Anmeldung mit einem Klick'],
-            ['Zugriffs- und Erneuerungstoken für Google Drive bzw. OneDrive', 'Zugriff auf deinen eigenen Inkwell-Ordner in der Cloud'],
+            ['Zugriffs- und Erneuerungstoken für Google Drive bzw. OneDrive', 'Zugriff auf deinen eigenen Inkwells-Ordner in der Cloud'],
             ['Liste deiner eigenen Freigaben (Kennung und Link je Heft)', 'Damit „Freigabe aktualisieren" und „Freigabe aufheben" später noch funktionieren'],
             ['Liste der Hefte, die noch in die Cloud müssen', 'Damit Änderungen, die du ohne Internet gemacht hast, später nachgeladen werden']
           ]
@@ -64,12 +64,12 @@ const PRIVACY = {
       {
         h: '3. Anmeldung mit Google oder Microsoft',
         p: [
-          'Inkwell hat keine eigene Nutzerverwaltung. Es gibt keine Registrierung mit E-Mail und Passwort und keine Passwort-Datenbank. Die Anmeldung läuft ausschließlich über dein bestehendes Google- oder Microsoft-Konto.',
-          'Bei der Anmeldung fragt Inkwell diese Berechtigungen an:'
+          'Inkwells hat keine eigene Nutzerverwaltung. Es gibt keine Registrierung mit E-Mail und Passwort und keine Passwort-Datenbank. Die Anmeldung läuft ausschließlich über dein bestehendes Google- oder Microsoft-Konto.',
+          'Bei der Anmeldung fragt Inkwells diese Berechtigungen an:'
         ],
         ul: [
-          '<strong>Google (openid, email, profile, drive.file):</strong> Identifikation (Profil-ID, E-Mail-Adresse, Name, Profilbild) und Zugriff ausschließlich auf die Dateien, die Inkwell selbst in deinem Google Drive anlegt.',
-          '<strong>Microsoft (User.Read, Files.ReadWrite, offline_access):</strong> Identifikation (Profil-ID, E-Mail-Adresse, Name) sowie Lese- und Schreibzugriff auf den von Inkwell genutzten Speicherbereich in deinem OneDrive.'
+          '<strong>Google (openid, email, profile, drive.file):</strong> Identifikation (Profil-ID, E-Mail-Adresse, Name, Profilbild) und Zugriff ausschließlich auf die Dateien, die Inkwells selbst in deinem Google Drive anlegt.',
+          '<strong>Microsoft (User.Read, Files.ReadWrite, offline_access):</strong> Identifikation (Profil-ID, E-Mail-Adresse, Name) sowie Lese- und Schreibzugriff auf den von Inkwells genutzten Speicherbereich in deinem OneDrive.'
         ],
         p2: [
           'Die erhaltenen Angaben sowie die zeitlich begrenzten Zugriffstokens werden nur lokal gespeichert: in der App in der Einstellungsdatei, auf der Website im localStorage deines Browsers. Sie werden an niemanden weitergeleitet.',
@@ -79,10 +79,10 @@ const PRIVACY = {
       {
         h: '4. Cloud-Sicherung über Google Drive oder OneDrive',
         p: [
-          'Die Cloud-Sicherung ist freiwillig und standardmäßig aus. Schaltest du sie ein, werden deine Notizbücher als JSON-Dateien in deinem eigenen Google Drive oder OneDrive im Ordner „Inkwell“ abgelegt.',
+          'Die Cloud-Sicherung ist freiwillig und standardmäßig aus. Schaltest du sie ein, werden deine Notizbücher als JSON-Dateien in deinem eigenen Google Drive oder OneDrive im Ordner „Inkwells“ abgelegt.',
           'Das bedeutet: Die Daten liegen in deinem Google- oder Microsoft-Konto, unter deiner Kontrolle, und zählen auf deinen jeweiligen Speicherplatz. Sie laufen zu keinem Zeitpunkt über einen Server von uns. Für die Verarbeitung gelten die Datenschutzerklärungen von Google bzw. Microsoft.',
           'Arbeitest du ohne Internet, bleiben die Änderungen zunächst nur auf deinem Gerät. Die App merkt sich, welche Hefte noch hochzuladen sind, und holt das nach, sobald wieder eine Verbindung besteht. Gemerkt wird dabei nur die Kennung des Hefts, kein Inhalt.',
-          'Du kannst die Sicherung jederzeit in der App abschalten, den Ordner „Inkwell“ in deinem Cloud-Speicher löschen und Inkwell in deinem Google- oder Microsoft-Konto den Zugriff entziehen. Deine lokalen Notizbücher bleiben dabei unberührt.'
+          'Du kannst die Sicherung jederzeit in der App abschalten, den Ordner „Inkwells“ in deinem Cloud-Speicher löschen und Inkwells in deinem Google- oder Microsoft-Konto den Zugriff entziehen. Deine lokalen Notizbücher bleiben dabei unberührt.'
         ],
         links: [
           { label: 'Google-Zugriff verwalten und entziehen', href: 'https://myaccount.google.com/permissions' },
@@ -138,8 +138,8 @@ const PRIVACY = {
           head: ['Dienst', 'Wozu', 'Wo'],
           rows: [
             ['Google Fonts', 'Schriftarten der Website und der App', 'Website und App'],
-            ['Google Identity / Drive API', 'Anmeldung und Zugriff auf deinen Inkwell-Ordner in Drive', 'Website und App, nur bei Google-Anmeldung'],
-            ['Microsoft Identity / Graph API', 'Anmeldung und Zugriff auf deinen Inkwell-Ordner in OneDrive', 'Website und App, nur bei Microsoft-Anmeldung'],
+            ['Google Identity / Drive API', 'Anmeldung und Zugriff auf deinen Inkwells-Ordner in Drive', 'Website und App, nur bei Google-Anmeldung'],
+            ['Microsoft Identity / Graph API', 'Anmeldung und Zugriff auf deinen Inkwells-Ordner in OneDrive', 'Website und App, nur bei Microsoft-Anmeldung'],
             ['GitHub', 'Auslieferung der Website, Liste der Downloads, Prüfung auf App-Updates', 'Website und App'],
             ['Google Firebase (Cloud Firestore)', 'Beiträge im Community-Forum sowie Lesekopien freigegebener Hefte', 'Forumsseite; sonst nur, wenn du eine Freigabe erstellst oder öffnest']
           ]
@@ -147,9 +147,10 @@ const PRIVACY = {
         note: 'Diese Dienste werden nicht zum Wiedererkennen oder Beobachten von Besuchern eingesetzt.'
       },
       {
-        h: '9. Update-Prüfung in der App',
+        h: '9. Updates der App',
         p: [
-          'Die Desktop-App fragt bei GitHub nach, ob eine neuere Version vorliegt, und lädt auf deinen Wunsch das Installationsprogramm herunter. Dabei wird ausschließlich die öffentliche Versionsliste abgerufen. Es werden keine Angaben über dich, dein Gerät oder deine Notizen übermittelt.'
+          'Die von dieser Website geladene Fassung fragt bei GitHub nach, ob eine neuere Version vorliegt, und lädt auf deinen Wunsch das Installationsprogramm herunter. Dabei wird ausschließlich die öffentliche Versionsliste abgerufen. Es werden keine Angaben über dich, dein Gerät oder deine Notizen übermittelt.',
+          'Die Fassung aus dem Microsoft Store fragt bei GitHub gar nicht erst nach – dort hält Windows die App selbst auf Stand. Der Eintrag liegt bei Microsoft, und Microsoft erfährt als Vertriebsweg, dass du Inkwells installiert hast, so wie bei jeder anderen App aus dem Store. Darauf haben wir keinen Einfluss; dafür gilt die Datenschutzerklärung von Microsoft.'
         ]
       },
       {
@@ -170,9 +171,9 @@ const PRIVACY = {
           'Vieles davon kannst du unmittelbar selbst umsetzen, ohne uns fragen zu müssen:'
         ],
         ul: [
-          '<strong>Auskunft und Übertragbarkeit:</strong> Deine Notizbücher liegen bereits als lesbare Dateien bei dir und in deinem Cloud-Ordner „Inkwell“ (Drive / OneDrive) – du kannst sie jederzeit kopieren oder als PDF beziehungsweise Word-Dokument ausgeben.',
-          '<strong>Löschung:</strong> Lokale Dateien löschen, den Ordner „Inkwell“ in Google Drive oder OneDrive löschen, bestehende Freigaben aufheben, in der App abmelden.',
-          '<strong>Widerruf der Einwilligung:</strong> Cloud-Sicherung ausschalten und Inkwell in deinen Google- oder Microsoft-Kontoeinstellungen den Zugriff entziehen.',
+          '<strong>Auskunft und Übertragbarkeit:</strong> Deine Notizbücher liegen bereits als lesbare Dateien bei dir und in deinem Cloud-Ordner „Inkwells“ (Drive / OneDrive) – du kannst sie jederzeit kopieren oder als PDF beziehungsweise Word-Dokument ausgeben.',
+          '<strong>Löschung:</strong> Lokale Dateien löschen, den Ordner „Inkwells“ in Google Drive oder OneDrive löschen, bestehende Freigaben aufheben, in der App abmelden.',
+          '<strong>Widerruf der Einwilligung:</strong> Cloud-Sicherung ausschalten und Inkwells in deinen Google- oder Microsoft-Kontoeinstellungen den Zugriff entziehen.',
           '<strong>Forumsbeiträge:</strong> Löschung über den Community-Bereich anfragen.'
         ]
       },
@@ -185,13 +186,13 @@ const PRIVACY = {
       {
         h: '13. Kinder',
         p: [
-          'Inkwell richtet sich nicht gezielt an Kinder unter 16 Jahren. Da wir keine Daten über Nutzerinnen und Nutzer sammeln, werden auch keine Daten von Kindern erhoben. Für die Anmeldung mit Google oder Microsoft gelten zusätzlich die Altersgrenzen der jeweiligen Anbieter.'
+          'Inkwells richtet sich nicht gezielt an Kinder unter 16 Jahren. Da wir keine Daten über Nutzerinnen und Nutzer sammeln, werden auch keine Daten von Kindern erhoben. Für die Anmeldung mit Google oder Microsoft gelten zusätzlich die Altersgrenzen der jeweiligen Anbieter.'
         ]
       },
       {
         h: '14. Änderungen',
         p: [
-          'Ändert sich die Funktionsweise von Inkwell, wird diese Seite angepasst. Der jeweils aktuelle Stand ist oben angegeben. Die Änderungshistorie ist im öffentlichen Repository nachvollziehbar.'
+          'Ändert sich die Funktionsweise von Inkwells, wird diese Seite angepasst. Der jeweils aktuelle Stand ist oben angegeben. Die Änderungshistorie ist im öffentlichen Repository nachvollziehbar.'
         ]
       }
     ]
@@ -199,7 +200,7 @@ const PRIVACY = {
 
   en: {
     title: 'Privacy',
-    subtitle: 'What Inkwell stores, what it does not, and where your notes actually live.',
+    subtitle: 'What Inkwells stores, what it does not, and where your notes actually live.',
     updatedLabel: 'Last updated',
     summaryTitle: 'The short version',
     summary: [
@@ -213,9 +214,9 @@ const PRIVACY = {
     ],
     sections: [
       {
-        h: '1. Who is behind Inkwell',
+        h: '1. Who is behind Inkwells',
         p: [
-          'Inkwell is a private, open-source project and is not run commercially. There is no company, no ad business and no sharing of data with third parties for advertising.',
+          'Inkwells is a private, open-source project and is not run commercially. There is no company, no ad business and no sharing of data with third parties for advertising.',
           'For privacy questions, access requests and deletion requests, the simplest route is to file a bug report in the Community section of the website, where they are handled.'
         ],
         links: [
@@ -234,7 +235,7 @@ const PRIVACY = {
           rows: [
             ['Language, storage location, auto-save, custom keyboard shortcuts', 'Your settings'],
             ['Email, name, profile ID and profile picture URL of the cloud account', 'Showing the signed-in account and one-click re-authentication'],
-            ['Access and refresh tokens for Google Drive or OneDrive', 'Access to your own Inkwell folder in the cloud'],
+            ['Access and refresh tokens for Google Drive or OneDrive', 'Access to your own Inkwells folder in the cloud'],
             ['List of your own shares (identifier and link per notebook)', 'So "Update share" and "Revoke share" still work later on'],
             ['List of notebooks still waiting to be uploaded', 'So changes you made without internet are uploaded afterwards']
           ]
@@ -244,12 +245,12 @@ const PRIVACY = {
       {
         h: '3. Signing in with Google or Microsoft',
         p: [
-          'Inkwell has no user management of its own. There is no email-and-password registration and no password database. Signing in works exclusively through your existing Google or Microsoft account.',
-          'During sign-in Inkwell requests these permissions:'
+          'Inkwells has no user management of its own. There is no email-and-password registration and no password database. Signing in works exclusively through your existing Google or Microsoft account.',
+          'During sign-in Inkwells requests these permissions:'
         ],
         ul: [
-          '<strong>Google (openid, email, profile, drive.file):</strong> identification (profile ID, email address, display name, profile picture) and access restricted exclusively to files created by Inkwell in your Google Drive.',
-          '<strong>Microsoft (User.Read, Files.ReadWrite, offline_access):</strong> identification (profile ID, email address, display name) as well as read and write access to the Inkwell folder in your OneDrive.'
+          '<strong>Google (openid, email, profile, drive.file):</strong> identification (profile ID, email address, display name, profile picture) and access restricted exclusively to files created by Inkwells in your Google Drive.',
+          '<strong>Microsoft (User.Read, Files.ReadWrite, offline_access):</strong> identification (profile ID, email address, display name) as well as read and write access to the Inkwells folder in your OneDrive.'
         ],
         p2: [
           'The information received and the time-limited access tokens are stored locally only: in the app inside the settings file, on the website in your browser\'s localStorage. They are not forwarded to anyone.',
@@ -259,10 +260,10 @@ const PRIVACY = {
       {
         h: '4. Cloud backup via Google Drive or OneDrive',
         p: [
-          'Cloud backup is optional and off by default. If you turn it on, your notebooks are stored as JSON files in your own Google Drive or OneDrive inside the "Inkwell" folder.',
+          'Cloud backup is optional and off by default. If you turn it on, your notebooks are stored as JSON files in your own Google Drive or OneDrive inside the "Inkwells" folder.',
           'That means the data sits in your Google or Microsoft account, under your control, and counts against your storage. It never passes through a server of ours. Processing is governed by Google\'s or Microsoft\'s privacy policy.',
           'If you work without internet, changes stay on your device for the time being. The app remembers which notebooks still need uploading and catches up as soon as there is a connection again. Only the notebook identifier is remembered, never any content.',
-          'You can turn the backup off at any time, delete the "Inkwell" folder in your cloud storage and revoke Inkwell\'s access in your Google or Microsoft account. Your local notebooks are untouched by this.'
+          'You can turn the backup off at any time, delete the "Inkwells" folder in your cloud storage and revoke Inkwells\'s access in your Google or Microsoft account. Your local notebooks are untouched by this.'
         ],
         links: [
           { label: 'Manage and revoke Google access', href: 'https://myaccount.google.com/permissions' },
@@ -318,8 +319,8 @@ const PRIVACY = {
           head: ['Service', 'Purpose', 'Where'],
           rows: [
             ['Google Fonts', 'Typefaces used on the website and in the app', 'Website and app'],
-            ['Google Identity / Drive API', 'Sign-in and access to your Inkwell folder in Drive', 'Website and app, only when signing in with Google'],
-            ['Microsoft Identity / Graph API', 'Sign-in and access to your Inkwell folder in OneDrive', 'Website and app, only when signing in with Microsoft'],
+            ['Google Identity / Drive API', 'Sign-in and access to your Inkwells folder in Drive', 'Website and app, only when signing in with Google'],
+            ['Microsoft Identity / Graph API', 'Sign-in and access to your Inkwells folder in OneDrive', 'Website and app, only when signing in with Microsoft'],
             ['GitHub', 'Serving the website, download list, checking for app updates', 'Website and app'],
             ['Google Firebase (Cloud Firestore)', 'Community forum posts and read-only copies of shared notebooks', 'Forum page; otherwise only when you create or open a share']
           ]
@@ -327,9 +328,10 @@ const PRIVACY = {
         note: 'None of these services are used to recognise or observe visitors.'
       },
       {
-        h: '9. Update check in the app',
+        h: '9. App updates',
         p: [
-          'The desktop app asks GitHub whether a newer version exists and, if you choose to, downloads the installer. Only the public release list is retrieved. No information about you, your device or your notes is transmitted.'
+          'The build downloaded from this website asks GitHub whether a newer version exists and, if you choose to, downloads the installer. Only the public release list is retrieved. No information about you, your device or your notes is transmitted.',
+          'The build from the Microsoft Store never asks GitHub at all – there Windows keeps the app up to date itself. The listing lives at Microsoft, and Microsoft, as the distribution channel, learns that you installed Inkwells, just as with any other app from the Store. That is outside our control; Microsoft own privacy statement applies to it.'
         ]
       },
       {
@@ -350,9 +352,9 @@ const PRIVACY = {
           'Much of this you can carry out yourself, without having to ask us:'
         ],
         ul: [
-          '<strong>Access and portability:</strong> your notebooks already exist as readable files on your device and in your cloud "Inkwell" folder (Drive / OneDrive) — copy them whenever you like, or export them as PDF or Word.',
-          '<strong>Erasure:</strong> delete the local files, delete the "Inkwell" folder in Drive or OneDrive, revoke any shares, sign out in the app.',
-          '<strong>Withdrawing consent:</strong> turn off cloud backup and revoke Inkwell\'s access in your Google or Microsoft account settings.',
+          '<strong>Access and portability:</strong> your notebooks already exist as readable files on your device and in your cloud "Inkwells" folder (Drive / OneDrive) — copy them whenever you like, or export them as PDF or Word.',
+          '<strong>Erasure:</strong> delete the local files, delete the "Inkwells" folder in Drive or OneDrive, revoke any shares, sign out in the app.',
+          '<strong>Withdrawing consent:</strong> turn off cloud backup and revoke Inkwells\'s access in your Google or Microsoft account settings.',
           '<strong>Forum posts:</strong> request removal through the Community section.'
         ]
       },
@@ -365,13 +367,13 @@ const PRIVACY = {
       {
         h: '13. Children',
         p: [
-          'Inkwell is not specifically aimed at children under 16. Since we collect no data about users, no data about children is collected either. Google\'s and Microsoft\'s own age requirements additionally apply to signing in.'
+          'Inkwells is not specifically aimed at children under 16. Since we collect no data about users, no data about children is collected either. Google\'s and Microsoft\'s own age requirements additionally apply to signing in.'
         ]
       },
       {
         h: '14. Changes',
         p: [
-          'If the way Inkwell works changes, this page is updated. The current version date is shown above. The history of changes can be followed in the public repository.'
+          'If the way Inkwells works changes, this page is updated. The current version date is shown above. The history of changes can be followed in the public repository.'
         ]
       }
     ]
@@ -379,7 +381,7 @@ const PRIVACY = {
 
   it: {
     title: 'Privacy',
-    subtitle: 'Cosa salva Inkwell, cosa no e dove si trovano davvero i tuoi appunti.',
+    subtitle: 'Cosa salva Inkwells, cosa no e dove si trovano davvero i tuoi appunti.',
     updatedLabel: 'Ultimo aggiornamento',
     summaryTitle: 'In breve',
     summary: [
@@ -393,9 +395,9 @@ const PRIVACY = {
     ],
     sections: [
       {
-        h: '1. Chi c\'è dietro Inkwell',
+        h: '1. Chi c\'è dietro Inkwells',
         p: [
-          'Inkwell è un progetto privato e open source, non gestito a scopo commerciale. Non c\'è nessuna azienda, nessuna raccolta pubblicitaria e nessuna cessione di dati a terzi per scopi pubblicitari.',
+          'Inkwells è un progetto privato e open source, non gestito a scopo commerciale. Non c\'è nessuna azienda, nessuna raccolta pubblicitaria e nessuna cessione di dati a terzi per scopi pubblicitari.',
           'Per domande sulla privacy, richieste di accesso e richieste di cancellazione il modo più semplice è segnalare un bug nella sezione Community del sito, dove vengono gestite.'
         ],
         links: [
@@ -414,7 +416,7 @@ const PRIVACY = {
           rows: [
             ['Lingua, percorso di salvataggio, salvataggio automatico, scorciatoie personalizzate', 'Le tue impostazioni'],
             ['Email, nome, ID profilo e indirizzo immagine profilo dell\'account cloud', 'Mostrare l\'account connesso e riaccedere con un clic'],
-            ['Token di accesso e di rinnovo per Google Drive o OneDrive', 'Accesso alla tua cartella Inkwell nel cloud'],
+            ['Token di accesso e di rinnovo per Google Drive o OneDrive', 'Accesso alla tua cartella Inkwells nel cloud'],
             ['Elenco delle tue condivisioni (identificativo e link per quaderno)', 'Perché "Aggiorna condivisione" e "Revoca condivisione" funzionino anche in seguito'],
             ['Elenco dei quaderni ancora da caricare', 'Perché le modifiche fatte senza internet vengano caricate in un secondo momento']
           ]
@@ -424,12 +426,12 @@ const PRIVACY = {
       {
         h: '3. Accesso con Google o Microsoft',
         p: [
-          'Inkwell non ha una propria gestione utenti. Non esiste registrazione con email e password né un database di password. L\'accesso avviene esclusivamente tramite il tuo account Google o Microsoft esistente.',
-          'Durante l\'accesso Inkwell richiede queste autorizzazioni:'
+          'Inkwells non ha una propria gestione utenti. Non esiste registrazione con email e password né un database di password. L\'accesso avviene esclusivamente tramite il tuo account Google o Microsoft esistente.',
+          'Durante l\'accesso Inkwells richiede queste autorizzazioni:'
         ],
         ul: [
-          '<strong>Google (openid, email, profile, drive.file):</strong> identificazione (ID profilo, indirizzo email, nome visualizzato, immagine del profilo) e accesso limitato esclusivamente ai file creati da Inkwell nel tuo Google Drive.',
-          '<strong>Microsoft (User.Read, Files.ReadWrite, offline_access):</strong> identificazione (ID profilo, indirizzo email, nome visualizzato) e accesso in lettura/scrittura alla cartella Inkwell nel tuo OneDrive.'
+          '<strong>Google (openid, email, profile, drive.file):</strong> identificazione (ID profilo, indirizzo email, nome visualizzato, immagine del profilo) e accesso limitato esclusivamente ai file creati da Inkwells nel tuo Google Drive.',
+          '<strong>Microsoft (User.Read, Files.ReadWrite, offline_access):</strong> identificazione (ID profilo, indirizzo email, nome visualizzato) e accesso in lettura/scrittura alla cartella Inkwells nel tuo OneDrive.'
         ],
         p2: [
           'Le informazioni ricevute e i token di accesso a tempo limitato vengono salvati solo localmente: nell\'app nel file delle impostazioni, sul sito nel localStorage del browser. Non vengono inoltrati a nessuno.',
@@ -439,10 +441,10 @@ const PRIVACY = {
       {
         h: '4. Backup cloud tramite Google Drive o OneDrive',
         p: [
-          'Il backup cloud è facoltativo e disattivato di default. Se lo attivi, i tuoi quaderni vengono salvati come file JSON nel tuo Google Drive o OneDrive nella cartella "Inkwell".',
+          'Il backup cloud è facoltativo e disattivato di default. Se lo attivi, i tuoi quaderni vengono salvati come file JSON nel tuo Google Drive o OneDrive nella cartella "Inkwells".',
           'Ciò significa che i dati si trovano nel tuo account Google o Microsoft, sotto il tuo controllo, e occupano il tuo spazio di archiviazione. Non passano mai da un nostro server. Il trattamento è regolato dall\'informativa privacy di Google o Microsoft.',
           'Se lavori senza internet, le modifiche restano per il momento solo sul tuo dispositivo. L\'app ricorda quali quaderni devono ancora essere caricati e recupera appena torna la connessione. Viene ricordato solo l\'identificativo del quaderno, mai il contenuto.',
-          'Puoi disattivare il backup in qualsiasi momento, eliminare la cartella "Inkwell" nel tuo spazio cloud e revocare l\'accesso di Inkwell nel tuo account Google o Microsoft. I quaderni locali restano intatti.'
+          'Puoi disattivare il backup in qualsiasi momento, eliminare la cartella "Inkwells" nel tuo spazio cloud e revocare l\'accesso di Inkwells nel tuo account Google o Microsoft. I quaderni locali restano intatti.'
         ],
         links: [
           { label: 'Gestisci e revoca l\'accesso Google', href: 'https://myaccount.google.com/permissions' },
@@ -498,8 +500,8 @@ const PRIVACY = {
           head: ['Servizio', 'Scopo', 'Dove'],
           rows: [
             ['Google Fonts', 'Caratteri tipografici del sito e dell\'app', 'Sito e app'],
-            ['Google Identity / Drive API', 'Accesso e uso della tua cartella Inkwell in Drive', 'Sito e app, solo con accesso Google'],
-            ['Microsoft Identity / Graph API', 'Accesso e uso della tua cartella Inkwell in OneDrive', 'Sito e app, solo con accesso Microsoft'],
+            ['Google Identity / Drive API', 'Accesso e uso della tua cartella Inkwells in Drive', 'Sito e app, solo con accesso Google'],
+            ['Microsoft Identity / Graph API', 'Accesso e uso della tua cartella Inkwells in OneDrive', 'Sito e app, solo con accesso Microsoft'],
             ['GitHub', 'Distribuzione del sito, elenco download, controllo aggiornamenti', 'Sito e app'],
             ['Google Firebase (Cloud Firestore)', 'Messaggi del forum e copie di sola lettura dei quaderni condivisi', 'Pagina del forum; altrimenti solo se crei o apri una condivisione']
           ]
@@ -507,9 +509,10 @@ const PRIVACY = {
         note: 'Nessuno di questi servizi viene usato per riconoscere o osservare i visitatori.'
       },
       {
-        h: '9. Controllo aggiornamenti nell\'app',
+        h: '9. Aggiornamenti dell\'app',
         p: [
-          'L\'app desktop chiede a GitHub se esiste una versione più recente e, se lo desideri, scarica il programma di installazione. Viene richiesto solo l\'elenco pubblico delle versioni. Non viene trasmessa alcuna informazione su di te, sul tuo dispositivo o sui tuoi appunti.'
+          'L\'app desktop chiede a GitHub se esiste una versione più recente e, se lo desideri, scarica il programma di installazione. Viene richiesto solo l\'elenco pubblico delle versioni. Non viene trasmessa alcuna informazione su di te, sul tuo dispositivo o sui tuoi appunti.',
+          'La versione del Microsoft Store non interroga affatto GitHub: là è Windows stesso a tenere aggiornata l\'app. La scheda si trova presso Microsoft, che come canale di distribuzione viene a sapere che hai installato Inkwells, come per qualsiasi altra app dello Store. Questo non dipende da noi; in proposito vale l\'informativa sulla privacy di Microsoft.'
         ]
       },
       {
@@ -530,9 +533,9 @@ const PRIVACY = {
           'Gran parte di questo puoi farlo direttamente, senza doverlo chiedere a noi:'
         ],
         ul: [
-          '<strong>Accesso e portabilità:</strong> i tuoi quaderni esistono già come file leggibili sul tuo dispositivo e nella cartella cloud "Inkwell" (Drive / OneDrive) — puoi copiarli quando vuoi oppure esportarli in PDF o Word.',
-          '<strong>Cancellazione:</strong> elimina i file locali, elimina la cartella "Inkwell" in Drive o OneDrive, revoca le condivisioni attive, esci dall\'app.',
-          '<strong>Revoca del consenso:</strong> disattiva il backup cloud e revoca l\'accesso di Inkwell nelle impostazioni del tuo account Google o Microsoft.',
+          '<strong>Accesso e portabilità:</strong> i tuoi quaderni esistono già come file leggibili sul tuo dispositivo e nella cartella cloud "Inkwells" (Drive / OneDrive) — puoi copiarli quando vuoi oppure esportarli in PDF o Word.',
+          '<strong>Cancellazione:</strong> elimina i file locali, elimina la cartella "Inkwells" in Drive o OneDrive, revoca le condivisioni attive, esci dall\'app.',
+          '<strong>Revoca del consenso:</strong> disattiva il backup cloud e revoca l\'accesso di Inkwells nelle impostazioni del tuo account Google o Microsoft.',
           '<strong>Messaggi del forum:</strong> richiedi la rimozione tramite la sezione Community.'
         ]
       },
@@ -545,13 +548,13 @@ const PRIVACY = {
       {
         h: '13. Minori',
         p: [
-          'Inkwell non si rivolge specificamente a minori di 16 anni. Poiché non raccogliamo dati sugli utenti, non vengono raccolti nemmeno dati di minori. Per l\'accesso valgono inoltre i limiti di età previsti da Google e Microsoft.'
+          'Inkwells non si rivolge specificamente a minori di 16 anni. Poiché non raccogliamo dati sugli utenti, non vengono raccolti nemmeno dati di minori. Per l\'accesso valgono inoltre i limiti di età previsti da Google e Microsoft.'
         ]
       },
       {
         h: '14. Modifiche',
         p: [
-          'Se il funzionamento di Inkwell cambia, questa pagina viene aggiornata. La data di riferimento è indicata in alto. La cronologia delle modifiche è consultabile nel repository pubblico.'
+          'Se il funzionamento di Inkwells cambia, questa pagina viene aggiornata. La data di riferimento è indicata in alto. La cronologia delle modifiche è consultabile nel repository pubblico.'
         ]
       }
     ]

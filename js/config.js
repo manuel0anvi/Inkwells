@@ -58,7 +58,7 @@ const MICROSOFT_GRAPH = 'https://graph.microsoft.com/v1.0';
 const ADMIN_EMAIL = 'admin@inkwells.me';
 
 // Anzeigename, unter dem der Admin im Forum antwortet.
-const ADMIN_DISPLAY_NAME = 'Inkwell Team';
+const ADMIN_DISPLAY_NAME = 'Inkwells Team';
 
 /* Namen, die normalen Nutzern verwehrt bleiben.
 
@@ -69,7 +69,13 @@ const ADMIN_DISPLAY_NAME = 'Inkwell Team';
 
    Dieselbe Sperre steht noch einmal in website/firestore.rules. Das ist
    Absicht: hier sorgt sie für eine verständliche Fehlermeldung, dort
-   dafür, dass sie sich nicht umgehen lässt. */
+   dafür, dass sie sich nicht umgehen lässt.
+
+   >>> Warum in der Liste „inkwell" steht und nicht „inkwells" <<<
+   Die App heißt inzwischen Inkwells. Verglichen wird mit includes(),
+   also als Teilzeichenfolge – die kurze Form fängt die lange mit ab.
+   Andersherum nicht: wer hier auf „inkwells" umstellt, gibt den Namen
+   „Inkwell Team" wieder frei. */
 const RESERVED_AUTHOR_WORDS = [
   'inkwell',
   'anvi',
@@ -110,7 +116,7 @@ function isReservedAuthorName(name) {
 
 /* ── Gemeinsames ────────────────────────────────────────────────── */
 
-const CLOUD_FOLDER = 'Inkwell';
+const CLOUD_FOLDER = 'Inkwells';
 const CLOUD_TRASH_FOLDER = 'Papierkorb';
 const CLOUD_PROVIDERS = ['google', 'microsoft'];
 

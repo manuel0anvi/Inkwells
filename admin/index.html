@@ -6,7 +6,7 @@
      <script src="https://fremd"> laeuft damit nicht. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com; object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inkwell — Verwaltung</title>
+<title>Inkwells — Verwaltung</title>
 
 <!-- Der Adminbereich gehört nicht in Suchergebnisse. -->
 <meta name="robots" content="noindex, nofollow">
@@ -108,8 +108,8 @@ body[data-admin="yes"] .admin-gate { display: none; }
   <!-- Logo links wie überall. Der Klick führt aus dem Adminbereich
        hinaus – mit Rückfrage, damit das nicht versehentlich passiert. -->
   <a href="#" class="nav-logo" id="admin-exit-btn" title="Adminbereich verlassen">
-    <img src="../icon.png" alt="Inkwell Logo">
-    <span>Inkwell</span>
+    <img src="../icon.png" alt="Inkwells Logo">
+    <span>Inkwells</span>
   </a>
   <div class="nav-right">
     <div class="admin-tabs">
@@ -141,7 +141,7 @@ body[data-admin="yes"] .admin-gate { display: none; }
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title" data-i18n="admin_page_title">Verwaltung</h1>
-      <p class="page-subtitle" data-i18n="admin_page_sub">Angemeldet als Inkwell Team.</p>
+      <p class="page-subtitle" data-i18n="admin_page_sub">Angemeldet als Inkwells Team.</p>
     </div>
 
     <!-- ── Community ────────────────────────────────────────────────
@@ -157,7 +157,7 @@ body[data-admin="yes"] .admin-gate { display: none; }
       </button>
 
       <div id="admin-post-form-card" class="forum-form-card">
-        <p class="admin-as-note" data-i18n="admin_post_as">Wird als „Inkwell Team“ veröffentlicht.</p>
+        <p class="admin-as-note" data-i18n="admin_post_as">Wird als „Inkwells Team“ veröffentlicht.</p>
         <form id="admin-new-post-form">
           <div class="forum-input-group">
             <div class="forum-input-header">
@@ -273,7 +273,7 @@ body[data-admin="yes"] .admin-gate { display: none; }
   </div>
 
   <footer>
-    <p>© 2026 Inkwell · Anvi</p>
+    <p>© 2026 Inkwells · Anvi</p>
     <div class="fl">
       <a href="../community/" data-i18n="nav_community">Community</a>
       <a href="../datenschutz/" data-i18n="nav_datenschutz">Datenschutz</a>
@@ -929,7 +929,7 @@ for (const btn of document.querySelectorAll('.forum-filter-btn')) {
    werden – Beitragsliste, Zähler und der Datenschutz-Editor. */
 if (typeof addLangChangeListener === 'function') {
   addLangChangeListener(() => {
-    document.title = 'Inkwell — ' + t('admin_page_title');
+    document.title = 'Inkwells — ' + t('admin_page_title');
     updateCounter('admin-post-title', 120);
     updateCounter('admin-post-content', 2000);
     if (posts.length) renderFeed();
@@ -960,7 +960,7 @@ if (typeof addLangChangeListener === 'function') {
   }
 
   document.body.dataset.admin = 'yes';
-  document.title = 'Inkwell — ' + t('admin_page_title');
+  document.title = 'Inkwells — ' + t('admin_page_title');
   loadPosts();
 
   // Wird die Sitzung anderswo beendet (etwa in einem zweiten Tab),

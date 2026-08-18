@@ -99,6 +99,12 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .pl-info{text-align:left}
 .pl-info strong{display:block;font-size:15px;font-weight:400;color:var(--cream);font-family:'Cormorant Garamond',serif;font-style:italic}
 .pl-info span{font-size:12px;color:var(--text-muted)}
+.dl-store{margin-top:22px}
+.dl-or{display:flex;align-items:center;gap:14px;margin:0 0 18px;color:var(--text-muted);font-family:'Jost',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.dl-or::before,.dl-or::after{content:'';flex:1;height:0;border-top:0.5px solid var(--navy-border)}
+.btn-store{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;box-sizing:border-box;background:transparent;color:var(--gold-light);text-decoration:none;font-family:'Jost',sans-serif;font-size:13px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;padding:16px 24px;border:0.5px solid var(--gold);transition:background .2s,color .2s,transform .15s}
+.btn-store:hover,.btn-store:active,.btn-store:focus{background:var(--gold);color:var(--navy);transform:translateY(-2px);outline:none}
+.dl-store-note{margin:12px 0 0;text-align:center;font-size:11px;color:var(--text-muted);letter-spacing:.05em}
 .dl-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);letter-spacing:.07em;border-top:0.5px solid var(--navy-border);padding-top:18px;margin-top:18px}
 
 .ver-section{max-width:720px;margin:0 auto;padding:0 40px 140px}
@@ -616,7 +622,7 @@ footer a:hover{color:var(--gold-light)}
 }
 
 @media(max-width:480px){
-  /* „Inkwell" bei 68px passt auf einem 320px-Bildschirm gerade so – mit
+  /* „Inkwells" bei 68px passt auf einem 320px-Bildschirm gerade so – mit
      Rand daneben aber nicht mehr. Deshalb hier kleiner werden dürfen. */
   .hero h1{font-size:clamp(52px,17vw,88px)}
   .hero,.features,.dl-section,.ver-section,.page-container{padding-left:16px;padding-right:16px}

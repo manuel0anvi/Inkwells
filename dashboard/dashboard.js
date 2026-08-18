@@ -39,7 +39,7 @@ async function requireSession() {
   session = await ensureFreshToken();
   if (!session) {
     redirectToLogin();
-    clearInkwellSession();
+    clearInkwellsSession();
     return false;
   }
   return true;
@@ -90,7 +90,7 @@ async function cloudFetch(url) {
   }
 
   if (res.status === 401) {
-    clearInkwellSession();
+    clearInkwellsSession();
     throw new Error('SESSION_EXPIRED');
   }
 
@@ -167,7 +167,7 @@ async function loadNotebooksFromCloud() {
   let ownBytes = 0;
 
   // Bewusst über ALLE gefundenen Ordner: falls durch den früheren Fehler
-  // zwei "Inkwell"-Ordner existieren, werden trotzdem alle Hefte gefunden.
+  // zwei "Inkwells"-Ordner existieren, werden trotzdem alle Hefte gefunden.
   // Doppelte IDs werden dabei übersprungen.
   for (const folderId of folders) {
     const files = await provider.listNotebookFiles(cloudJson, folderId);
@@ -182,7 +182,7 @@ async function loadNotebooksFromCloud() {
         });
         if (!notebook) continue;
 
-        notebook.id = notebook.id || file.inkwellId || file.id;
+        notebook.id = notebook.id || file.inkwellsId || file.id;
         if (seenIds.has(notebook.id)) continue;
 
         seenIds.add(notebook.id);
@@ -235,7 +235,7 @@ async function showDashboard() {
 
     if (!folderFound) {
       grid.innerHTML = `<p style="color:var(--text-muted); padding:20px;">${
-        (t('dash_cloud_empty') || 'Noch kein Inkwell-Ordner in {provider}. Melde dich in der App mit demselben Konto an und aktiviere die Cloud-Sicherung.').replace('{provider}', getActiveProvider().label)
+        (t('dash_cloud_empty') || 'Noch kein Inkwells-Ordner in {provider}. Melde dich in der App mit demselben Konto an und aktiviere die Cloud-Sicherung.').replace('{provider}', getActiveProvider().label)
       }</p>`;
       return;
     }
@@ -648,7 +648,7 @@ document.getElementById('viewer-back').addEventListener('click', () => {
    ─────────────────────────────────────────────────────────────────── */
 
 document.getElementById('viewer-pdf').addEventListener('click', () => {
-  if (currentNotebook) InkwellExport.open(currentNotebook);
+  if (currentNotebook) InkwellsExport.open(currentNotebook);
 });
 
 /* ── Heft freigeben ───────────────────────────────────────────────────
@@ -663,7 +663,7 @@ document.getElementById('viewer-pdf').addEventListener('click', () => {
 // und „aufheben" nach einem Seitenwechsel weiter funktionieren.
 //   neu :  { [nbId]: { docId, linkId, url, linkMode } }
 //   alt :  { [nbId]: { shareId, url, mode } }   – eingefrorene Lesekopie
-const SHARE_STORE_KEY = 'inkwell_shares';
+const SHARE_STORE_KEY = 'inkwells_shares';
 
 function loadShareRegistry() {
   try { return JSON.parse(localStorage.getItem(SHARE_STORE_KEY)) || {}; }
@@ -690,12 +690,12 @@ function shareFor(notebookId) {
 }
 
 function whenShareReady() {
-  if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+  if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), 15000);
-    document.addEventListener('inkwell-share-ready', () => {
+    document.addEventListener('inkwells-share-ready', () => {
       clearTimeout(timer);
-      if (window.InkwellShare) resolve(window.InkwellShare); else reject(new Error('SHARE_OFFLINE'));
+      if (window.InkwellsShare) resolve(window.InkwellsShare); else reject(new Error('SHARE_OFFLINE'));
     }, { once: true });
   });
 }
@@ -795,7 +795,7 @@ async function openShareDialog() {
   }
 
   // Ohne echte Firebase-Kennung geht nichts davon.
-  const me = await inkwellIdentityReady();
+  const me = await inkwellsIdentityReady();
   needs.textContent = t('share_needs_account');
   needs.style.display = me ? 'none' : 'block';
   shareEl('share-dlg-link-section').style.display = me ? '' : 'none';
@@ -879,7 +879,7 @@ function renderShareHead() {
   const linkInput = shareEl('share-dlg-link');
   if (shareHead.linkMode !== 'off' && shareHead.linkId) {
     linkRow.style.display = 'flex';
-    linkInput.value = window.InkwellShare.docUrlFor(shareHead.linkId);
+    linkInput.value = window.InkwellsShare.docUrlFor(shareHead.linkId);
   } else {
     linkRow.style.display = 'none';
     linkInput.value = '';
@@ -893,7 +893,7 @@ function renderSharePeople() {
   box.innerHTML = '';
   if (!shareHead) return;
 
-  const rows = window.InkwellShare.listMembers(shareHead);
+  const rows = window.InkwellsShare.listMembers(shareHead);
 
   if (!rows.length && !shareHead.blockedEmails.length) {
     const empty = document.createElement('p');
@@ -1189,10 +1189,10 @@ document.getElementById('share-overlay').addEventListener('click', (e) => {
 
    Auf der Website bleibt ein geteiltes Dokument IMMER schreibgeschützt –
    auch mit Bearbeitungsrecht. Dafür steht dort ein Knopf, der es in der
-   Inkwell-App öffnet.
+   Inkwells-App öffnet.
    ══════════════════════════════════════════════════════════════════════ */
 
-const SHARED_SEEN_KEY = 'inkwell_shared_seen_at';
+const SHARED_SEEN_KEY = 'inkwells_shared_seen_at';
 
 let sharedDocs = [];
 let unwatchShared = null;
@@ -1260,7 +1260,7 @@ function switchDashTab(which) {
 function renderMicrosoftLinkButton(hint, danach) {
   if (!hint) return;
   if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'microsoft') return;
-  if (!isInkwellLoggedIn()) return;
+  if (!isInkwellsLoggedIn()) return;
 
   const btn = document.createElement('button');
   /* Der Knopf steht bewusst NEBEN dem Raster, nicht darin: als Kind von
@@ -1278,9 +1278,9 @@ function renderMicrosoftLinkButton(hint, danach) {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
-      const api = await whenInkwellShareReady();
+      const api = await whenInkwellsShareReady();
       await api.signInMicrosoftInteractive(getRememberedEmail() || '');
-      document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+      document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
       if (danach) { await danach(); return; }
       await startWatchingShared().catch(() => {});
       renderSharedDocs();
@@ -1328,7 +1328,7 @@ function renderSharedDocs() {
     return;
   }
 
-  const api = window.InkwellShare;
+  const api = window.InkwellsShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
     renderMicrosoftLinkButton(hint);
@@ -1418,7 +1418,7 @@ async function openSharedDoc(head) {
 async function startWatchingShared() {
   if (unwatchShared) { unwatchShared(); unwatchShared = null; }
 
-  const me = await inkwellIdentityReady();
+  const me = await inkwellsIdentityReady();
   if (!me) {
     sharedDocs = [];
     renderSharedBadge();
@@ -1426,7 +1426,7 @@ async function startWatchingShared() {
     return;
   }
 
-  const api = window.InkwellShare;
+  const api = window.InkwellsShare;
   unwatchShared = api.watchSharedDocs(me.email, (list) => {
     sharedDocs = list.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
     renderSharedBadge();
@@ -1436,7 +1436,7 @@ async function startWatchingShared() {
 
 document.getElementById('dash-tab-own').addEventListener('click', () => switchDashTab('own'));
 document.getElementById('dash-tab-shared').addEventListener('click', () => switchDashTab('shared'));
-document.addEventListener('inkwell-identity-changed', () => {
+document.addEventListener('inkwells-identity-changed', () => {
   startWatchingShared().catch(() => {});
 });
 
@@ -1458,8 +1458,8 @@ function openNotebookFromUrl() {
 }
 
 document.getElementById('logout-btn').addEventListener('click', async () => {
-  // Warten, sonst schneidet die Navigation das Abmelden ab – siehe inkwellLogout()
-  await inkwellLogout();
+  // Warten, sonst schneidet die Navigation das Abmelden ab – siehe inkwellsLogout()
+  await inkwellsLogout();
   session = null;
   window.location.replace('../');
 });

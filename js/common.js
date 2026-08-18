@@ -8,23 +8,23 @@
    nachzuladen: ein dynamisches import() in einem klassischen Script
    rechnet relative Pfade gegen die SEITE, nicht gegen das Script – aus
    dem Dashboard heraus zeigte './js/firebase.js' deshalb ins Leere. */
-const INKWELL_SCRIPT_DIR = (document.currentScript && document.currentScript.src)
+const INKWELLS_SCRIPT_DIR = (document.currentScript && document.currentScript.src)
   ? document.currentScript.src.replace(/[^/]*$/, '')
   : './';
 
-const INKWELL_TOKEN_KEY = 'inkwell_cloud_token';
-const INKWELL_REFRESH_KEY = 'inkwell_cloud_refresh';
-const INKWELL_EXPIRY_KEY = 'inkwell_cloud_expiry';
-const INKWELL_UID_KEY = 'inkwell_cloud_uid';
-const INKWELL_EMAIL_KEY = 'inkwell_cloud_email';
-const INKWELL_NAME_KEY = 'inkwell_cloud_name';
-const INKWELL_PICTURE_KEY = 'inkwell_cloud_picture';
-const INKWELL_PROVIDER_KEY = 'inkwell_cloud_provider';
+const INKWELLS_TOKEN_KEY = 'inkwells_cloud_token';
+const INKWELLS_REFRESH_KEY = 'inkwells_cloud_refresh';
+const INKWELLS_EXPIRY_KEY = 'inkwells_cloud_expiry';
+const INKWELLS_UID_KEY = 'inkwells_cloud_uid';
+const INKWELLS_EMAIL_KEY = 'inkwells_cloud_email';
+const INKWELLS_NAME_KEY = 'inkwells_cloud_name';
+const INKWELLS_PICTURE_KEY = 'inkwells_cloud_picture';
+const INKWELLS_PROVIDER_KEY = 'inkwells_cloud_provider';
 
 /* ── Anbieter ─────────────────────────────────────────────────────── */
 
 function getActiveProviderId() {
-  const stored = localStorage.getItem(INKWELL_PROVIDER_KEY);
+  const stored = localStorage.getItem(INKWELLS_PROVIDER_KEY);
   if (stored && CLOUD_PROVIDERS.includes(stored)) return stored;
   return defaultCloudProvider();
 }
@@ -35,68 +35,68 @@ function getActiveProvider() {
 
 /* ── Session ──────────────────────────────────────────────────────── */
 
-function getInkwellSession() {
-  const token = localStorage.getItem(INKWELL_TOKEN_KEY);
-  const uid = localStorage.getItem(INKWELL_UID_KEY);
-  const expiry = Number(localStorage.getItem(INKWELL_EXPIRY_KEY) || 0);
+function getInkwellsSession() {
+  const token = localStorage.getItem(INKWELLS_TOKEN_KEY);
+  const uid = localStorage.getItem(INKWELLS_UID_KEY);
+  const expiry = Number(localStorage.getItem(INKWELLS_EXPIRY_KEY) || 0);
 
   if (!token || !uid) return null;
   if (expiry && Date.now() >= expiry) {
     // Nur das abgelaufene Token verwerfen. E-Mail und Name bleiben, damit
     // die stille Erneuerung einen Hinweis auf das Konto hat und der Login
     // danach ein einziger Klick ist.
-    expireInkwellToken();
+    expireInkwellsToken();
     return null;
   }
 
   return {
     provider: getActiveProviderId(),
     accessToken: token,
-    refreshToken: localStorage.getItem(INKWELL_REFRESH_KEY) || '',
+    refreshToken: localStorage.getItem(INKWELLS_REFRESH_KEY) || '',
     userId: uid,
-    email: localStorage.getItem(INKWELL_EMAIL_KEY) || '',
-    name: localStorage.getItem(INKWELL_NAME_KEY) || '',
-    picture: localStorage.getItem(INKWELL_PICTURE_KEY) || '',
+    email: localStorage.getItem(INKWELLS_EMAIL_KEY) || '',
+    name: localStorage.getItem(INKWELLS_NAME_KEY) || '',
+    picture: localStorage.getItem(INKWELLS_PICTURE_KEY) || '',
     expiry
   };
 }
 
-function saveInkwellSession(session) {
-  localStorage.setItem(INKWELL_TOKEN_KEY, session.accessToken);
-  localStorage.setItem(INKWELL_REFRESH_KEY, session.refreshToken || '');
-  localStorage.setItem(INKWELL_UID_KEY, session.userId);
-  localStorage.setItem(INKWELL_EXPIRY_KEY, String(session.expiry || 0));
-  localStorage.setItem(INKWELL_EMAIL_KEY, session.email || '');
-  localStorage.setItem(INKWELL_NAME_KEY, session.name || '');
-  localStorage.setItem(INKWELL_PICTURE_KEY, session.picture || '');
-  if (session.provider) localStorage.setItem(INKWELL_PROVIDER_KEY, session.provider);
+function saveInkwellsSession(session) {
+  localStorage.setItem(INKWELLS_TOKEN_KEY, session.accessToken);
+  localStorage.setItem(INKWELLS_REFRESH_KEY, session.refreshToken || '');
+  localStorage.setItem(INKWELLS_UID_KEY, session.userId);
+  localStorage.setItem(INKWELLS_EXPIRY_KEY, String(session.expiry || 0));
+  localStorage.setItem(INKWELLS_EMAIL_KEY, session.email || '');
+  localStorage.setItem(INKWELLS_NAME_KEY, session.name || '');
+  localStorage.setItem(INKWELLS_PICTURE_KEY, session.picture || '');
+  if (session.provider) localStorage.setItem(INKWELLS_PROVIDER_KEY, session.provider);
 }
 
 // Nur das Token entwerten (Ablauf), Konto-Angaben behalten
-function expireInkwellToken() {
-  [INKWELL_TOKEN_KEY, INKWELL_UID_KEY, INKWELL_EXPIRY_KEY]
+function expireInkwellsToken() {
+  [INKWELLS_TOKEN_KEY, INKWELLS_UID_KEY, INKWELLS_EXPIRY_KEY]
     .forEach(k => localStorage.removeItem(k));
 }
 
 // Vollständige Abmeldung: alles weg
-function clearInkwellSession() {
-  [INKWELL_TOKEN_KEY, INKWELL_REFRESH_KEY, INKWELL_UID_KEY, INKWELL_EXPIRY_KEY,
-   INKWELL_EMAIL_KEY, INKWELL_NAME_KEY, INKWELL_PICTURE_KEY]
+function clearInkwellsSession() {
+  [INKWELLS_TOKEN_KEY, INKWELLS_REFRESH_KEY, INKWELLS_UID_KEY, INKWELLS_EXPIRY_KEY,
+   INKWELLS_EMAIL_KEY, INKWELLS_NAME_KEY, INKWELLS_PICTURE_KEY]
     .forEach(k => localStorage.removeItem(k));
 
   // Reste aus früheren Fassungen
-  ['inkwell_web_token', 'inkwell_web_uid', 'inkwell_gdrive_token',
-   'inkwell_google_token', 'inkwell_google_uid', 'inkwell_google_expiry',
-   'inkwell_google_email', 'inkwell_google_name', 'inkwell_google_picture']
+  ['inkwells_web_token', 'inkwells_web_uid', 'inkwells_gdrive_token',
+   'inkwells_google_token', 'inkwells_google_uid', 'inkwells_google_expiry',
+   'inkwells_google_email', 'inkwells_google_name', 'inkwells_google_picture']
     .forEach(k => localStorage.removeItem(k));
 }
 
 function getRememberedEmail() {
-  return localStorage.getItem(INKWELL_EMAIL_KEY) || '';
+  return localStorage.getItem(INKWELLS_EMAIL_KEY) || '';
 }
 
-function isInkwellLoggedIn() {
-  return !!getInkwellSession();
+function isInkwellsLoggedIn() {
+  return !!getInkwellsSession();
 }
 
 /* ── Stille Token-Erneuerung ──────────────────────────────────────────
@@ -202,7 +202,7 @@ async function applyTokens(providerId, { accessToken, refreshToken, expiresIn, i
     picture: profile.picture,
     expiry: Date.now() + Math.max(0, (expiresIn || 3600) - 60) * 1000
   };
-  saveInkwellSession(session);
+  saveInkwellsSession(session);
 
   // Dieselbe Anmeldung auch gegenüber Firebase gültig machen. Bewusst ohne
   // await: schlägt es fehl, funktioniert das Dashboard ganz normal weiter,
@@ -214,17 +214,17 @@ async function applyTokens(providerId, { accessToken, refreshToken, expiresIn, i
 
 /* ── Firebase-Kennung ─────────────────────────────────────────────────
    js/share.js ist ein ES-Modul und meldet sich über das Ereignis
-   "inkwell-share-ready". Auf Seiten ohne dieses Modul passiert hier
+   "inkwells-share-ready". Auf Seiten ohne dieses Modul passiert hier
    schlicht nichts.
    ─────────────────────────────────────────────────────────────────── */
 
-function whenInkwellShareReady(timeoutMs = 15000) {
-  if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+function whenInkwellsShareReady(timeoutMs = 15000) {
+  if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), timeoutMs);
-    document.addEventListener('inkwell-share-ready', () => {
+    document.addEventListener('inkwells-share-ready', () => {
       clearTimeout(timer);
-      if (window.InkwellShare) resolve(window.InkwellShare);
+      if (window.InkwellsShare) resolve(window.InkwellsShare);
       else reject(new Error('SHARE_OFFLINE'));
     }, { once: true });
   });
@@ -232,20 +232,20 @@ function whenInkwellShareReady(timeoutMs = 15000) {
 
 async function linkFirebaseIdentity(providerId, idToken, rawNonce) {
   try {
-    const api = await whenInkwellShareReady();
+    const api = await whenInkwellsShareReady();
     await api.signInWithProviderToken({ provider: providerId, idToken, rawNonce });
     console.log('[Auth] Firebase-Kennung hergestellt:', api.currentIdentity()?.email || '?');
 
     // Freigaben, die noch der anonymen Gerätekennung gehören, dem Konto
     // zuschlagen – sonst ließen sie sich hier nicht mehr aufheben.
     try {
-      const raw = JSON.parse(localStorage.getItem('inkwell_shares') || '{}');
+      const raw = JSON.parse(localStorage.getItem('inkwells_shares') || '{}');
       const ids = Object.values(raw || {}).map(e => e?.shareId).filter(Boolean);
       const claimed = await api.claimOwnShares(ids);
       if (claimed > 0) console.log('[Auth]', claimed, 'Freigabe(n) übernommen');
     } catch (e) { /* Merkliste kaputt – nicht schlimm */ }
 
-    document.dispatchEvent(new CustomEvent('inkwell-identity-changed'));
+    document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
     return true;
   } catch (err) {
     console.warn('[Auth] Firebase-Anmeldung fehlgeschlagen:', err?.message || err);
@@ -257,9 +257,9 @@ async function linkFirebaseIdentity(providerId, idToken, rawNonce) {
  * Ist die Firebase-Kennung nutzbar? Sie hält sich von selbst über
  * Seitenwechsel hinweg; erst wenn sie fehlt, muss neu angemeldet werden.
  */
-async function inkwellIdentityReady() {
+async function inkwellsIdentityReady() {
   try {
-    const api = await whenInkwellShareReady(8000);
+    const api = await whenInkwellsShareReady(8000);
     await api.whenIdentityReady();
     if (!api.hasRealIdentity()) return null;
 
@@ -285,14 +285,14 @@ async function inkwellIdentityReady() {
 /* ── Die Adminsitzung endet mit der Adminseite ────────────────────────
    Wer sich in der Verwaltung anmeldet und danach zurück auf die Website
    geht, war dort weiterhin Admin: Beiträge und Antworten ließen sich
-   löschen und alles Geschriebene ging unter „Inkwell Team" hinaus. Das
+   löschen und alles Geschriebene ging unter „Inkwells Team" hinaus. Das
    war nie beabsichtigt – die Werkzeuge gehören in die Verwaltung.
 
    Abgemeldet wird beim BETRETEN jeder anderen Seite, nicht beim Verlassen
    der Adminseite: ein Fenster, das zugemacht wird, kommt nicht mehr dazu,
    und ein „beforeunload" darf ohnehin nichts mehr abwarten.
 
-   Nicht zu verwechseln mit inkwellAdminSignOut() weiter unten: das räumt
+   Nicht zu verwechseln mit inkwellsAdminSignOut() weiter unten: das räumt
    beim ausdrücklichen Abmelden auf und fragt deshalb nicht erst nach.
    Hier MUSS gefragt werden – sonst würde ein ganz normal angemeldeter
    Nutzer mit hinausgeworfen.
@@ -309,7 +309,7 @@ async function inkwellIdentityReady() {
    abhängt, ob moderiert werden darf, muss das abwarten – sonst zeichnet
    er seine Löschen-Knöpfe in der Lücke zwischen „noch angemeldet" und
    „abgemeldet". */
-window.inkwellAdminSessionEnded = Promise.resolve();
+window.inkwellsAdminSessionEnded = Promise.resolve();
 
 function endAdminSessionOutsideAdmin() {
   if (window.location.pathname.includes('/admin/')) return;
@@ -318,15 +318,15 @@ function endAdminSessionOutsideAdmin() {
 
   // Seiten mit dem Forum-Modul (Community, Datenschutz, Startseite)
   const viaForum = new Promise((resolve) => {
-    if (window.InkwellForum) return resolve(window.InkwellForum);
+    if (window.InkwellsForum) return resolve(window.InkwellsForum);
     if (!document.querySelector('script[src*="firebase.js"]')) return resolve(null);
-    document.addEventListener('inkwell-forum-ready',
-      () => resolve(window.InkwellForum || null), { once: true });
+    document.addEventListener('inkwells-forum-ready',
+      () => resolve(window.InkwellsForum || null), { once: true });
     setTimeout(() => resolve(null), 15000);
   }).then(async (api) => {
     if (!api?.adminReady) return false;
     if (!await api.adminReady()) return false;
-    await inkwellAdminSignOut();
+    await inkwellsAdminSignOut();
     done('das Forum-Modul');
     return true;
   });
@@ -337,17 +337,17 @@ function endAdminSessionOutsideAdmin() {
     if (schonErledigt) return;
     if (!document.querySelector('script[src*="share.js"]')) return;
 
-    const api = await whenInkwellShareReady(8000);
+    const api = await whenInkwellsShareReady(8000);
     await api.whenIdentityReady();
     const me = api.currentIdentity();
     if (!me || me.email !== api.normalizeEmail(ADMIN_EMAIL)) return;
 
     await api.signOutIdentity();
-    document.body.dataset.inkwellAdmin = 'no';
+    document.body.dataset.inkwellsAdmin = 'no';
     done('das Freigabe-Modul');
   });
 
-  window.inkwellAdminSessionEnded = viaShare.catch(err => {
+  window.inkwellsAdminSessionEnded = viaShare.catch(err => {
     console.warn('[Admin] Abmelden übersprungen:', err?.message || err);
   });
 }
@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', endAdminSessionOutsideAdmin);
  * eine echte Neuanmeldung nötig ist. Mehrfachaufrufe teilen sich den Vorgang.
  */
 async function ensureFreshToken(minRemainingMs = 5 * 60 * 1000) {
-  const current = getInkwellSession();
+  const current = getInkwellsSession();
   if (current && current.expiry - Date.now() > minRemainingMs) return current;
 
   if (_refreshPromise) return _refreshPromise;
@@ -367,7 +367,7 @@ async function ensureFreshToken(minRemainingMs = 5 * 60 * 1000) {
   const providerId = getActiveProviderId();
   const provider = getCloudProvider(providerId);
   const hint = current?.email || getRememberedEmail();
-  const storedRefresh = localStorage.getItem(INKWELL_REFRESH_KEY) || '';
+  const storedRefresh = localStorage.getItem(INKWELLS_REFRESH_KEY) || '';
 
   _refreshPromise = (async () => {
     try {
@@ -395,10 +395,10 @@ async function ensureFreshToken(minRemainingMs = 5 * 60 * 1000) {
         return session;
       }
 
-      return getInkwellSession();
+      return getInkwellsSession();
     } catch (err) {
       console.warn('[Auth] Stille Erneuerung nicht möglich:', err.message);
-      return getInkwellSession();
+      return getInkwellsSession();
     } finally {
       _refreshPromise = null;
     }
@@ -412,11 +412,11 @@ async function ensureFreshToken(minRemainingMs = 5 * 60 * 1000) {
 // Eigene Domain der Website (siehe website/CNAME). Wird nur gebraucht, wenn
 // die Seite ohne echte Herkunftsadresse geöffnet wurde – etwa per Doppelklick
 // auf die HTML-Datei. Im Normalbetrieb ergibt sie sich aus der Adresszeile.
-const INKWELL_SITE_URL = 'https://inkwells.me/';
+const INKWELLS_SITE_URL = 'https://inkwells.me/';
 
-function inkwellLoginRedirectUri() {
+function inkwellsLoginRedirectUri() {
   if (!window.location.origin || window.location.origin === 'null' || window.location.protocol === 'file:') {
-    return INKWELL_SITE_URL;
+    return INKWELLS_SITE_URL;
   }
   // Der Login läuft immer über die Startseite, damit je Anbieter nur EINE
   // Weiterleitungs-Adresse hinterlegt werden muss.
@@ -440,10 +440,10 @@ async function startCloudLogin(returnTo, providerId) {
   }
 
   // Anbieter merken, damit die Rückleitung weiß, wer geantwortet hat
-  localStorage.setItem(INKWELL_PROVIDER_KEY, id);
+  localStorage.setItem(INKWELLS_PROVIDER_KEY, id);
 
   const provider = getCloudProvider(id);
-  const redirectUri = inkwellLoginRedirectUri();
+  const redirectUri = inkwellsLoginRedirectUri();
 
   /* Google lief hier früher ohne Seitenwechsel über den Identity-Dienst.
      Der gibt aber nur ein Zugriffstoken heraus, kein ID-Token – und ohne
@@ -514,28 +514,28 @@ function handleGoogleCallback() {
    Firebase sind zwei völlig getrennte Dinge. Firebase bewahrt seine
    Sitzung im Browser auf und überlebt damit jedes Neuladen, auch ein
    hartes. Wer sich abgemeldet hatte, konnte deshalb weiterhin Beiträge
-   löschen und schrieb weiter unter „Inkwell Team" – der einzige Weg
+   löschen und schrieb weiter unter „Inkwells Team" – der einzige Weg
    hinaus war das Logo im Adminbereich, und darauf kommt niemand.
 
    js/firebase.js wird dafür bei Bedarf geholt: die meisten Seiten binden
    es gar nicht ein, und dann gibt es auch keine Adminsitzung zu beenden.
    ─────────────────────────────────────────────────────────────────── */
 
-async function inkwellAdminSignOut() {
+async function inkwellsAdminSignOut() {
   try {
-    const module = await import(INKWELL_SCRIPT_DIR + 'firebase.js');
-    const api = module.default || window.InkwellForum;
+    const module = await import(INKWELLS_SCRIPT_DIR + 'firebase.js');
+    const api = module.default || window.InkwellsForum;
     if (api?.adminSignOut) await api.adminSignOut();
-    document.body.dataset.inkwellAdmin = 'no';
+    document.body.dataset.inkwellsAdmin = 'no';
   } catch (err) {
-    console.warn('[Inkwell] Adminsitzung nicht beendet:', err?.message || err);
+    console.warn('[Inkwells] Adminsitzung nicht beendet:', err?.message || err);
   }
 }
 
-function inkwellLogout() {
-  const session = getInkwellSession();
+function inkwellsLogout() {
+  const session = getInkwellsSession();
   const providerId = getActiveProviderId();
-  clearInkwellSession();
+  clearInkwellsSession();
 
   // Zugriff zurückziehen – nur Google bietet dafür einen Endpunkt
   if (providerId === 'google' && session?.accessToken) {
@@ -553,19 +553,19 @@ function inkwellLogout() {
        · die Kennung für geteilte Dokumente. Blieb sie stehen, wurden sie
          danach weiter unter der ALTEN Adresse gesucht – auch nachdem man
          sich längst mit einer anderen angemeldet hatte.
-       · die Adminsitzung, siehe inkwellAdminSignOut(). Blieb sie stehen,
+       · die Adminsitzung, siehe inkwellsAdminSignOut(). Blieb sie stehen,
          konnte man weiter Beiträge löschen und schrieb weiter unter
-         „Inkwell Team".
+         „Inkwells Team".
 
      Gibt ein Promise zurück, auf das der Aufrufer warten MUSS, bevor er
      die Seite wechselt: sonst schneidet die Navigation das Abmelden ab
      und beide Sitzungen bleiben doch stehen. */
-  const identityOut = whenInkwellShareReady(3000)
+  const identityOut = whenInkwellsShareReady(3000)
     .then(api => api.signOutIdentity())
-    .then(() => document.dispatchEvent(new CustomEvent('inkwell-identity-changed')))
+    .then(() => document.dispatchEvent(new CustomEvent('inkwells-identity-changed')))
     .catch(err => console.warn('[Auth] Firebase-Abmeldung übersprungen:', err?.message || err));
 
-  return Promise.all([identityOut, inkwellAdminSignOut()]).then(() => {});
+  return Promise.all([identityOut, inkwellsAdminSignOut()]).then(() => {});
 }
 
 /* ── Navigation / Sprachmenü ──────────────────────────────────────── */
@@ -588,7 +588,7 @@ document.addEventListener('click', (event) => {
 
 // Zustand des Login-/Dashboard-Buttons in der Navigationsleiste
 function checkCommonAuth(isLandingPage = false, relativePathToRoot = './') {
-  const loggedIn = isInkwellLoggedIn();
+  const loggedIn = isInkwellsLoggedIn();
   const isDashboard = window.location.pathname.includes('/dashboard/');
 
   const btnOpenLogin = document.getElementById('btn-open-login');
@@ -603,7 +603,7 @@ function checkCommonAuth(isLandingPage = false, relativePathToRoot = './') {
      Statt eines Verweises, der ins Leere führt, führt der Knopf zurück in
      die Verwaltung. Gesetzt wird das Kennzeichen von js/admin.js, sobald
      Firebase die Anmeldung bestätigt hat. */
-  if (document.body.dataset.inkwellAdmin === 'yes') {
+  if (document.body.dataset.inkwellsAdmin === 'yes') {
     if (span) {
       span.textContent = window.t ? t('admin_page_title') : 'Verwaltung';
       span.removeAttribute('data-i18n');
@@ -660,7 +660,7 @@ function checkCommonAuth(isLandingPage = false, relativePathToRoot = './') {
   }
 }
 
-function _inkwellNavContext() {
+function _inkwellsNavContext() {
   const path = window.location.pathname;
   const isSub = path.includes('/dashboard/') || path.includes('/community/') || path.includes('/datenschutz/');
   return { rel: isSub ? '../' : './', isLanding: !isSub };
@@ -668,12 +668,12 @@ function _inkwellNavContext() {
 
 if (typeof addLangChangeListener === 'function') {
   addLangChangeListener(() => {
-    const { rel, isLanding } = _inkwellNavContext();
+    const { rel, isLanding } = _inkwellsNavContext();
     checkCommonAuth(isLanding, rel);
   });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const { rel, isLanding } = _inkwellNavContext();
+  const { rel, isLanding } = _inkwellsNavContext();
   checkCommonAuth(isLanding, rel);
 });

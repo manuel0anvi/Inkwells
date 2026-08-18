@@ -68,6 +68,17 @@
     'FONT',
     'UL', 'OL', 'LI', 'BLOCKQUOTE', 'SECTION',
 
+    /* ── Verweise ────────────────────────────────────────────────────
+       Sie standen bewusst nicht hier: ein <a> traegt eine ADRESSE, und
+       eine Adresse ist der uebliche Weg, ueber den in einer Seite etwas
+       Ausfuehrbares landet (javascript:, data:, vbscript:).
+
+       Seit es sie im Editor gibt (ui/links.js), gehoeren sie dazu – aber
+       nur mit der Pruefung in istAdresse() weiter unten. Was dort nicht
+       durchkommt, verliert sein href und bleibt als blosser Text stehen:
+       lieber ein toter Verweis als ein gefaehrlicher. */
+    'A',
+
     /* ── Tabellen ────────────────────────────────────────────────────
        Sie standen bewusst NICHT hier: bis es sie im Editor gab, war ein
        <table> in einem Seitentext etwas Fremdes, und die Bereinigung hat
@@ -87,8 +98,32 @@
      Schreiben – ein style="list-style-type" waere keine Alternative, von
      einem style bleibt unten allein die Farbe stehen. Das Muster ist
      bewusst allgemein gehalten, damit eine neue Form nicht an zwei
-     Stellen nachgetragen werden muss. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|table|formula(-block)?|comment-mark|resolved)$/;
+     Stellen nachgetragen werden muss.
+
+     `j-align-…` traegt die Ausrichtung eines Absatzes (ui/toolbar.js).
+     Auch sie MUSS hier stehen: ein style="text-align" waere keine
+     Alternative, von einem style bleibt unten allein die Farbe uebrig.
+     Gebraucht wird sie vor allem beim Oeffnen von Word-Dokumenten –
+     dort ist eine zentrierte Ueberschrift der Normalfall. */
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke|frei)$/;
+
+  /* ── Abstand statt Leerzeichen ──────────────────────────────────────
+     `j-luecke` ist der Abstandshalter, den ein Klick rechts neben schon
+     geschriebenen Text setzt (canvas/text.js). Er traegt keinen Text,
+     nur eine Breite – und die MUSS hier durchkommen, sonst waere er nach
+     dem ersten Abgleich null Pixel breit und die Stelle verloren.
+
+     Welche Elemente einen Einzug tragen duerfen. Ein Mass an einem
+     <span> mitten im Satz waere etwas anderes als ein Absatzeinzug und
+     hat hier nichts zu suchen – der Abstandshalter ist die einzige
+     Ausnahme, und er wird eigens geprueft. */
+  const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+                              'LI', 'UL', 'OL', 'BLOCKQUOTE']);
+
+  /* Nur eine nackte Pixelzahl, hoechstens vier Stellen. Kein calc(), kein
+     var(), keine andere Einheit – gebraucht wird nur, was canvas/text.js
+     selbst schreibt, und das ist immer „<Zahl>px". */
+  const istAbstand = (wert) => /^\d{1,4}(\.\d{1,2})?px$/.test(String(wert || '').trim());
 
   /* KaTeX erzeugt beim Rendern eine Vielzahl innerer Elemente mit eigenen
      Klassen. Sie alle aufzuzählen wäre brüchig – jede neue KaTeX-Version
@@ -110,6 +145,50 @@
      Breite und Hoehe waeren beim ersten Abgleich weg.
      Erlaubt ist eine nackte Zahl, nichts weiter. */
   const istMass = (wert) => /^[1-9]\d{0,3}$/.test(String(wert).trim());
+
+  /* Die Stelle einer frei gesetzten Tabelle (core/tables.js). Sie steht
+     aus demselben Grund als Attribut da wie Breite und Hoehe – und darf,
+     anders als ein Mass, auch 0 sein: links oben ist eine gueltige Lage. */
+  const istStelle = (wert) => /^\d{1,4}$/.test(String(wert).trim());
+
+  /* ══════════════════════════════════════════════════════════════════
+     WELCHE ADRESSE AN EINEM VERWEIS STEHEN DARF
+
+     Ausdruecklich eine Liste des ERLAUBTEN und nicht des Verbotenen.
+     Eine Sperrliste waere hier besonders truegerisch: sie muesste
+     javascript: treffen, aber auch  java\nscript: ,  JaVaScRiPt: ,
+     &#106;avascript: und was der Browser sonst noch als dasselbe liest.
+
+     Drei Arten kommen durch:
+
+       http:  und  https:   das gewoehnliche Netz
+       mailto:              eine Mailadresse
+       inkwells:             die eigene Adresse der App, ueber die ein
+                            Freigabe-Link geoeffnet wird (main.js)
+
+     Gepruefte wird ueber den URL-Parser des Browsers und nicht mit einem
+     eigenen regulaeren Ausdruck: der Parser liest die Adresse GENAU SO,
+     wie sie spaeter auch benutzt wird, und faellt auf keine der
+     Schreibweisen oben herein.
+
+     >>> Warum relative Adressen durchfallen <<<
+     Sie brauchen eine Grundlage, und die ist in der App der oertliche
+     Server und auf der Website inkwells.me. Ein Verweis auf die eigene
+     Seite ergibt in einem Heft keinen Sinn und waere nur ein Weg, auf
+     Dateien der Oberflaeche zu zeigen.
+     ══════════════════════════════════════════════════════════════════ */
+  const ERLAUBTE_SCHEMATA = new Set(['http:', 'https:', 'mailto:', 'inkwells:']);
+
+  function istAdresse(wert) {
+    if (typeof wert !== 'string') return false;
+    const roh = wert.trim();
+    if (!roh || roh.length > 2048) return false;
+    try {
+      return ERLAUBTE_SCHEMATA.has(new URL(roh).protocol);
+    } catch (err) {
+      return false;   // ohne Schema, also relativ – siehe oben
+    }
+  }
 
   /** Ist das eine Farbe und sonst nichts? Kein url(), kein Ausdruck. */
   function istFarbe(wert) {
@@ -139,15 +218,68 @@
       /* Vom style bleibt allein die Farbe stehen. Gelesen wird ueber
          el.style, das der Browser schon geparst hat – damit kann keine
          merkwuerdige Schreibweise durchrutschen. */
+      /* ══════════════════════════════════════════════════════════════
+         VOM style BLEIBT DIE FARBE – UND DER ABSTAND
+
+         Lange blieb hier nur die Farbe stehen. Dazugekommen sind drei
+         Masse, mit denen Inkwells seit der Umstellung auf „Abstand statt
+         Leerzeichen" die Stelle hält, an die jemand geklickt hat
+         (canvas/text.js):
+
+           margin-left  Einzug eines Absatzes
+           margin-top   Abstand nach oben, auf ganze Zeilen gerundet
+           width        die Breite eines Abstandshalters (span.j-luecke)
+
+         Vorher stand dort, wo diese Masse jetzt stehen, ein Block aus
+         Leerzeichen im TEXT. Fielen die Masse hier weg, käme das aufs
+         Gleiche hinaus wie damals: die Stelle wäre beim ersten Abgleich
+         verloren.
+
+         Durchgelassen wird nur eine geprüfte Zahl in Pixeln (istAbstand)
+         und nur an einem Element, das sie tragen darf. Ein Mass kann
+         nichts ausführen; das Schlimmste, was ein zu grosser Wert
+         anrichtet, ist ein Absatz, der weit rechts steht – deshalb die
+         Obergrenze. */
       if (name === 'style') {
         const farbe = el.style && el.style.color;
+        const links = el.style && el.style.marginLeft;
+        const oben = el.style && el.style.marginTop;
+        const breite = el.style && el.style.width;
+        const vonLinks = el.style && el.style.left;
+        const vonOben = el.style && el.style.top;
+        const istBlock = BLOCK_TAGS.has(el.tagName);
+        const istHalter = el.tagName === 'SPAN' && el.classList.contains('j-luecke');
+        /* Ein frei stehender Absatz traegt seine Lage im style. Sie MUSS
+           durchkommen: ohne sie stuende er beim naechsten Abgleich in der
+           linken oberen Ecke, und zwar bei allen Beteiligten. Gepruefte
+           Pixelzahl wie der Einzug auch – ein Mass kann nichts ausfuehren,
+           und die Obergrenze haelt ihn auf dem Blatt. */
+        const istFrei = istBlock && el.classList.contains('j-frei');
+
         el.removeAttribute('style');
         if (istFarbe(farbe)) el.style.color = farbe;
+        if (istBlock && istAbstand(links)) el.style.marginLeft = links;
+        if (istBlock && istAbstand(oben)) el.style.marginTop = oben;
+        if (istHalter && istAbstand(breite)) el.style.width = breite;
+        if (istFrei && istAbstand(vonLinks)) el.style.left = vonLinks;
+        if (istFrei && istAbstand(vonOben)) el.style.top = vonOben;
         continue;
       }
 
       // <font color="…"> – der Weg, auf dem Chromium foreColor ablegt
       if (name === 'color' && el.tagName === 'FONT' && istFarbe(wert)) continue;
+
+      /* Die Adresse eines Verweises, siehe istAdresse(). Kommt sie nicht
+         durch, faellt sie unten mit allem anderen weg – der Text des
+         Verweises bleibt stehen, er ist dann nur nicht mehr anklickbar. */
+      if (name === 'href' && el.tagName === 'A' && istAdresse(wert)) continue;
+
+      /* Ein Verweis oeffnet sich im Standardbrowser (ui/links.js). Die
+         beiden Angaben sind reine Vorsorge fuer die Website, wo er in
+         einem neuen Reiter aufgeht: ohne noopener bekaeme die fremde
+         Seite ueber window.opener Zugriff auf die unsere. */
+      if (name === 'target' && el.tagName === 'A' && wert === '_blank') continue;
+      if (name === 'rel' && el.tagName === 'A' && wert === 'noopener noreferrer') continue;
 
       // Verbundene Zellen, siehe ZELLEN_ATTRIBUTE
       if (ZELLEN_ATTRIBUTE.has(name) && (el.tagName === 'TD' || el.tagName === 'TH')
@@ -157,10 +289,22 @@
       if (name === 'width' && el.tagName === 'COL' && istMass(wert)) continue;
       if (name === 'height' && el.tagName === 'TR' && istMass(wert)) continue;
 
+      // Die Stelle einer frei gesetzten Tabelle, siehe istStelle
+      if ((name === 'x' || name === 'y') && el.tagName === 'TABLE' && istStelle(wert)) continue;
+
       // data-latex auf Formel-Spans: der LaTeX-Quelltext, aus dem KaTeX rendert.
       // Ohne ihn wäre die Formel nach dem ersten Abgleich nicht mehr editierbar.
       if (name === 'data-latex' && el.tagName === 'SPAN'
           && el.classList.contains('j-formula')) continue;
+
+      /* Der Abstandshalter ist ein Stück und keine Textstelle. Ohne
+         dieses Attribut landete Getipptes IN ihm statt dahinter – für
+         Chromium ist „hinter dem Element" dieselbe Stelle wie „am Ende
+         des Elements", solange nichts dahinter steht (canvas/text.js).
+         Nur an ihm und nur mit diesem einen Wert: 'true' wäre das
+         Gegenteil und machte aus jedem Element ein Eingabefeld. */
+      if (name === 'contenteditable' && el.tagName === 'SPAN'
+          && el.classList.contains('j-luecke') && String(wert) === 'false') continue;
 
       /* data-cid an der kommentierten Stelle: die Kennung des Kommentars,
          zu dem sie gehört. Ohne sie ginge die Verknüpfung zwischen Text und

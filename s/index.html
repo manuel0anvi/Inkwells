@@ -6,7 +6,7 @@
      <script src="https://fremd"> laeuft damit nicht. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inkwell — Freigegebenes Heft</title>
+<title>Inkwells — Freigegebenes Heft</title>
 
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
@@ -112,15 +112,15 @@
 
 <nav>
   <a href="../?home=true" class="nav-logo">
-    <img src="../icon.png" alt="Inkwell Logo">
-    <span>Inkwell</span>
+    <img src="../icon.png" alt="Inkwells Logo">
+    <span>Inkwells</span>
   </a>
   <div class="nav-right">
     <!-- Beschriftung im <span>, damit die Regel für schmale Bildschirme sie
          ausblenden kann; ohne das quoll der Text aus dem runden Knopf. -->
-    <a href="../" class="nav-dl" style="padding: 6px 14px; border-radius: 20px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Inkwell holen">
+    <a href="../" class="nav-dl" style="padding: 6px 14px; border-radius: 20px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Inkwells holen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display:none; flex-shrink:0;" class="dl-icon-mobile"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-      <span data-i18n="share_get_inkwell">Inkwell holen</span>
+      <span data-i18n="share_get_inkwells">Inkwells holen</span>
     </a>
     <div class="lang-sw">
       <button class="lb active" onclick="setLang('de')">DE</button>
@@ -150,7 +150,7 @@
       <span class="share-badge" id="share-role-badge" data-i18n="share_readonly">Nur lesen</span>
       <!-- Bearbeitet wird ausschließlich in der App: im Browser bleibt ein
            geteiltes Dokument immer schreibgeschützt. -->
-      <a id="share-open-app" class="btn-m" style="display:none; padding:6px 12px; font-size:12px; text-decoration:none;" data-i18n="share_open_app">In Inkwell öffnen</a>
+      <a id="share-open-app" class="btn-m" style="display:none; padding:6px 12px; font-size:12px; text-decoration:none;" data-i18n="share_open_app">In Inkwells öffnen</a>
       <button id="share-pdf" class="btn-m" style="padding:6px 12px; font-size:12px;" data-i18n="dash_pdf">Als PDF</button>
     </div>
   </div>
@@ -163,7 +163,7 @@
 </div>
 
 <footer>
-  <p>© 2026 Inkwell · Anvi</p>
+  <p>© 2026 Inkwells · Anvi</p>
   <div class="fl">
     <a href="https://github.com/manuel0anvi/Inkwell" target="_blank">GitHub</a>
     <a href="../community/" data-i18n="nav_community">Community</a>
@@ -194,16 +194,16 @@ const viewerPages = document.getElementById('viewer-pages');
 let sharedNotebook = null;
 
 function whenShareReady() {
-  if (window.InkwellShare) return Promise.resolve(window.InkwellShare);
+  if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error('SHARE_OFFLINE')),
       15000
     );
-    document.addEventListener('inkwell-share-ready', () => {
+    document.addEventListener('inkwells-share-ready', () => {
       clearTimeout(timer);
-      if (window.InkwellShare) resolve(window.InkwellShare);
+      if (window.InkwellsShare) resolve(window.InkwellsShare);
       else reject(new Error('SHARE_OFFLINE'));
     }, { once: true });
   });
@@ -230,7 +230,7 @@ function renderShared(notebook, meta) {
 
   const title = notebook.name || meta.title || 'Notizbuch';
   document.getElementById('share-title').textContent = title;
-  document.title = `${title} — Inkwell`;
+  document.title = `${title} — Inkwells`;
 
   const pages = getNotebookPages(notebook);
   const pageLabel = pages.length === 1 ? t('page') : t('pages');
@@ -264,7 +264,7 @@ function renderShared(notebook, meta) {
 /* Export: identisch zum Dashboard (js/export-ui.js). PDF läuft über den
    Druckdialog des Browsers, Word über js/docx.js. */
 document.getElementById('share-pdf').addEventListener('click', () => {
-  if (sharedNotebook) InkwellExport.open(sharedNotebook);
+  if (sharedNotebook) InkwellsExport.open(sharedNotebook);
 });
 
 if (typeof addLangChangeListener === 'function') {
@@ -354,7 +354,7 @@ async function openSharedDocument(api, linkId) {
   window.__shareMeta = { title: head.title, mode: head.linkMode, updatedAt: head.updatedAt };
   renderShared(sharedNotebook, window.__shareMeta);
 
-  // „In Inkwell öffnen" führt über das Protokoll inkwell://share/<linkId>.
+  // „In Inkwells öffnen" führt über das Protokoll inkwells://share/<linkId>.
   // Der Browser fragt dann selbst, ob die App gestartet werden soll.
   const openApp = document.getElementById('share-open-app');
   if (openApp) {

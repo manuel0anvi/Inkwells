@@ -321,7 +321,7 @@ function hasRealIdentity() {
 
 /**
  * Auch bei Firebase abmelden. Beim Abmelden aufgerufen – in der App von
- * CloudSync.signOut(), auf der Website von inkwellLogout().
+ * CloudSync.signOut(), auf der Website von inkwellsLogout().
  *
  * Ohne das blieb die Firebase-Sitzung nach dem Abmelden bestehen. Wer sich
  * danach mit einer anderen Adresse anmeldete, bekam die geteilten Dokumente
@@ -359,7 +359,7 @@ async function signInMicrosoftInteractive(loginHint = '') {
   const provider = new OAuthProvider('microsoft.com');
   provider.addScope('email');
 
-  /* Nur persönliche Konten, wie überall sonst in Inkwell (TENANT in
+  /* Nur persönliche Konten, wie überall sonst in Inkwells (TENANT in
      src/core/cloudConfig.js bzw. website/js/config.js). Ein Geschäfts-
      oder Schulkonto liefe hier sonst in dieselbe unerklärte Fehlerseite
      wie bei der Anmeldung. */
@@ -386,7 +386,7 @@ async function signInMicrosoftInteractive(loginHint = '') {
        Auflösen lässt sich das nur so, wie Firebase es vorsieht: einmal
        mit dem BEKANNTEN Anbieter anmelden und die Microsoft-Anmeldung
        daran anhängen. Danach gehören beide Wege zu einem Konto, und
-       Inkwell sieht dieselbe Person – wichtig, weil die Freigaben an der
+       Inkwells sieht dieselbe Person – wichtig, weil die Freigaben an der
        Adresse hängen, nicht an der Anmeldeart.
 
        Der Anhang bleibt hier liegen, statt gleich weiterzumachen: das
@@ -408,7 +408,7 @@ async function signInMicrosoftInteractive(loginHint = '') {
       at: Date.now()
     };
     const fehler = new Error('MICROSOFT_NEEDS_GOOGLE');
-    fehler.code = 'inkwell/microsoft-needs-google';
+    fehler.code = 'inkwells/microsoft-needs-google';
     fehler.email = offeneVerknuepfung.email;
     throw fehler;
   }
@@ -600,7 +600,7 @@ function docUrlFor(linkId) {
 
 /** Adresse, die statt des Browsers die App öffnet (siehe main.js). */
 function appUrlFor(linkId) {
-  return `inkwell://share/${encodeURIComponent(linkId)}`;
+  return `inkwells://share/${encodeURIComponent(linkId)}`;
 }
 
 /**
@@ -836,6 +836,80 @@ async function isOwnShare(shareId) {
    ══════════════════════════════════════════════════════════════════════ */
 
 /** Wirft, wenn kein echtes Konto angemeldet ist. */
+/* ══════════════════════════════════════════════════════════════════════
+   VERSIONSSPERRE
+
+   Wer ein geteiltes Dokument öffnen will, muss dieselbe Fassung von
+   Inkwells haben wie der Besitzer. Sonst kommt er gar nicht hinein – auch
+   nicht zum Lesen, und auch nicht über einen Link.
+
+   >>> Warum so streng, und warum in BEIDE Richtungen <<<
+   Ein geteiltes Dokument ist kein Dateiformat, das man verträglich
+   halten kann. Es ist ein laufender Raum: Yjs-Stände, ein
+   Änderungsstrom, eine Rollenliste, ein Merkzettel über den letzten
+   Stand. Ändert sich daran etwas zwischen zwei Fassungen, dann schreiben
+   zwei verschiedene Stände in dieselbe Ablage – und was dabei
+   herauskommt, merkt niemand sofort, sondern Tage später an fehlender
+   Arbeit.
+
+   Deshalb ist auch die ältere Seite gesperrt, nicht nur die neuere:
+   „meine ist neuer, also kann ich das schon lesen" stimmt genau so
+   wenig. Wer schreibt, schreibt in einer Form, die der andere nicht
+   kennt.
+
+   Verglichen wird die Fassung, wie sie ist – nicht „grösser oder
+   kleiner". Ein Vergleich mit grösser/kleiner wäre eine Aussage über
+   Verträglichkeit, und die trifft hier niemand.
+
+   Ein Kopf ohne Angabe stammt aus der Zeit vor dieser Sperre. Der bleibt
+   offen: sonst wäre jedes bestehende Dokument mit einem Schlag für alle
+   zu, und niemand käme mehr an seine Sachen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Die Fassung, die hier läuft. Leer, wenn sie nicht zu ermitteln ist. */
+let _eigeneVersion = '';
+
+async function eigeneAppVersion() {
+  if (_eigeneVersion) return _eigeneVersion;
+  try {
+    if (typeof window !== 'undefined' && window.api && window.api.getAppVersion) {
+      _eigeneVersion = String(await window.api.getAppVersion() || '').trim();
+    }
+  } catch (err) { /* dann eben ohne */ }
+  return _eigeneVersion;
+}
+
+/**
+ * Passt die eigene Fassung zu der des Dokuments?
+ *
+ * @returns {Promise<{ok:boolean, meine:string, ihre:string, wer:'ich'|'besitzer'|''}>}
+ *   `wer` sagt, WESSEN Fassung die ältere ist – daraus wird der Satz für
+ *   den Nutzer. Bei ok ist es leer.
+ */
+async function versionPasst(head) {
+  const ihre = String(head && head.appVersion || '').trim();
+  const meine = await eigeneAppVersion();
+
+  // Ohne Angabe auf einer der beiden Seiten wird nicht gesperrt
+  if (!ihre || !meine) return { ok: true, meine, ihre, wer: '' };
+  if (ihre === meine) return { ok: true, meine, ihre, wer: '' };
+
+  /* Wer ist älter? Nur für den Satz, nicht für die Entscheidung – die
+     ist schon gefallen. Teil für Teil als Zahl, damit 1.10.0 nach 1.9.0
+     kommt und nicht davor. */
+  const teile = (v) => String(v).split('.').map(s => Number.parseInt(s, 10) || 0);
+  const a = teile(meine), b = teile(ihre);
+  let wer = '';
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (x === y) continue;
+    wer = x < y ? 'ich' : 'besitzer';
+    break;
+  }
+
+  return { ok: false, meine, ihre, wer };
+}
+
 function requireIdentity() {
   const me = currentIdentity();
   if (!me || me.anonymous || !me.email) throw new Error('NEEDS_ACCOUNT');
@@ -885,6 +959,39 @@ function describeDoc(docId, data) {
        eigene Kennung beim Öffnen selbst ein (registerMyUid), damit der
        Besitzer daraus die Rollenliste des Raums bauen kann. */
     memberUids: (data.memberUids && typeof data.memberUids === 'object') ? data.memberUids : {},
+    /* ── Unter welchem Namen der Live-Raum läuft ────────────────────
+       Fehlt er, ist es die Dokumentkennung selbst – so lief es bisher,
+       und so laufen alle bestehenden Dokumente weiter.
+
+       >>> Wozu er dann überhaupt gut ist <<<
+       Die Regeln der Realtime Database lassen roles/{raum} anlegen, wer
+       sich selbst als owner einträgt; erst danach ist der Raum vergeben.
+       Wer eine Dokumentkennung kannte – und die bekommt jeder, der einen
+       reinen LESE-Link öffnet –, konnte den Raum also besetzen, BEVOR der
+       echte Besitzer ihn zum ersten Mal betritt. Der Client merkte das
+       zwar (ROOM_OWNER_MISMATCH), aber danach kam der Besitzer nie mehr
+       hinein: die Regel lässt nur den eingetragenen owner schreiben. Die
+       Live-Zusammenarbeit dieses Dokuments war dauerhaft tot, ohne einen
+       Ausweg in der App.
+
+       Mit dem Raumnamen gibt es einen: der Besitzer würfelt einen neuen
+       und trägt ihn in den Kopf ein (joinDocRoom). Der Besetzer sitzt
+       dann in einem Raum, in den niemand mehr kommt. */
+    roomKey: typeof data.roomKey === 'string' && data.roomKey ? data.roomKey : docId,
+    /* Mit welcher Fassung von Inkwells der Besitzer arbeitet. Leer heisst:
+       aus der Zeit davor – dann wird nicht gesperrt. Siehe
+       versionPasst() weiter unten. */
+    appVersion: typeof data.appVersion === 'string' ? data.appVersion : '',
+    /* ── Was geschieht, wenn zwei Texte aneinanderstossen ───────────
+       Die Entscheidung des BESITZERS (Einstellungen, textFluss). Sie
+       gilt für alle, solange sie in diesem Dokument sind – sonst sähe
+       dieselbe Seite bei jedem anders aus.
+
+       Nur der Besitzer schreibt sie (saveDocumentContent); die Regeln
+       lassen einem Bearbeiter am Kopf ohnehin nur die Seitenliste durch.
+       Leer heisst: aus der Zeit davor, dann gilt die eigene Wahl. */
+    textFluss: (data.textFluss === 'fest' || data.textFluss === 'verschmelzen'
+                || data.textFluss === 'elastisch') ? data.textFluss : '',
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
     updatedAt: toDate(data.updatedAt),
     createdAt: toDate(data.createdAt),
@@ -911,6 +1018,64 @@ function describeDoc(docId, data) {
 /** Erkennt eingebettete Bilddaten (data:…) – die gehören nicht in die Seite. */
 function isInlineData(value) {
   return typeof value === 'string' && value.startsWith('data:');
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   KOMMENTARE REISEN MIT DER SEITE
+
+   >>> Was hier gefehlt hat <<<
+   Gar nichts davon. Das Wort „comments" kam in dieser Datei nicht vor.
+   Der Live-Weg trug sie (ui/collab.js), der dauerhafte nicht – und der
+   ist der, der zählt: sobald ein geteiltes Dokument einmal geladen wird
+   statt live anzukommen, waren alle Kommentare weg.
+
+   Fast weg, und das war das Tückische. Die MARKIERUNG im Text überlebt
+   (sanitize.js lässt data-cid durch), also stand die Stelle weiterhin
+   farbig da. Nur der Kommentar dazu fehlte, und core/comments.js baute
+   aus der Markierung einen Ersatz: ohne Text und mit
+   `author.uid = ''`. Und weil „gehört mir" die Kennung vergleicht,
+   hatte danach NIEMAND mehr Bearbeiten und Löschen – auch der nicht,
+   der ihn geschrieben hat. Genau so wurde es gemeldet.
+
+   Sie hängen an der Seite und nicht am Kopf: eine gelöschte Seite nimmt
+   ihre Kommentare mit, und beim seitenweisen Schreiben geht nur mit,
+   was sich wirklich geändert hat.
+   ══════════════════════════════════════════════════════════════════════ */
+function commentsForPage(notebook, pageId) {
+  const alle = Array.isArray(notebook?.comments) ? notebook.comments : [];
+  return alle
+    .filter(c => c && String(c.pageId) === String(pageId))
+    /* Platzhalter bleiben hier. Sie entstehen aus einer Markierung,
+       deren Kommentar noch fehlt (core/comments.js), und haben deshalb
+       keine Autorenkennung. Sie zu sichern hiesse, den leeren Ersatz
+       dauerhaft an die Stelle des Originals zu setzen – und danach kaeme
+       das Original nie wieder. Die Pruefung steht hier ausgeschrieben
+       und nicht als Aufruf: diese Datei laeuft auch auf der Website,
+       und dort gibt es core/comments.js nicht. */
+    .filter(c => !!(c.author && c.author.uid))
+    .map(c => ({
+      id: String(c.id),
+      pageId: String(pageId),
+      text: String(c.text || ''),
+      zitat: String(c.zitat || '').slice(0, 160),
+      author: {
+        uid: String(c.author?.uid || ''),
+        name: String(c.author?.name || '')
+      },
+      created: Number(c.created) || 0,
+      edited: Number(c.edited) || 0,
+      resolved: !!c.resolved,
+      replies: (Array.isArray(c.replies) ? c.replies : []).map(r => ({
+        id: String(r.id || ''),
+        text: String(r.text || ''),
+        author: {
+          uid: String(r.author?.uid || ''),
+          name: String(r.author?.name || '')
+        },
+        created: Number(r.created) || 0,
+        edited: Number(r.edited) || 0
+      }))
+    }));
 }
 
 /* ── Die Seiten eines Hefts in Heft-Reihenfolge ──────────────────────
@@ -993,6 +1158,9 @@ function splitNotebook(notebook) {
       date: page.date || '',
       text: page.textContent || '',
       objects,
+      // Siehe commentsForPage(): ohne sie verlor jedes geteilte Dokument
+      // beim ersten Laden alle Kommentare
+      comments: commentsForPage(notebook, pageId),
       hasBg
     });
 
@@ -1112,12 +1280,24 @@ function assembleNotebook(head, pages = [], ink = [], blobs = []) {
     return out;
   });
 
+  /* Die Kommentare aller Seiten wieder zu einer Liste – so hält das Heft
+     sie (nb.comments, core/comments.js). Auf der Seite liegen sie nur für
+     den Weg durch Firestore, damit eine gelöschte Seite die ihren
+     mitnimmt. */
+  const comments = [];
+  for (const page of sorted) {
+    for (const c of (Array.isArray(page.comments) ? page.comments : [])) {
+      comments.push({ ...c, pageId: String(page.id) });
+    }
+  }
+
   const notebook = {
     id: head.notebookId || '',
     name: head.title || 'Notizbuch',
     color: head.color || '#c8a96e',
     defaultBg: head.defaultBg || 'ruled',
     pages: notebookPages,
+    comments,
     sections: Array.isArray(head.sections) ? head.sections.map(s => ({ ...s })) : []
   };
   if (head.activeSecId) notebook.activeSecId = head.activeSecId;
@@ -1183,6 +1363,12 @@ async function shareDocument(notebook, options = {}) {
     revision: (existing?.revision || 0) + 1,
     linkMode,
     linkId,
+    /* Die Fassung des Besitzers. Sie entscheidet, wer hereindarf –
+       siehe versionPasst(). Sie steht im Kopf und nicht anderswo, weil
+       jeder sie beim Öffnen ohnehin liest, und weil nur der Besitzer sie
+       ändern darf: editorUpdate() in website/firestore.rules zählt die
+       erlaubten Felder einzeln auf, und sie steht nicht dabei. */
+    appVersion: await eigeneAppVersion(),
     updatedAt: serverTimestamp()
   };
 
@@ -1258,9 +1444,11 @@ async function clearDocContent(docId) {
 function fingerprintNotebook(notebook) {
   const pages = {};
   for (const page of (notebook.pages || [])) {
+    const strokes = page.inkStrokes || [];
     pages[String(page.id)] = {
-      sig: signatureOf(page),
-      strokes: (page.inkStrokes || []).length
+      sig: signatureOf(page, commentsForPage(notebook, page.id)),
+      strokes: strokes.length,
+      inkSig: inkSignatureOf(strokes)
     };
   }
   return {
@@ -1273,20 +1461,107 @@ function fingerprintNotebook(notebook) {
   };
 }
 
-/** Kurze, stabile Unterschrift über den änderbaren Teil einer Seite. */
-function signatureOf(page) {
-  const objects = (page.objects || []).map(o => ({ ...o, src: isInlineData(o.src) ? o.src.length : o.src }));
-  const text = page.textContent || '';
-  const raw = JSON.stringify([text, objects, page.bg ?? null, (page.bgImg || '').length]);
-
-  // Einfacher Hash (FNV-1a). Es geht nur um „gleich oder nicht", nicht um
-  // Fälschungssicherheit – die Unterschrift verlässt das Gerät nie.
+/** Einfacher Hash (FNV-1a) über eine Zeichenkette. */
+function kurzhash(raw) {
   let hash = 0x811c9dc5;
   for (let i = 0; i < raw.length; i++) {
     hash ^= raw.charCodeAt(i);
     hash = (hash * 0x01000193) >>> 0;
   }
   return hash.toString(36) + ':' + raw.length;
+}
+
+/**
+ * Kurze, stabile Unterschrift über den änderbaren Teil einer Seite.
+ *
+ * @param {object} page
+ * @param {object[]} [comments] die Kommentare DIESER Seite. Sie liegen am
+ *   Heft und nicht an der Seite, müssen aber mit in die Unterschrift:
+ *   sonst gilt eine Seite, an der nur ein Kommentar geändert wurde, als
+ *   unverändert – und die Änderung ginge nie hinaus.
+ */
+function signatureOf(page, comments) {
+  const objects = (page.objects || []).map(o => ({ ...o, src: isInlineData(o.src) ? o.src.length : o.src }));
+  const text = page.textContent || '';
+  // Es geht nur um „gleich oder nicht", nicht um Fälschungssicherheit –
+  // die Unterschrift verlässt das Gerät nie.
+  return kurzhash(JSON.stringify([
+    text, objects, page.bg ?? null, (page.bgImg || '').length,
+    Array.isArray(comments) ? comments : []
+  ]));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE UNTERSCHRIFT ÜBER DIE HANDSCHRIFT EINER SEITE
+
+   >>> Was hier vorher stand, und warum es falsch war <<<
+   Im Merkzettel lag allein die ANZAHL der Striche, und saveDocumentContent
+   entschied daraus, was zu tun ist. Das ging in zwei Fällen schief, und
+   beide kommen im Alltag vor – die Wartezeit bis zum Sichern sind zwei
+   Sekunden, in denen man leicht beides tut:
+
+     1. Einen Strich wegradieren und einen neuen ziehen. Die Anzahl ist
+        danach dieselbe, also galt die Seite als unverändert. Die Änderung
+        erreichte die anderen NIE und war nach dem nächsten Laden auch beim
+        Urheber wieder weg.
+
+     2. Einen alten Strich wegradieren und zwei neue ziehen. Die Anzahl
+        wächst von 5 auf 6, also wurde „ab Stelle 5 anhängen" gerechnet –
+        aber die ersten fünf sind nicht mehr dieselben fünf. Es ging der
+        falsche Strich hinaus, und einer fehlte.
+
+   Jetzt liegt eine Unterschrift über die GANZE Strichliste im Merkzettel.
+   Der Trick beim Anhängen: die gespeicherte Unterschrift ist genau die
+   Unterschrift über die ersten `before` Striche, so wie sie damals waren.
+   Man kann also nachrechnen, ob der Anfang wirklich unverändert
+   geblieben ist – und nur dann anhängen.
+   ══════════════════════════════════════════════════════════════════════ */
+function inkSignatureOf(strokes) {
+  return kurzhash(JSON.stringify(strokes || []));
+}
+
+/**
+ * Was mit der Handschrift einer Seite zu geschehen hat.
+ *
+ * Bewusst eine reine Funktion neben saveDocumentContent und nicht darin:
+ * nur so lässt sich die Entscheidung prüfen, ohne Firestore zu befragen
+ * (scripts/test-ink-diff.js). Genau hier saß der Fehler, und er war von
+ * außen nicht zu sehen – er zeigte sich erst beim anderen, Tage später.
+ *
+ * @param {object[]} strokes  die Striche, wie sie jetzt sind
+ * @param {object|null} merk  der Eintrag dieser Seite im Merkzettel
+ * @param {string} jetzt      inkSignatureOf(strokes), schon gerechnet
+ * @returns {{was:'neu'|'anhaengen'|'nichts', ab:number}}
+ *   `ab` gilt nur bei 'anhaengen' und sagt, ab welchem Strich.
+ */
+function inkPlan(strokes, merk, jetzt) {
+  const liste = strokes || [];
+
+  // Seite ist neu: ihre Striche gab es im Raum noch nie
+  if (!merk || merk.strokes === undefined) {
+    return { was: liste.length ? 'neu' : 'nichts', ab: 0 };
+  }
+
+  const before = merk.strokes;
+
+  /* Merkzettel aus der Zeit vor der Unterschrift. Für diese eine Runde
+     das alte Verhalten – siehe die Begründung bei inkSignatureOf. */
+  if (!merk.inkSig) {
+    if (liste.length === before) return { was: 'nichts', ab: 0 };
+    if (liste.length > before) return { was: 'anhaengen', ab: before };
+    return { was: 'neu', ab: 0 };
+  }
+
+  if (jetzt === merk.inkSig) return { was: 'nichts', ab: 0 };
+
+  /* Nur angehängt? Dann muss der Anfang unverändert sein – und die
+     gespeicherte Unterschrift IST die Unterschrift genau dieses Anfangs.
+     Stimmt sie nicht, ist mittendrin etwas passiert (radiert,
+     verschoben), und die Seite wird neu geschrieben. */
+  if (liste.length > before && inkSignatureOf(liste.slice(0, before)) === merk.inkSig) {
+    return { was: 'anhaengen', ab: before };
+  }
+  return { was: 'neu', ab: 0 };
 }
 
 /**
@@ -1354,7 +1629,9 @@ async function saveDocumentContent(docId, notebook, options = {}) {
       pageCount: parts.head.pageCount,
       sections: parts.head.sections,
       revision: rev,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      // Die Entscheidung des Besitzers reist mit – siehe describeDoc
+      ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
     }));
     return { revision: rev, fingerprint, written: parts.pages.length };
   }
@@ -1378,26 +1655,20 @@ async function saveDocumentContent(docId, notebook, options = {}) {
     written++;
   }
 
-  // Handschrift: dazugekommene Striche anhängen, sonst nichts anfassen.
+  /* Handschrift. Was zu tun ist, entscheidet inkPlan() – siehe dort,
+     warum das eine eigene Funktion ist. */
   for (const page of (notebook.pages || [])) {
     const pageId = String(page.id);
     const strokes = page.inkStrokes || [];
-    const before = base.pages[pageId]?.strokes;
+    const plan = inkPlan(strokes, base.pages[pageId], fingerprint.pages[pageId]?.inkSig);
 
-    // Seite ist neu: ihre Striche gab es im Raum noch nie. Ohne diesen Fall
-    // käme eine frisch angelegte Seite ohne Handschrift beim anderen an.
-    if (before === undefined) {
-      if (strokes.length) await rewritePageInk(docId, pageId, strokes, me.uid);
-      continue;
-    }
+    if (plan.was === 'nichts') continue;
 
-    if (strokes.length === before) continue;
-
-    if (strokes.length > before) {
-      await appendStrokes(docId, pageId, strokes.slice(before), me.uid);
+    if (plan.was === 'anhaengen') {
+      await appendStrokes(docId, pageId, strokes.slice(plan.ab), me.uid);
     } else {
-      // Radiert: die Bögen dieser Seite neu schreiben. Nur hier wird
-      // überschrieben – Radieren IST nun einmal ein Entfernen.
+      // Radiert oder mittendrin geändert: die Bögen dieser Seite neu
+      // schreiben. Nur hier wird überschrieben.
       await rewritePageInk(docId, pageId, strokes, me.uid);
     }
     written++;
@@ -1416,7 +1687,9 @@ async function saveDocumentContent(docId, notebook, options = {}) {
     pageCount: parts.head.pageCount,
     sections: parts.head.sections,
     revision,
-    updatedAt: serverTimestamp()
+    updatedAt: serverTimestamp(),
+    // Die Entscheidung des Besitzers reist mit – siehe describeDoc
+    ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
   }));
 
   return { revision, fingerprint, written };
@@ -2113,6 +2386,50 @@ const OP_BACKLOG = 200;
 // Änderungen, die älter sind, räumt der Client beim Betreten weg.
 const OP_MAX_AGE_MS = 10 * 60 * 1000;
 
+/* ── Der Chat im Raum ──────────────────────────────────────────────
+   So viele Nachrichten holt man beim Betreten nach. Mehr wäre bei jedem
+   Öffnen eine spürbare Ladezeit, weniger fühlt sich an, als sei etwas
+   verlorengegangen. */
+const CHAT_BACKLOG = 80;
+
+/* Wie lange eine Nachricht bleibt. Länger als der Änderungsstrom (10
+   Minuten): eine Bemerkung an einen Menschen ist auch morgen noch etwas
+   wert, eine Yjs-Änderung nicht. Kürzer als „für immer": der Chat ist
+   das Gespräch NEBEN der Arbeit, das Ergebnis gehört ins Dokument. Die
+   Regel in website/database.rules.json lässt genau ab dieser Grenze
+   jeden Beteiligten aufräumen. */
+const CHAT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/* ══════════════════════════════════════════════════════════════════════
+   UND WER RÄUMT AUF, WENN NIEMAND DAS HEFT ÖFFNET?
+
+   Weggeräumt wurde bisher genau einmal: beim Betreten des Raums. Wer ein
+   Heft eine Woche nicht anfasst, fand danach das Gespräch von damals
+   noch vollständig vor – die Frist stand zwar auf einem Tag, sie kam
+   aber nie zum Tragen, weil sie niemand auslöste.
+
+   Ein Dienst, der das ohne Beteiligte täte, gibt es hier nicht: Inkwells
+   hat keinen Server, nur Firebase und die Geräte der Beteiligten. Also
+   auf zwei Wegen:
+
+     · GEZEIGT wird ohnehin nur, was jünger als die Frist ist (onChat
+       verwirft den Rest). Das gilt sofort und in jedem Fenster, auch
+       wenn zum Löschen gerade niemand da war. Für den Nutzer ist der
+       Chat damit verlässlich nach einem Tag leer.
+     · GELÖSCHT wird laufend, solange irgendein Fenster den Raum offen
+       hat – beim Betreten und danach in diesem Takt. Eine Stunde, weil
+       eine Nachricht, die eine Stunde über ihre Frist hinaus in der
+       Datenbank liegt, niemandem schadet: sehen kann sie ohnehin keiner
+       mehr.
+   ══════════════════════════════════════════════════════════════════════ */
+const CHAT_PRUNE_EVERY_MS = 60 * 60 * 1000;
+
+/* Länger als das gilt niemand mehr als „schreibt gerade". Die Anzeige
+   wird bei jedem Anschlag aufgefrischt (CHAT_TYPING_REFRESH_MS in
+   ui/chat.js) – wer aufhört, verschwindet also nach dieser Zeit von
+   selbst, auch wenn seine Abmeldung nie ankommt. */
+const CHAT_TYPING_TTL_MS = 6000;
+
 let _rtdbPromise = null;
 
 /**
@@ -2161,7 +2478,8 @@ function colorForUid(uid) {
  * @param {object} [options]
  * @param {boolean} [options.isOwner]  ist DIESE Person der Besitzer?
  * @param {string}  [options.ownerUid] Kennung des Besitzers, für onOwnerAway
- * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/onOp/leave
+ * @returns {Promise<object>} Raum mit setPage/onPresence/onOwnerAway/sendOp/
+ *   onOp/sendChat/onChat/setTyping/onTyping/leave
  */
 /** Ein Versprechen, das nach der Frist auf jeden Fall zurueckkommt. */
 function mitZeitgrenze(versprechen, ms) {
@@ -2238,12 +2556,29 @@ function warteAufEinlass(mod, rtdb, docId, uid, timeoutMs = 25000) {
 async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
   const { mod, db: rtdb } = await loadRealtime();
-  const { ref, child, push, set, remove, onValue, onChildAdded, onDisconnect,
-          query: rtQuery, limitToLast, serverTimestamp: rtNow, get: rtGet } = mod;
+  const { ref, child, push, set, remove, onValue, onChildAdded, onChildRemoved,
+          onDisconnect, query: rtQuery, limitToLast,
+          serverTimestamp: rtNow, get: rtGet } = mod;
 
-  const meRef = ref(rtdb, `presence/${docId}/${me.uid}`);
-  const opsRef = ref(rtdb, `ops/${docId}`);
-  const rolesRef = ref(rtdb, `roles/${docId}`);
+  /* Der Name des Raums – normalerweise die Dokumentkennung. Weicht er
+     ab, hat der Besitzer den Raum einmal gewechselt; siehe roomKey in
+     describeDoc() und die Übernahme weiter unten. */
+  let raum = options.roomKey || docId;
+
+  let meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
+  let opsRef = ref(rtdb, `ops/${raum}`);
+  let rolesRef = ref(rtdb, `roles/${raum}`);
+  let chatRef = ref(rtdb, `chat/${raum}/m`);
+  let tippRef = ref(rtdb, `chat/${raum}/t`);
+
+  const zeigeAufRaum = (neuerRaum) => {
+    raum = neuerRaum;
+    meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
+    opsRef = ref(rtdb, `ops/${raum}`);
+    rolesRef = ref(rtdb, `roles/${raum}`);
+    chatRef = ref(rtdb, `chat/${raum}/m`);
+    tippRef = ref(rtdb, `chat/${raum}/t`);
+  };
 
   /* ── Steht die Leitung? ───────────────────────────────────────────
      Die Realtime Database nimmt Schreibvorgaenge auch ohne Verbindung
@@ -2283,11 +2618,40 @@ async function joinDocRoom(docId, options = {}) {
       r[uid] = true;
       if (rolle === 'edit') w[uid] = true;
     }
+    const rollen = { owner: me.uid, r, w };
+
+    /* ── Ist der Raum besetzt? ──────────────────────────────────────
+       roles/{raum} darf anlegen, wer sich selbst als owner einträgt.
+       Steht dort eine fremde Kennung, ist der Raum vergeben – und die
+       Regel lässt uns dort nie mehr hinein. Vorher endete das hier
+       endgültig: der Besitzer bekam eine Absage von der Datenbank, und
+       die Live-Zusammenarbeit dieses Dokuments blieb für immer aus.
+
+       Der Ausweg ist ein anderer Raum. Er wird gewürfelt und in den
+       Firestore-Kopf geschrieben; die Eingeladenen lesen ihn beim
+       nächsten Öffnen von dort. Wer den alten besetzt hält, sitzt
+       danach allein darin. */
+    let vorhanden = null;
+    try {
+      const snap = await mitZeitgrenze(rtGet(rolesRef), 8000);
+      vorhanden = snap && snap.exists() ? (snap.val() || {}).owner : null;
+    } catch (err) {
+      // Nicht lesen können heißt nicht besetzt – weitermachen und schreiben
+      console.warn('[Share] Rollenliste nicht lesbar:', err.message);
+    }
+
+    if (vorhanden && vorhanden !== me.uid) {
+      console.warn('[Share] Der Raum ist von einer fremden Kennung belegt – neuer Raum');
+      const neuerRaum = makeShareId();
+      await step('Raum wechseln', () => updateDoc(doc(db, DOCS, docId), { roomKey: neuerRaum }));
+      zeigeAufRaum(neuerRaum);
+    }
+
     /* Ohne Zeitgrenze: steht die Leitung nicht, kommt set() nie zurueck
        und das Oeffnen des Hefts bliebe haengen. Der Schreibvorgang ist
        damit nicht verloren - die Datenbank reicht ihn nach, sobald sie
        wieder kann. */
-    await mitZeitgrenze(set(rolesRef, { owner: me.uid, r, w }), 8000);
+    await mitZeitgrenze(set(rolesRef, rollen), 8000);
   } else {
     /* >>> Gehört dieser Raum wirklich dem, dem das Dokument gehört? <<<
        roles/{docId} darf anlegen, wer sich selbst als owner einträgt.
@@ -2301,8 +2665,13 @@ async function joinDocRoom(docId, options = {}) {
       const snap = await rtGet(rolesRef);
       const eingetragen = snap.exists() ? (snap.val() || {}).owner : null;
       if (eingetragen && eingetragen !== wanted) {
+        /* Für den Eingeladenen ist hier Schluss – aber nicht endgültig:
+           sobald der Besitzer das Dokument das nächste Mal öffnet, wechselt
+           er den Raum (oben), und beim nächsten Öffnen steht der neue Name
+           im Kopf. Deshalb sagt die Meldung, worauf man wartet. */
         throw new Error('ROOM_OWNER_MISMATCH: Der Raum gehört einer anderen '
-          + 'Kennung als das Dokument – Live-Betrieb bleibt aus.');
+          + 'Kennung als das Dokument. Sobald der Besitzer das Dokument '
+          + 'öffnet, wird ein neuer Raum angelegt.');
       }
     }
 
@@ -2327,7 +2696,7 @@ async function joinDocRoom(docId, options = {}) {
        Störung: ohne anwesenden Besitzer dürfen die Eingeladenen ohnehin
        nur lesen. Der Streifen sagt es dann. */
     try {
-      await warteAufEinlass(mod, rtdb, docId, me.uid);
+      await warteAufEinlass(mod, rtdb, raum, me.uid);
     } catch (err) {
       /* Ohne Leitung ist "der Besitzer hat dich nicht aufgenommen" die
          falsche Auskunft - wir haben schlicht nie nachsehen koennen. */
@@ -2426,6 +2795,7 @@ async function joinDocRoom(docId, options = {}) {
   let pendingPage = null;
   let pageTimer = null;
   let left = false;
+  let chatPruneTimer = null;
 
   // Nur einmal darüber klagen, nicht bei jedem Tastendruck
   let extrasWarned = false;
@@ -2514,15 +2884,76 @@ async function joinDocRoom(docId, options = {}) {
     }, wait);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     EIN BEOBACHTER, DER NICHT AUFGIBT
+
+     Firebase KÜNDIGT einen Beobachter, sobald die Regeln ihn einmal
+     abweisen – von selbst kommt er nie wieder. In einem fremden Raum ist
+     das keine Ausnahme, sondern der Normalfall: geht der Besitzer kurz
+     weg, ist der Zugang für einen Augenblick zu (siehe leave weiter
+     unten), und danach blieb es für immer still. Die Eingeladenen sahen
+     nichts mehr, blieben im Lesemodus und mussten das Dokument zumachen
+     und neu öffnen.
+
+     Deshalb wird nach einem Abbruch neu angemeldet, mit wachsendem
+     Abstand bis höchstens einer halben Minute.
+
+     >>> Wann Beharrlichkeit falsch ist <<<
+     Bei einem Zugang, den die Regeln GAR NICHT kennen. Dann ist der
+     nächste Versuch so aussichtslos wie der erste, und beharrlich heißt
+     nur noch: alle halbe Minute dieselbe Meldung in die Konsole, für
+     immer. Genau das ist mit dem Chat passiert, solange die
+     veröffentlichten Regeln den Zweig `chat` noch nicht hatten.
+
+     `aufgeben` entscheidet das. Trifft es zu, wird ein letztes Mal
+     gemeldet – mit dem, was zu tun ist – und dann ist Ruhe.
+
+     @param {(gut: Function, weg: Function) => Function} anmelden
+     @param {string} was  Name für die Konsole
+     @param {(err: Error) => boolean} [aufgeben]  Endgültig? Kein weiterer Versuch
+     ══════════════════════════════════════════════════════════════════ */
+  function beharrlich(anmelden, was, aufgeben) {
+    let beendet = false, uhr = null, pause = 800, aus = null;
+
+    const versuch = () => {
+      if (beendet) return;
+      aus = anmelden(
+        () => { pause = 800; },        // es kommt wieder etwas an
+        (err) => {
+          aus = null;
+          if (beendet) return;
+
+          if (typeof aufgeben === 'function' && aufgeben(err)) {
+            beendet = true;
+            return;
+          }
+
+          console.warn('[Share] Beobachter abgebrochen (' + was + '), neuer Versuch in '
+            + pause + ' ms:', err?.message || err);
+          uhr = setTimeout(versuch, pause);
+          pause = Math.min(pause * 2, 30000);
+        });
+    };
+    versuch();
+
+    const stop = () => {
+      beendet = true;
+      clearTimeout(uhr);
+      if (aus) { try { aus(); } catch (e) {} }
+      aus = null;
+    };
+    stops.push(stop);
+    return stop;
+  }
+
   function onPresence(callback) {
-    const stop = onValue(ref(rtdb, `presence/${docId}`), (snap) => {
+    return beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${raum}`), (snap) => {
+      gut();
       const all = snap.val() || {};
       // lost = die stehen gebliebene Marke eines Besitzers, dem die
       // Leitung abgerissen ist. Anwesend ist er damit gerade nicht.
       callback(Object.values(all).filter(p => p && p.uid !== me.uid && !p.lost));
-    }, () => callback([]));
-    stops.push(stop);
-    return stop;
+    }, (err) => { callback([]); weg(err); }), 'Anwesenheit');
   }
 
   /**
@@ -2571,7 +3002,8 @@ async function joinDocRoom(docId, options = {}) {
       report();
     }, () => { connected = false; report(); });
 
-    const stopOwner = onValue(ref(rtdb, `presence/${docId}/${ownerUid}`), (snap) => {
+    const stopOwner = beharrlich((gut, weg) => onValue(ref(rtdb, `presence/${raum}/${ownerUid}`), (snap) => {
+      gut();
       /* >>> Kein Eintrag zählt schon als weg <<<
          Ob der Besitzer abgestürzt ist oder ordentlich zugemacht hat,
          macht für die Gefahr keinen Unterschied: in beiden Fällen kann
@@ -2587,9 +3019,9 @@ async function joinDocRoom(docId, options = {}) {
       const eintrag = snap.val();
       ownerHere = snap.exists() && !eintrag?.lost;
       report();
-    }, () => { ownerHere = false; report(); });
+    }, (err) => { ownerHere = false; report(); weg(err); }), 'Besitzer');
 
-    stops.push(stopConn, stopOwner);
+    stops.push(stopConn);
     return () => { stopConn(); stopOwner(); };
   }
 
@@ -2650,18 +3082,305 @@ async function joinDocRoom(docId, options = {}) {
     });
   }
 
+  /* Auch dieser Strom meldet sich nach einem Abbruch wieder an – ohne das
+     war er nach dem ersten „permission_denied" für immer tot. Dass dabei
+     die letzten Meldungen ein zweites Mal hereinkommen, macht nichts: es
+     ist genau das, was auch beim Betreten passiert, und eine Yjs-Änderung
+     zweimal einzuarbeiten ändert nichts. */
   function onOp(callback) {
-    const stop = onChildAdded(
+    return beharrlich((gut, weg) => onChildAdded(
       rtQuery(opsRef, limitToLast(OP_BACKLOG)),
       (snap) => {
+        gut();
         const op = snap.val();
         if (!op || op.by === me.uid) return;   // eigene Änderungen nicht doppelt
         callback(op);
       },
-      (err) => console.warn('[Share] Änderungsstrom beendet:', err?.message || err)
-    );
-    stops.push(stop);
-    return stop;
+      (err) => weg(err)
+    ), 'Änderungsstrom');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DER CHAT
+
+     Das Gespräch NEBEN dem Dokument. Es liegt bewusst in einem eigenen
+     Baum und nicht im Änderungsstrom – die beiden Gründe stehen in
+     website/database.rules.json.
+
+     Name, Initialen und Farbe reisen an jeder Nachricht MIT, statt sie
+     beim Anzeigen aus der Anwesenheit zu holen. Sonst stünde über jeder
+     Zeile von jemandem, der inzwischen gegangen ist, ein Fragezeichen –
+     und gerade die alten Zeilen liest man später.
+     ══════════════════════════════════════════════════════════════════ */
+
+  const CHAT_MAX_LEN = 800;
+
+/* So viel einer Nachricht reist als Zitat mit, wenn jemand darauf
+   antwortet. Genug, um sie wiederzuerkennen; kurz genug, dass die
+   Antwort nicht doppelt so lang wird wie das Zitat darin. */
+const CHAT_QUOTE_LEN = 140;
+
+  /* ══════════════════════════════════════════════════════════════════
+     WENN DIE REGELN DEN CHAT NOCH NICHT KENNEN
+
+     Der Zweig `chat` ist neu. Solange die in der Firebase Console
+     veröffentlichten Regeln ihn nicht haben, fällt er auf `.read: false`
+     an der Wurzel – und JEDER Zugriff wird abgewiesen, Lesen wie
+     Schreiben.
+
+     Das ist kein Fehler, den ein weiterer Versuch behebt. Vorher lief
+     genau das: der Beobachter meldete sich alle halbe Minute neu an, die
+     Tipp-Anzeige schickte alle zwei Sekunden, und in der Konsole stand
+     eine Wand aus permission_denied – während der Nutzer im Fenster nur
+     sah, dass nichts passiert.
+
+     Jetzt wird EINMAL gesagt, was zu tun ist, und dann ist Ruhe. Der
+     übrige Live-Betrieb ist davon unberührt: Anwesenheit, Text und
+     Handschrift liegen in anderen Zweigen und laufen weiter.
+     ══════════════════════════════════════════════════════════════════ */
+
+  const CHAT_HILFE = 'Der Chat braucht den Zweig "chat" in den Regeln der '
+    + 'Realtime Database. Abhilfe: website/database.rules.json in der '
+    + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.';
+
+  let chatAus = '';                 // Grund, oder leer
+  const chatHoerer = new Set();     // wer über den Zustand Bescheid will
+
+  function istVerboten(err) {
+    const m = String(err?.message || err || '').toLowerCase();
+    return m.includes('permission_denied') || m.includes('permission denied');
+  }
+
+  /** Einmal melden, dann still bleiben. */
+  function chatFaelltAus(err) {
+    if (chatAus) return true;
+    chatAus = 'RULES';
+    console.warn('[Share] Der Chat ist abgewiesen worden. ' + CHAT_HILFE);
+    for (const cb of chatHoerer) { try { cb(chatAus); } catch (e) {} }
+    return true;
+  }
+
+  /* Ein abgewiesener Zugang kommt durch Wiederholen nicht zurück. Diese
+     Antwort beendet die Beharrlichkeit (siehe dort). */
+  function chatEndgueltig(err) {
+    return istVerboten(err) ? chatFaelltAus(err) : false;
+  }
+
+  /**
+   * Meldet, ob der Chat benutzbar ist. Der Rückruf kommt sofort mit dem
+   * jetzigen Stand und noch einmal, wenn er sich ändert.
+   *
+   * @param {(grund: string) => void} cb  '' heißt: er läuft
+   */
+  function onChatStatus(cb) {
+    chatHoerer.add(cb);
+    try { cb(chatAus); } catch (e) {}
+    return () => chatHoerer.delete(cb);
+  }
+
+  /**
+   * Schickt eine Nachricht in den Raum.
+   *
+   * Anders als sendOp darf das JEDER, der das Dokument lesen darf. Wer
+   * nur zusehen darf, hat oft genau deshalb eine Frage.
+   *
+   * @param {string} text
+   * @param {{id:string, name:string, text:string}} [antwortAuf]
+   *        Worauf geantwortet wird – oder nichts.
+   * @returns {Promise<boolean>} ob sie angekommen ist
+   */
+  function sendChat(text, antwortAuf) {
+    if (left || chatAus) return Promise.resolve(false);
+    const tx = String(text || '').replace(/\s+$/, '').slice(0, CHAT_MAX_LEN);
+    if (!tx) return Promise.resolve(false);
+
+    const eintrag = {
+      by: me.uid,
+      at: rtNow(),
+      tx,
+      nm: String(card.name || '').slice(0, 120),
+      ini: String(card.initials || '').slice(0, 4),
+      col: String(card.color || '').slice(0, 32)
+    };
+
+    /* ══════════════════════════════════════════════════════════════
+       DIE ANTWORT TRÄGT IHR ZITAT MIT SICH
+
+       Naheliegender wäre, nur die Kennung (rid) zu schicken und den
+       Text beim Anzeigen aus der Liste zu holen. Das geht hier nicht
+       verlässlich: geholt werden nur die letzten CHAT_BACKLOG
+       Nachrichten, und ältere sind nach einem Tag ohnehin gelöscht
+       (CHAT_MAX_AGE_MS). Eine Antwort auf etwas, das nicht mehr da
+       ist, stünde dann ohne jeden Bezug im Gespräch.
+
+       Deshalb reisen Name und ein kurzer Ausschnitt mit. Die Kennung
+       bleibt trotzdem dabei: solange das Ursprüngliche noch in der
+       Liste steht, springt ein Klick auf das Zitat dorthin.
+       ══════════════════════════════════════════════════════════════ */
+    if (antwortAuf && antwortAuf.id) {
+      eintrag.rid = String(antwortAuf.id).slice(0, 64);
+      eintrag.rn = String(antwortAuf.name || '').slice(0, 120);
+      eintrag.rt = String(antwortAuf.text || '').slice(0, CHAT_QUOTE_LEN);
+    }
+
+    return push(chatRef, eintrag).then(() => true).catch((err) => {
+      if (istVerboten(err)) { chatFaelltAus(err); return false; }
+      console.warn('[Share] Nachricht nicht gesendet:', err?.message || err);
+      return false;
+    });
+  }
+
+  /**
+   * Nimmt eine eigene Nachricht zurück.
+   *
+   * Nur die eigene: die Regel in website/database.rules.json lässt
+   * Fremdes erst nach Ablauf der Frist löschen (dann räumt pruneChat
+   * ohnehin auf). Geprüft wird das dort und nicht hier – was der Client
+   * verspricht, gilt nicht.
+   *
+   * @returns {Promise<boolean>}
+   */
+  function deleteChat(id) {
+    if (left || chatAus || !id) return Promise.resolve(false);
+    return remove(child(chatRef, String(id))).then(() => true).catch((err) => {
+      if (istVerboten(err)) return false;
+      console.warn('[Share] Nachricht nicht geloescht:', err?.message || err);
+      return false;
+    });
+  }
+
+  /**
+   * Meldet jede Nachricht – auch die eigenen.
+   *
+   * >>> Warum hier NICHT gefiltert wird <<<
+   * sendOp lässt die eigenen Änderungen weg, weil sie örtlich schon
+   * eingearbeitet sind. Im Chat ist es umgekehrt: erst wenn die eigene
+   * Zeile aus dem Raum zurückkommt, steht sie wirklich dort. Genau das
+   * soll man sehen – sonst stünde sie im Fenster und wäre nie
+   * angekommen.
+   */
+  function onChat(callback) {
+    return beharrlich((gut, weg) => onChildAdded(
+      rtQuery(chatRef, limitToLast(CHAT_BACKLOG)),
+      (snap) => {
+        gut();
+        const m = snap.val();
+        if (!m || !m.tx) return;
+        /* Abgelaufenes gar nicht erst durchreichen. Gelöscht wird es
+           von pruneChat – aber darauf zu warten hiesse, dass ein
+           Gespräch von vorletzter Woche noch dasteht, bloss weil
+           zwischendurch niemand den Raum betreten hat. */
+        if (typeof m.at === 'number' && Date.now() - m.at > CHAT_MAX_AGE_MS) return;
+        callback({
+          id: snap.key,
+          uid: m.by || '',
+          at: typeof m.at === 'number' ? m.at : Date.now(),
+          text: String(m.tx),
+          name: m.nm || '',
+          initials: m.ini || '?',
+          color: m.col || '',
+          selbst: m.by === me.uid,
+          // Worauf geantwortet wurde – siehe sendChat
+          antwort: m.rid ? { id: String(m.rid), name: m.rn || '', text: String(m.rt || '') } : null
+        });
+      },
+      (err) => weg(err)
+    ), 'Chat', chatEndgueltig);
+  }
+
+  /**
+   * Meldet, wenn eine Nachricht verschwindet.
+   *
+   * Zwei Gründe dafür: jemand hat seine eigene zurückgenommen, oder
+   * pruneChat hat Abgelaufenes weggeräumt. Für die Anzeige ist beides
+   * dasselbe – die Zeile gehört weg.
+   *
+   * >>> Warum das eine eigene Anmeldung braucht <<<
+   * onChildAdded meldet nur das Dazukommen. Ohne den Gegenpart blieb
+   * eine zurückgenommene Nachricht bei allen anderen stehen, bis sie
+   * das Dokument neu öffneten – und genau das sieht aus, als habe das
+   * Löschen nicht funktioniert.
+   */
+  function onChatRemoved(callback) {
+    return beharrlich((gut, weg) => onChildRemoved(
+      rtQuery(chatRef, limitToLast(CHAT_BACKLOG)),
+      (snap) => { gut(); try { callback(snap.key); } catch (e) {} },
+      (err) => weg(err)
+    ), 'Chat-Ruecknahme', chatEndgueltig);
+  }
+
+  /**
+   * Sagt, dass man gerade tippt – oder aufgehört hat.
+   *
+   * Bewusst nicht in der Anwesenheit: die schreibt nur der Eigentümer
+   * ihres Eintrags, und jede Änderung dort lässt bei allen Beteiligten
+   * Marken und Sperrbänder neu rechnen (ui/collab.js). Für drei
+   * wackelnde Punkte ist das zu viel Betrieb.
+   */
+  function setTyping(an) {
+    /* Bei abgewiesenem Chat gar nicht erst losschicken: das hier kommt
+       im Takt des Tippens und war der lauteste Teil der Fehlerwand. */
+    if (left || chatAus) return Promise.resolve(false);
+    const ziel = child(tippRef, me.uid);
+    const p = an ? set(ziel, rtNow()) : remove(ziel);
+    return p.then(() => true).catch((err) => {
+      if (istVerboten(err)) chatFaelltAus(err);
+      return false;
+    });
+  }
+
+  /**
+   * Meldet laufend, WER gerade tippt – ohne einen selbst.
+   *
+   * Der Zeitstempel wird hier ausgewertet und nicht beim Empfänger: eine
+   * Anzeige, die hängen bleibt, weil jemandem die Leitung abgerissen
+   * ist, sieht aus wie ein Fehler. Gemessen wird gegen die eigene Uhr –
+   * gehen die Uhren auseinander, verschiebt sich die Anzeige um diesen
+   * Betrag, und mehr als ein paar Sekunden zu früh oder zu spät kann
+   * dabei nicht herauskommen.
+   */
+  function onTyping(callback) {
+    let uhr = null;
+    let zuletzt = {};
+
+    const melde = () => {
+      const jetzt = Date.now();
+      const frisch = [];
+      for (const [uid, at] of Object.entries(zuletzt)) {
+        if (uid === me.uid) continue;
+        if (typeof at !== 'number') continue;
+        if (jetzt - at > CHAT_TYPING_TTL_MS) continue;
+        frisch.push(uid);
+      }
+      try { callback(frisch); } catch (e) { /* Anzeige darf nichts kosten */ }
+    };
+
+    const stop = beharrlich((gut, weg) => onValue(tippRef,
+      (snap) => { gut(); zuletzt = snap.val() || {}; melde(); },
+      (err) => weg(err)
+    ), 'Tipp-Anzeige', chatEndgueltig);
+
+    /* Ein Eintrag, der nicht mehr aufgefrischt wird, verfällt von selbst.
+       Ohne diesen Takt bliebe er stehen, bis sich irgendetwas anderes am
+       Baum ändert – und das kann bei einem abgerissenen Gerät nie sein. */
+    uhr = setInterval(melde, 1500);
+
+    return () => { clearInterval(uhr); stop(); };
+  }
+
+  /** Alte Nachrichten wegräumen. Wie pruneOps, nur mit längerer Frist. */
+  async function pruneChat() {
+    if (left || chatAus) return;
+    try {
+      const snap = await rtGet(chatRef);
+      const alle = snap.val() || {};
+      const grenze = Date.now() - CHAT_MAX_AGE_MS;
+      for (const [key, m] of Object.entries(alle)) {
+        if (typeof m?.at === 'number' && m.at < grenze) {
+          await remove(child(chatRef, key)).catch(() => {});
+        }
+      }
+    } catch (err) { /* nicht wichtig genug für eine Meldung */ }
   }
 
   /** Alte Einträge wegräumen – sonst wächst der Strom endlos. */
@@ -2682,20 +3401,56 @@ async function joinDocRoom(docId, options = {}) {
     if (left) return;
     left = true;
     clearTimeout(pageTimer);
+    clearInterval(chatPruneTimer);
     for (const stop of stops) { try { stop(); } catch (e) {} }
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
 
-    /* Der Besitzer nimmt die Rollenliste wieder mit. Sie gilt nur,
-       solange er da ist – wer eingeladen ist, darf ohne ihn ohnehin nur
-       lesen. Bleibt sie stehen, behielte ein später Entfernter seinen
-       Zugang zum Raum bis zum nächsten Betreten des Besitzers. */
+    /* Die Tipp-Anzeige mitnehmen. Sie verfiele zwar von selbst
+       (CHAT_TYPING_TTL_MS), aber „X schreibt gerade" von jemandem, der
+       das Dokument eben zugemacht hat, sind sechs Sekunden zu viel. */
+    try { await remove(child(tippRef, me.uid)); } catch (e) {}
+
+    /* ══════════════════════════════════════════════════════════════════
+       DER BESITZER NIMMT NUR DAS SCHREIBRECHT MIT, NICHT DIE GANZE LISTE
+
+       Hier stand remove(rolesRef) – die Rollenliste verschwand ganz,
+       sobald der Besitzer den Raum verliess. Die Regeln hängen aber ALLES
+       daran: presence/$docId und ops/$docId sind nur lesbar, wenn
+       roles/$docId/r/$uid gesetzt ist (website/database.rules.json).
+
+       In dem Augenblick verloren deshalb alle anderen Anwesenheit UND
+       Änderungsstrom auf einen Schlag – und zwar endgültig: Firebase
+       KÜNDIGT einen Beobachter, den die Regeln einmal abgewiesen haben.
+       Kam der Besitzer zurück, blieben sie taub im Lesemodus sitzen und
+       sahen von seiner Arbeit nichts. Es half nur, das Dokument zuzumachen
+       und neu zu öffnen. Genau so wurde es zweimal gemeldet.
+
+       Genommen wird jetzt nur das SCHREIBRECHT. Das deckt den Grund, aus
+       dem die Liste überhaupt weggeräumt wurde – niemand soll ohne den
+       Besitzer in den Raum schreiben –, und lässt das Mitlesen stehen.
+       Ohne ihn darf ohnehin niemand bearbeiten (onOwnerAway).
+
+       Was bleibt: wer später aus dem Dokument entfernt wird, kann bis zum
+       nächsten Betreten des Besitzers noch mitlesen. Das ist der kleinere
+       Schaden – an den Inhalt selbst kommt er über Firestore nicht mehr
+       heran, und die Freigabe ist dort sofort weg.
+       ══════════════════════════════════════════════════════════════════ */
     if (options.isOwner) {
-      try { await remove(rolesRef); } catch (e) { /* dann beim nächsten Mal */ }
+      try { await set(child(rolesRef, 'w'), { [me.uid]: true }); }
+      catch (e) { /* dann beim nächsten Mal */ }
     }
   }
 
   pruneOps();
+  pruneChat();
+
+  /* Und danach weiter, solange der Raum offen ist – siehe
+     CHAT_PRUNE_EVERY_MS. Der Takt hängt am Raum und nicht am Fenster:
+     leave() nimmt ihn mit, sonst räumte ein längst verlassener Raum
+     weiter in einer Datenbank herum, in der er nichts mehr zu suchen
+     hat. */
+  chatPruneTimer = setInterval(pruneChat, CHAT_PRUNE_EVERY_MS);
 
   /**
    * Die Rollenliste des Raums neu schreiben. Nur der Besitzer darf das,
@@ -2734,7 +3489,12 @@ async function joinDocRoom(docId, options = {}) {
     });
   }
 
-  return { me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles, onConnection, leave };
+  return {
+    me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles,
+    onConnection, leave,
+    // Das Gespräch neben dem Dokument
+    sendChat, deleteChat, onChat, onChatRemoved, setTyping, onTyping, onChatStatus
+  };
 }
 
 /* ── Fassade ────────────────────────────────────────────────────────
@@ -2742,7 +3502,7 @@ async function joinDocRoom(docId, options = {}) {
    globalen Gültigkeitsbereich), dieses Modul ist ein ES-Modul.
    ─────────────────────────────────────────────────────────────────── */
 
-const InkwellShare = {
+const InkwellsShare = {
   // Lesekopien (unverändert)
   publishNotebook,
   loadSharedNotebook,
@@ -2799,6 +3559,10 @@ const InkwellShare = {
   normalizeEmail,
   looksLikeEmail,
 
+  // Versionssperre: passt meine Fassung zu der des Besitzers?
+  versionPasst,
+  eigeneAppVersion,
+
   // Umwandler – reine Funktionen, für Tests und die Oberfläche
   splitNotebook,
   assembleNotebook,
@@ -2812,11 +3576,11 @@ const InkwellShare = {
 };
 
 if (typeof window !== 'undefined') {
-  window.InkwellShare = InkwellShare;
-  document.dispatchEvent(new Event('inkwell-share-ready'));
+  window.InkwellsShare = InkwellsShare;
+  document.dispatchEvent(new Event('inkwells-share-ready'));
 }
 
-export default InkwellShare;
+export default InkwellsShare;
 export {
   publishNotebook, loadSharedNotebook, revokeShare, isOwnShare,
   ensureOwnerId, currentOwnerId, shareUrlFor,
@@ -2831,5 +3595,6 @@ export {
   loadDocument, loadPage, registerMyUid, roomRolesFrom,
   docUrlFor, appUrlFor, normalizeEmail, looksLikeEmail,
   splitNotebook, assembleNotebook, fingerprintNotebook,
+  versionPasst, eigeneAppVersion,
   joinDocRoom, savePageText, initialsOf, colorForUid
 };

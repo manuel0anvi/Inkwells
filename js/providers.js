@@ -24,7 +24,7 @@ const WebGoogleProvider = {
        durchsetzbar. Google gibt das ID-Token nur zusammen mit einer nonce
        heraus; die muss den Seitenwechsel überleben. */
     const nonce = randomVerifier();
-    try { sessionStorage.setItem('inkwell_auth_nonce', nonce); } catch (e) {}
+    try { sessionStorage.setItem('inkwells_auth_nonce', nonce); } catch (e) {}
 
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
@@ -51,10 +51,10 @@ const WebGoogleProvider = {
 
   async completeAuth(params) {
     const nonce = (() => {
-      try { return sessionStorage.getItem('inkwell_auth_nonce') || ''; }
+      try { return sessionStorage.getItem('inkwells_auth_nonce') || ''; }
       catch (e) { return ''; }
     })();
-    try { sessionStorage.removeItem('inkwell_auth_nonce'); } catch (e) {}
+    try { sessionStorage.removeItem('inkwells_auth_nonce'); } catch (e) {}
 
     return {
       accessToken: params.get('access_token'),
@@ -92,11 +92,11 @@ const WebGoogleProvider = {
     );
     return (data.files || [])
       .filter(f => f.mimeType !== 'application/vnd.google-apps.folder')
-      .filter(f => !f.name?.startsWith('inkwell-'))
-      .filter(f => f.name?.endsWith('.json') || f.name?.endsWith('.jrnl') || f.appProperties?.inkwellId)
+      .filter(f => !f.name?.startsWith('inkwells-'))
+      .filter(f => f.name?.endsWith('.json') || f.name?.endsWith('.jrnl') || f.appProperties?.inkwellsId)
       .map(f => ({
         id: f.id, name: f.name, modifiedTime: f.modifiedTime,
-        size: Number(f.size) || 0, inkwellId: f.appProperties?.inkwellId || null
+        size: Number(f.size) || 0, inkwellsId: f.appProperties?.inkwellsId || null
       }));
   },
 
@@ -132,7 +132,7 @@ function describeMicrosoftTokenError(detail) {
   if (/AADSTS90023|Cross-origin token redemption/i.test(text)) {
     return 'Die Adresse dieser Website ist in Azure als Plattform „Web" eingetragen. '
       + 'Für die Anmeldung im Browser muss sie unter „Single-page application" stehen: '
-      + 'Azure Portal → App-Registrierungen → Inkwell → Authentifizierung → '
+      + 'Azure Portal → App-Registrierungen → Inkwells → Authentifizierung → '
       + `„${window.location.origin}/" unter „Web" entfernen und unter „Single-page application" (SPA) neu hinzufügen. `
       + 'Siehe CLOUD_SETUP.md, Abschnitt B2.';
   }
@@ -167,9 +167,9 @@ const WebMicrosoftProvider = {
     const nonce = randomVerifier();
 
     // Muss den Seitenwechsel überleben
-    sessionStorage.setItem('inkwell_pkce_verifier', verifier);
-    sessionStorage.setItem('inkwell_pkce_redirect', redirectUri);
-    sessionStorage.setItem('inkwell_auth_nonce', nonce);
+    sessionStorage.setItem('inkwells_pkce_verifier', verifier);
+    sessionStorage.setItem('inkwells_pkce_redirect', redirectUri);
+    sessionStorage.setItem('inkwells_auth_nonce', nonce);
 
     const params = new URLSearchParams({
       client_id: MICROSOFT_CLIENT_ID,
@@ -196,9 +196,9 @@ const WebMicrosoftProvider = {
 
   async completeAuth(params) {
     const code = params.get('code');
-    const verifier = sessionStorage.getItem('inkwell_pkce_verifier');
-    const redirectUri = sessionStorage.getItem('inkwell_pkce_redirect');
-    const nonce = sessionStorage.getItem('inkwell_auth_nonce') || '';
+    const verifier = sessionStorage.getItem('inkwells_pkce_verifier');
+    const redirectUri = sessionStorage.getItem('inkwells_pkce_redirect');
+    const nonce = sessionStorage.getItem('inkwells_auth_nonce') || '';
     if (!verifier || !redirectUri) throw new Error('Anmeldedaten unvollständig – bitte erneut versuchen');
 
     const res = await fetch(MICROSOFT_TOKEN_ENDPOINT, {
@@ -215,9 +215,9 @@ const WebMicrosoftProvider = {
     });
 
     const data = await res.json().catch(() => ({}));
-    sessionStorage.removeItem('inkwell_pkce_verifier');
-    sessionStorage.removeItem('inkwell_pkce_redirect');
-    sessionStorage.removeItem('inkwell_auth_nonce');
+    sessionStorage.removeItem('inkwells_pkce_verifier');
+    sessionStorage.removeItem('inkwells_pkce_redirect');
+    sessionStorage.removeItem('inkwells_auth_nonce');
 
     if (!res.ok) {
       throw new Error(describeMicrosoftTokenError(
@@ -299,7 +299,7 @@ const WebMicrosoftProvider = {
       for (const item of (data.value || [])) {
         if (item.folder) continue;
         if (!item.name?.endsWith('.json') && !item.name?.endsWith('.jrnl')) continue;
-        if (item.name.startsWith('inkwell-')) continue;
+        if (item.name.startsWith('inkwells-')) continue;
 
         const base = item.name.replace(/\.(json|jrnl)$/i, '');
         const idx = base.lastIndexOf('__');
@@ -308,7 +308,7 @@ const WebMicrosoftProvider = {
           name: item.name,
           modifiedTime: item.lastModifiedDateTime,
           size: Number(item.size) || 0,
-          inkwellId: idx >= 0 ? base.slice(idx + 2) : null
+          inkwellsId: idx >= 0 ? base.slice(idx + 2) : null
         });
       }
       url = data['@odata.nextLink'] || null;

@@ -6,7 +6,7 @@
      <script src="https://fremd"> laeuft damit nicht. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://login.microsoftonline.com; object-src 'none'; base-uri 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inkwell — Digitales Notizbuch</title>
+<title>Inkwells — Digitales Notizbuch</title>
 
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="alternate icon" type="image/x-icon" href="icon.ico">
@@ -19,8 +19,8 @@
 
 <nav>
   <a href="#" class="nav-logo">
-    <img src="icon.png" alt="Inkwell Logo">
-    <span>Inkwell</span>
+    <img src="icon.png" alt="Inkwells Logo">
+    <span>Inkwells</span>
   </a>
   <div class="nav-right">
     <a href="community/" class="nav-dl nav-community" title="Community">
@@ -59,12 +59,12 @@
 <section class="hero">
   <div class="hero-badge" data-i18n="hero_badge">Digitales Notizbuch für Windows</div>
   <div class="hero-icon">
-    <img src="icon.png" alt="Inkwell Logo">
+    <img src="icon.png" alt="Inkwells Logo">
   </div>
-  <h1><span>Ink</span>well</h1>
+  <h1><span>Ink</span>wells</h1>
   <p class="hero-tagline" data-i18n="hero_tagline">Text und Handschrift vereint in einem eleganten, digitalen Notizbuch.</p>
   <div class="hero-actions">
-    <a id="hero-dl" href="#" class="btn-p" download="Inkwell-Setup.exe">
+    <a id="hero-dl" href="#" class="btn-p" download="Inkwells-Setup.exe">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span data-i18n="hero_dl">Download für Windows</span>
     </a>
@@ -94,16 +94,27 @@
 <section class="dl-section" id="download">
   <div class="ver-badge" id="vbadge">Version 1.0.0</div>
   <h2 data-i18n="dl_title">Bereit zum Schreiben?</h2>
-  <p data-i18n="dl_sub">Lade Inkwell kostenlos herunter und starte noch heute mit deinen ersten digitalen Notizen.</p>
+  <p data-i18n="dl_sub">Lade Inkwells kostenlos herunter und starte noch heute mit deinen ersten digitalen Notizen.</p>
   <div class="dl-box">
     <div class="dl-plat">
       <div class="pl-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg></div>
       <div class="pl-info"><strong>Windows</strong><span data-i18n="dl_info">Windows 10 / 11 · x64 · NSIS Installer</span></div>
     </div>
-    <a id="main-dl" href="#" class="btn-p" style="width:100%;justify-content:center;" download="Inkwell-Setup.exe">
+    <a id="main-dl" href="#" class="btn-p" style="width:100%;justify-content:center;" download="Inkwells-Setup.exe">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span data-i18n="dl_btn">Inkwell-Setup.exe herunterladen</span>
+      <span data-i18n="dl_btn">Inkwells-Setup.exe herunterladen</span>
     </a>
+    <!-- Weg ueber den Microsoft Store. Bleibt verborgen, solange
+         STORE_URL leer ist - ein toter Link waere schlimmer als keiner. -->
+    <div id="store-block" class="dl-store" style="display:none">
+      <div class="dl-or"><span data-i18n="dl_or">oder</span></div>
+      <a id="store-dl" href="#" class="btn-store" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+        <span data-i18n="dl_store_btn">Im Microsoft Store laden</span>
+      </a>
+      <p class="dl-store-note" data-i18n="dl_store_note">Ohne Warnmeldung von Windows, Updates kommen von selbst.</p>
+    </div>
+
     <div class="dl-meta"><span id="dm-ver">Version 1.0.0</span><span data-i18n="dl_free">Kostenlos &amp; Open Source</span></div>
   </div>
 </section>
@@ -117,7 +128,7 @@
 </section>
 
 <footer>
-  <p>© 2026 Inkwell · Anvi</p>
+  <p>© 2026 Inkwells · Anvi</p>
   <div class="fl">
     <a href="https://github.com/manuel0anvi/Inkwell" target="_blank">GitHub</a>
     <a href="community/" data-i18n="nav_community">Community</a>
@@ -157,7 +168,7 @@
         <span data-i18n="login_microsoft">Mit Microsoft anmelden</span>
       </button>
       <p style="font-size:12px; color:var(--text-muted); margin:0; line-height:1.5;" data-i18n="login_scope_hint">
-        Inkwell erhält nur Zugriff auf die Dateien, die es selbst im Ordner „Inkwell“ anlegt.
+        Inkwells erhält nur Zugriff auf die Dateien, die es selbst im Ordner „Inkwells“ anlegt.
       </p>
       <p style="font-size:12px; color:var(--text-muted); margin:0; line-height:1.5;" data-i18n="login_separate_hint">
         Beide Konten sind getrennt: Hefte in Google Drive erscheinen nicht in OneDrive und umgekehrt.
@@ -180,8 +191,8 @@
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ms-hint-title">
     <div class="modal-kicker" data-i18n="ms_hint_kicker">Vor der Anmeldung</div>
     <h4 id="ms-hint-title" data-i18n="ms_hint_title">Nur mit privatem Microsoft-Konto</h4>
-    <p data-i18n="ms_hint_body">Inkwell ist für persönliche Microsoft-Konten eingerichtet — also Outlook.com, Hotmail, Live oder MSN.</p>
-    <p class="modal-note" data-i18n="ms_hint_body_2">Mit einem Geschäfts- oder Schulkonto schlägt die Anmeldung fehl. Diese Konten verwaltet deine Organisation, und sie müsste Inkwell erst freigeben.</p>
+    <p data-i18n="ms_hint_body">Inkwells ist für persönliche Microsoft-Konten eingerichtet — also Outlook.com, Hotmail, Live oder MSN.</p>
+    <p class="modal-note" data-i18n="ms_hint_body_2">Mit einem Geschäfts- oder Schulkonto schlägt die Anmeldung fehl. Diese Konten verwaltet deine Organisation, und sie müsste Inkwells erst freigeben.</p>
     <div class="modal-actions">
       <button id="ms-hint-cancel" class="btn-m" type="button" data-i18n="downgrade_cancel">Abbrechen</button>
       <button id="ms-hint-confirm" class="btn-m warn" type="button" data-i18n="ms_hint_confirm">Verstanden, weiter</button>
@@ -238,7 +249,22 @@
 <script src="js/admin.js"></script>
 <script>
 const GH_USER = 'manuel0anvi';
-const GH_REPO = 'Inkwell';
+const GH_REPO = 'Inkwells';
+
+/* Adresse der Store-Eintragung. Steht erst fest, wenn die App in Partner
+   Center veroeffentlicht ist - sie sieht dann so aus:
+       https://apps.microsoft.com/detail/9NBLGGH4XXXX
+   Solange hier nichts steht, bleibt der Store-Knopf unsichtbar. */
+const STORE_URL = '';
+
+(function zeigeStore() {
+  if (!STORE_URL) return;
+  const block = document.getElementById('store-block');
+  const link = document.getElementById('store-dl');
+  if (!block || !link) return;
+  link.href = STORE_URL;
+  block.style.display = 'block';
+})();
 
 let releases = [];
 let pendingDowngrade = null;
@@ -447,7 +473,7 @@ function openLoginModal(reason) {
 }
 
 btnOpenLogin.addEventListener('click', () => {
-  if (!isInkwellLoggedIn()) openLoginModal();
+  if (!isInkwellsLoggedIn()) openLoginModal();
 });
 
 // Google leitet auf die Startseite zurück – Callback zuerst behandeln.
@@ -482,8 +508,8 @@ btnOpenLogin.addEventListener('click', () => {
   // Sonst: angemeldete Nutzer direkt ins Dashboard. Ist das Token gerade
   // abgelaufen, wird vorher still erneuert, damit man nicht grundlos
   // wieder auf der Startseite landet.
-  const active = isInkwellLoggedIn()
-    ? getInkwellSession()
+  const active = isInkwellsLoggedIn()
+    ? getInkwellsSession()
     : (getRememberedEmail() ? await ensureFreshToken() : null);
 
   if (active) window.location.replace('dashboard/');

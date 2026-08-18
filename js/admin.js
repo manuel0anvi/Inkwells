@@ -4,7 +4,7 @@
    Diese Datei ist ein klassisches Script (kein Modul), damit die Seiten
    ihre Funktionen wie gewohnt aus onclick="…" aufrufen können. Die
    eigentliche Anbindung an Firebase steckt in js/firebase.js und kommt
-   über window.InkwellForum herein.
+   über window.InkwellsForum herein.
 
    Wichtig zum Verständnis: Nichts hier schützt irgendetwas. Ob gelöscht
    oder unter geschütztem Namen geschrieben werden darf, entscheidet
@@ -15,9 +15,9 @@
 
 /* ── Warten auf js/firebase.js ──────────────────────────────────────
    Das Modul läuft erst nach den klassischen Scripts. Bis dahin gibt es
-   window.InkwellForum noch nicht. */
+   window.InkwellsForum noch nicht. */
 function whenAdminApiReady() {
-  if (window.InkwellForum) return Promise.resolve(window.InkwellForum);
+  if (window.InkwellsForum) return Promise.resolve(window.InkwellsForum);
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -25,9 +25,9 @@ function whenAdminApiReady() {
       15000
     );
 
-    document.addEventListener('inkwell-forum-ready', () => {
+    document.addEventListener('inkwells-forum-ready', () => {
       clearTimeout(timer);
-      if (window.InkwellForum) resolve(window.InkwellForum);
+      if (window.InkwellsForum) resolve(window.InkwellsForum);
       else reject(new Error('ADMIN_API_MISSING'));
     }, { once: true });
   });
@@ -58,7 +58,7 @@ async function isAdminSignedIn() {
    Auf der Adminseite selbst passiert das nicht: die hat ihre eigene
    Navigation und setzt data-admin bereits beim Laden. */
 function markAdminOnBody(admin) {
-  document.body.dataset.inkwellAdmin = admin ? 'yes' : 'no';
+  document.body.dataset.inkwellsAdmin = admin ? 'yes' : 'no';
 
   if (typeof checkCommonAuth !== 'function') return;
 

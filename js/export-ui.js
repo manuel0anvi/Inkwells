@@ -184,7 +184,7 @@
 
   function printSelection(numbers) {
     const previousTitle = document.title;
-    document.title = (current.notebook.name || 'Inkwell').replace(/[\\/:*?"<>|]/g, '_');
+    document.title = (current.notebook.name || 'Inkwells').replace(/[\\/:*?"<>|]/g, '_');
 
     // Für den Druck in Originalgröße darstellen und alles ausblenden,
     // was nicht zur Auswahl gehört.
@@ -228,7 +228,7 @@
   /* ── Word ─────────────────────────────────────────────────────────── */
 
   async function downloadDocx(numbers) {
-    if (!global.InkwellDocx) { setStatus(t('export_docx_unavailable')); return; }
+    if (!global.InkwellsDocx) { setStatus(t('export_docx_unavailable')); return; }
 
     setStatus(t('export_working'));
 
@@ -243,7 +243,7 @@
         headerRight: fmtPageDate(item.page.date)
       }));
 
-    const bytes = await InkwellDocx.build(entries, {
+    const bytes = await InkwellsDocx.build(entries, {
       title: notebook.name,
       onProgress: (done, total) => setStatus(`${t('export_working')} ${done}/${total}`)
     });
@@ -255,7 +255,7 @@
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = InkwellDocx.safeFileName(notebook.name) + '.docx';
+    link.download = InkwellsDocx.safeFileName(notebook.name) + '.docx';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -324,5 +324,5 @@
 
   if (typeof addLangChangeListener === 'function') addLangChangeListener(translate);
 
-  global.InkwellExport = { open, close };
+  global.InkwellsExport = { open, close };
 })(window);

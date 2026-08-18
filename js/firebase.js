@@ -15,7 +15,7 @@
    direkt von Googles CDN. Weil ein <script type="module"> seinen eigenen
    Gültigkeitsbereich hat, die Forenseite ihre Funktionen aber aus
    onclick="…"-Attributen aufruft, wird hier eine kleine Fassade unter
-   window.InkwellForum bereitgestellt.
+   window.InkwellsForum bereitgestellt.
 
    Version des SDK bewusst festgenagelt – so ändert sich nichts unter der
    Hand. Zum Aktualisieren nur die Nummer in beiden Import-Zeilen tauschen.
@@ -452,7 +452,7 @@ function watchPosts(onChange, onError) {
    globalen Gültigkeitsbereich). Über window kommen beide Welten zusammen.
    ─────────────────────────────────────────────────────────────────── */
 
-window.InkwellForum = {
+window.InkwellsForum = {
   listPosts,
   listReplies,
   createPost,
@@ -478,6 +478,6 @@ window.InkwellForum = {
 
 // Signal für die Seite: ab jetzt darf geladen werden. Wird auch dann
 // gebraucht, wenn das Modul (Netz, Blocker) gar nicht erst hochkommt –
-// dann bleibt window.InkwellForum leer und die Seite zeigt einen Fehler,
+// dann bleibt window.InkwellsForum leer und die Seite zeigt einen Fehler,
 // statt endlos "Lade Beiträge…" anzuzeigen.
-document.dispatchEvent(new Event('inkwell-forum-ready'));
+document.dispatchEvent(new Event('inkwells-forum-ready'));
