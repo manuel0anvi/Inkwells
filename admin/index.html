@@ -110,17 +110,83 @@ body[data-admin="yes"] .admin-gate { display: none; }
   padding: 20px; margin-bottom: 26px; background: var(--navy-card);
 }
 
-.ziel-gitter {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 2px 18px;
+.ziel-zeile { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-bottom: 8px; }
+
+/* Die Anbieter-Auswahl haengt an der Zeile darueber und wird deshalb
+   eingerueckt - der Strich links zeigt, wozu sie gehoert. */
+.ziel-unterzeile {
+  display: flex; flex-wrap: wrap; gap: 4px 22px;
+  margin: -2px 0 12px 14px; padding-left: 14px;
+  border-left: 2px solid var(--gold-dim, var(--navy-border));
 }
 .admin-check {
-  display: flex; align-items: center; gap: 9px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
   font-family: 'Jost', sans-serif; font-weight: 300; font-size: 14px;
-  color: var(--cream); margin-bottom: 5px; text-transform: none;
-  letter-spacing: normal;
+  color: var(--text-body); margin-bottom: 5px; text-transform: none;
+  letter-spacing: normal; transition: color .15s;
 }
-.admin-check input { width: auto; margin: 0; flex: none; }
+.admin-check:hover { color: var(--cream); }
+
+/* ── Haken und Punkte in Inkwells-Art ───────────────────────────────
+   Die des Browsers sind blau und quadratisch und passen in keine der
+   drei Sprachen zu dieser Seite. Deshalb selbst gezeichnet: Gold auf
+   Navy, derselbe duenne Rand wie bei den Eingabefeldern.
+
+   appearance:none nimmt die Vorgabe weg – danach ist das Feld eine
+   leere Flaeche, die hier von Hand gefuellt wird. */
+.admin-check input[type="checkbox"],
+.admin-check input[type="radio"] {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; flex: none; margin: 0; padding: 0;
+  background: var(--navy); border: 1px solid var(--navy-border);
+  cursor: pointer; position: relative;
+  transition: border-color .15s, background .15s;
+}
+.admin-check input[type="checkbox"] { border-radius: 3px; }
+.admin-check input[type="radio"] { border-radius: 50%; }
+
+.admin-check:hover input:not(:checked) { border-color: var(--gold-dark); }
+
+.admin-check input:checked { border-color: var(--gold); background: var(--gold-dim); }
+
+/* Der Haken: zwei Kanten eines Kastens, gedreht. Kein Zeichensatz noetig,
+   und er sitzt in jeder Groesse richtig. */
+.admin-check input[type="checkbox"]:checked::after {
+  content: ''; position: absolute;
+  left: 4px; top: 1px; width: 5px; height: 9px;
+  border: solid var(--gold-light);
+  border-width: 0 2px 2px 0;
+  transform: rotate(43deg);
+}
+
+.admin-check input[type="radio"]:checked::after {
+  content: ''; position: absolute;
+  left: 3px; top: 3px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--gold-light);
+}
+
+.admin-check input:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+
+/* ── Datumsfeld ─────────────────────────────────────────────────────
+   color-scheme sagt dem Browser, dass der Kalender dunkel sein soll –
+   ohne das klappt ein weisses Fenster ueber die dunkle Seite. Der
+   Filter faerbt das Kalenderzeichen in unser Gold. */
+.admin-field input[type="date"] {
+  color-scheme: dark;
+  max-width: 15rem;
+  font-family: 'Jost', sans-serif;
+  letter-spacing: .04em;
+}
+.admin-field input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(72%) sepia(38%) saturate(720%) hue-rotate(2deg) brightness(92%);
+  cursor: pointer; opacity: .85;
+}
+.admin-field input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+.admin-field input[type="date"]:focus {
+  border-color: var(--gold); outline: none;
+}
 
 /* Sprachreiter im Formular – kleiner als die Hauptreiter oben, damit die
    Rangfolge stimmt. */
@@ -363,21 +429,44 @@ body[data-admin="yes"] .admin-gate { display: none; }
 
         <div class="admin-field">
           <label data-i18n="admin_nachricht_ziel">Wen es erreicht</label>
-          <div class="ziel-gitter">
-            <label class="admin-check"><input type="checkbox" id="ziel-angemeldete">
+
+          <!-- Anmeldung. Einfachauswahl, weil sich die Faelle ausschliessen:
+               "nur Google" UND "nur Microsoft" zusammen traefe nur Konten,
+               die mit BEIDEN verknuepft sind - fast niemanden. -->
+          <div class="ziel-zeile">
+            <label class="admin-check"><input type="radio" name="ziel-anmeldung" value="alle" checked>
+              <span data-i18n="admin_ziel_anmeldung_alle">Alle, auch ohne Konto</span></label>
+            <label class="admin-check"><input type="radio" name="ziel-anmeldung" value="angemeldet">
               <span data-i18n="admin_ziel_angemeldete">Nur angemeldete Nutzer</span></label>
-            <label class="admin-check"><input type="checkbox" id="ziel-neue">
-              <span data-i18n="admin_ziel_neue">Nur beim allerersten Start</span></label>
-            <label class="admin-check"><input type="checkbox" id="ziel-store">
-              <span data-i18n="admin_ziel_store">Nur Fassung aus dem Microsoft Store</span></label>
-            <label class="admin-check"><input type="checkbox" id="ziel-website">
-              <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
-            <label class="admin-check"><input type="checkbox" id="ziel-google">
-              <span data-i18n="admin_ziel_google">Nur mit Google angemeldet</span></label>
-            <label class="admin-check"><input type="checkbox" id="ziel-microsoft">
-              <span data-i18n="admin_ziel_microsoft">Nur mit Microsoft/OneDrive angemeldet</span></label>
           </div>
-          <p class="admin-hint" data-i18n="admin_ziel_hint">Ohne Haken geht sie an alle. Mehrere Haken gelten zusammen.</p>
+
+          <!-- Erscheint erst, wenn "nur angemeldete" gewaehlt ist. -->
+          <div class="ziel-unterzeile" id="ziel-anbieter-zeile" style="display:none">
+            <label class="admin-check"><input type="radio" name="ziel-anbieter" value="egal" checked>
+              <span data-i18n="admin_ziel_anbieter_egal">Alle Angemeldeten</span></label>
+            <label class="admin-check"><input type="radio" name="ziel-anbieter" value="microsoft">
+              <span data-i18n="admin_ziel_microsoft">Nur mit Microsoft/OneDrive angemeldet</span></label>
+            <label class="admin-check"><input type="radio" name="ziel-anbieter" value="google">
+              <span data-i18n="admin_ziel_google">Nur mit Google angemeldet</span></label>
+          </div>
+
+          <!-- Woher die App stammt. Ebenfalls Einfachauswahl: "Store UND
+               Website" gibt es nicht, das traefe niemanden. -->
+          <div class="ziel-zeile">
+            <label class="admin-check"><input type="radio" name="ziel-fassung" value="alle" checked>
+              <span data-i18n="admin_ziel_fassung_alle">Beide Fassungen</span></label>
+            <label class="admin-check"><input type="radio" name="ziel-fassung" value="store">
+              <span data-i18n="admin_ziel_store">Nur Fassung aus dem Microsoft Store</span></label>
+            <label class="admin-check"><input type="radio" name="ziel-fassung" value="website">
+              <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
+          </div>
+
+          <div class="ziel-zeile">
+            <label class="admin-check"><input type="checkbox" id="ziel-neue">
+              <span data-i18n="admin_ziel_neue">Nur neu installierte</span></label>
+          </div>
+
+          <p class="admin-hint" data-i18n="admin_ziel_hint">Die Zeilen gelten zusammen. Wer nichts einschränkt, erreicht alle.</p>
         </div>
 
         <div class="admin-field">
@@ -563,18 +652,28 @@ function nachrichtAusFormular() {
 
   const art = nachrichtFeld('nachricht-art').value;
   const bis = holen('nachricht-bis');
+  const gewaehlt = (name) => {
+    const el = document.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value : 'alle';
+  };
+  const anmeldung = gewaehlt('ziel-anmeldung');
+  const anbieter = gewaehlt('ziel-anbieter');
+  const fassung = gewaehlt('ziel-fassung');
 
   return {
     titel: { de: titelDe, en: holen('nachricht-titel-en'), it: holen('nachricht-titel-it') },
     text:  { de: textDe,  en: holen('nachricht-text-en'),  it: holen('nachricht-text-it') },
     art: art === 'banner' ? 'banner' : 'fenster',
     sofort: art === 'fenster-sofort',
+    /* Aus den Einfachauswahlen werden dieselben Felder wie bisher - die
+       Auswertung in src/core/postfach.js bleibt unveraendert. Die Form
+       hier verhindert nur Kombinationen, die niemanden treffen. */
     ziel: {
-      nurAngemeldete: nachrichtFeld('ziel-angemeldete').checked,
-      nurStore:       nachrichtFeld('ziel-store').checked,
-      nurWebsite:     nachrichtFeld('ziel-website').checked,
-      nurGoogle:      nachrichtFeld('ziel-google').checked,
-      nurMicrosoft:   nachrichtFeld('ziel-microsoft').checked,
+      nurAngemeldete: anmeldung !== 'alle',
+      nurGoogle:      anmeldung !== 'alle' && anbieter === 'google',
+      nurMicrosoft:   anmeldung !== 'alle' && anbieter === 'microsoft',
+      nurStore:       fassung === 'store',
+      nurWebsite:     fassung === 'website',
       nurNeue:        nachrichtFeld('ziel-neue').checked
     },
     /* Ende des Tages, nicht Mitternacht: sonst waere eine Nachricht am
@@ -589,10 +688,14 @@ function nachrichtFormularLeeren() {
                     'nachricht-bis']) {
     nachrichtFeld(id).value = '';
   }
-  for (const id of ['ziel-angemeldete', 'ziel-store', 'ziel-website',
-                    'ziel-google', 'ziel-microsoft', 'ziel-neue']) {
-    nachrichtFeld(id).checked = false;
+  nachrichtFeld('ziel-neue').checked = false;
+  for (const [name, wert] of [['ziel-anmeldung', 'alle'],
+                              ['ziel-anbieter', 'egal'],
+                              ['ziel-fassung', 'alle']]) {
+    const el = document.querySelector('input[name="' + name + '"][value="' + wert + '"]');
+    if (el) el.checked = true;
   }
+  anbieterZeileZeigen();
   nachrichtFeld('nachricht-art').value = 'fenster-start';
 }
 
@@ -662,7 +765,9 @@ async function nachrichtenZeichnen() {
 
     // WEN es erreicht – jeder Haken eine eigene Marke
     for (const [feld, schluessel, rueckfall] of [
-      ['nurAngemeldete', 'admin_ziel_angemeldete', 'Angemeldete'],
+      /* Bei "nur Google" ist "angemeldet" selbstverstaendlich - die Marke
+         dafuer waere doppelt gemoppelt und macht die Zeile unruhig. */
+      ['nurAngemeldete', 'admin_marke_angemeldet', 'angemeldet'],
       ['nurGoogle', 'admin_marke_google', 'Google'],
       ['nurMicrosoft', 'admin_marke_microsoft', 'Microsoft'],
       ['nurStore', 'admin_marke_store', 'Store'],
@@ -670,6 +775,7 @@ async function nachrichtenZeichnen() {
       ['nurNeue', 'admin_marke_neue', 'Erststart']
     ]) {
       if (!(n.ziel && n.ziel[feld])) continue;
+      if (feld === 'nurAngemeldete' && (n.ziel.nurGoogle || n.ziel.nurMicrosoft)) continue;
       const m = document.createElement('span');
       m.className = 'marke wen';
       m.textContent = t(schluessel) || rueckfall;
@@ -750,6 +856,18 @@ async function nachrichtenZeichnen() {
     eintrag.appendChild(koerper);
     kasten.appendChild(eintrag);
   }
+}
+
+/* Die Anbieter-Auswahl ergibt nur Sinn, wenn ueberhaupt auf Angemeldete
+   eingeschraenkt wird - sonst stuende dort eine Auswahl ohne Wirkung. */
+function anbieterZeileZeigen() {
+  const an = document.querySelector('input[name="ziel-anmeldung"]:checked');
+  document.getElementById('ziel-anbieter-zeile').style.display =
+    (an && an.value === 'angemeldet') ? 'flex' : 'none';
+}
+
+for (const el of document.querySelectorAll('input[name="ziel-anmeldung"]')) {
+  el.addEventListener('change', anbieterZeileZeigen);
 }
 
 /* ── Formular auf und zu ─────────────────────────────────────────────
