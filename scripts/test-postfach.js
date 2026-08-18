@@ -92,6 +92,34 @@ check('Nur Store reicht nicht',
 
 check('Ohne Haken geht sie an alle', P.trifftZu(nachricht('6'), ALLE), true);
 
+/* ── Womit angemeldet ───────────────────────────────────────────────── */
+
+console.log('\nDer Anmeldeweg trennt Google von Microsoft');
+
+const GOOGLE = { angemeldet: true, anbieter: ['google.com'] };
+const MICROSOFT = { angemeldet: true, anbieter: ['microsoft.com'] };
+const ANONYM = { angemeldet: false, anbieter: [] };
+
+const nurGoogle = nachricht('11', { ziel: { nurGoogle: true } });
+check('Google bekommt sie', P.trifftZu(nurGoogle, GOOGLE), true);
+check('Microsoft nicht', P.trifftZu(nurGoogle, MICROSOFT), false);
+check('Anonyme erst recht nicht', P.trifftZu(nurGoogle, ANONYM), false);
+
+const nurMicrosoft = nachricht('12', { ziel: { nurMicrosoft: true } });
+check('Microsoft bekommt sie', P.trifftZu(nurMicrosoft, MICROSOFT), true);
+check('Google nicht', P.trifftZu(nurMicrosoft, GOOGLE), false);
+
+/* Ein Konto kann mit BEIDEN Anbietern verknuepft sein – linkWithCredential
+   haengt einen zweiten an dieselbe Kennung. Dann zaehlt es fuer beide. */
+const BEIDE = { angemeldet: true, anbieter: ['google.com', 'microsoft.com'] };
+check('Verknuepftes Konto zaehlt fuer Google', P.trifftZu(nurGoogle, BEIDE), true);
+check('Und fuer Microsoft', P.trifftZu(nurMicrosoft, BEIDE), true);
+
+/* Fehlt die Angabe ganz (alte Fassung der App), darf eine Nachricht mit
+   Anbieter-Haken NICHT bei jedem landen. */
+check('Ohne Anbieterangabe lieber nicht zustellen',
+  P.trifftZu(nurGoogle, { angemeldet: true }), false);
+
 /* ── Ablaufdatum ────────────────────────────────────────────────────── */
 
 console.log('\nAbgelaufene Nachrichten werden nicht mehr zugestellt');

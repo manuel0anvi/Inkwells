@@ -69,7 +69,7 @@ function istGueltig(nachricht, jetzt) {
 /**
  * Geht diese Nachricht den hier sitzenden Nutzer an?
  *
- * lage = { angemeldet, store, erstesMal }
+ * lage = { angemeldet, anbieter, store, erstesMal }
  *
  * Die Häkchen sind UND-verknüpft: „nur Angemeldete" plus „nur Store"
  * trifft angemeldete Store-Nutzer. Ohne Häkchen geht sie an alle.
@@ -82,11 +82,21 @@ function istGueltig(nachricht, jetzt) {
 function trifftZu(nachricht, lage) {
   const ziel = (nachricht && nachricht.ziel) || {};
   const l = lage || {};
+  const anbieter = Array.isArray(l.anbieter) ? l.anbieter : [];
 
   if (ziel.nurAngemeldete && !l.angemeldet) return false;
   if (ziel.nurStore && !l.store) return false;
   if (ziel.nurWebsite && l.store) return false;
   if (ziel.nurNeue && !l.erstesMal) return false;
+
+  /* Womit angemeldet? Die Kennungen kommen unveraendert von Firebase
+     (providerData), deshalb hier die vollen Namen und keine eigenen
+     Kuerzel - was Firebase liefert, muss hier eins zu eins passen.
+
+     "Microsoft" und "OneDrive" sind dasselbe Konto: die Cloud-Sicherung
+     in OneDrive haengt an der Microsoft-Anmeldung. */
+  if (ziel.nurGoogle && !anbieter.includes('google.com')) return false;
+  if (ziel.nurMicrosoft && !anbieter.includes('microsoft.com')) return false;
 
   return true;
 }

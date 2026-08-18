@@ -33,7 +33,7 @@
 
   let nachrichten = [];                       // wie sie in Firestore stehen
   let stand = { gelesen: [], geloescht: [] }; // vereinigt, örtlich + Cloud
-  let lage = { angemeldet: false, store: false, erstesMal: false };
+  let lage = { angemeldet: false, anbieter: [], store: false, erstesMal: false };
   let bereit = false;
   let zeigtGerade = false;                    // ein Fenster nach dem anderen
 
@@ -237,14 +237,17 @@
        Gerätekennung. Die hat nämlich jeder — sonst gäbe es für Nutzer
        ohne Konto gar kein Postfach. */
     let angemeldet = false;
+    let anbieter = [];
     try {
       const S = window.InkwellsShare;
       const ich = S && S.currentIdentity ? S.currentIdentity() : null;
       angemeldet = !!(ich && !ich.anonymous && ich.email);
+      anbieter = (ich && ich.anbieter) || [];
     } catch (err) { /* dann gilt anonym */ }
 
     return {
       angemeldet,
+      anbieter,
       store: window.api.istStorefassung === true,
       erstesMal
     };
