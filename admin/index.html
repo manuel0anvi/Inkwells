@@ -100,6 +100,38 @@ body[data-admin="yes"] .admin-gate { display: none; }
   nav { flex-wrap: wrap; gap: 12px; padding: 14px 20px; }
   .admin-tab { padding: 7px 11px; font-size: 10px; letter-spacing: .08em; }
 }
+
+/* ── Nachrichten ────────────────────────────────────────────────────
+   Mehrere Eingabefelder je Feldgruppe (drei Sprachen) brauchen Abstand
+   untereinander; die Regel oben setzt nur die Breite. */
+.admin-field input + input,
+.admin-field textarea + textarea { margin-top: 8px; }
+
+.admin-check {
+  display: flex; align-items: center; gap: 9px; cursor: pointer;
+  font-family: 'Jost', sans-serif; font-weight: 300; font-size: 14px;
+  color: var(--cream); margin-bottom: 7px; text-transform: none;
+  letter-spacing: normal;
+}
+.admin-check input { width: auto; margin: 0; flex: none; }
+
+.nachricht-zeile {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 14px;
+  align-items: start; padding: 12px 0;
+  border-bottom: 0.5px solid var(--navy-border);
+}
+.nachricht-zeile:last-child { border-bottom: none; }
+.nachricht-zeile .kopf { font-weight: 500; }
+.nachricht-zeile .unten {
+  grid-column: 1; font-family: 'Jost', sans-serif; font-size: 11px;
+  letter-spacing: .06em; color: var(--text-muted);
+}
+.nachricht-zeile .marke {
+  display: inline-block; border: 0.5px solid var(--gold); color: var(--gold-light);
+  border-radius: 3px; padding: 1px 6px; margin-right: 6px; font-size: 10px;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.nachricht-zeile .abgelaufen { border-color: var(--navy-border); color: var(--text-muted); }
 </style>
 </head>
 <body data-admin="pending">
@@ -115,6 +147,7 @@ body[data-admin="yes"] .admin-gate { display: none; }
     <div class="admin-tabs">
       <button type="button" class="admin-tab active" data-panel="moderation" data-i18n="admin_tab_moderation">Community</button>
       <button type="button" class="admin-tab" data-panel="privacy" data-i18n="admin_tab_privacy">Datenschutz</button>
+      <button type="button" class="admin-tab" data-panel="nachrichten" data-i18n="admin_tab_nachrichten">Nachrichten</button>
       <button type="button" class="admin-tab" data-panel="password" data-i18n="admin_tab_password">Passwort</button>
     </div>
     <div class="lang-sw">
@@ -249,6 +282,70 @@ body[data-admin="yes"] .admin-gate { display: none; }
       <p class="admin-status" id="privacy-status"></p>
     </section>
 
+    <!-- ── Nachrichten an die App ───────────────────────────────────
+         Eine Nachricht geht an jede Installation mit Internet - auch an
+         die ohne Konto, denn die App meldet jedes Geraet anonym an.
+
+         ACHTUNG: Die Nachrichten liegen in einem oeffentlich lesbaren
+         Dokument. Der Empfaengerkreis wird von der App ausgewertet, nicht
+         vom Server - wer die Datenbank direkt abfragt, sieht alles.
+         Nichts Vertrauliches hineinschreiben. ─────────────────────── -->
+    <section class="admin-panel" id="panel-nachrichten">
+      <p class="admin-hint" data-i18n="admin_nachrichten_hint"></p>
+
+      <div class="admin-field">
+        <label for="nachricht-titel-de" data-i18n="admin_nachricht_titel">Überschrift</label>
+        <input type="text" id="nachricht-titel-de" maxlength="120" placeholder="Deutsch">
+        <input type="text" id="nachricht-titel-en" maxlength="120" placeholder="English (optional)">
+        <input type="text" id="nachricht-titel-it" maxlength="120" placeholder="Italiano (optional)">
+      </div>
+
+      <div class="admin-field">
+        <label for="nachricht-text-de" data-i18n="admin_nachricht_text">Text</label>
+        <textarea id="nachricht-text-de" rows="4" maxlength="2000" placeholder="Deutsch"></textarea>
+        <textarea id="nachricht-text-en" rows="3" maxlength="2000" placeholder="English (optional)"></textarea>
+        <textarea id="nachricht-text-it" rows="3" maxlength="2000" placeholder="Italiano (optional)"></textarea>
+      </div>
+
+      <div class="admin-field">
+        <label for="nachricht-art" data-i18n="admin_nachricht_art">Wie es erscheint</label>
+        <select id="nachricht-art">
+          <option value="fenster-start" data-i18n="admin_nachricht_art_start">Als Fenster, beim nächsten Start</option>
+          <option value="fenster-sofort" data-i18n="admin_nachricht_art_sofort">Als Fenster, sofort</option>
+          <option value="banner" data-i18n="admin_nachricht_art_banner">Nur im Postfach</option>
+        </select>
+      </div>
+
+      <div class="admin-field">
+        <label data-i18n="admin_nachricht_ziel">Wen es erreicht</label>
+        <label class="admin-check"><input type="checkbox" id="ziel-angemeldete">
+          <span data-i18n="admin_ziel_angemeldete">Nur angemeldete Nutzer</span></label>
+        <label class="admin-check"><input type="checkbox" id="ziel-store">
+          <span data-i18n="admin_ziel_store">Nur Fassung aus dem Microsoft Store</span></label>
+        <label class="admin-check"><input type="checkbox" id="ziel-website">
+          <span data-i18n="admin_ziel_website">Nur Fassung von der Website</span></label>
+        <label class="admin-check"><input type="checkbox" id="ziel-neue">
+          <span data-i18n="admin_ziel_neue">Nur beim allerersten Start</span></label>
+        <p class="admin-hint" data-i18n="admin_ziel_hint">Ohne Haken geht sie an alle. Mehrere Haken gelten zusammen.</p>
+      </div>
+
+      <div class="admin-field">
+        <label for="nachricht-bis" data-i18n="admin_nachricht_bis">Zustellen bis (JJJJ-MM-TT)</label>
+        <input type="date" id="nachricht-bis">
+      </div>
+
+      <div class="admin-actions">
+        <button type="button" class="btn-p" id="nachricht-senden" data-i18n="admin_nachricht_senden">Verschicken</button>
+        <button type="button" class="btn-m" id="nachricht-aufraeumen" data-i18n="admin_nachricht_aufraeumen">Abgelaufene aufräumen</button>
+      </div>
+      <p class="admin-status" id="nachricht-status"></p>
+
+      <div class="admin-field" style="margin-top:26px">
+        <label data-i18n="admin_nachricht_verschickt">Verschickt</label>
+        <div id="nachricht-liste"></div>
+      </div>
+    </section>
+
     <!-- ── Passwort ─────────────────────────────────────────────────── -->
     <section class="admin-panel" id="panel-password">
       <form id="password-form" autocomplete="off" style="max-width:460px;">
@@ -347,13 +444,180 @@ function showStatus(id, message, kind) {
 /* ── Reiter ─────────────────────────────────────────────────────────── */
 
 function switchPanel(name) {
-  for (const tab of document.querySelectorAll('.admin-tab')) {
+  /* ══ NACHRICHTEN AN DIE APP ══════════════════════════════════════════
+   Eine Nachricht landet in site_content/nachrichten. Jede Installation
+   mit Internet liest das beim Start - auch die ohne Konto, denn die App
+   meldet jedes Geraet anonym bei Firebase an.
+
+   >>> Der Empfaengerkreis ist eine Hoeflichkeit, keine Sperre <<<
+   Das Dokument ist oeffentlich lesbar; die Auswahl trifft die App. Wer
+   die Datenbank direkt abfragt, sieht auch, was nicht fuer ihn gedacht
+   war. Fuer Ankuendigungen reicht das - Vertrauliches gehoert hier nicht
+   hinein. Dieselbe Warnung steht in src/core/postfach.js.
+   ══════════════════════════════════════════════════════════════════ */
+
+const nachrichtFeld = (id) => document.getElementById(id);
+
+function nachrichtAusFormular() {
+  const holen = (id) => (nachrichtFeld(id).value || '').trim();
+
+  const titelDe = holen('nachricht-titel-de');
+  const textDe = holen('nachricht-text-de');
+  if (!titelDe || !textDe) return null;
+
+  const art = nachrichtFeld('nachricht-art').value;
+  const bis = holen('nachricht-bis');
+
+  return {
+    titel: { de: titelDe, en: holen('nachricht-titel-en'), it: holen('nachricht-titel-it') },
+    text:  { de: textDe,  en: holen('nachricht-text-en'),  it: holen('nachricht-text-it') },
+    art: art === 'banner' ? 'banner' : 'fenster',
+    sofort: art === 'fenster-sofort',
+    ziel: {
+      nurAngemeldete: nachrichtFeld('ziel-angemeldete').checked,
+      nurStore:       nachrichtFeld('ziel-store').checked,
+      nurWebsite:     nachrichtFeld('ziel-website').checked,
+      nurNeue:        nachrichtFeld('ziel-neue').checked
+    },
+    /* Ende des Tages, nicht Mitternacht: sonst waere eine Nachricht am
+       eingetragenen Tag selbst schon abgelaufen. */
+    gueltigBis: bis ? new Date(bis + 'T23:59:59.000Z').toISOString() : null
+  };
+}
+
+function nachrichtFormularLeeren() {
+  for (const id of ['nachricht-titel-de', 'nachricht-titel-en', 'nachricht-titel-it',
+                    'nachricht-text-de', 'nachricht-text-en', 'nachricht-text-it',
+                    'nachricht-bis']) {
+    nachrichtFeld(id).value = '';
+  }
+  for (const id of ['ziel-angemeldete', 'ziel-store', 'ziel-website', 'ziel-neue']) {
+    nachrichtFeld(id).checked = false;
+  }
+  nachrichtFeld('nachricht-art').value = 'fenster-start';
+}
+
+function zielText(ziel) {
+  const z = ziel || {};
+  const teile = [];
+  if (z.nurAngemeldete) teile.push(t('admin_ziel_angemeldete') || 'Nur Angemeldete');
+  if (z.nurStore) teile.push(t('admin_ziel_store') || 'Nur Store');
+  if (z.nurWebsite) teile.push(t('admin_ziel_website') || 'Nur Website');
+  if (z.nurNeue) teile.push(t('admin_ziel_neue') || 'Nur Erststart');
+  return teile.length ? teile.join(' · ') : (t('admin_ziel_alle') || 'Alle');
+}
+
+async function nachrichtenZeichnen() {
+  const kasten = document.getElementById('nachricht-liste');
+  if (!kasten) return;
+
+  let liste = [];
+  try {
+    liste = await adminApi.ladeNachrichten();
+  } catch (err) {
+    showStatus('nachricht-status', describeAdminError(err), 'err');
+    return;
+  }
+
+  kasten.innerHTML = '';
+  if (!liste.length) {
+    const leer = document.createElement('p');
+    leer.className = 'admin-hint';
+    leer.textContent = t('admin_nachricht_keine') || 'Noch nichts verschickt.';
+    kasten.appendChild(leer);
+    return;
+  }
+
+  const jetzt = Date.now();
+
+  for (const n of liste) {
+    const zeile = document.createElement('div');
+    zeile.className = 'nachricht-zeile';
+
+    const kopf = document.createElement('div');
+    kopf.className = 'kopf';
+    kopf.textContent = (n.titel && n.titel.de) || '(ohne Titel)';
+
+    const unten = document.createElement('div');
+    unten.className = 'unten';
+
+    const abgelaufen = n.gueltigBis && !Number.isNaN(Date.parse(n.gueltigBis))
+      && Date.parse(n.gueltigBis) < jetzt;
+
+    const marke = document.createElement('span');
+    marke.className = 'marke' + (abgelaufen ? ' abgelaufen' : '');
+    marke.textContent = abgelaufen
+      ? (t('admin_nachricht_abgelaufen') || 'abgelaufen')
+      : (n.art === 'banner' ? 'Postfach' : (n.sofort ? 'sofort' : 'Start'));
+    unten.appendChild(marke);
+
+    const wann = new Date(n.erstellt);
+    unten.append(document.createTextNode(
+      (Number.isNaN(wann.getTime()) ? '' : wann.toLocaleDateString() + ' · ') + zielText(n.ziel)
+    ));
+
+    const weg = document.createElement('button');
+    weg.type = 'button';
+    weg.className = 'btn-m warn';
+    weg.textContent = t('admin_nachricht_zurueck') || 'Zurückziehen';
+    weg.addEventListener('click', async () => {
+      /* Zurueckziehen nimmt sie aus jedem Postfach - auch bei denen, die
+         sie schon gesehen haben. Gelesen ist gelesen; sie wird ab jetzt
+         nur nicht mehr angezeigt. */
+      if (!confirm(t('admin_nachricht_zurueck_sicher')
+        || 'Diese Nachricht aus allen Postfächern entfernen?')) return;
+      try {
+        await adminApi.ziehNachrichtZurueck(n.id);
+        showStatus('nachricht-status', t('admin_nachricht_zurueckgezogen') || 'Zurückgezogen.', 'ok');
+        await nachrichtenZeichnen();
+      } catch (err) {
+        showStatus('nachricht-status', describeAdminError(err), 'err');
+      }
+    });
+
+    zeile.append(kopf, weg, unten);
+    kasten.appendChild(zeile);
+  }
+}
+
+document.getElementById('nachricht-senden').addEventListener('click', async () => {
+  const nachricht = nachrichtAusFormular();
+  if (!nachricht) {
+    showStatus('nachricht-status',
+      t('admin_nachricht_fehlt') || 'Überschrift und Text auf Deutsch werden gebraucht.', 'err');
+    return;
+  }
+  try {
+    await adminApi.verschickeNachricht(nachricht);
+    nachrichtFormularLeeren();
+    showStatus('nachricht-status', t('admin_nachricht_weg') || 'Verschickt.', 'ok');
+    await nachrichtenZeichnen();
+  } catch (err) {
+    showStatus('nachricht-status', describeAdminError(err), 'err');
+  }
+});
+
+document.getElementById('nachricht-aufraeumen').addEventListener('click', async () => {
+  try {
+    const weg = await adminApi.raeumeNachrichtenAuf();
+    showStatus('nachricht-status',
+      (t('admin_nachricht_aufgeraeumt') || '{n} abgelaufene entfernt.').replace('{n}', weg), 'ok');
+    await nachrichtenZeichnen();
+  } catch (err) {
+    showStatus('nachricht-status', describeAdminError(err), 'err');
+  }
+});
+
+for (const tab of document.querySelectorAll('.admin-tab')) {
     tab.classList.toggle('active', tab.dataset.panel === name);
   }
   for (const panel of document.querySelectorAll('.admin-panel')) {
     panel.classList.toggle('active', panel.id === 'panel-' + name);
   }
   if (name === 'privacy' && !privacyDraft) loadPrivacyDraft();
+  // Die Liste jedes Mal frisch: sie ist kurz, und ein veralteter Stand
+  // waere hier schlimmer als ein Zugriff mehr.
+  if (name === 'nachrichten') nachrichtenZeichnen();
 }
 
 /* ══════════════════════════════════════════════════════════════════════

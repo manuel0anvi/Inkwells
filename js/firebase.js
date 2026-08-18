@@ -416,6 +416,78 @@ async function resetPrivacy() {
   await deleteDoc(doc(db, SITE_CONTENT, PRIVACY_DOC));
 }
 
+/* ── Nachrichten an die App ──────────────────────────────────────────
+   Alle Nachrichten stehen in EINEM Dokument, site_content/nachrichten.
+   Das ist Absicht: site_content ist von den Sicherheitsregeln schon
+   abgedeckt – öffentlich lesbar, nur vom Admin beschreibbar. Für die
+   Nachrichten selbst brauchte es dort keine Änderung.
+
+   >>> Öffentlich lesbar heißt: nichts Vertrauliches hineinschreiben <<<
+   Der Empfängerkreis („nur Angemeldete", „nur Store") wird von der App
+   ausgewertet, nicht vom Server. Wer die Datenbank direkt abfragt, sieht
+   alles. Für Ankündigungen reicht das.
+
+   Die Liste bleibt ein Feld im Dokument statt einer Untersammlung: so
+   liest die App sie mit EINEM Zugriff, und ein Firestore-Dokument fasst
+   1 MB – das reicht für einige hundert Nachrichten. Abgelaufene sollten
+   trotzdem regelmäßig weg, dafür gibt es raeumeNachrichtenAuf().
+   ─────────────────────────────────────────────────────────────────── */
+
+const NACHRICHTEN_DOC = 'nachrichten';
+
+/** Alle Nachrichten, neueste zuerst. */
+async function ladeNachrichten() {
+  const snap = await getDoc(doc(db, SITE_CONTENT, NACHRICHTEN_DOC));
+  if (!snap.exists()) return [];
+  const daten = snap.data() || {};
+  const liste = Array.isArray(daten.liste) ? daten.liste : [];
+  return liste.slice().sort((a, b) =>
+    String(b.erstellt || '').localeCompare(String(a.erstellt || '')));
+}
+
+/** Schreibt die ganze Liste zurück. */
+async function sichreNachrichten(liste) {
+  await setDoc(doc(db, SITE_CONTENT, NACHRICHTEN_DOC), {
+    liste: Array.isArray(liste) ? liste : [],
+    updated_at: serverTimestamp()
+  });
+}
+
+/** Hängt eine neue Nachricht an. Die Kennung kommt aus der Uhrzeit. */
+async function verschickeNachricht(nachricht) {
+  const liste = await ladeNachrichten();
+  const id = new Date().toISOString().replace(/[:.]/g, '-');
+  liste.unshift({ ...nachricht, id, erstellt: new Date().toISOString() });
+  await sichreNachrichten(liste);
+  return id;
+}
+
+/**
+ * Zieht eine Nachricht zurück.
+ *
+ * Sie verschwindet damit aus jedem Postfach – auch bei denen, die sie
+ * schon gesehen haben. Was jemand bereits gelesen hat, lässt sich nicht
+ * zurückholen; ab jetzt wird sie nur nicht mehr angezeigt.
+ */
+async function ziehNachrichtZurueck(id) {
+  const liste = await ladeNachrichten();
+  await sichreNachrichten(liste.filter(n => String(n.id) !== String(id)));
+}
+
+/** Wirft alles weg, dessen Ablaufdatum vorbei ist. */
+async function raeumeNachrichtenAuf() {
+  const liste = await ladeNachrichten();
+  const jetzt = Date.now();
+  const bleibt = liste.filter(n => {
+    if (!n.gueltigBis) return true;
+    const ende = Date.parse(n.gueltigBis);
+    return Number.isNaN(ende) || ende >= jetzt;
+  });
+  const weg = liste.length - bleibt.length;
+  if (weg > 0) await sichreNachrichten(bleibt);
+  return weg;
+}
+
 /* ── Echtzeit (vorbereitet, aktuell ungenutzt) ───────────────────────
    Die Forenseite lädt bewusst auf Anforderung neu statt über onSnapshot:
    ein Live-Update würde die Liste neu zeichnen und dabei ein gerade
@@ -473,7 +545,13 @@ window.InkwellsForum = {
   deleteReply,
   loadPrivacy,
   savePrivacy,
-  resetPrivacy
+  resetPrivacy,
+
+  // Nachrichten an die App
+  ladeNachrichten,
+  verschickeNachricht,
+  ziehNachrichtZurueck,
+  raeumeNachrichtenAuf
 };
 
 // Signal für die Seite: ab jetzt darf geladen werden. Wird auch dann
