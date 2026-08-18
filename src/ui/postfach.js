@@ -36,6 +36,7 @@
   let lage = { angemeldet: false, anbieter: [], store: false, erstesMal: false };
   let bereit = false;
   let zeigtGerade = false;                    // ein Fenster nach dem anderen
+  let letzteKennung = null;                   // gegen doppeltes Auswerten
 
   /* ── Übersetzung ──────────────────────────────────────────────────── */
 
@@ -226,6 +227,16 @@
 
   /* ── Anlauf ───────────────────────────────────────────────────────── */
 
+  /** Kennung samt Anmeldeweg – daran erkennt man einen echten Wechsel. */
+  function kennungJetzt() {
+    try {
+      const S = window.InkwellsShare;
+      const ich = S && S.currentIdentity ? S.currentIdentity() : null;
+      if (!ich) return '';
+      return ich.uid + '|' + (ich.anbieter || []).join(',') + '|' + (ich.anonymous ? 'a' : 'e');
+    } catch (err) { return ''; }
+  }
+
   async function lageErmitteln() {
     let erstesMal = false;
     try {
@@ -260,6 +271,7 @@
     bereit = true;
 
     lage = await lageErmitteln();
+    letzteKennung = kennungJetzt();
 
     // Örtlich zuerst: das steht auch ohne Internet zur Verfügung
     try {
@@ -280,6 +292,42 @@
     nachrichten = await S.ladeNachrichten();
     zeichneAbzeichen();
     await zeigeFaellige(true);
+
+    /* ── Und auf den Anmeldestand hören ──────────────────────────────
+       Wer sich WÄHREND der Sitzung anmeldet, gehört ab da zu einem
+       anderen Empfängerkreis. Ohne dieses Nachfassen bliebe die Lage auf
+       dem Stand des Starts stehen — und eine Nachricht an „nur neu
+       installierte UND nur angemeldete" erreichte niemanden: beim
+       allerersten Start ist noch niemand angemeldet, und beim nächsten
+       Start ist „neu installiert" schon nicht mehr wahr.
+
+       >>> Warum hier beimStart = true steht <<<
+       Der Filter schlägt nicht um, weil Zeit vergangen ist, sondern weil
+       wir jetzt mehr über den Nutzer wissen. Der Start hat längst
+       stattgefunden; wir konnten ihn nur noch nicht auswerten. Und
+       angemeldet hat man sich gerade selbst — ein Fenster ist dann keine
+       Überrumpelung.
+
+       Nebenbei erledigt das den Kennungswechsel: auf einem zweiten
+       Rechner bekommt man beim Anmelden eine neue Firebase-Kennung, und
+       hier wird der örtliche Stand in deren Dokument hochvereinigt. */
+    S.onIdentityChanged(async () => {
+      const jetzt = kennungJetzt();
+      if (jetzt === letzteKennung) return;
+      letzteKennung = jetzt;
+
+      lage = await lageErmitteln();
+
+      try {
+        const oben = await S.ladePostfachStand();
+        stand = P.vereinigeStand(stand, oben);
+      } catch (err) { /* offline, macht nichts */ }
+      await standSichern();
+
+      zeichneAbzeichen();
+      if (E('ov-postfach').style.display === 'flex') zeichneFach();
+      await zeigeFaellige(true);
+    });
 
     /* Ab jetzt lauschen. Was hereinkommt, springt nur auf, wenn es
        ausdrücklich "sofort" verlangt – der Rest wartet auf den nächsten
