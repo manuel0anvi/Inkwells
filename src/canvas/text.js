@@ -940,8 +940,6 @@ function richteFreieAbsaetze(textDiv) {
                      sobald wieder Platz ist. Seine gewählte Stelle
                      bleibt gespeichert, das Ausweichen wird gerechnet.
      'fest'          Dasselbe, aber der Nachbar behält seine neue Stelle.
-     'verschmelzen'  Berühren sich zwei, werden sie EIN Text. Ab da
-                     verhält sich die Zeile wie in Word.
 
    >>> Warum das Ausweichen gerechnet und nicht gespeichert wird <<<
    Weil sonst die Absicht verloren ginge. In `left`/`top` steht, wohin
@@ -962,11 +960,7 @@ function richteFreieAbsaetze(textDiv) {
    Texte zusammen und sähen aus wie einer. */
 const FREI_LUFT_PX = 10;
 
-/* So nah gilt als „berührt" – dort wird verschmolzen (und nur dort;
-   sonst zöge ein Absatz auf halber Seite den nächsten an sich). */
-const FREI_BERUEHRT_PX = 12;
-
-/** @returns {'elastisch'|'fest'|'verschmelzen'} */
+/** @returns {'elastisch'|'fest'} */
 function ausweichArt(nb) {
   /* Ein FREMDES Dokument bringt die Entscheidung seines Besitzers mit.
      Sie gilt, solange man darin ist – sonst sähe die Seite bei jedem
@@ -980,7 +974,11 @@ function ausweichArt(nb) {
   if (nb && nb.origin === 'shared' && nb.textFluss) return nb.textFluss;
   const wahl = (typeof Settings !== 'undefined' && Settings)
     ? Settings.get('textFluss') : '';
-  return (wahl === 'fest' || wahl === 'verschmelzen') ? wahl : 'elastisch';
+  /* Alles, was nicht 'fest' ist, gilt als 'elastisch' - auch das
+     abgeschaffte 'verschmelzen'. In alten Einstellungen und in fremden
+     Dokumenten kann es noch stehen; es soll dann kein Sonderfall sein,
+     sondern schlicht die Vorgabe. */
+  return (wahl === 'fest') ? 'fest' : 'elastisch';
 }
 
 /** Die freien Absätze, so wie sie gerade auf dem Blatt liegen. */
@@ -1017,12 +1015,6 @@ function ordneFreieAbsaetze(textDiv, art) {
     p.style.maxWidth = '';
   }
   if (alle.length < 2) return;
-
-  if (wahl === 'verschmelzen') {
-    verschmelzeBeruehrende(textDiv);
-    alle = [...textDiv.querySelectorAll('p.j-frei')];
-    if (alle.length < 2) return;
-  }
 
   const fest = (wahl === 'fest');
 
@@ -1065,49 +1057,6 @@ function ordneFreieAbsaetze(textDiv, art) {
       k.oben += schub;
     }
     drüber.push(k);
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   BERÜHREN HEISST ZUSAMMENWACHSEN
-
-   Die dritte Art. Sobald der rechte Absatz den linken berührt, wird aus
-   beiden einer: der Abstand dazwischen bleibt als Abstandshalter stehen
-   (siehe _neueLuecke), der Text wandert hinüber, der leere Absatz
-   verschwindet.
-
-   Das ist die einzige der drei Arten, die sich nicht zurücknehmen lässt
-   – zusammengewachsen ist zusammengewachsen. Dafür verhält sich die
-   Zeile danach wie in jedem Textprogramm: jedes Zeichen schiebt den
-   Rest.
-   ══════════════════════════════════════════════════════════════════════ */
-function verschmelzeBeruehrende(textDiv) {
-  for (let runde = 0; runde < 8; runde++) {
-    const kaesten = _freieKaesten([...textDiv.querySelectorAll('p.j-frei')])
-      .sort((a, b) => (a.oben - b.oben) || (a.links - b.links));
-
-    let paar = null;
-    for (let i = 0; i < kaesten.length && !paar; i++) {
-      for (let j = 0; j < kaesten.length; j++) {
-        const a = kaesten[i], b = kaesten[j];
-        if (a === b || b.links < a.links) continue;
-        // Auf derselben Zeile?
-        if (Math.abs(a.oben - b.oben) > 4) continue;
-        if (b.links > a.links + a.breit + FREI_BERUEHRT_PX) continue;
-        paar = { a: a.p, b: b.p, luecke: b.links - (a.links + a.breit) };
-        break;
-      }
-    }
-    if (!paar) return;
-
-    if (paar.luecke > 3) paar.a.appendChild(_neueLuecke(paar.luecke));
-    while (paar.b.firstChild) {
-      const kind = paar.b.firstChild;
-      // Der leere Umbruch eines frischen Absatzes gehört nicht mit
-      if (kind.tagName === 'BR' && !kind.nextSibling) { kind.remove(); break; }
-      paar.a.appendChild(kind);
-    }
-    paar.b.remove();
   }
 }
 

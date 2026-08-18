@@ -204,11 +204,11 @@ function ohneGriffe(textDiv) {
    aneinanderstossende Texte verhalten (ui/settings.js), und wenn die
    Umstellung eines Besitzers hereinkommt (ui/sharedDocs.js).
 
-   Zwei der drei Arten ändern dabei wirklich etwas am Text – 'fest'
-   schreibt die neue Lage hinein, 'verschmelzen' macht aus zwei Absätzen
-   einen. Deshalb geht für sie ein 'input' hinaus: daran hängt alles
-   Weitere (ins Heft schreiben, an die anderen melden, sichern). Bei
-   'elastisch' bleibt der Text, wie er ist – dort wird nur neu gerechnet.
+   Von den beiden Arten ändert nur 'fest' wirklich etwas am Text: sie
+   schreibt die neue Lage hinein. Deshalb geht dafür ein 'input' hinaus –
+   daran hängt alles Weitere (ins Heft schreiben, an die anderen melden,
+   sichern). Bei 'elastisch' bleibt der Text, wie er ist; dort wird nur
+   neu gerechnet.
    ══════════════════════════════════════════════════════════════════════ */
 window.wendeTextFlussAn = function wendeTextFlussAn() {
   if (typeof ordneFreieAbsaetze !== 'function') return;

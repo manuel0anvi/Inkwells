@@ -225,8 +225,7 @@
     const fremdBestimmt = !!(nb && nb.textFluss);
     const schluessel = {
       elastisch: 'textFlussHinweisElastisch',
-      fest: 'textFlussHinweisFest',
-      verschmelzen: 'textFlussHinweisVerschmelzen'
+      fest: 'textFlussHinweisFest'
     }[textFlussSel.value] || 'textFlussHinweisElastisch';
 
     textFlussHinweis.textContent = t(schluessel)

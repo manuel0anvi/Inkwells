@@ -270,11 +270,13 @@ app.on('ready', async () => {
     fe.zurueck && fe.zurueck.l > fe.vorher.l + 10,
     JSON.stringify(fe.nachher) + ' -> ' + JSON.stringify(fe.zurueck));
 
-  const ve = await stossen('verschmelzen');
-  pruefe('verschmelzen: aus zwei Absaetzen wird einer',
-    ve.bloecke === 1, ve.bloecke + ' Absaetze: ' + ve.html);
-  pruefe('verschmelzen: beide Texte stehen darin',
-    /links/.test(ve.html) && /rechter/.test(ve.html), ve.html);
+  /* Das Zusammenwachsen wie in Word ist abgeschafft. Steht es aus einer
+     alten Einstellung oder einem fremden Dokument noch da, darf es kein
+     Sonderfall sein, sondern muss schlicht wie 'elastisch' wirken - die
+     beiden Absaetze bleiben also zwei. */
+  const alt = await stossen('verschmelzen');
+  pruefe('abgeschafftes verschmelzen wirkt wie elastisch',
+    alt.bloecke === 2, alt.bloecke + ' Absaetze: ' + alt.html);
 
   await js(`Settings.set ? Settings.set('textFluss', 'elastisch')
             : Settings.update({ textFluss: 'elastisch' })`);

@@ -36,7 +36,6 @@ const DEFAULT_SETTINGS = {
 
        'elastisch'     der Nachbar weicht aus und kommt wieder zurück
        'fest'          er weicht aus und bleibt, wo er hingerückt ist
-       'verschmelzen'  beide werden ein Text, wie in Word
 
      'elastisch' ist die Vorgabe, weil sie nichts endgültig macht: die
      Stelle, die jemand gewählt hat, bleibt in jedem Fall gespeichert.

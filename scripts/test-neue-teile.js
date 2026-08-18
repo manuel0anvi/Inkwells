@@ -529,11 +529,18 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
     /function raeumeVorlaeufiges/.test(textQuelle)
     && /_nimmZurueck\(el\);\s*\n\s*el\.remove\(\)/.test(textQuelle), true);
 
-  /* 7. Wenn zwei Texte aneinanderstossen: drei Arten, waehlbar. */
-  check('Drei Arten, wenn Texte aneinanderstossen',
+  /* 7. Wenn zwei Texte aneinanderstossen: zwei Arten, waehlbar.
+
+     Das Zusammenwachsen wie in Word ist wieder abgeschafft – es war die
+     einzige Art, die den Text unwiderruflich veraenderte, und zurueck
+     kam man nicht mehr. Deshalb wird hier ausdruecklich geprueft, dass
+     die Funktion dafuer WEG ist: sonst schliche sie sich beim naechsten
+     Umbau wieder ein. */
+  check('Zwei Arten, wenn Texte aneinanderstossen',
     /function ordneFreieAbsaetze/.test(textQuelle)
-    && /function verschmelzeBeruehrende/.test(textQuelle)
     && /const fest = \(wahl === 'fest'\)/.test(textQuelle), true);
+  check('Und das Zusammenwachsen ist draussen',
+    /verschmelzeBeruehrende/.test(textQuelle), false);
   check('Waagerecht UND senkrecht wird ausgewichen',
     /style\.marginLeft = schub/.test(textQuelle)
     && /style\.marginTop = schub/.test(textQuelle), true);
