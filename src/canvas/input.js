@@ -67,6 +67,31 @@ function attachInput(canvas, textDiv, objLayer, page) {
     setActivePg(page.id);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DER MAGNET
+
+     Wer knapp neben ein Wort klickt, will fast immer AN das Wort und
+     nicht daneben. Vorher galten zwei Pixel als „getroffen"; alles
+     darueber legte einen frei stehenden Absatz an, und man stand mit
+     der Marke einen Fingerbreit neben dem Text, wo man doch hinein
+     wollte.
+
+     Jetzt zieht der Text auf etwa einem Zentimeter an. Waagerecht,
+     nicht senkrecht: nach oben und unten bleibt es eng, sonst risse
+     eine Zeile die Marke aus der Zeile darunter zu sich herueber.
+
+     Gemessen wird in Bildschirm-Pixeln, deshalb wird der Zentimeter mit
+     dem Zoom der Seite mitskaliert – sonst haftete es bei 50 % doppelt
+     so weit wie bei 100 %. */
+  const ANHAFT_MM = 10;
+  const PX_PRO_MM = 96 / 25.4;            // CSS rechnet mit 96 dpi
+
+  function anhaftPx() {
+    const r = textDiv.getBoundingClientRect();
+    const zoom = textDiv.offsetWidth > 0 ? (r.width / textDiv.offsetWidth) : 1;
+    return ANHAFT_MM * PX_PRO_MM * zoom;
+  }
+
   function isFreeEditorAreaClick(clientX, clientY) {
     const plain = (textDiv.innerText || '').replace(/\r/g, '');
     if (!plain.trim().length) return true;
@@ -84,10 +109,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
       const rects = beschriebeneKaesten();
       if (!rects.length) return true;
 
+      const haft = anhaftPx();
       const trifftText = rects.some(rc => (
         rc.width > 1 &&
-        clientX >= rc.left - 2 &&
-        clientX <= rc.right + 2 &&
+        clientX >= rc.left - haft &&
+        clientX <= rc.right + haft &&
         clientY >= rc.top - 1 &&
         clientY <= rc.bottom + 1
       ));

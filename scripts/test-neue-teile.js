@@ -541,6 +541,19 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
     && /const fest = \(wahl === 'fest'\)/.test(textQuelle), true);
   check('Und das Zusammenwachsen ist draussen',
     /verschmelzeBeruehrende/.test(textQuelle), false);
+  /* 7b. Der Magnet: knapp daneben geklickt heisst „hin". */
+  check('Vorhandener Text zieht auf etwa einem Zentimeter an',
+    /const ANHAFT_MM = 10/.test(lies('src', 'canvas', 'input.js'))
+    && /clientX >= rc\.left - haft/.test(lies('src', 'canvas', 'input.js'))
+    && /clientX <= rc\.right \+ haft/.test(lies('src', 'canvas', 'input.js')), true);
+  /* Senkrecht darf er NICHT anziehen - sonst risse eine Zeile die Marke
+     aus der Zeile darunter zu sich herueber. */
+  check('Aber nur waagerecht, nicht nach oben und unten',
+    /clientY >= rc\.top - 1/.test(lies('src', 'canvas', 'input.js'))
+    && /clientY <= rc\.bottom \+ 1/.test(lies('src', 'canvas', 'input.js')), true);
+  check('Und der Zeilenanfang zieht ebenso an',
+    /if \(linksPx < ANHAFT_MM_TEXT \* PX_PRO_MM_TEXT\) linksPx = 0;/.test(textQuelle), true);
+
   check('Waagerecht UND senkrecht wird ausgewichen',
     /style\.marginLeft = schub/.test(textQuelle)
     && /style\.marginTop = schub/.test(textQuelle), true);

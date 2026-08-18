@@ -960,6 +960,12 @@ function richteFreieAbsaetze(textDiv) {
    Texte zusammen und sähen aus wie einer. */
 const FREI_LUFT_PX = 10;
 
+/* Wie weit der Zeilenanfang anzieht. Dieselbe Weite gilt in
+   canvas/input.js fuer das Anhaften an vorhandenen Text – wer das eine
+   aendert, sollte das andere mitaendern. */
+const ANHAFT_MM_TEXT = 10;
+const PX_PRO_MM_TEXT = 96 / 25.4;
+
 /** @returns {'elastisch'|'fest'} */
 function ausweichArt(nb) {
   /* Ein FREMDES Dokument bringt die Entscheidung seines Besitzers mit.
@@ -1143,9 +1149,19 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
      Text soll auf den Linien des Papiers sitzen. Beides in
      Seiten-Pixeln: die Seite ist gezoomt, der gespeicherte Wert darf
      das nicht sein. */
-  const linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
+  let linksPx = Math.max(0, (clientX - r.left) / Math.max(0.01, scaleX));
   const obenRoh = (clientY - r.top) / Math.max(0.01, scaleY);
   const zeile = Math.max(0, Math.floor((obenRoh - pt) / lh));
+
+  /* ── Der Zeilenanfang zieht an ─────────────────────────────────────
+     Wer knapp neben den Anfang einer Zeile klickt, will an den Anfang.
+     Ohne das saesse der Absatz drei Pixel weiter rechts als der darueber,
+     und die Seite haette einen unruhigen linken Rand.
+
+     Ein Zentimeter, dieselbe Weite wie beim Anhaften an vorhandenen Text
+     (canvas/input.js). Gerechnet wird hier in SEITEN-Pixeln, deshalb ohne
+     Zoom: der gespeicherte Wert soll vom Zoom unabhaengig sein. */
+  if (linksPx < ANHAFT_MM_TEXT * PX_PRO_MM_TEXT) linksPx = 0;
 
   const neu = _freierAbsatz(linksPx, pt + zeile * lh);
   neu[VORLAEUFIG] = true;
