@@ -93,6 +93,10 @@ const READER = { uid: 'uid-leser', mail: 'leser@example.com' };
 const STRANGER = { uid: 'uid-fremd', mail: 'fremd@example.com' };
 const BLOCKED = { uid: 'uid-gesperrt', mail: 'gesperrt@example.com' };
 
+/* Dieselbe Kennung, die adminUid() in website/firestore.rules zurueckgibt.
+   Steht dort der Platzhalter statt der echten UID, faellt es hier auf. */
+const ADMIN = { uid: '9czynXNXAlfs8bGtx5hEOO9dRCd2', mail: 'admin@example.com' };
+
 /** Ein Dokument, wie es shareDocument anlegt. */
 function headData(overrides = {}) {
   return {
@@ -684,6 +688,45 @@ function headData(overrides = {}) {
     remove(ref(rtOf(READER), 'chat/dok1/m/frisch')));
   await ok('Die eigenen jederzeit',
     remove(ref(rtOf(READER), 'chat/dok1/m/n1')));
+
+  /* ── Postfach ──────────────────────────────────────────────────────
+     Die Nachrichten selbst sind oeffentlich lesbar – das ist Absicht und
+     der Grund, warum der Empfaengerkreis in der App nur eine Hoeflichkeit
+     ist (src/core/postfach.js). Der persoenliche Gelesen-Stand dagegen
+     geht niemanden sonst etwas an, auch den Admin nicht. */
+  section('Firestore: Postfach');
+
+  const ohne = () => env.unauthenticatedContext().firestore();
+
+  await ok('Nachrichten liest jeder, auch ohne Anmeldung',
+    getDoc(doc(ohne(), 'site_content/nachrichten')));
+
+  await denied('Schreiben darf sie nur der Admin',
+    setDoc(doc(fsOf(STRANGER), 'site_content/nachrichten'), { liste: [] }));
+
+  await ok('Der Admin darf',
+    setDoc(doc(fsOf(ADMIN), 'site_content/nachrichten'), { liste: [] }));
+
+  await ok('Den eigenen Stand anlegen',
+    setDoc(doc(fsOf(READER), 'postfach/' + READER.uid),
+      { gelesen: ['n1'], geloescht: [], aktualisiert: serverTimestamp() }));
+
+  await ok('Und wieder lesen',
+    getDoc(doc(fsOf(READER), 'postfach/' + READER.uid)));
+
+  await denied('Fremde Staende bleiben zu',
+    getDoc(doc(fsOf(STRANGER), 'postfach/' + READER.uid)));
+
+  await denied('Und lassen sich nicht ueberschreiben',
+    setDoc(doc(fsOf(STRANGER), 'postfach/' + READER.uid), { gelesen: [] }));
+
+  /* Der Admin verschickt Nachrichten – er soll nicht mitlesen koennen,
+     wer sie geoeffnet hat. */
+  await denied('Auch der Admin sieht fremde Staende nicht',
+    getDoc(doc(fsOf(ADMIN), 'postfach/' + READER.uid)));
+
+  await denied('Ohne Anmeldung gar kein Postfach',
+    getDoc(doc(ohne(), 'postfach/' + READER.uid)));
 
   section('Realtime Database: alles Übrige bleibt zu');
 

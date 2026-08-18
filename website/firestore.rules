@@ -179,6 +179,27 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    /* ── Postfach: was jeder schon gelesen und geloescht hat ──────────
+       Die Nachrichten SELBST stehen in site_content/nachrichten und sind
+       oeffentlich lesbar – der Empfaengerkreis ist eine Hoeflichkeit der
+       App, keine Sperre (siehe src/core/postfach.js). Hier steht nur der
+       persoenliche Stand: welche Kennungen gelesen, welche geloescht.
+
+       Jeder sieht und schreibt ausschliesslich sein eigenes Dokument.
+       Auch die anonyme Geraetekennung zaehlt – ohne sie haetten Nutzer
+       ohne Konto gar kein Postfach.
+
+       Geschrieben wird immer der ganze Stand, nicht nur das Neue: beide
+       Listen wachsen nur, der Abgleich zwischen zwei Rechnern ist
+       deshalb eine Vereinigung und braucht keine Reihenfolge.
+
+       Der Admin bekommt hier bewusst KEINEN Zugriff. Er verschickt
+       Nachrichten, er liest nicht mit, wer sie geoeffnet hat.
+       ───────────────────────────────────────────────────────────────── */
+    match /postfach/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     /* ── Kennung des Anmeldenden ──────────────────────────────────────
        Seit die App das id_token von Google bzw. Microsoft an Firebase
        weiterreicht (js/share.js, signInWithProviderToken), steht hier
