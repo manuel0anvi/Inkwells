@@ -31,7 +31,7 @@ steht deshalb in `.gitignore` und liegt nur örtlich. Wer die Website bearbeiten
 will, holt sie sich dorthin:
 
 ```
-git clone -b website https://github.com/manuel0anvi/Inkwell.git website
+git clone -b website https://github.com/manuel0anvi/Inkwells.git website
 ```
 
 Danach funktionieren `npm run web` und `npm run deploy-web` wie gehabt.

@@ -57,7 +57,7 @@ function git(args, opts = {}) {
 
 if (!fs.existsSync(LOCAL)) {
   console.error('✗ Der Ordner website/ fehlt ganz.');
-  console.error('  git clone -b website https://github.com/manuel0anvi/Inkwell.git website');
+  console.error('  git clone -b website https://github.com/manuel0anvi/Inkwells.git website');
   process.exit(1);
 }
 

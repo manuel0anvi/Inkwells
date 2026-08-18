@@ -150,7 +150,7 @@ function downloadFile(url, dest, rest = MAX_REDIRECTS) {
 }
 async function getLatestGitHubRelease() {
   try {
-    const data = await fetchJson('https://api.github.com/repos/manuel0anvi/Inkwell/releases/latest');
+    const data = await fetchJson('https://api.github.com/repos/manuel0anvi/Inkwells/releases/latest');
     if (!data || !data.tag_name) return null;
     const exeAsset = data.assets && data.assets.find(a => a.name.endsWith('.exe'));
     if (!exeAsset) return null;

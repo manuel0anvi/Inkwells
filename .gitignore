@@ -14,7 +14,7 @@ src/core/cloudConfig.local.js
 # Der Ordner bleibt auf dem eigenen Rechner liegen und wird von
 # "npm run web" und "npm run deploy-web" weiter gebraucht. Wer den
 # app-Branch frisch klont, holt ihn sich aus dem website-Branch:
-#     git clone -b website https://github.com/manuel0anvi/Inkwell.git website
+#     git clone -b website https://github.com/manuel0anvi/Inkwells.git website
 # Bewusst "/website/*" und nicht "/website/": in einen ausgeschlossenen
 # ORDNER steigt Git gar nicht erst hinein, ein "!" darin bliebe wirkungslos.
 # Mit dem Stern wird jeder Eintrag einzeln ausgeschlossen – und nur dann

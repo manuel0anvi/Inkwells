@@ -41,10 +41,10 @@ function arg(name, fallback) {
   return hit ? hit.slice(name.length + 3) : fallback;
 }
 
-const REPO = arg('repo', 'https://github.com/manuel0anvi/Inkwell.git');
+const REPO = arg('repo', 'https://github.com/manuel0anvi/Inkwells.git');
 const BRANCH = arg('branch', 'website');
 
-const isDefaultTarget = REPO.includes('manuel0anvi/Inkwell') && BRANCH === 'website';
+const isDefaultTarget = REPO.includes('manuel0anvi/Inkwells') && BRANCH === 'website';
 const WORK = path.join(ROOT, isDefaultTarget ? '.deploy-website' : '.deploy-website-alt');
 
 // Gehört zur Firebase-Einrichtung, nicht auf die Website
