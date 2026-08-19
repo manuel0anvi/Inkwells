@@ -96,6 +96,22 @@
       
       let transferred = 0;
       for (const nb of S.notebooks) {
+        /* ── Fremde Dokumente bleiben, wo sie sind: nirgends ──────────
+           Ein für mich freigegebenes Dokument gehört jemand anderem. Es
+           hat hier keine .jrnl-Datei und steht auch nicht in der
+           Übersicht (core/registry.js) – sein Zuhause ist der Raum in
+           Firestore.
+
+           Ohne diese Zeile lief es genau deshalb in den Zweig
+           „Quelle nicht gefunden, dann eben frisch speichern" darunter:
+           der Umzug legte eine Datei für ein Dokument an, das mir gar
+           nicht gehört, und meldete dabei einen Fehler. Gemeldet aus der
+           Nutzung, August 2026. */
+        if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) {
+          console.log('[Settings] Übersprungen, gehört jemand anderem:', nb.name);
+          continue;
+        }
+
         // Get current path from registry or generate from old location
         const registryEntry = Registry.find(nb.id);
         const currentPath = registryEntry?.path || (oldLocation + '\\' + nb.name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim() + '.jrnl');

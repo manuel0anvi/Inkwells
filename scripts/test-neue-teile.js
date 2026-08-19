@@ -554,6 +554,14 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
   check('Und der Zeilenanfang zieht ebenso an',
     /if \(linksPx < ANHAFT_MM_TEXT \* PX_PRO_MM_TEXT\) linksPx = 0;/.test(textQuelle), true);
 
+  /* 7c. Fremde Dokumente werden nie auf die Platte geschrieben.
+     Der Umzug des Speicherorts ging alle Hefte durch und legte fuer
+     jedes ohne Datei eine neue an - auch fuer die, die mir gar nicht
+     gehoeren. Gemeldet aus der Nutzung. */
+  check('Der Ordnerwechsel laesst fremde Dokumente aus',
+    /\[Settings\] Übersprungen, gehört jemand anderem/
+      .test(lies('src', 'ui', 'settings.js')), true);
+
   check('Waagerecht UND senkrecht wird ausgewichen',
     /style\.marginLeft = schub/.test(textQuelle)
     && /style\.marginTop = schub/.test(textQuelle), true);
