@@ -65,3 +65,8 @@ Desktop.ini
 # umschreiben, und das ist auf einem gemeinsamen Branch tabu.
 final version.zip
 icon-notizbuch-alt.ico
+
+# ── Werbebilder ─────────────────────────────────────────────────────
+# Die Aufnahmen entstehen aus scripts/werbebilder neu. Sie gehoeren
+# nicht ins Repo: es ist oeffentlich, und die Dateien sind gross.
+/werbebilder/
