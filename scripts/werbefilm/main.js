@@ -82,14 +82,20 @@ app.on('ready', async () => {
      gebracht, kostet dasselbe nur noch Millisekunden. */
   fs.mkdirSync(QUELLEN, { recursive: true });
   console.log('Vorlagen rechnen ...');
-  for (const [von, nach, filter] of [
-    ['A2-blatt-nah.png', 'blatt.jpg', 'scale=1920:-2:flags=lanczos'],
-    ['B-uebersicht.png', 'B-uebersicht.jpg', 'scale=1920:1080:flags=lanczos'],
-    ['F-tabelle-formel.png', 'F-tabelle-formel.jpg', 'scale=1920:1080:flags=lanczos'],
-    ['C-zusammen.png', 'C-zusammen.jpg', 'scale=1920:1080:flags=lanczos']
+  /* In VOLLER Groesse, nicht auf 1920 heruntergerechnet. Die Karten
+     zeigen einen Ausschnitt – bei der Formel etwa nur das Blatt, nicht
+     das halbe Fenster drumherum –, und dieser Ausschnitt wird auf
+     Kartenbreite hochgezogen. Von einer 1920er Vorlage bliebe davon
+     Matsch; die Aufnahmen sind 2560 breit, und genau die werden hier
+     gebraucht. Als JPEG, weil PNG in dieser Groesse nur langsamer ist. */
+  for (const [von, nach] of [
+    ['A2-blatt-nah.png', 'blatt.jpg'],
+    ['B-uebersicht.png', 'B-uebersicht.jpg'],
+    ['F-tabelle-formel.png', 'F-tabelle-formel.jpg'],
+    ['C-zusammen.png', 'C-zusammen.jpg']
   ]) {
     const r = spawnSync(ffmpeg, ['-y', '-loglevel', 'error', '-i',
-      path.join(QUELLE, von), '-vf', filter, '-q:v', '2',
+      path.join(QUELLE, von), '-q:v', '2',
       path.join(QUELLEN, nach)], { shell: false });
     if (r.status !== 0) {
       console.error('ffmpeg konnte ' + von + ' nicht umrechnen.');

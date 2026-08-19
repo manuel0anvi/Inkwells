@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Inkwells 15s</title>
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; padding: 0; background: #12121a; overflow: hidden }
+  html, body { margin: 0; padding: 0; background: #0b0b12; overflow: hidden }
   canvas { display: block }
 </style>
 </head>
@@ -15,34 +15,36 @@
 /* ══════════════════════════════════════════════════════════════════════
    FUENFZEHN SEKUNDEN, AUF EINE LEINWAND GEMALT
 
-   Der erste Anlauf lief ueber CSS: vier <img> mit transform:scale, vom
-   Browser uebereinandergeblendet, und jedes Einzelbild ueber
-   Page.captureScreenshot geholt. Das war zu langsam — nach fuenfzehn
-   Minuten stand er bei Bild 226 von 450.
+   Der Ton ist der der beiden Vorlagen: dunkler Grund, driftende
+   Lichtbaender, Funken, und die Oberflaeche nicht formatfuellend,
+   sondern als SCHWEBENDE KARTE mit Schatten, die hereinkippt und sich
+   setzt. Nur in Gold statt in Cyan — die Farben stehen in css/base.css,
+   und ein Film in fremden Farben ist der Film einer fremden App.
 
-   Der Grund lag nicht am Aufnehmen, sondern am Rechnen davor: bei jedem
-   Bild hat Chromium die mehrere Megapixel grossen Aufnahmen neu
-   abgetastet (die hochkante Blattaufnahme allein ist 2483x3470), und
-   waehrend einer Ueberblendung gleich zwei davon.
-
-   Hier wird stattdessen gezeichnet. drawImage bekommt ein QUELLRECHTECK
-   mit — die Kamerafahrt IST dieses Rechteck — und tastet damit nur den
-   Ausschnitt ab, der wirklich ins Bild kommt. Die Vorlagen liegen
-   ausserdem schon auf 1920 heruntergerechnet in werbefilm/quellen
-   (ffmpeg, in main.js). Aus Minuten je Bild werden Millisekunden.
+   >>> Warum Karten und keine formatfuellenden Aufnahmen <<<
+   Ein Bildschirmfoto ueber das ganze Bild sieht aus wie ein
+   Bildschirmfoto. Dieselbe Aufnahme auf eine Karte gelegt, leicht
+   gekippt, mit Schatten und einem Lichtstreif darueber, sieht aus wie
+   ein Gegenstand — und Gegenstaende kann man bewegen.
 
    >>> Warum die Bildnummer und nicht die Uhr <<<
    Es laeuft nichts von selbst: kein requestAnimationFrame, keine
    CSS-Animation. main.js sagt „male Bild 137", und erst dann wird
    gemalt. Damit ist der Film gleichmaessig, egal wie beschaeftigt der
    Rechner beim Aufnehmen gerade war.
+
+   >>> Und warum alles Weiche vorgerechnet ist <<<
+   ctx.filter = 'blur(...)' ist schoen und teuer. Die Lichtbaender und
+   der Schein der Funken werden deshalb EINMAL beim Start in kleine
+   Hilfsleinwaende gemalt und danach nur noch verschoben, gedreht und
+   verblasst. Das ist der Unterschied zwischen zwoelf Sekunden und
+   einer Viertelstunde fuer denselben Film.
    ══════════════════════════════════════════════════════════════════════ */
 
 const B = 1920, H = 1080;
-const FPS = 30, DAUER = 15;
-const BLENDE = 0.5;
+const FPS = 30;
 
-const GRUND = '#12121a';
+const GRUND = '#0b0b12';
 const GOLD = '#c8a96e';
 const GOLD_HELL = '#e0c07a';
 const HELL = '#ede8e0';
@@ -55,172 +57,367 @@ ctx.imageSmoothingQuality = 'high';
 const weich = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 const misch = (a, b, p) => a + (b - a) * p;
 const klemm = (x, a, b) => Math.max(a, Math.min(b, x));
+const anteil = (t, a, b) => klemm((t - a) / (b - a), 0, 1);
 
-/* ── Die Einstellungen ────────────────────────────────────────────────
-   `zoom` ist der Bildausschnitt: 1 heisst ganze Breite, 1.15 heisst
-   naeher dran. `x` und `y` sind die Lage des Ausschnitts im Bild, von
-   0 (ganz oben/links) bis 1 (ganz unten/rechts) — bei 0.5 in der Mitte.
-   Sie ueberlappen sich um genau eine Blendenlaenge. */
-const SCHNITTE = [
-  /* >>> Warum die Zoomwerte so klein sind <<<
-     Die Vorlagen sind auf genau 1920 gerechnet. Zoom 1.0 heisst damit
-     Pixel auf Pixel; alles darueber ist Hochrechnen und wird weich. Im
-     ersten Anlauf standen hier 1.30 und 1.34 — der Text auf dem Blatt
-     war dreimal so gross wie noetig und sichtbar unscharf. Die Bewegung
-     soll aus der FAHRT kommen, nicht aus der Vergroesserung. */
-  {
-    quelle: 'blatt', von: 0.0, bis: 3.9,
-    /* Die einzige Fahrt, die etwas BEHAUPTET: sie faengt beim getippten
-       Text an und hoert bei der Handschrift auf, auf demselben Blatt.
-       Das ist der Satz, um den es geht — als Kamerabewegung statt als
-       Behauptung in der Zeile darunter. */
-    zoom: [1.00, 1.07], x: [0.5, 0.5], y: [0.03, 0.52],
-    text: [['Typed text and handwriting. ', 0], ['One page.', 1]]
-  },
-  {
-    quelle: 'B-uebersicht', von: 3.4, bis: 6.9,
-    zoom: [1.07, 1.00], x: [0.45, 0.5], y: [0.35, 0.45],
-    text: [['Every notebook ', 0], ['in one place.', 1]]
-  },
-  {
-    quelle: 'F-tabelle-formel', von: 6.4, bis: 9.9,
-    zoom: [1.00, 1.12], x: [0.5, 0.46], y: [0.30, 0.16],
-    text: [['Formulas, tables, ', 0], ['PDFs.', 1]]
-  },
-  {
-    quelle: 'C-zusammen', von: 9.4, bis: 13.1,
-    zoom: [1.12, 1.00], x: [0.72, 0.50], y: [0.45, 0.50],
-    text: [['Edit together, ', 0], ['live.', 1]]
-  }
+/* Aussen weich, innen mit Schwung – dafuer, dass eine Karte hereinkippt
+   und sich SETZT, statt gleichmaessig anzukommen. */
+const raus = x => 1 - Math.pow(1 - klemm(x, 0, 1), 3);
+const federn = x => {
+  x = klemm(x, 0, 1);
+  return 1 - Math.pow(2, -9 * x) * Math.cos(x * 13);
+};
+
+const BILDER = {};
+let bandA = null, bandB = null, schein = null;
+
+/* ── Die Zeitrechnung ─────────────────────────────────────────────────
+   Fuenf Bilder, die sich um zwei Zehntel ueberlappen. Die Ueberlappung
+   ist die Uebergabe: die alte Karte geht hinaus, waehrend die neue
+   schon hereinkommt. */
+const SZENEN = [
+  { von: 0.0,  bis: 3.75 },
+  { von: 3.55, bis: 6.95 },
+  { von: 6.75, bis: 10.15 },
+  { von: 9.95, bis: 13.35 },
+  { von: 13.15, bis: 15.0 }
 ];
 
-const ENDE_VON = 12.6;
-const BILDER = {};
+/* ══════════════════════════════════════════════════════════════════════
+   DER GRUND: LICHTBAENDER UND FUNKEN
+   ══════════════════════════════════════════════════════════════════════ */
 
-/* Der dunkle Rand. Einmal gebaut und dann nur noch aufgelegt – ein
-   Verlauf je Einzelbild neu zu rechnen kostet mehr als das Bild. */
-let vignette = null;
-function baueVignette() {
-  const v = document.createElement('canvas');
-  v.width = B; v.height = H;
-  const g = v.getContext('2d');
-  const r = g.createRadialGradient(B / 2, H * 0.48, H * 0.28, B / 2, H * 0.48, H * 0.92);
-  r.addColorStop(0, 'rgba(0,0,0,0)');
-  r.addColorStop(0.62, 'rgba(0,0,0,.30)');
-  r.addColorStop(1, 'rgba(0,0,0,.72)');
-  g.fillStyle = r; g.fillRect(0, 0, B, H);
-  vignette = v;
+/** Ein weiches Lichtband, einmal gemalt und danach nur noch bewegt. */
+function baueBand(breit, hoch, farbe, dicke) {
+  const k = document.createElement('canvas');
+  k.width = breit; k.height = hoch;
+  const g = k.getContext('2d');
+  g.filter = 'blur(46px)';
+  g.strokeStyle = farbe;
+  g.lineWidth = dicke;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(-40, hoch * 0.62);
+  g.bezierCurveTo(breit * 0.26, hoch * 0.16, breit * 0.55, hoch * 0.92,
+                  breit + 40, hoch * 0.34);
+  g.stroke();
+  g.filter = 'none';
+  return k;
 }
 
-/** Eine Einstellung malen: Quellrechteck ausrechnen, Ausschnitt zeichnen. */
-function maleSchnitt(s, p, deckung) {
-  const im = BILDER[s.quelle];
-  if (!im) return;
-  const z = misch(s.zoom[0], s.zoom[1], p);
-
-  /* Das Quellrechteck hat immer 16:9 – sonst verzerrte das Bild. Es ist
-     so gross, wie der Zoom erlaubt, und passt in jedem Fall ins Bild. */
-  let sw = im.naturalWidth / z;
-  let sh = sw * H / B;
-  if (sh > im.naturalHeight) { sh = im.naturalHeight; sw = sh * B / H; }
-
-  const freiX = im.naturalWidth - sw;
-  const freiY = im.naturalHeight - sh;
-  const sx = klemm(misch(s.x[0], s.x[1], p), 0, 1) * freiX;
-  const sy = klemm(misch(s.y[0], s.y[1], p), 0, 1) * freiY;
-
-  ctx.globalAlpha = deckung;
-  ctx.drawImage(im, sx, sy, sw, sh, 0, 0, B, H);
-  ctx.globalAlpha = 1;
+/** Der weiche Schein hinter einem Funken. */
+function baueSchein(r) {
+  const k = document.createElement('canvas');
+  k.width = r * 2; k.height = r * 2;
+  const g = k.getContext('2d');
+  const v = g.createRadialGradient(r, r, 0, r, r, r);
+  v.addColorStop(0, 'rgba(224,192,122,.85)');
+  v.addColorStop(0.35, 'rgba(200,169,110,.28)');
+  v.addColorStop(1, 'rgba(200,169,110,0)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, r * 2, r * 2);
+  return k;
 }
 
-/* ── Der dunkle Fuss unter der Zeile ──────────────────────────────────
-   Im ersten Anlauf stand die Zeile mit blossem Schatten ueber dem Bild.
-   Ueber der Uebersicht ging das (dunkel), ueber dem BLATT nicht: cremes
-   Papier, weisse Schrift, dazwischen die Handschrift — unlesbar.
+function maleGrund(t) {
+  ctx.fillStyle = GRUND;
+  ctx.fillRect(0, 0, B, H);
 
-   Ein Schatten hilft da nicht, er macht helle Flaechen nur schmutzig.
-   Es braucht einen Grund, und zwar einen, der von selbst verschwindet:
-   er kommt und geht mit der Zeile, nicht mit der Einstellung. */
-let fuss = null;
-function baueFuss() {
-  const f = document.createElement('canvas');
-  f.width = 8; f.height = H;
-  const g = f.getContext('2d');
-  const v = g.createLinearGradient(0, H * 0.60, 0, H);
-  v.addColorStop(0, 'rgba(10,10,16,0)');
-  v.addColorStop(0.45, 'rgba(10,10,16,.55)');
-  v.addColorStop(1, 'rgba(10,10,16,.88)');
-  g.fillStyle = v; g.fillRect(0, 0, 8, H);
-  fuss = f;
+  /* Zwei Baender, gegenlaeufig und verschieden schnell. Gegenlaeufig,
+     damit nie das Muster zu sehen ist, nach dem sie sich bewegen. */
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  ctx.globalAlpha = 1.0;
+  ctx.save();
+  ctx.translate(B * 0.5 + Math.sin(t * 0.28) * 150, H * 0.42 + Math.cos(t * 0.21) * 70);
+  ctx.rotate(Math.sin(t * 0.14) * 0.08);
+  ctx.drawImage(bandA, -B * 0.62, -H * 0.5, B * 1.24, H);
+  ctx.restore();
+
+  ctx.globalAlpha = 0.72;
+  ctx.save();
+  ctx.translate(B * 0.5 - Math.sin(t * 0.19 + 1.4) * 190, H * 0.58 - Math.cos(t * 0.16) * 90);
+  ctx.rotate(-0.06 + Math.cos(t * 0.11) * 0.07);
+  ctx.drawImage(bandB, -B * 0.62, -H * 0.5, B * 1.24, H);
+  ctx.restore();
+
+  ctx.restore();
 }
 
-/** Die Zeile unten: normaler Text in Creme, betonter in Gold. */
-function maleZeile(teile, deckung) {
-  if (deckung <= 0.002) return;
-  const gross = 58;
-  const yy = H * 0.895 + misch(16, 0, deckung);
-
-  if (fuss) {
-    ctx.save();
-    ctx.globalAlpha = deckung;
-    ctx.drawImage(fuss, 0, 0, 8, H, 0, 0, B, H);
-    ctx.restore();
+/* ── Funken ───────────────────────────────────────────────────────────
+   Vierzackige Sterne, wie in der ersten Vorlage. Sie stehen fest im
+   Bild (gesaet, nicht zufaellig je Einzelbild — sonst flackerten sie)
+   und atmen mit eigener Geschwindigkeit. */
+const FUNKEN = [];
+(function saeFunken() {
+  let s = 20260819;
+  const z = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let i = 0; i < 26; i++) {
+    FUNKEN.push({
+      x: z() * B, y: z() * H,
+      gr: 7 + z() * 16,
+      takt: 0.5 + z() * 1.1,
+      phase: z() * 6.28,
+      kraft: 0.35 + z() * 0.65
+    });
   }
+})();
 
-  const stuecke = teile.map(([t, fett]) => {
-    ctx.font = (fett ? '600 ' : '400 ') + gross + 'px "Crimson Pro", Georgia, serif';
-    return { t, fett, w: ctx.measureText(t).width };
-  });
-  const breite = stuecke.reduce((a, s) => a + s.w, 0);
+function maleStern(x, y, r, a) {
+  if (a <= 0.01) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = a * 0.5;
+  const sr = r * 3.4;
+  ctx.drawImage(schein, x - sr, y - sr, sr * 2, sr * 2);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#f2dfae';
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x + r * 0.17, y - r * 0.17, x + r, y);
+  ctx.quadraticCurveTo(x + r * 0.17, y + r * 0.17, x, y + r);
+  ctx.quadraticCurveTo(x - r * 0.17, y + r * 0.17, x - r, y);
+  ctx.quadraticCurveTo(x - r * 0.17, y - r * 0.17, x, y - r);
+  ctx.fill();
+  ctx.restore();
+}
+
+function maleFunken(t, staerke) {
+  if (staerke <= 0.01) return;
+  for (const f of FUNKEN) {
+    const puls = 0.5 + 0.5 * Math.sin(t * f.takt + f.phase);
+    maleStern(f.x, f.y, f.gr * (0.55 + puls * 0.45), puls * f.kraft * staerke);
+  }
+}
+
+/** Ein Ausbruch von Funken um eine Stelle – fuer den Wechsel. */
+function funkenStoss(cx, cy, p, anzahl) {
+  if (p <= 0 || p >= 1) return;
+  for (let i = 0; i < anzahl; i++) {
+    const w = (i / anzahl) * 6.283 + p * 0.6;
+    const d = misch(60, 460, raus(p)) * (0.6 + (i % 3) * 0.22);
+    maleStern(cx + Math.cos(w) * d, cy + Math.sin(w) * d * 0.62,
+              misch(16, 3, p), (1 - p) * 0.9);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE KARTE
+   ══════════════════════════════════════════════════════════════════════ */
+
+function rundesRechteck(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/**
+ * Eine Aufnahme als schwebende Karte.
+ * @param o.quelle  Name in BILDER
+ * @param o.aus     Ausschnitt: {cx,cy} ist seine MITTE in Anteilen der
+ *                  Aufnahme, z der Zoom (1 = ganze Breite).
+ *
+ *                  Zuerst stand hier die Lage der oberen linken Ecke im
+ *                  freien Raum ("0.3 des Ueberstands"). Das war nicht zu
+ *                  treffen: wieviel Ueberstand es gibt, haengt selbst am
+ *                  Zoom, also verschob jede Zoomaenderung auch den
+ *                  Bildausschnitt. Mit der Mitte bleibt stehen, was man
+ *                  ansieht, und der Zoom tut nur noch das, was er soll.
+ * @param o.mitte   Mitte der Karte auf der Buehne
+ * @param o.breite  Breite der Karte (Hoehe folgt aus 16:9)
+ * @param o.dreh    Neigung in Bogenmass
+ * @param o.deckung 0..1
+ * @param o.wisch   0..1 – wie weit die Karte von oben aufgedeckt ist
+ * @param o.streif  0..1 – Lage des Lichtstreifs, ausserhalb 0..1 = keiner
+ */
+function maleKarte(o) {
+  const im = BILDER[o.quelle];
+  if (!im || o.deckung <= 0.004) return;
+
+  /* ── Das Seitenverhaeltnis gehoert zum Inhalt ──────────────────────
+     Erst war jede Karte 16:9. Bei der Uebersicht ging das nicht auf:
+     die Hefte stehen als BRETT nebeneinander, oben im Fenster, und
+     darunter ist Luft. Ein 16:9-Ausschnitt, der alle Hefte fasst, nimmt
+     zwangslaeufig die ganze Breite — und damit auch die leere Haelfte.
+     Zieht man ihn enger, fallen links die ersten Hefte heraus; genau
+     das war zu sehen.
+
+     Eine breite, flache Karte loest beides: sie zeigt das Brett und
+     sonst nichts. */
+  const seite = o.seite || 9 / 16;
+  const w = o.breite, h = w * seite;
+  const r = 26;
+
+  let sw = im.naturalWidth / o.aus.z;
+  let sh = sw * seite;
+  if (sh > im.naturalHeight) { sh = im.naturalHeight; sw = sh / seite; }
+  const sx = klemm(o.aus.cx * im.naturalWidth - sw / 2, 0, im.naturalWidth - sw);
+  const sy = klemm(o.aus.cy * im.naturalHeight - sh / 2, 0, im.naturalHeight - sh);
 
   ctx.save();
-  ctx.globalAlpha = deckung;
-  ctx.textBaseline = 'alphabetic';
-  /* Ein Schatten, weil die Zeile ueber wechselndem Grund steht – ueber
-     dem hellen Blatt waere sie ohne ihn nicht zu lesen. */
-  ctx.shadowColor = 'rgba(0,0,0,.9)';
-  ctx.shadowBlur = 26;
-  let x = (B - breite) / 2;
-  for (const s of stuecke) {
-    ctx.font = (s.fett ? '600 ' : '400 ') + gross + 'px "Crimson Pro", Georgia, serif';
-    ctx.fillStyle = s.fett ? GOLD_HELL : HELL;
-    ctx.fillText(s.t, x, yy);
-    x += s.w;
+  ctx.globalAlpha = o.deckung;
+  ctx.translate(o.mitte.x, o.mitte.y);
+  ctx.rotate(o.dreh || 0);
+
+  // Der Schatten macht aus der Flaeche einen Gegenstand
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.62)';
+  ctx.shadowBlur = 90;
+  ctx.shadowOffsetY = 34;
+  ctx.fillStyle = '#07070c';
+  rundesRechteck(-w / 2, -h / 2, w, h, r);
+  ctx.fill();
+  ctx.restore();
+
+  rundesRechteck(-w / 2, -h / 2, w, h, r);
+  ctx.save();
+  ctx.clip();
+  ctx.drawImage(im, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
+
+  /* ── Der Wisch ──────────────────────────────────────────────────────
+     Die Karte wird von oben nach unten aufgedeckt, mit einer leuchtenden
+     Kante am Rand. Bei der ersten Einstellung ist das der ganze Trick:
+     die Seite fuellt sich, waehrend man hinsieht. */
+  if (o.wisch !== undefined && o.wisch < 1) {
+    const kante = -h / 2 + h * klemm(o.wisch, 0, 1);
+    ctx.fillStyle = GRUND;
+    ctx.fillRect(-w / 2, kante, w, h);
+    const v = ctx.createLinearGradient(0, kante - 90, 0, kante + 26);
+    v.addColorStop(0, 'rgba(224,192,122,0)');
+    v.addColorStop(0.72, 'rgba(224,192,122,.30)');
+    v.addColorStop(1, 'rgba(240,222,175,.85)');
+    ctx.fillStyle = v;
+    ctx.fillRect(-w / 2, kante - 90, w, 116);
   }
+
+  // Lichtstreif: ein schraeger Glanz, der einmal darueberlaeuft
+  if (o.streif !== undefined && o.streif > 0 && o.streif < 1) {
+    const p = o.streif, bx = misch(-w * 0.9, w * 0.9, p);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.translate(bx, 0);
+    ctx.rotate(-0.36);
+    const v = ctx.createLinearGradient(-190, 0, 190, 0);
+    v.addColorStop(0, 'rgba(255,255,255,0)');
+    v.addColorStop(0.5, 'rgba(255,246,222,.16)');
+    v.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = v;
+    ctx.fillRect(-190, -h, 380, h * 2);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Ein feiner goldener Rand, damit die Karte gegen den Grund steht
+  rundesRechteck(-w / 2, -h / 2, w, h, r);
+  ctx.strokeStyle = 'rgba(200,169,110,.42)';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ZEILE
+
+   Wort fuer Wort, jedes steigt aus dem Grund auf. Der ganze Satz auf
+   einmal ist eine Bildunterschrift; Wort fuer Wort ist eine Stimme.
+   ══════════════════════════════════════════════════════════════════════ */
+function maleZeile(worte, t, von, bis) {
+  const auf = anteil(t, von, von + 0.55);
+  const zu = 1 - anteil(t, bis - 0.32, bis);
+  const d = weich(auf) * weich(zu);
+  if (d <= 0.004) return;
+
+  const gross = 62;
+  const basis = H * 0.885;
+
+  // Ein dunkler Fuss, sonst ist Creme auf hellem Papier nicht zu lesen
+  ctx.save();
+  ctx.globalAlpha = d;
+  const v = ctx.createLinearGradient(0, H * 0.60, 0, H);
+  v.addColorStop(0, 'rgba(8,8,14,0)');
+  v.addColorStop(0.5, 'rgba(8,8,14,.62)');
+  v.addColorStop(1, 'rgba(8,8,14,.92)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, H * 0.60, B, H * 0.40);
+  ctx.restore();
+
+  const luecke = ctx.measureText(' ').width;
+  const teile = worte.map(([w, gold]) => {
+    ctx.font = (gold ? '700 ' : '400 ') + gross + 'px "Crimson Pro", Georgia, serif';
+    return { w, gold, br: ctx.measureText(w).width };
+  });
+  const gesamt = teile.reduce((a, s) => a + s.br, 0) + luecke * (teile.length - 1) * 3.2;
+
+  ctx.save();
+  ctx.textBaseline = 'alphabetic';
+  let x = (B - gesamt) / 2;
+  teile.forEach((s, i) => {
+    // Jedes Wort kommt eine Zehntelsekunde nach dem vorigen
+    const wd = weich(anteil(t, von + 0.18 + i * 0.11, von + 0.62 + i * 0.11)) * weich(zu);
+    ctx.globalAlpha = wd;
+    ctx.font = (s.gold ? '700 ' : '400 ') + gross + 'px "Crimson Pro", Georgia, serif';
+    ctx.fillStyle = s.gold ? GOLD_HELL : HELL;
+    ctx.shadowColor = 'rgba(0,0,0,.75)';
+    ctx.shadowBlur = 18;
+    ctx.fillText(s.w, x, basis + misch(30, 0, wd));
+    x += s.br + luecke * 3.2;
+  });
   ctx.shadowBlur = 0;
 
-  // Der goldene Strich darunter waechst mit der Zeile auf
-  const sb = deckung * 190;
+  // Der goldene Strich waechst unter der Zeile auf
+  const sb = d * 210;
   const g = ctx.createLinearGradient(B / 2 - sb, 0, B / 2 + sb, 0);
   g.addColorStop(0, 'rgba(200,169,110,0)');
   g.addColorStop(0.5, GOLD);
   g.addColorStop(1, 'rgba(200,169,110,0)');
+  ctx.globalAlpha = d;
   ctx.fillStyle = g;
-  ctx.fillRect(B / 2 - sb, yy + 30, sb * 2, 2);
+  ctx.fillRect(B / 2 - sb, basis + 34, sb * 2, 2);
   ctx.restore();
 }
 
-/** Die Schlusstafel: Zeichen, Name, Satz, Adresse. */
-function maleEnde(deckung) {
-  if (deckung <= 0.002) return;
+/* ══════════════════════════════════════════════════════════════════════
+   DIE SCHLUSSTAFEL
+   ══════════════════════════════════════════════════════════════════════ */
+function maleEnde(t, von) {
+  const d = weich(anteil(t, von, von + 0.55));
+  if (d <= 0.004) return;
+
   ctx.save();
-  ctx.globalAlpha = deckung;
+  ctx.globalAlpha = d;
   ctx.fillStyle = GRUND;
   ctx.fillRect(0, 0, B, H);
+  ctx.restore();
+
+  maleGrundSchwach(t, d * 0.8);
 
   const mitte = H / 2;
+  const auf = federn(anteil(t, von + 0.1, von + 0.95));
+
+  ctx.save();
+  ctx.globalAlpha = d;
+  ctx.translate(B / 2, mitte);
+  ctx.scale(misch(0.82, 1, auf), misch(0.82, 1, auf));
+  ctx.translate(-B / 2, -mitte);
 
   /* Das Zeichen aus der Titelleiste (src/index.html), von Hand
      nachgezogen: ein Heft mit Ruecken und drei Zeilen. */
-  const s = 86, zx = B / 2 - 250, zy = mitte - 78;
-  const e = s / 15;                       // das SVG ist 15 Einheiten breit
+  const s = 92, zx = B / 2 - 268, zy = mitte - 84;
+  const e = s / 15;
+  ctx.save();
+  ctx.shadowColor = 'rgba(200,169,110,.55)';
+  ctx.shadowBlur = 40 * d;
   ctx.strokeStyle = GOLD;
   ctx.lineWidth = 1.2 * e;
-  ctx.beginPath();
-  ctx.roundRect(zx + 2 * e, zy + 2 * e, 11 * e, 11 * e, 2 * e);
+  rundesRechteck(zx + 2 * e, zy + 2 * e, 11 * e, 11 * e, 2 * e);
   ctx.stroke();
-  ctx.globalAlpha = deckung * 0.7;
+  ctx.restore();
+  ctx.globalAlpha = d * 0.7;
+  ctx.strokeStyle = GOLD;
   ctx.lineWidth = 1 * e;
   ctx.beginPath();
   ctx.moveTo(zx + 5 * e, zy + 2 * e); ctx.lineTo(zx + 5 * e, zy + 13 * e);
@@ -228,68 +425,195 @@ function maleEnde(deckung) {
   ctx.moveTo(zx + 7 * e, zy + 8 * e); ctx.lineTo(zx + 12 * e, zy + 8 * e);
   ctx.moveTo(zx + 7 * e, zy + 11 * e); ctx.lineTo(zx + 10 * e, zy + 11 * e);
   ctx.stroke();
-  ctx.globalAlpha = deckung;
+  ctx.globalAlpha = d;
 
   ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
   ctx.fillStyle = HELL;
-  ctx.font = '400 104px "Crimson Pro", Georgia, serif';
-  const wort = 'INKWELLS';
-  const sperr = 22;
-  let w = 0;
-  for (const ch of wort) w += ctx.measureText(ch).width + sperr;
-  let x = zx + 130;
-  for (const ch of wort) {
-    ctx.fillText(ch, x, mitte + 22);
+  ctx.font = '400 108px "Crimson Pro", Georgia, serif';
+  const wort = 'INKWELLS', sperr = 24;
+  let x = zx + 140;
+  wort.split('').forEach((ch, i) => {
+    // Die Buchstaben kommen von links nacheinander an
+    const bd = weich(anteil(t, von + 0.22 + i * 0.045, von + 0.62 + i * 0.045));
+    ctx.globalAlpha = d * bd;
+    ctx.fillText(ch, x, mitte + 24 + misch(14, 0, bd));
     x += ctx.measureText(ch).width + sperr;
-  }
+  });
+  ctx.globalAlpha = d;
 
   ctx.textAlign = 'center';
+  const sd = weich(anteil(t, von + 0.58, von + 0.92));
+  ctx.globalAlpha = d * sd;
   ctx.fillStyle = '#9a9080';
-  ctx.font = 'italic 400 34px "Crimson Pro", Georgia, serif';
-  ctx.fillText('Typed and handwritten. One page.', B / 2, mitte + 96);
+  ctx.font = 'italic 400 36px "Crimson Pro", Georgia, serif';
+  ctx.fillText('Typed and handwritten. One page.', B / 2, mitte + 102);
 
+  /* Die Adresse ist das Einzige, was der Zuschauer MITNEHMEN soll.
+     Sie stand zuletzt und lief bis von+1.4 auf – bei einer Schlusstafel
+     von 1,85 s blieb sie keine halbe Sekunde voll stehen. Jetzt ist sie
+     bei von+1.1 da und steht danach siebeneinhalb Zehntel. */
+  const nd = weich(anteil(t, von + 0.78, von + 1.1));
+  ctx.globalAlpha = d * nd;
   ctx.fillStyle = GOLD;
-  ctx.font = '400 27px "DM Mono", ui-monospace, monospace';
-  let n = 0;
+  ctx.font = '500 28px "DM Mono", ui-monospace, monospace';
   const netz = 'inkwells.me';
-  for (const ch of netz) n += ctx.measureText(ch).width + 9;
-  let nx = B / 2 - n / 2;
-  for (const ch of netz) {
-    ctx.fillText(ch, nx + ctx.measureText(ch).width / 2, mitte + 168);
-    nx += ctx.measureText(ch).width + 9;
-  }
+  let nb = 0;
+  netz.split('').forEach(ch => { nb += ctx.measureText(ch).width + 10; });
+  let nx = B / 2 - nb / 2;
+  netz.split('').forEach(ch => {
+    const bw = ctx.measureText(ch).width;
+    ctx.fillText(ch, nx + bw / 2, mitte + 176);
+    nx += bw + 10;
+  });
+  ctx.restore();
+
+  maleFunken(t, d * 0.9);
+}
+
+/** Nur die Baender, fuer die Schlusstafel (der Grund ist dort schon da). */
+function maleGrundSchwach(t, a) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.4 * a;
+  ctx.translate(B * 0.5 + Math.sin(t * 0.28) * 150, H * 0.5);
+  ctx.rotate(Math.sin(t * 0.14) * 0.08);
+  ctx.drawImage(bandA, -B * 0.62, -H * 0.5, B * 1.24, H);
   ctx.restore();
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DIE EINSTELLUNGEN
+
+   Jede ist eine Karte, die hereinkippt, sich setzt, langsam weiterfaehrt
+   und wieder hinausgeht. Der Unterschied liegt im Inhalt und in dem,
+   was zusaetzlich passiert.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Gemeinsamer Lauf einer Karte: herein, sitzen, hinaus. */
+function kartenLauf(t, sz, o) {
+  const l = sz.bis - sz.von;
+  const p = anteil(t, sz.von, sz.bis);
+  const ein = federn(anteil(t, sz.von, sz.von + 0.75));
+  const aus = weich(anteil(t, sz.bis - 0.45, sz.bis));
+
+  const deckung = weich(anteil(t, sz.von, sz.von + 0.28)) * (1 - aus);
+  // Hereinkippen, dann eine ruhige Fahrt, dann zur Seite hinaus
+  const dreh = misch(o.drehVon, 0, ein) + aus * o.drehRaus;
+  const x = B / 2 + misch(o.xVon, 0, ein) + aus * o.xRaus;
+  const y = H * 0.455 + misch(o.yVon, 0, ein) + aus * o.yRaus;
+  const gr = misch(o.grVon, o.grBis, weich(p)) * misch(1, 0.86, aus);
+
+  return { p, deckung, dreh, mitte: { x, y }, breite: gr };
+}
+
+const EINSTELLUNGEN = [
+  // ── 1 · Getippt und geschrieben, eine Seite ────────────────────────
+  (t, sz) => {
+    const k = kartenLauf(t, sz, {
+      drehVon: 0.10, drehRaus: -0.12, xVon: -110, xRaus: -520,
+      yVon: 150, yRaus: -60, grVon: 1380, grBis: 1460
+    });
+    /* Die Seite fuellt sich, waehrend man hinsieht – das ist der Satz,
+       um den es geht, als Bewegung statt als Behauptung.
+
+       Frueher lief der Wisch von 0,35 s bis 1,85 s: die erste knappe
+       Sekunde war damit fast schwarz, und ein Film, der leer anfaengt,
+       ist nach einer Sekunde weggewischt. Jetzt ist er bei 1,1 s durch. */
+    const wisch = weich(anteil(t, sz.von + 0.12, sz.von + 1.1));
+    maleKarte({
+      quelle: 'blatt',
+      aus: { cx: 0.5, cy: misch(0.30, 0.42, weich(k.p)), z: 1.0 },
+      mitte: k.mitte, breite: k.breite, dreh: k.dreh, deckung: k.deckung, wisch
+    });
+    // Funken an der Kante, wo die Tinte gerade auftaucht
+    if (wisch > 0.05 && wisch < 0.98) {
+      const h = k.breite * 9 / 16;
+      const ky = k.mitte.y - h / 2 + h * wisch;
+      maleStern(k.mitte.x - k.breite * 0.24, ky, 16, 0.85);
+      maleStern(k.mitte.x + k.breite * 0.19, ky - 14, 10, 0.55);
+    }
+    maleZeile([['Typed', 0], ['text', 0], ['and', 0], ['handwriting.', 0],
+               ['One', 1], ['page.', 1]], t, sz.von + 1.5, sz.bis);
+  },
+
+  // ── 2 · Jedes Heft an einem Ort ────────────────────────────────────
+  (t, sz) => {
+    const k = kartenLauf(t, sz, {
+      drehVon: -0.09, drehRaus: 0.10, xVon: 620, xRaus: 560,
+      yVon: 90, yRaus: 70, grVon: 1620, grBis: 1720
+    });
+    maleKarte({
+      quelle: 'B-uebersicht', seite: 0.3125,
+      aus: { cx: 0.50, cy: misch(0.30, 0.285, weich(k.p)), z: 1.0 },
+      mitte: k.mitte, breite: k.breite, dreh: k.dreh, deckung: k.deckung,
+      streif: anteil(t, sz.von + 0.55, sz.von + 1.5)
+    });
+    funkenStoss(k.mitte.x, k.mitte.y, anteil(t, sz.von, sz.von + 0.9), 9);
+    maleZeile([['Every', 0], ['notebook', 0], ['in', 1], ['one', 1], ['place.', 1]],
+              t, sz.von + 1.15, sz.bis);
+  },
+
+  // ── 3 · Formeln, Tabellen, PDFs ────────────────────────────────────
+  (t, sz) => {
+    const k = kartenLauf(t, sz, {
+      drehVon: 0.11, drehRaus: -0.09, xVon: -580, xRaus: -540,
+      yVon: -120, yRaus: 90, grVon: 1320, grBis: 1450
+    });
+    maleKarte({
+      quelle: 'F-tabelle-formel',
+      aus: { cx: 0.395, cy: misch(0.21, 0.17, weich(k.p)), z: misch(2.55, 2.85, weich(k.p)) },
+      mitte: k.mitte, breite: k.breite, dreh: k.dreh, deckung: k.deckung,
+      streif: anteil(t, sz.von + 0.6, sz.von + 1.6)
+    });
+    funkenStoss(k.mitte.x, k.mitte.y, anteil(t, sz.von, sz.von + 0.9), 11);
+    maleZeile([['Formulas,', 0], ['tables,', 0], ['PDFs.', 1]],
+              t, sz.von + 1.15, sz.bis);
+  },
+
+  // ── 4 · Zu zweit, live ─────────────────────────────────────────────
+  (t, sz) => {
+    const k = kartenLauf(t, sz, {
+      drehVon: -0.12, drehRaus: 0.08, xVon: 560, xRaus: 0,
+      yVon: 140, yRaus: -680, grVon: 1460, grBis: 1340
+    });
+    maleKarte({
+      quelle: 'C-zusammen',
+      aus: { cx: misch(0.60, 0.50, weich(k.p)), cy: 0.44, z: misch(1.30, 1.10, weich(k.p)) },
+      mitte: k.mitte, breite: k.breite, dreh: k.dreh, deckung: k.deckung,
+      streif: anteil(t, sz.von + 0.7, sz.von + 1.7)
+    });
+    /* Zwei Funken oben rechts auf der Karte – dort sitzen die Abzeichen
+       der Anwesenden. Sie ploppen nacheinander, wie jemand, der
+       dazukommt. */
+    const h = k.breite * 9 / 16;
+    [[0.375, 0.408, 0.55], [0.405, 0.408, 0.85]].forEach(([fx, fy, wann], i) => {
+      const pd = federn(anteil(t, sz.von + wann, sz.von + wann + 0.5));
+      if (pd > 0.02) {
+        const px = k.mitte.x + k.breite * fx * Math.cos(k.dreh) - h * fy * Math.sin(k.dreh);
+        const py = k.mitte.y + k.breite * fx * Math.sin(k.dreh) - h * fy * Math.cos(k.dreh);
+        maleStern(px, py, 20 * pd, 0.9 * klemm(pd, 0, 1) * (1 - anteil(t, sz.von + wann + 1.1, sz.von + wann + 1.7)));
+      }
+    });
+    maleZeile([['Edit', 0], ['together,', 0], ['live.', 1]], t, sz.von + 1.35, sz.bis);
+  }
+];
+
+/* ══════════════════════════════════════════════════════════════════════ */
+
 window.__bild = function (n) {
   const t = n / FPS;
-  ctx.fillStyle = GRUND;
-  ctx.fillRect(0, 0, B, H);
 
-  let obenAuf = null, obenD = 0;
-  for (const s of SCHNITTE) {
-    if (t < s.von || t > s.bis) continue;
-    const auf = weich(klemm((t - s.von) / BLENDE, 0, 1));
-    const zu = weich(klemm((s.bis - t) / BLENDE, 0, 1));
-    const d = auf * zu;
-    if (d <= 0.002) continue;
-    const p = weich(klemm((t - s.von) / (s.bis - s.von), 0, 1));
-    maleSchnitt(s, p, d);
-    if (d > obenD) { obenD = d; obenAuf = s; }
+  maleGrund(t);
+  maleFunken(t, 0.8);
+
+  for (let i = 0; i < EINSTELLUNGEN.length; i++) {
+    const sz = SZENEN[i];
+    if (t < sz.von - 0.02 || t > sz.bis + 0.02) continue;
+    EINSTELLUNGEN[i](t, sz);
   }
 
-  if (vignette) ctx.drawImage(vignette, 0, 0);
-
-  /* Die Zeile kommt spaeter als ihr Bild und geht frueher: erst sehen,
-     dann lesen. Waehrend einer Ueberblendung steht keine – zwei Zeilen
-     uebereinander liest niemand. */
-  if (obenAuf) {
-    const a = obenAuf.von + 0.8, b = obenAuf.bis - 0.9;
-    const zd = weich(klemm((t - a) / 0.45, 0, 1)) * weich(klemm((b - t) / 0.35, 0, 1));
-    maleZeile(obenAuf.text, zd);
-  }
-
-  maleEnde(weich(klemm((t - ENDE_VON) / 0.7, 0, 1)));
+  maleEnde(t, SZENEN[4].von);
   return true;
 };
 
@@ -308,21 +632,23 @@ window.__bereit = (async () => {
   if (document.fonts) {
     try {
       await Promise.all([
-        document.fonts.load('400 58px "Crimson Pro"'),
-        document.fonts.load('600 58px "Crimson Pro"'),
-        document.fonts.load('italic 400 34px "Crimson Pro"'),
-        document.fonts.load('400 27px "DM Mono"')
+        document.fonts.load('400 62px "Crimson Pro"'),
+        document.fonts.load('700 62px "Crimson Pro"'),
+        document.fonts.load('italic 400 36px "Crimson Pro"'),
+        document.fonts.load('500 28px "DM Mono"')
       ]);
       await document.fonts.ready;
     } catch (e) { /* ohne Netz bleibt Georgia – kein Grund abzubrechen */ }
   }
 
-  baueVignette();
-  baueFuss();
+  bandA = baueBand(1200, 620, 'rgba(206,166,96,.95)', 78);
+  bandB = baueBand(1200, 620, 'rgba(122,104,190,.62)', 104);
+  schein = baueSchein(80);
+
   window.__bild(0);
   const fehlt = namen.filter(nm => !BILDER[nm]);
   return (fehlt.length ? 'FEHLT: ' + fehlt.join(', ') : 'alle Bilder da')
-    + ' · Crimson Pro: ' + (document.fonts.check('400 58px "Crimson Pro"') ? 'ja' : 'nein');
+    + ' · Crimson Pro: ' + (document.fonts.check('700 62px "Crimson Pro"') ? 'ja' : 'nein');
 })();
 
 /** Das fertige Einzelbild als JPEG – main.js schreibt es weg. */
