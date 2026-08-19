@@ -167,6 +167,11 @@
     strokes = strokes || [];
     objekte = objekte || [];
     if (!strokes.length && !objekte.length) return;
+
+    /* Es darf immer nur EINES ausgewaehlt sein. Hier laufen alle Wege
+       zusammen – Antippen, Einkreisen, Auswahl von aussen –, deshalb
+       steht es hier und nicht an jedem Weg einzeln (canvas/objects.js). */
+    if (typeof window.deselectObject === 'function') window.deselectObject();
     const huelle = document.createElement('div');
     huelle.className = 'ink-sel';
     pageEl.appendChild(huelle);

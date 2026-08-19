@@ -1040,6 +1040,42 @@ body.touch-draw .j-canvas {
   pointer-events: auto;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE FORM IST DUENN – DER FINGER BRAUCHT MEHR RAND
+
+   Ein Bild ist eine Flaeche; eine Form ist ein Strich von zwei Pixeln.
+   Zwar faengt das SVG die ganze Huelle ab, aber die Huelle einer kleinen
+   Form ist selbst nur zwei Zentimeter gross. Mit dem Finger – der
+   ungefaehr einen Zentimeter breit aufsetzt und dessen Mittelpunkt der
+   Nutzer nicht sieht – war das schwer zu treffen. Genau so wurde es
+   gemeldet.
+
+   Der unsichtbare Ring vergroessert die Huelle nach aussen. Er erbt
+   pointer-events von .obj-body und ist damit genau dann da, wenn die
+   Form ueberhaupt anfassbar ist: im Zeigermodus (ui/toolbar.js,
+   applyMode). Beim Stift ist er weg und stoert das Zeichnen nicht.
+
+   Zwei Weiten, weil zwei Hände gemeint sind. Die Maus trifft auf den
+   Pixel genau; ihr reichen acht, und mehr wären schädlich, weil der Ring
+   sonst den Text dicht neben der Form verschluckt. Der Finger bekommt
+   zweiundzwanzig – gut einen halben Zentimeter. Was gerade benutzt wird,
+   steht an body.touch-input und wechselt mit der ersten Mausbewegung
+   (core/state.js).
+
+   Die Griffe liegen darüber (.obj-chrome, z-index 5000) und bleiben
+   deshalb treffbar. Bilder bekommen den Ring nicht – die sind gross
+   genug.
+   ══════════════════════════════════════════════════════════════════════ */
+.obj-body[data-kind="shape"]::after {
+  content: '';
+  position: absolute;
+  inset: -8px
+}
+
+body.touch-input .obj-body[data-kind="shape"]::after {
+  inset: -22px
+}
+
 /* ── Das AUSGEWAEHLTE Bild gehoert dem Finger ────────────────────────
    Ohne das entschied der Browser bei einem gezogenen Finger auf Scrollen:
    die Seite lief weg, das Bild blieb liegen. Nur am ausgewaehlten, weil

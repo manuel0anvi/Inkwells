@@ -111,6 +111,24 @@ function restackObjects(objLayer, page) {
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.obj-wrap')) deselect(); });
 
 /* ══════════════════════════════════════════════════════════════════════
+   ABWAEHLEN VON AUSSEN
+
+   Der Faenger darueber steht in der BLASENPHASE. canvas/strokeSelect.js
+   faengt einen Tipp auf einen Strich aber schon in der Abfangphase ab und
+   haelt ihn mit stopPropagation an – hier kam er dann nie an. Ein
+   ausgewaehltes Bild blieb deshalb ausgewaehlt, waehrend daneben die
+   Huelle des Strichs aufging: zwei Auswahlen, zwei Leisten, und Entf traf
+   beides. Genau so wurde es gemeldet.
+
+   Statt den Faenger ebenfalls in die Abfangphase zu ziehen – dort raeumte
+   er zu frueh weg, noch bevor feststeht, ob ueberhaupt etwas anderes
+   ausgewaehlt wird – sagt strokeSelect.js jetzt ausdruecklich Bescheid.
+   Die Gegenrichtung steht in select(): dort wird die Strich-Huelle
+   weggenommen.
+   ══════════════════════════════════════════════════════════════════════ */
+window.deselectObject = deselect;
+
+/* ══════════════════════════════════════════════════════════════════════
    EIN BILD HINTER DEM TEXT ANKLICKEN
 
    Es liegt unter .j-text, und das Textfeld nimmt in der Zeigerstellung
@@ -292,6 +310,10 @@ function placeObject(objLayer, obj, page) {
   wrap.style.cssText = 'left:' + obj.x + 'px;top:' + obj.y + 'px;width:' + obj.w + 'px;height:' + obj.h + 'px;position:absolute;pointer-events:none';
 
   const body = document.createElement('div'); body.className = 'obj-body';
+  /* Die Art steht am Koerper, damit der Stil sie unterscheiden kann:
+     eine Form braucht mehr Rand zum Anfassen als ein Bild
+     (css/pages.css). */
+  body.dataset.kind = obj.kind || 'datei';
   body.style.pointerEvents = S.mode === 'cursor' ? 'auto' : 'none';
   if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; body.appendChild(img); }
   else if (obj.kind === 'shape') { body.innerHTML = renderShapeBody(obj); }
@@ -540,13 +562,51 @@ function placeObject(objLayer, obj, page) {
     const deg = 'rotate(' + (obj.rot || 0) + 'deg)';
     body.style.transform = deg;
     chrome.style.transform = deg;
-    // Sonst stünde die Leiste bei einem gedrehten Bild auf dem Kopf
-    bar.style.transform = 'translateX(-50%) rotate(' + (-(obj.rot || 0)) + 'deg)';
+    // Die Leiste dreht sich gegen: sonst stünde sie auf dem Kopf.
+    // Ihre Stelle rechnet placeBar() aus, samt Gegendrehung.
+    placeBar();
   }
 
-  /** Oben ist bei einem Bild am Seitenanfang kein Platz – dann nach unten. */
+  /* Luft zwischen Leiste und Blattrand. */
+  const BAR_LUFT = 6;
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE LEISTE BLEIBT AUF DEM BLATT
+
+     Sie steht mittig über der Form. Stand die Form am linken oder
+     rechten Rand, ragte die Leiste über das Blatt hinaus – und .j-page
+     schneidet ab (overflow: hidden, css/pages.css). Die halbe Leiste
+     fehlte also, und die Knöpfe darin waren nicht zu treffen.
+
+     Zu sehen war sie nur, WÄHREND man die Form schob: dann trägt die
+     Seite kurz .obj-dragging und schneidet nichts ab. Beim Loslassen
+     verschwand sie wieder unter dem Rand. Genau so wurde es gemeldet.
+
+     Statt am Abschneiden zu drehen – das brauchen die Seiten, damit
+     Striche nicht auf die nächste überlaufen – wird die Leiste hier ins
+     Blatt zurückgeschoben. Senkrecht dasselbe: über der Form, solange
+     darüber Blatt ist, sonst darunter. Gemessen wird an der wirklichen
+     Höhe der Leiste; vorher stand dort die feste Zahl 64, und in einer
+     Sprache mit längeren Beschriftungen stimmte sie nicht mehr.
+     ══════════════════════════════════════════════════════════════════ */
   function placeBar() {
-    bar.classList.toggle('below', (obj.y || 0) < 64);
+    const pw = (page && page.w) || (typeof CFG !== 'undefined' ? CFG.PAGE_W : 794);
+    const bh = bar.offsetHeight || 40;
+    const bw = bar.offsetWidth || 0;
+
+    // Senkrecht: oben, wenn oben Platz ist
+    bar.classList.toggle('below', (obj.y || 0) - bh - 12 < BAR_LUFT);
+
+    /* Waagerecht: die Mitte der Form, aber nicht über den Rand hinaus.
+       Ist die Leiste breiter als das Blatt, bleibt sie mittig – dann ist
+       jede Verschiebung nur eine andere Art, daneben zu liegen. */
+    const mitte = (obj.x || 0) + (obj.w || 0) / 2;
+    const links = BAR_LUFT + bw / 2;
+    const rechts = pw - BAR_LUFT - bw / 2;
+    const soll = links > rechts ? mitte : Math.max(links, Math.min(rechts, mitte));
+
+    bar.style.transform = 'translateX(calc(-50% + ' + Math.round(soll - mitte) + 'px)) '
+      + 'rotate(' + (-(obj.rot || 0)) + 'deg)';
   }
 
   function turnBy(deg) {
@@ -668,6 +728,20 @@ function placeObject(objLayer, obj, page) {
   /** Zeigt Griffe und Leiste. Die Ebene des Bildes bleibt unberührt. */
   function select() {
     deselect();
+    /* ══════════════════════════════════════════════════════════════
+       ES DARF IMMER NUR EINES AUSGEWAEHLT SEIN
+
+       Auswaehlen gibt es zweimal: hier fuer Bilder, Formen und Formeln,
+       und in canvas/strokeSelect.js fuer Gezeichnetes. Beide wussten
+       nichts voneinander. Der Weg dorthin ging nur in eine Richtung:
+       wer einen Strich antippte, verlor das Bild (der Faenger ganz oben
+       in dieser Datei raeumt es weg) – wer aber ein Bild antippte,
+       behielt die Huelle des Strichs. Danach standen zwei Leisten
+       nebeneinander, und Entf traf beides. Genau so wurde es gemeldet.
+
+       Hier fehlte also die Gegenrichtung.
+       ══════════════════════════════════════════════════════════════ */
+    if (typeof window.deselectStroke === 'function') window.deselectStroke();
     _selObj = wrap;
     wrap.classList.add('selected');
     chrome.style.display = 'block';
