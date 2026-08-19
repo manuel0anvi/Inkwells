@@ -791,7 +791,34 @@ body.touch-draw .j-canvas {
    ══════════════════════════════════════════════════════════════════════ */
 .j-text p.j-frei {
   position: absolute;
-  margin: 0
+  margin: 0;
+
+  /* ══════════════════════════════════════════════════════════════════
+     EIN PIXEL, DAMIT DIE SCHREIBMARKE ZU SEHEN IST
+
+     Ohne diese Zeile war die Marke nach einem Klick auf freie Fläche
+     unsichtbar. Man klickte hin, nichts blinkte, und erst der erste
+     Buchstabe zeigte, dass die Marke die ganze Zeit dort stand. Genau
+     so wurde es gemeldet.
+
+     Der Grund: ein absolut gesetzter Kasten ohne width ist so breit wie
+     sein Inhalt. Ein frisch angelegter Absatz enthält nur ein <br> –
+     also NULL Pixel breit. Chromium schneidet die Marke am Kasten ab,
+     und bei Breite null bleibt von ihr nichts übrig. Sobald ein
+     Buchstabe darin steht, wird der Kasten breit und die Marke
+     erscheint; deshalb sah es aus, als käme sie erst beim Tippen.
+
+     Gemessen: sechs Aufnahmen über zwei Sekunden, Bildpunkte in der
+     Farbe der Marke im Ausschnitt um den Absatz. Ohne die Zeile 0 in
+     allen sechs, mit ihr 88 im Wechsel mit 0 – das Blinken.
+
+     Ein Pixel genügt, und mehr darf es auch nicht sein: die Breite
+     bleibt sonst am Inhalt (siehe oben), und ein Klick rechts neben den
+     Text soll weiter freie Fläche treffen. Wo Kästen gegeneinander
+     geprüft werden, zählen ohnehin nur solche breiter als 1 px
+     (canvas/input.js, beschriebeneKaesten).
+     ══════════════════════════════════════════════════════════════════ */
+  min-width: 1px
 }
 
 .j-text h1,
