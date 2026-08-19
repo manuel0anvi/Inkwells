@@ -176,8 +176,60 @@ function mapReply(docSnap) {
 
 /* ── Lesen ──────────────────────────────────────────────────────────── */
 
+/* ══════════════════════════════════════════════════════════════════════
+   WAS OBEN STEHT
+
+   Neues zuerst – in einem Forum sucht niemand das Aktuelle am Ende einer
+   langen Liste. Vorher kamen die Antworten älteste zuerst; bei einem
+   Beitrag mit zwanzig Antworten musste man bis ganz nach unten rollen, um
+   zu sehen, ob überhaupt jemand geantwortet hat.
+
+   Eine Ausnahme steht darüber: die Antwort des Teams. Sie ist meist DIE
+   Antwort auf die Frage – wer den Beitrag öffnet, soll sie sehen, ohne
+   erst zu suchen. Untereinander gilt auch dort das Neueste zuerst.
+
+   >>> Warum hier und nicht in der Abfrage <<<
+   Den Fall „Zeitstempel fehlt noch" kann Firestore nicht ausdrücken.
+   Direkt nach dem Absenden steht created_at auf null, weil
+   serverTimestamp() erst beim nächsten Abgleich einen Wert bekommt.
+   Firestore sortiert eine solche Antwort ans Ende – dabei ist sie die
+   allerneueste und gehört nach oben. Genau die eigene, gerade
+   geschriebene Antwort war deshalb nirgends zu sehen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Der Name des Teams. Früher hiess die App „Inkwell", deshalb stehen in
+   älteren Antworten beide Schreibweisen – beide bleiben angeheftet.
+   Gross- und Kleinschreibung spielt keine Rolle. */
+const TEAM_NAMEN = ['inkwells team', 'inkwell team'];
+
+/** @param {{author?: string}} eintrag */
+function istVomTeam(eintrag) {
+  return TEAM_NAMEN.includes(String((eintrag && eintrag.author) || '').trim().toLowerCase());
+}
+
+/** Ohne Zeitstempel gilt „gerade eben" – siehe oben. */
+function zeitWert(eintrag) {
+  const d = eintrag && eintrag.created_at;
+  return d instanceof Date ? d.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+/** Neueste zuerst. */
+function neuesteZuerst(a, b) {
+  return zeitWert(b) - zeitWert(a);
+}
+
+/** Neueste zuerst, das Team darüber. */
+function sortiereAntworten(liste) {
+  return liste.slice().sort((a, b) => {
+    const ta = istVomTeam(a) ? 1 : 0;
+    const tb = istVomTeam(b) ? 1 : 0;
+    if (ta !== tb) return tb - ta;
+    return neuesteZuerst(a, b);
+  });
+}
+
 /**
- * Antworten eines Beitrags, älteste zuerst.
+ * Antworten eines Beitrags: das Team zuerst, dahinter die neuesten.
  * @param {string} postId
  * @returns {Promise<Reply[]>}
  */
@@ -185,7 +237,7 @@ async function listReplies(postId) {
   const snapshot = await getDocs(
     query(collection(db, POSTS, postId, REPLIES), orderBy('created_at', 'asc'))
   );
-  return snapshot.docs.map(mapReply);
+  return sortiereAntworten(snapshot.docs.map(mapReply));
 }
 
 /**
@@ -213,7 +265,9 @@ async function listPosts() {
     }
   }));
 
-  return posts;
+  /* Die Abfrage sortiert schon absteigend; nachgezogen wird nur der Fall,
+     den sie nicht kennt – der eben abgeschickte Beitrag ohne Zeitstempel. */
+  return posts.sort(neuesteZuerst);
 }
 
 /* ── Schreiben ──────────────────────────────────────────────────────── */
@@ -512,7 +566,7 @@ function watchPosts(onChange, onError) {
           post.replies = [];
         }
       }));
-      onChange(posts);
+      onChange(posts.sort(neuesteZuerst));
     },
     (err) => { if (onError) onError(err); else console.error('[Forum] Live-Abgleich:', err); }
   );

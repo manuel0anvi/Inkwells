@@ -631,8 +631,13 @@ function renderFeed() {
       html += `<div id="replies-list-${post.id}" style="display:none; flex-direction:column; gap:8px; margin-top:14px;">`;
       post.replies.forEach(reply => {
         const isAnonReply = ['Anonym', 'Anonymous', 'Anonimo'].includes(reply.author);
+        /* Angeheftet steht sie ohnehin schon oben (js/firebase.js). Der
+           Streifen sagt, WARUM sie oben steht – sonst sähe die
+           Reihenfolge nach Zufall aus. */
+        const vomTeam = ['inkwells team', 'inkwell team']
+          .includes(String(reply.author || '').trim().toLowerCase());
         html += `
-          <div class="reply-item">
+          <div class="reply-item${vomTeam ? ' vom-team' : ''}">
             <div class="reply-meta">
               ${isAnonReply ? '' : `<strong>${escapeHtml(reply.author)}</strong>`}
               <span>${getFormattedDate(reply.created_at)}</span>

@@ -995,7 +995,7 @@ function describeDoc(docId, data) {
        Nur der Besitzer schreibt sie (saveDocumentContent); die Regeln
        lassen einem Bearbeiter am Kopf ohnehin nur die Seitenliste durch.
        Leer heisst: aus der Zeit davor, dann gilt die eigene Wahl. */
-    textFluss: (data.textFluss === 'fest' || data.textFluss === 'verschmelzen'
+    textFluss: (data.textFluss === 'fest'
                 || data.textFluss === 'elastisch') ? data.textFluss : '',
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
     updatedAt: toDate(data.updatedAt),
