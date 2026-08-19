@@ -1065,8 +1065,10 @@ function renderFeed() {
     const badge = post.type === 'question' ? t('community_type_question') : t('community_type_bug');
     const replies = post.replies || [];
 
+    /* Angeheftet steht sie ohnehin oben (js/firebase.js); der Streifen
+       sagt, warum – genau wie im Forum. */
     const replyItems = replies.map(reply => `
-      <div class="reply-item">
+      <div class="reply-item${['inkwells team','inkwell team'].includes(String(reply.author || '').trim().toLowerCase()) ? ' vom-team' : ''}">
         <div class="reply-meta">
           <strong>${escapeHtml(reply.author)}</strong>
           <span>${escapeHtml(formatDate(reply.created_at))}</span>
@@ -1096,8 +1098,12 @@ function renderFeed() {
             </button>
           </div>
 
-          ${replies.length ? `<div id="admin-replies-${escapeHtml(post.id)}" style="display:none; flex-direction:column; gap:8px; margin-bottom:14px;">${replyItems}</div>` : ''}
-
+          <!-- ── Erst das Formular, dann die Antworten ──────────────────
+               Es stand hinter der Liste. Bei einem Beitrag mit vielen
+               Antworten sprang der Druck auf „Antworten" damit ans Ende
+               der Liste – das Feld lag ausserhalb des Bildes und es sah
+               aus, als sei nichts geschehen. Dieselbe Reihenfolge wie im
+               Forum selbst (community/index.html). -->
           <form class="reply-form" id="admin-reply-form-${escapeHtml(post.id)}" data-reply-post="${escapeHtml(post.id)}">
             <p class="admin-as-note">${escapeHtml(t('admin_mod_reply_as'))}</p>
             <div class="forum-input-group" style="margin:0;">
@@ -1105,6 +1111,8 @@ function renderFeed() {
             </div>
             <button type="submit" class="reply-submit-btn">${escapeHtml(t('admin_mod_reply_send'))}</button>
           </form>
+
+          ${replies.length ? `<div id="admin-replies-${escapeHtml(post.id)}" style="display:none; flex-direction:column; gap:8px; margin-top:14px;">${replyItems}</div>` : ''}
         </div>
       </div>`;
   }).join('');

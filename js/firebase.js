@@ -179,22 +179,26 @@ function mapReply(docSnap) {
 /* ══════════════════════════════════════════════════════════════════════
    WAS OBEN STEHT
 
-   Neues zuerst – in einem Forum sucht niemand das Aktuelle am Ende einer
-   langen Liste. Vorher kamen die Antworten älteste zuerst; bei einem
-   Beitrag mit zwanzig Antworten musste man bis ganz nach unten rollen, um
-   zu sehen, ob überhaupt jemand geantwortet hat.
+   BEITRÄGE und ANTWORTEN laufen absichtlich verschieden herum:
 
-   Eine Ausnahme steht darüber: die Antwort des Teams. Sie ist meist DIE
-   Antwort auf die Frage – wer den Beitrag öffnet, soll sie sehen, ohne
-   erst zu suchen. Untereinander gilt auch dort das Neueste zuerst.
+     · Beiträge  – neueste zuerst. Ein Forum ist eine Liste von Themen,
+                   und das jüngste Thema interessiert zuerst.
+     · Antworten – älteste zuerst, wie ein Gespräch. Eine Antwort bezieht
+                   sich auf die davor; von hinten gelesen ergibt sie
+                   keinen Sinn. Die neueste steht also unten.
+
+   Eine Ausnahme steht über beidem: die Antwort des Teams. Sie ist meist
+   DIE Antwort auf die Frage – wer den Beitrag öffnet, soll sie sehen,
+   ohne erst zu suchen. Untereinander bleiben auch sie in der
+   Reihenfolge, in der sie geschrieben wurden.
 
    >>> Warum hier und nicht in der Abfrage <<<
    Den Fall „Zeitstempel fehlt noch" kann Firestore nicht ausdrücken.
    Direkt nach dem Absenden steht created_at auf null, weil
-   serverTimestamp() erst beim nächsten Abgleich einen Wert bekommt.
-   Firestore sortiert eine solche Antwort ans Ende – dabei ist sie die
-   allerneueste und gehört nach oben. Genau die eigene, gerade
-   geschriebene Antwort war deshalb nirgends zu sehen.
+   serverTimestamp() erst beim nächsten Abgleich einen Wert bekommt. So
+   eine Antwort ist die allerjüngste: unter den Antworten gehört sie ganz
+   nach unten, unter den Beiträgen ganz nach oben. Beides fällt hier
+   heraus, weil „ohne Datum" als „gerade eben" gilt.
    ══════════════════════════════════════════════════════════════════════ */
 
 /* Der Name des Teams. Früher hiess die App „Inkwell", deshalb stehen in
@@ -213,23 +217,28 @@ function zeitWert(eintrag) {
   return d instanceof Date ? d.getTime() : Number.MAX_SAFE_INTEGER;
 }
 
-/** Neueste zuerst. */
+/** Neueste zuerst – für die Beiträge. */
 function neuesteZuerst(a, b) {
   return zeitWert(b) - zeitWert(a);
 }
 
-/** Neueste zuerst, das Team darüber. */
+/** Älteste zuerst – für die Antworten, damit sie sich lesen lassen. */
+function aeltesteZuerst(a, b) {
+  return zeitWert(a) - zeitWert(b);
+}
+
+/** Der Reihe nach, das Team darüber. */
 function sortiereAntworten(liste) {
   return liste.slice().sort((a, b) => {
     const ta = istVomTeam(a) ? 1 : 0;
     const tb = istVomTeam(b) ? 1 : 0;
     if (ta !== tb) return tb - ta;
-    return neuesteZuerst(a, b);
+    return aeltesteZuerst(a, b);
   });
 }
 
 /**
- * Antworten eines Beitrags: das Team zuerst, dahinter die neuesten.
+ * Antworten eines Beitrags: das Team zuerst, dahinter der Reihe nach.
  * @param {string} postId
  * @returns {Promise<Reply[]>}
  */
