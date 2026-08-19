@@ -349,9 +349,22 @@
     const r = _sel.huelle.getBoundingClientRect();
     const h = leiste.offsetHeight || 30;
     const w = leiste.offsetWidth || 70;
-    const oben = r.top - h - 6;
-    leiste.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left))) + 'px';
-    leiste.style.top = Math.round(oben > 60 ? oben : r.bottom + 6) + 'px';
+    /* ── Sie muss GANZ zu sehen sein ────────────────────────────────
+       Ueber der Form, wenn dort Platz ist, sonst darunter. Beides wird
+       danach ins Fenster geklemmt: eine Form ganz unten schob die Leiste
+       sonst unter den unteren Rand, wo niemand mehr hinkommt.
+
+       Die 60 Pixel oben sind die Werkzeugleiste - darunter darf sie
+       nicht rutschen, sonst steht sie hinter den Knoepfen. */
+    const OBEN_FREI = 60, RAND = 8;
+    const darueber = r.top - h - 6;
+    let y = darueber > OBEN_FREI ? darueber : r.bottom + 6;
+    y = Math.max(OBEN_FREI, Math.min(window.innerHeight - h - RAND, y));
+
+    const x = Math.max(RAND, Math.min(window.innerWidth - w - RAND, r.left));
+
+    leiste.style.left = Math.round(x) + 'px';
+    leiste.style.top = Math.round(y) + 'px';
   }
 
   function versteckeLeiste() {

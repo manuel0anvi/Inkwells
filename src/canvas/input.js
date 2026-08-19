@@ -1169,11 +1169,74 @@ function geradeGanzWeg(c, page, canvas) {
     }
     return true;
   });
-  if (bleibt.length === liste.length) return;
+  const formenWeg = radiereFormen(c, page, r, canvas);
+
+  if (bleibt.length === liste.length && !formenWeg) return;
   S.strokeHistory[page.id] = bleibt;
   redrawStrokes(canvas, bleibt);
   page.inkStrokes = JSON.parse(JSON.stringify(bleibt));
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER RADIERER ERWISCHT AUCH FORMEN
+
+   Eine erkannte Form ist kein Strich mehr, sondern ein Objekt in
+   page.objects (machDarausEinObjekt). Der Radierer arbeitete nur auf
+   strokeHistory und ging deshalb glatt durch jedes Viereck hindurch -
+   gemeldet aus der Nutzung.
+
+   >>> Warum ganz und nicht stueckweise <<<
+   Aus demselben Grund wie beim geraden Strich: eine Form ist ein
+   geometrisches Ding, kein Farbauftrag. Ein halb weggeriebenes Viereck
+   waere kein Viereck mehr, sondern Bruch.
+
+   Getroffen ist, wer den RAND beruehrt - nicht die Flaeche. Sonst
+   loeschte ein Wisch quer ueber die Seite jedes Rechteck, ueber dessen
+   Inneres er zufaellig lief.
+   ══════════════════════════════════════════════════════════════════════ */
+function radiereFormen(c, page, radius, canvas) {
+  const objekte = page.objects;
+  if (!Array.isArray(objekte) || !objekte.length) return false;
+
+  const trifftRand = (o) => {
+    const x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+    // Weit ausserhalb des Kastens? Dann gar nicht erst rechnen.
+    if (c.x < x1 - radius || c.x > x2 + radius ||
+        c.y < y1 - radius || c.y > y2 + radius) return false;
+
+    /* Nah an einer der vier Kanten - und bei Ellipse und Dreieck ebenso,
+       denn deren Rand liegt innerhalb desselben Kastens. Genauer waere
+       schoener, aber ein Radierer ist ein grobes Werkzeug; die Kante des
+       Kastens liegt nie mehr als eine Strichbreite daneben. */
+    const nahSenkrecht = (Math.abs(c.x - x1) <= radius || Math.abs(c.x - x2) <= radius)
+      && c.y >= y1 - radius && c.y <= y2 + radius;
+    const nahWaagerecht = (Math.abs(c.y - y1) <= radius || Math.abs(c.y - y2) <= radius)
+      && c.x >= x1 - radius && c.x <= x2 + radius;
+    return nahSenkrecht || nahWaagerecht;
+  };
+
+  const weg = objekte.filter(o => o && o.kind === 'shape' && trifftRand(o));
+  if (!weg.length) return false;
+
+  const raus = new Set(weg.map(o => String(o.id)));
+  page.objects = objekte.filter(o => !raus.has(String(o.id)));
+
+  /* Derselbe Weg wie beim Loeschen ueber die Auswahlleiste
+     (canvas/strokeSelect.js): Huelle weg, dann neu stapeln und melden. */
+  const pageEl = canvas && canvas.closest ? canvas.closest('[data-pgid]') : null;
+  if (pageEl) {
+    /* Dieselbe Auswahl wie objHuelle() in canvas/strokeSelect.js - die
+       Funktion dort ist oertlich und von hier nicht erreichbar. */
+    for (const o of weg) {
+      const h = pageEl.querySelector('.obj-wrap[data-objid="' + CSS.escape(String(o.id)) + '"]');
+      if (h) h.remove();
+    }
+    const layer = pageEl.querySelector('.j-objects');
+    if (layer && typeof restackObjects === 'function') restackObjects(layer, page);
+  }
+  if (typeof noteObjectChanged === 'function') noteObjectChanged();
+  return true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

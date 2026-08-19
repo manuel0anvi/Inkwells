@@ -1269,7 +1269,11 @@ body.touch-draw .j-canvas {
 
 .ink-sel-bar {
   position: fixed;
-  z-index: 1262;
+  /* Ueber allem, was auf der Seite liegt: der Seitenkopf und die
+     Aufklapper der Werkzeugleiste stehen auf 1300, und mit 1262 rutschte
+     die Leiste darunter - bei einer Form am oberen Rand war sie halb
+     verdeckt. Unter den Meldungen (2000) und den Fenstern bleibt sie. */
+  z-index: 1400;
   display: flex;
   gap: 2px;
   padding: 3px;
