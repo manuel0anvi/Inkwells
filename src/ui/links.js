@@ -146,17 +146,50 @@
     return knoten && knoten.closest ? knoten.closest('a') : null;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WER NICHTS AUSGEWAEHLT HAT, BEKOMMT EINEN SATZ
+
+     Hier stand zweimal ein blankes `return`. Wer den Knopf drueckte,
+     ohne vorher Text ausgewaehlt zu haben, sah deshalb GAR NICHTS – kein
+     Fenster, keine Meldung, nichts. Das liest sich wie ein kaputter
+     Knopf. Genau so wurde es gemeldet.
+
+     Drei Faelle, drei verschiedene Saetze:
+
+       · gar nicht im Seitentext  – erst irgendwo hineinklicken
+       · im Text, aber nichts ausgewaehlt – erst die Woerter waehlen,
+         die zum Verweis werden sollen
+       · die Marke steht IN einem Verweis – dann ist gemeint, ihn zu
+         aendern, und es braucht keine Auswahl
+
+     Der dritte Fall ist der Grund, warum die Pruefung nicht einfach
+     „nichts ausgewaehlt heisst nein" lauten kann: einen vorhandenen
+     Verweis fasst man an, indem man hineinklickt.
+     ══════════════════════════════════════════════════════════════════ */
+  function sagAb(schluessel, rueckfall) {
+    if (typeof toast === 'function') toast((typeof t === 'function' && t(schluessel)) || rueckfall);
+  }
+
   function oeffneFenster() {
     const sel = window.getSelection();
     const feld = document.activeElement;
 
     // Nur im Seitentext. Anderswo hat ein Verweis keinen Platz.
-    if (!feld || !feld.classList || !feld.classList.contains('j-text')) return;
-    if (feld.isContentEditable === false) return;
+    if (!feld || !feld.classList || !feld.classList.contains('j-text')
+        || feld.isContentEditable === false) {
+      sagAb('linkNoCaret', 'Erst im Text an die Stelle klicken, an die der Verweis soll.');
+      return;
+    }
 
     gemerktesFeld = feld;
     gemerkt = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
     bearbeitet = verweisUnterMarke(sel);
+
+    // Nichts ausgewaehlt und auch kein vorhandener Verweis unter der Marke
+    if (!bearbeitet && (!sel || sel.isCollapsed || !String(sel).trim())) {
+      sagAb('linkNoSelection', 'Erst den Text auswählen, der zum Verweis werden soll.');
+      return;
+    }
 
     if (bearbeitet) {
       const href = bearbeitet.getAttribute('href') || '';

@@ -444,6 +444,8 @@ const TRANSLATIONS = {
     // Verweise im Text (ui/links.js)
     linkButton: 'Verweis (Strg+K)',
     linkTitle: 'Verweis',
+    linkNoCaret: 'Erst im Text an die Stelle klicken, an die der Verweis soll.',
+    linkNoSelection: 'Erst den Text auswählen, der zum Verweis werden soll.',
     linkTextLabel: 'Text',
     linkUrlLabel: 'Adresse',
     linkInsert: 'Einfügen',
@@ -1304,6 +1306,8 @@ const TRANSLATIONS = {
     // Links in text (ui/links.js)
     linkButton: 'Link (Ctrl+K)',
     linkTitle: 'Link',
+    linkNoCaret: 'First click in the text where the link should go.',
+    linkNoSelection: 'First select the text that should become the link.',
     linkTextLabel: 'Text',
     linkUrlLabel: 'Address',
     linkInsert: 'Insert',
@@ -2152,6 +2156,8 @@ const TRANSLATIONS = {
     // Collegamenti nel testo (ui/links.js)
     linkButton: 'Collegamento (Ctrl+K)',
     linkTitle: 'Collegamento',
+    linkNoCaret: 'Prima fai clic nel testo dove deve andare il collegamento.',
+    linkNoSelection: 'Prima seleziona il testo che deve diventare il collegamento.',
     linkTextLabel: 'Testo',
     linkUrlLabel: 'Indirizzo',
     linkInsert: 'Inserisci',
