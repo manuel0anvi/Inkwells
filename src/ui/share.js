@@ -753,6 +753,17 @@
     }
 
     const api = await whenShareReady();
+
+    /* ══════════════════════════════════════════════════════════════
+       ERST FRAGEN, DANN ANLEGEN
+
+       Die Sperre wirkt in den Regeln (website/firestore.rules); ohne
+       diese Zeile käme sie als „Missing or insufficient permissions"
+       zurück, und der Nutzer stünde vor einem Fehler ohne Grund. Hier
+       steht der Satz dazu – die Sperre selbst hängt nicht daran.
+       ══════════════════════════════════════════════════════════════ */
+    if (window.Melden_ && !await window.Melden_.darfIch('selbstTeilen')) return null;
+
     const result = await api.shareDocument(shareNb, { linkMode: 'off' });
 
     await remember(shareNb.id, {

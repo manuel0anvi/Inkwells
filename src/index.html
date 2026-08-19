@@ -623,6 +623,14 @@
             </svg>
             <span data-i18n="chatDelete">Nachricht zurücknehmen</span>
           </button>
+          <!-- Nur an FREMDEN Zeilen sichtbar, siehe ui/chat.js -->
+          <button class="ctx-item danger" id="chatctx-melden">
+            <svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 16 16" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3.6 14V2.6h7.6l-1 2.7 1 2.7H3.6"/>
+            </svg>
+            <span data-i18n="meldenTitel">Jemanden melden</span>
+          </button>
         </div>
         <!-- Wer gerade tippt: Abzeichen und drei wandernde Punkte -->
         <div class="chat-typing" id="chat-typing" style="display:none">
@@ -774,6 +782,89 @@
     </div>
     <div class="modal-btns">
       <button class="btn-m" id="postfach-zu" data-i18n="close">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     JEMANDEN MELDEN
+
+     Erreichbar aus der Anwesenheitsliste einer Zusammenarbeit und aus
+     dem Menue an einer fremden Chatzeile (ui/melden.js).
+
+     Ein Grund zum Ankreuzen und hoechstens zwei Saetze dazu – mehr wird
+     nicht mitgeschickt. Keine Chatzeilen, keine Seiteninhalte: das waere
+     fuer das bisschen mehr Gewissheit ein zu hoher Preis, und es muesste
+     in der Datenschutzerklaerung stehen. Ausfuehrlich in
+     src/core/melden.js.
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="ov-melden" style="display:none">
+  <div class="modal modal-melden">
+    <h3 data-i18n="meldenTitel">Jemanden melden</h3>
+    <p class="melden-wen" id="melden-wen"></p>
+
+    <label class="modal-label" data-i18n="meldenGrundLabel">Was ist vorgefallen?</label>
+    <div class="opt-radio-list" id="melden-gruende">
+      <label class="opt-radio">
+        <input type="radio" name="melden-grund" value="beleidigung" checked>
+        <span class="opt-radio-body">
+          <span class="opt-radio-title" data-i18n="meldenGrundBeleidigung">Beleidigung oder Bedrohung</span>
+          <span class="opt-radio-hint" data-i18n="meldenGrundBeleidigungHinweis">Beschimpfungen, Drohungen, Herabwürdigung im Chat oder auf dem Blatt.</span>
+        </span>
+      </label>
+      <label class="opt-radio">
+        <input type="radio" name="melden-grund" value="fremdeInhalte">
+        <span class="opt-radio-body">
+          <span class="opt-radio-title" data-i18n="meldenGrundFremdeInhalte">Unangemessene Inhalte</span>
+          <span class="opt-radio-hint" data-i18n="meldenGrundFremdeInhalteHinweis">Bilder oder Texte, die hier nichts zu suchen haben.</span>
+        </span>
+      </label>
+      <label class="opt-radio">
+        <input type="radio" name="melden-grund" value="zerstoerung">
+        <span class="opt-radio-body">
+          <span class="opt-radio-title" data-i18n="meldenGrundZerstoerung">Zerstört die gemeinsame Arbeit</span>
+          <span class="opt-radio-hint" data-i18n="meldenGrundZerstoerungHinweis">Löscht Seiten oder schreibt absichtlich alles zu.</span>
+        </span>
+      </label>
+      <label class="opt-radio">
+        <input type="radio" name="melden-grund" value="werbung">
+        <span class="opt-radio-body">
+          <span class="opt-radio-title" data-i18n="meldenGrundWerbung">Werbung</span>
+          <span class="opt-radio-hint" data-i18n="meldenGrundWerbungHinweis">Schickt Werbung, Links oder immer dasselbe.</span>
+        </span>
+      </label>
+      <label class="opt-radio">
+        <input type="radio" name="melden-grund" value="sonstiges">
+        <span class="opt-radio-body">
+          <span class="opt-radio-title" data-i18n="meldenGrundSonstiges">Etwas anderes</span>
+          <span class="opt-radio-hint" data-i18n="meldenGrundSonstigesHinweis">Bitte unten in zwei Sätzen sagen, worum es geht.</span>
+        </span>
+      </label>
+    </div>
+
+    <label class="modal-label" style="margin-top:16px" for="melden-notiz" data-i18n="meldenNotizLabel">Dazu sagen (freiwillig)</label>
+    <textarea id="melden-notiz" rows="3" maxlength="300" placeholder="Zwei Sätze genügen"></textarea>
+    <div class="melden-zaehler" id="melden-zaehler"></div>
+
+    <p class="melden-hinweis" data-i18n="meldenHinweis">
+      Die Meldung geht an den Besitzer des Dokuments und an das Inkwells Team.
+      Was auf dem Blatt oder im Chat steht, wird nicht mitgeschickt.
+    </p>
+
+    <div class="modal-btns">
+      <button id="melden-abbruch" data-i18n="cancel">Abbrechen</button>
+      <button id="melden-ok" class="ok-btn" data-i18n="meldenAbschicken">Melden</button>
+    </div>
+  </div>
+</div>
+
+<!-- Was der BESITZER sieht, wenn in seinem Dokument jemand gemeldet wurde -->
+<div class="overlay" id="ov-meldungen" style="display:none">
+  <div class="modal modal-melden">
+    <h3 data-i18n="meldungenTitel">Meldungen zu deinen Dokumenten</h3>
+    <div id="meldungen-liste" class="meldungen-liste"></div>
+    <div class="modal-btns">
+      <button class="btn-m" id="meldungen-zu" data-i18n="close">Schließen</button>
     </div>
   </div>
 </div>
@@ -1925,7 +2016,9 @@
 <script src="ui/settings.js"></script>
   <script src="ui/contextMenu.js"></script>
   <script src="core/postfach.js"></script>
+<script src="core/melden.js"></script>
   <script src="ui/postfach.js"></script>
+<script src="ui/melden.js"></script>
   <script src="ui/titlebar.js"></script>
   
   

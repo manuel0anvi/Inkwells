@@ -92,6 +92,10 @@ const EDITOR = { uid: 'uid-bearbeiter', mail: 'bearbeiter@example.com' };
 const READER = { uid: 'uid-leser', mail: 'leser@example.com' };
 const STRANGER = { uid: 'uid-fremd', mail: 'fremd@example.com' };
 const BLOCKED = { uid: 'uid-gesperrt', mail: 'gesperrt@example.com' };
+/* Der von der VERWALTUNG Gesperrte – nicht zu verwechseln mit BLOCKED,
+   den der Besitzer aus SEINEM Dokument geworfen hat (blockedEmails). */
+const GESPERRT = { uid: 'uid-verwarnt', mail: 'verwarnt@example.com' };
+const MELDER = { uid: 'uid-melder', mail: 'melder@example.com' };
 
 /* Dieselbe Kennung, die adminUid() in website/firestore.rules zurueckgibt.
    Steht dort der Platzhalter statt der echten UID, faellt es hier auf. */
@@ -157,6 +161,19 @@ function headData(overrides = {}) {
     await setDoc(doc(db, 'docs/dok2'), headData({
       linkMode: 'edit', linkId: 'link2', memberEmails: [], members: {}, memberVia: {}
     }));
+
+    /* ── Fuer die Sperren ──────────────────────────────────────────
+       Ein drittes Dokument, in dem der spaeter Gesperrte Mitglied ist.
+       Die Sperre wird erst im Abschnitt weiter unten gesetzt, damit die
+       Pruefungen davor den ungesperrten Zustand sehen. */
+    await setDoc(doc(db, 'docs/dok3'), headData({
+      linkMode: 'edit', linkId: 'link3',
+      memberEmails: [EDITOR.mail, GESPERRT.mail],
+      members: { [EDITOR.mail]: 'edit', [GESPERRT.mail]: 'edit' },
+      memberVia: { [EDITOR.mail]: 'invite', [GESPERRT.mail]: 'invite' },
+      blockedEmails: []
+    }));
+    await setDoc(doc(db, 'docs/dok3/pages/p1'), { index: 0, text: '<p>Drei</p>', objects: [] });
     await setDoc(doc(db, 'docs/dok2/pages/p1'), { index: 0, text: '<p>Offen</p>', objects: [] });
     await setDoc(doc(db, 'doc_links/link2'), { docId: 'dok2', owner: OWNER.uid });
   });
@@ -727,6 +744,152 @@ function headData(overrides = {}) {
 
   await denied('Ohne Anmeldung gar kein Postfach',
     getDoc(doc(ohne(), 'postfach/' + READER.uid)));
+
+  /* ══════════════════════════════════════════════════════════════
+     MELDEN UND SPERREN
+     ══════════════════════════════════════════════════════════════ */
+
+  section('Melden: was durchkommt und was nicht');
+
+  const meldung = (extra = {}) => ({
+    erstellt: serverTimestamp(),
+    melderEmail: MELDER.mail,
+    gemeldetEmail: GESPERRT.mail,
+    gemeldetName: 'Verwarnt',
+    docId: 'dok1',
+    docTitel: 'Mathematik',
+    ownerUid: OWNER.uid,
+    grund: 'beleidigung',
+    notiz: 'Hat im Chat beleidigt.',
+    erledigt: false,
+    ...extra
+  });
+
+  await ok('Ein Angemeldeter darf melden',
+    setDoc(doc(fsOf(MELDER), 'meldungen/m1'), meldung()));
+
+  await denied('Aber nicht unter fremdem Namen',
+    setDoc(doc(fsOf(MELDER), 'meldungen/m2'), meldung({ melderEmail: OWNER.mail })));
+
+  await denied('Und nicht sich selbst',
+    setDoc(doc(fsOf(MELDER), 'meldungen/m3'), meldung({ gemeldetEmail: MELDER.mail })));
+
+  await denied('Ein erfundener Grund kommt nicht durch',
+    setDoc(doc(fsOf(MELDER), 'meldungen/m4'), meldung({ grund: 'weilichkann' })));
+
+  await denied('Eine zu lange Notiz auch nicht',
+    setDoc(doc(fsOf(MELDER), 'meldungen/m5'), meldung({ notiz: 'x'.repeat(301) })));
+
+  await denied('Und nicht gleich als erledigt',
+    setDoc(doc(fsOf(MELDER), 'meldungen/m6'), meldung({ erledigt: true })));
+
+  await denied('Ohne Anmeldung gar nicht',
+    setDoc(doc(ohne(), 'meldungen/m7'), meldung({ melderEmail: '' })));
+
+  await ok('Die Verwaltung liest sie',
+    getDoc(doc(fsOf(ADMIN), 'meldungen/m1')));
+
+  await ok('Der Besitzer des Dokuments auch',
+    getDoc(doc(fsOf(OWNER), 'meldungen/m1')));
+
+  await denied('Der Gemeldete sieht sie nicht',
+    getDoc(doc(fsOf(GESPERRT), 'meldungen/m1')));
+
+  await denied('Und auch nicht der, der sie geschrieben hat',
+    getDoc(doc(fsOf(MELDER), 'meldungen/m1')));
+
+  await ok('Der Besitzer darf sie abhaken',
+    updateDoc(doc(fsOf(OWNER), 'meldungen/m1'), { erledigt: true }));
+
+  await denied('Aber nicht den Vorwurf umschreiben',
+    updateDoc(doc(fsOf(OWNER), 'meldungen/m1'), { grund: 'sonstiges' }));
+
+  section('Sperren: nur die Verwaltung setzt sie');
+
+  const sperre = (umfang, bis = null) => ({
+    email: GESPERRT.mail, bis, umfang,
+    grund: 'Beleidigung', gesetztAm: serverTimestamp()
+  });
+
+  await denied('Ein Nutzer sperrt niemanden',
+    setDoc(doc(fsOf(MELDER), 'sperren/' + GESPERRT.mail),
+      sperre({ neueFreigaben: true, selbstTeilen: false, laufendeRaus: false })));
+
+  await denied('Auch nicht sich selbst frei',
+    setDoc(doc(fsOf(GESPERRT), 'sperren/' + GESPERRT.mail), sperre({})));
+
+  await ok('Die Verwaltung schon',
+    setDoc(doc(fsOf(ADMIN), 'sperren/' + GESPERRT.mail),
+      sperre({ neueFreigaben: true, selbstTeilen: true, laufendeRaus: true })));
+
+  await ok('Der Betroffene darf seine eigene Sperre sehen',
+    getDoc(doc(fsOf(GESPERRT), 'sperren/' + GESPERRT.mail)));
+
+  await denied('Fremde Sperren gehen niemanden etwas an',
+    getDoc(doc(fsOf(MELDER), 'sperren/' + GESPERRT.mail)));
+
+  section('Und die Sperre wirkt wirklich');
+
+  await denied('Aus laufenden Freigaben heraus: kein Kopf mehr',
+    getDoc(doc(fsOf(GESPERRT), 'docs/dok3')));
+
+  await denied('Und kein Inhalt',
+    getDoc(doc(fsOf(GESPERRT), 'docs/dok3/pages/p1')));
+
+  await denied('Auch nicht ueber den offenen Link daneben',
+    getDoc(doc(fsOf(GESPERRT), 'docs/dok2/pages/p1')));
+
+  await denied('Nichts mehr schreiben',
+    setDoc(doc(fsOf(GESPERRT), 'docs/dok3/pages/p1'),
+      { index: 0, text: '<p>Doch</p>', objects: [] }));
+
+  await denied('Nichts Eigenes mehr freigeben',
+    setDoc(doc(fsOf(GESPERRT), 'docs/neu1'), {
+      owner: GESPERRT.uid, ownerEmail: GESPERRT.mail, ownerName: 'V',
+      title: 'Neu', color: '#c8a96e', defaultBg: 'ruled', notebookId: 'nb9',
+      format: 'pages', revision: 0, linkMode: 'off', linkId: '',
+      pageCount: 1, pageOrder: ['p1'], sections: [], activeSecId: '',
+      memberEmails: [], members: {}, memberVia: {}, blockedEmails: []
+    }));
+
+  await ok('Der Ungesperrte daneben kann alles wie vorher',
+    getDoc(doc(fsOf(EDITOR), 'docs/dok3')));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    // Sperre auf „abgelaufen" stellen
+    await setDoc(doc(ctx.firestore(), 'sperren/' + GESPERRT.mail), {
+      email: GESPERRT.mail,
+      bis: new Date(Date.now() - 864e5),
+      umfang: { neueFreigaben: true, selbstTeilen: true, laufendeRaus: true },
+      grund: 'Beleidigung'
+    });
+  });
+
+  await ok('Abgelaufen: er ist wieder dabei, wo er vorher war',
+    getDoc(doc(fsOf(GESPERRT), 'docs/dok3')));
+
+  await ok('Und darf wieder freigeben',
+    setDoc(doc(fsOf(GESPERRT), 'docs/neu2'), {
+      owner: GESPERRT.uid, ownerEmail: GESPERRT.mail, ownerName: 'V',
+      title: 'Neu', color: '#c8a96e', defaultBg: 'ruled', notebookId: 'nb9',
+      format: 'pages', revision: 0, linkMode: 'off', linkId: '',
+      pageCount: 1, pageOrder: ['p1'], sections: [], activeSecId: '',
+      memberEmails: [], members: {}, memberVia: {}, blockedEmails: []
+    }));
+
+  section('Direktpost: eine Nachricht an einen einzelnen');
+
+  await ok('Die Verwaltung legt sie an',
+    setDoc(doc(fsOf(ADMIN), 'direktpost/' + GESPERRT.mail), { liste: [] }));
+
+  await ok('Der Empfaenger liest sie',
+    getDoc(doc(fsOf(GESPERRT), 'direktpost/' + GESPERRT.mail)));
+
+  await denied('Sonst niemand',
+    getDoc(doc(fsOf(MELDER), 'direktpost/' + GESPERRT.mail)));
+
+  await denied('Und niemand schreibt sich selbst etwas hinein',
+    setDoc(doc(fsOf(GESPERRT), 'direktpost/' + GESPERRT.mail), { liste: [] }));
 
   section('Realtime Database: alles Übrige bleibt zu');
 

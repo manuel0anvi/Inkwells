@@ -31,6 +31,25 @@
   const P = window.Postfach_;
   if (!P) { console.warn('[Postfach] core/postfach.js fehlt'); return; }
 
+  /* ══════════════════════════════════════════════════════════════════
+     ZWEI QUELLEN, EIN FACH
+
+     `oeffentlich`  site_content/nachrichten – Ankuendigungen an alle
+     `direkt`       direktpost/{adresse}     – nur an diesen einen
+
+     Getrennt gehalten, weil sie getrennt hereinkommen: jede Quelle hat
+     ihren eigenen Beobachter, und beim Eintreffen soll nur die eine
+     ersetzt werden. Zusammengelegt werden sie erst beim Auswerten
+     (alleNachrichten) – von da an ist es eine Liste, und core/postfach.js
+     merkt keinen Unterschied.
+
+     Die Direktpost braucht keinen Empfaengerkreis: sie liegt schon unter
+     der Adresse des Empfaengers, und niemand sonst darf sie lesen
+     (website/firestore.rules). Deshalb kommt sie ohne `ziel` aus.
+     ══════════════════════════════════════════════════════════════════ */
+  let oeffentlich = [];
+  let direkt = [];
+  const alleNachrichten = () => oeffentlich.concat(direkt);
   let nachrichten = [];                       // wie sie in Firestore stehen
   let stand = { gelesen: [], geloescht: [] }; // vereinigt, örtlich + Cloud
   let lage = { angemeldet: false, anbieter: [], store: false,
@@ -302,7 +321,9 @@
       else await S.sichrePostfachStand(stand);
     } catch (err) { /* offline, macht nichts */ }
 
-    nachrichten = await S.ladeNachrichten();
+    oeffentlich = await S.ladeNachrichten();
+    direkt = S.ladeDirektpost ? await S.ladeDirektpost() : [];
+    nachrichten = alleNachrichten();
     zeichneAbzeichen();
     await zeigeFaellige(true);
 
@@ -337,6 +358,15 @@
       } catch (err) { /* offline, macht nichts */ }
       await standSichern();
 
+      /* Die Direktpost liegt unter der ADRESSE. Vor dem Anmelden gab es
+         keine, danach vielleicht schon – also hier neu holen und den
+         Beobachter neu anhaengen, der bis eben ins Leere zeigte. */
+      try {
+        direkt = S.ladeDirektpost ? await S.ladeDirektpost() : [];
+        nachrichten = alleNachrichten();
+      } catch (err) { /* offline, macht nichts */ }
+      horcheAufDirektpost();
+
       zeichneAbzeichen();
       if (E('ov-postfach').style.display === 'flex') zeichneFach();
       await zeigeFaellige(true);
@@ -346,9 +376,34 @@
        ausdrücklich "sofort" verlangt – der Rest wartet auf den nächsten
        Start, damit niemand mitten im Satz unterbrochen wird. */
     S.beobachteNachrichten(async (liste) => {
-      nachrichten = liste;
+      oeffentlich = liste;
+      nachrichten = alleNachrichten();
       zeichneAbzeichen();
       if (E('ov-postfach').style.display === 'flex') zeichneFach();
+      await zeigeFaellige(false);
+    });
+
+    horcheAufDirektpost();
+  }
+
+  /* Der Beobachter der Direktpost wird beim Anmelden neu gesetzt – die
+     Adresse aendert sich dabei. Der alte wird vorher abbestellt, sonst
+     lieferten zwei gleichzeitig und der zweite ueberschriebe den ersten
+     mit dem Stand der alten Adresse. */
+  let direktAbbestellen = null;
+
+  function horcheAufDirektpost() {
+    const S = window.InkwellsShare;
+    if (!S || !S.beobachteDirektpost) return;
+    if (direktAbbestellen) { try { direktAbbestellen(); } catch (err) { } }
+    direktAbbestellen = S.beobachteDirektpost(async (liste) => {
+      direkt = liste;
+      nachrichten = alleNachrichten();
+      zeichneAbzeichen();
+      if (E('ov-postfach').style.display === 'flex') zeichneFach();
+      /* Direktpost darf aufspringen: sie geht genau diesen einen an, und
+         sie kommt nicht im Dutzend. Ob sie wirklich aufspringt, haengt
+         weiter an ihrer eigenen Angabe `sofort`. */
       await zeigeFaellige(false);
     });
   }

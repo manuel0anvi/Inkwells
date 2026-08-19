@@ -231,7 +231,38 @@
 .collab-card-text {
   display: flex;
   flex-direction: column;
-  min-width: 0
+  min-width: 0;
+  flex: 1 1 auto
+}
+
+/* ── Melden ───────────────────────────────────────────────────────────
+   Blass und ohne Beschriftung: es ist der seltenste Knopf der ganzen
+   App, und er soll nicht danach aussehen, als gehoere er zum taeglichen
+   Umgang. Erst beim Daraufzeigen bekennt er Farbe. */
+.collab-melden {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--md);
+  opacity: .5;
+  cursor: pointer;
+  transition: opacity .15s, color .15s, background .15s
+}
+
+.collab-melden svg { width: 14px; height: 14px }
+
+.collab-melden:hover,
+.collab-melden:focus-visible {
+  opacity: 1;
+  color: #d98b7a;
+  background: rgba(217, 139, 122, .12)
 }
 
 .collab-card-text strong {

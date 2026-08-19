@@ -238,6 +238,140 @@ service cloud.firestore {
            );
     }
 
+    /* ══════════════════════════════════════════════════════════════════
+       SPERREN
+
+       Eine Sperre steht unter ihrer eigenen Adresse: sperren/{email}.
+       Kleingeschrieben, weil myEmail() das auch tut – sonst fände die
+       Regel unten nichts.
+
+       >>> Warum die Adresse als Dokumentname und nicht die UID <<<
+       Weil die Verwaltung die UID nicht kennt. Gemeldet wird jemand über
+       die Anwesenheitsliste eines Dokuments, und dort steht die Adresse.
+       Eine Zuordnung Adresse → UID gäbe es nur, wenn wir sie führten –
+       und die wäre eine öffentlich lesbare Liste aller Nutzer.
+
+       Lesen darf, wen es angeht: der Betroffene selbst (die App sagt ihm
+       dann, warum etwas nicht geht) und die Verwaltung. Schreiben nur die
+       Verwaltung. Auflisten darf niemand ausser ihr – sonst stünde hier
+       eine Liste aller je gesperrten Adressen.
+
+       Die Sperre WIRKT weiter unten bei /docs. Dort wird sie mit get()
+       nachgeschlagen; get() geht an dieser Regel vorbei, das ist so
+       vorgesehen.
+       ══════════════════════════════════════════════════════════════════ */
+    match /sperren/{email} {
+      allow get: if isAdmin() || (myEmail() != '' && email == myEmail());
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    /* Läuft gegen diese Adresse gerade eine Sperre für DIESE eine Sache?
+
+       Die drei Werte stehen genauso in src/core/melden.js:
+         neueFreigaben  kommt in kein geteiltes Dokument mehr hinein
+         selbstTeilen   gibt selbst nichts mehr frei
+         laufendeRaus   verliert auch die, in denen er schon ist
+
+       Ein fehlendes Enddatum heisst unbegrenzt. Ein Datum in der
+       Vergangenheit heisst: vorbei. Aufgeräumt wird nichts – eine
+       abgelaufene Sperre schadet nicht, und ein Aufräumdienst wäre eine
+       weitere Sache, die stillschweigend kaputtgehen kann.
+
+       >>> Was das kostet <<<
+       Ein zusätzlicher Lesevorgang, sobald jemand auf ein fremdes
+       Dokument zugreift. exists() steht bewusst davor: für alle, gegen
+       die nichts vorliegt – also praktisch alle – bricht die Prüfung dort
+       ab, und get() läuft gar nicht erst. */
+    function sperrPfad(email) {
+      return /databases/$(database)/documents/sperren/$(email);
+    }
+
+    function gesperrtFuer(was) {
+      return myEmail() != ''
+             && exists(sperrPfad(myEmail()))
+             && get(sperrPfad(myEmail())).data.get('umfang', {}).get(was, false) == true
+             && (
+                  get(sperrPfad(myEmail())).data.get('bis', null) == null
+                  || get(sperrPfad(myEmail())).data.bis > request.time
+                );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       MELDUNGEN
+
+       Wer in einem geteilten Dokument sitzt, kann jemanden melden. Die
+       Meldung geht an zwei Stellen: an den Besitzer des Dokuments, der
+       die Freigabe zurücknehmen kann, und an die Verwaltung.
+
+       >>> Was NICHT darin steht <<<
+       Keine Chatzeilen, keine Seiteninhalte. Nur ein Grund aus einer
+       festen Liste und höchstens zwei Sätze dazu. Die Liste steht hier
+       noch einmal, damit auch am Formular vorbei nichts anderes
+       ankommt.
+
+       >>> Warum die Adresse des Meldenden mit hinein muss <<<
+       Damit sich derselbe nicht hundertmal melden lässt und damit die
+       Verwaltung sieht, wenn jemand das Melden selbst missbraucht. Der
+       Gemeldete bekommt sie NICHT zu sehen – er sieht die Meldung
+       überhaupt nicht.
+
+       Geändert werden darf nur `erledigt`, und nur von der Verwaltung
+       oder dem Besitzer. Der Rest der Meldung steht fest: was einmal
+       gemeldet wurde, soll niemand nachträglich umschreiben.
+       ══════════════════════════════════════════════════════════════════ */
+    function validGrund(g) {
+      return g in ['beleidigung', 'werbung', 'fremdeInhalte', 'zerstoerung', 'sonstiges'];
+    }
+
+    match /meldungen/{meldungId} {
+      function m() { return resource.data; }
+
+      allow get, list: if isAdmin()
+                       || (request.auth != null && m().ownerUid == request.auth.uid);
+
+      allow create: if isVerifiedUser()
+                    && request.resource.data.melderEmail == myEmail()
+                    && request.resource.data.gemeldetEmail is string
+                    && request.resource.data.gemeldetEmail.size() > 0
+                    && request.resource.data.gemeldetEmail != myEmail()
+                    && validGrund(request.resource.data.grund)
+                    && request.resource.data.docId is string
+                    && request.resource.data.docId.size() > 0
+                    && request.resource.data.ownerUid is string
+                    && request.resource.data.notiz is string
+                    && request.resource.data.notiz.size() <= 300
+                    && request.resource.data.erledigt == false
+                    && isServerTime(request.resource.data.erstellt);
+
+      allow update: if (isAdmin() || (request.auth != null && m().ownerUid == request.auth.uid))
+                    && request.resource.data.diff(m()).affectedKeys().hasOnly(['erledigt']);
+
+      allow delete: if isAdmin();
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIREKTPOST — eine Nachricht an EINEN Nutzer
+
+       Die gewöhnlichen Postfach-Nachrichten stehen in site_content und
+       sind öffentlich lesbar; der Empfängerkreis ist dort eine
+       Höflichkeit der App, keine Sperre (src/core/postfach.js).
+
+       Für „du wurdest gemeldet" reicht das nicht. So eine Nachricht
+       nennt einen Vorwurf, und sie hat niemanden ausser dem Empfänger
+       etwas anzugehen. Deshalb ein eigenes Dokument je Adresse, das nur
+       er und die Verwaltung lesen dürfen.
+
+       Aufbau wie in site_content/nachrichten: ein Feld `liste` mit
+       denselben Nachrichten-Objekten. Dadurch kann das Postfach in der
+       App beide Quellen einfach hintereinanderhängen (ui/postfach.js).
+       ══════════════════════════════════════════════════════════════════ */
+    match /direktpost/{email} {
+      allow get: if isAdmin() || (myEmail() != '' && email == myEmail());
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
     /* ── Freigegebene Hefte ───────────────────────────────────────────
        Lesen darf jeder, der den Link kennt – das ist der Zweck. Die
        Kennung im Link ist 22 Zeichen lang und zufällig, also nicht
@@ -325,8 +459,15 @@ service cloud.firestore {
         return request.auth != null && head().owner == request.auth.uid;
       }
 
+      /* Wer aus laufenden Freigaben geworfen wurde, ist hier kein
+         Mitglied mehr – ohne dass ihn jemand aus der Liste streichen
+         müsste. Das ist der Punkt: die Verwaltung kennt die Dokumente
+         des Gesperrten gar nicht (eine Liste aller Dokumente gibt es
+         absichtlich nicht), könnte ihn also nirgends austragen. Läuft
+         die Sperre ab, ist er wieder dabei, wo er vorher war. */
       function isMember() {
-        return myEmail() != '' && myEmail() in head().memberEmails;
+        return myEmail() != '' && myEmail() in head().memberEmails
+               && !gesperrtFuer('laufendeRaus');
       }
 
       function linkIsOpen() {
@@ -342,7 +483,17 @@ service cloud.firestore {
          nicht", und die App zeigt eine Fehlermeldung, wo ein schlichtes
          „Freigabe gibt es nicht mehr" hingehört. Verraten wird dadurch
          nichts: dass etwas NICHT existiert, ist kein Geheimnis. */
-      allow get: if resource == null || isDocOwner() || isMember() || linkIsOpen();
+      /* Der offene Link steht hinter derselben Sperre wie die
+         Mitgliedschaft. Ohne das las der aus laufenden Freigaben
+         Geworfene den Kopf einfach ueber den Link weiter, den er ja
+         schon hatte – gefunden hat das scripts/test-rules.js.
+         Dieselbe Ueberlegung wie bei mayReadContent() weiter unten. */
+      allow get: if resource == null
+                    || isDocOwner()
+                    || isMember()
+                    || (linkIsOpen()
+                        && !gesperrtFuer('laufendeRaus')
+                        && !gesperrtFuer('neueFreigaben'));
 
       /* Auflisten nur über die Mitgliedschaft oder den eigenen Besitz –
          eine Liste ALLER Dokumente gibt es dadurch nicht, auch nicht für
@@ -360,6 +511,7 @@ service cloud.firestore {
          in pages/ink/blobs, nicht in Stücken. Stattdessen wird die
          Seitenzahl geprüft – die gibt es in beiden Formen. */
       allow create: if isVerifiedUser()
+                    && !gesperrtFuer('selbstTeilen')
                     && request.resource.data.owner == request.auth.uid
                     && request.resource.data.ownerEmail.lower() == myEmail()
                     && request.resource.data.linkMode in ['off', 'view', 'edit']
@@ -374,7 +526,19 @@ service cloud.firestore {
       function ownerUpdate() {
         return isDocOwner()
                && request.resource.data.owner == request.auth.uid
-               && request.resource.data.linkMode in ['off', 'view', 'edit'];
+               && request.resource.data.linkMode in ['off', 'view', 'edit']
+               /* Wer nicht teilen darf, darf auch niemanden dazuholen –
+                  sonst wäre die Sperre mit zwei Klicks umgangen. Das
+                  Wegnehmen bleibt erlaubt, und am eigenen Inhalt ändert
+                  sie ohnehin nichts: die Liste darf nur nicht wachsen. */
+               && (
+                    !gesperrtFuer('selbstTeilen')
+                    || (
+                         request.resource.data.memberEmails.size()
+                           <= head().memberEmails.size()
+                         && request.resource.data.linkMode == 'off'
+                       )
+                  );
       }
 
       /* Selbsteintrag über den Link: nur die eigene Adresse, nur mit der
@@ -385,6 +549,8 @@ service cloud.firestore {
         return isVerifiedUser()
                && linkIsOpen()
                && !(myEmail() in head().blockedEmails)
+               // Gesperrt heisst: in kein geteiltes Dokument mehr hinein
+               && !gesperrtFuer('neueFreigaben')
                && request.resource.data.diff(head()).affectedKeys()
                     .hasOnly(['memberEmails', 'members', 'memberVia'])
                && myEmail() in request.resource.data.memberEmails
@@ -516,8 +682,14 @@ service cloud.firestore {
          erlaubte Lesen über den Link. */
       function mayReadContent() {
         return (request.auth != null && docHead().owner == request.auth.uid)
-               || (myEmail() != '' && myEmail() in docHead().memberEmails)
-               || docHead().linkMode in ['view', 'edit'];
+               || (myEmail() != '' && myEmail() in docHead().memberEmails
+                   && !gesperrtFuer('laufendeRaus'))
+               /* Der offene Link steht bewusst hinter derselben Sperre:
+                  sonst käme der Hinausgeworfene über den Link, den er ja
+                  schon hat, sofort wieder herein – nur ohne Namen. */
+               || (docHead().linkMode in ['view', 'edit']
+                   && !gesperrtFuer('laufendeRaus')
+                   && !gesperrtFuer('neueFreigaben'));
       }
 
       /* >>> Die Mitgliederliste MUSS mitgeprüft werden <<<
@@ -542,6 +714,7 @@ service cloud.firestore {
                          myEmail() != ''
                          && myEmail() in docHead().memberEmails
                          && docHead().members[myEmail()] == 'edit'
+                         && !gesperrtFuer('laufendeRaus')
                        )
                   );
       }

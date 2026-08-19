@@ -45,6 +45,9 @@
 
   let room = null;          // der betretene Raum (core/share.js)
   let docId = null;
+  /* Wem das offene Dokument gehoert. Steht in den Meldungen und
+     entscheidet dort, wer sie lesen darf (ui/melden.js). */
+  let ownerUidJetzt = '';
   let docs = new Map();     // pageId -> { ydoc, ytext, applying, dirty }
   let inkSeen = new Map();  // pageId -> Set der schon vorhandenen Striche
   let others = [];          // wer sonst noch da ist
@@ -541,6 +544,30 @@
       text.appendChild(name);
       text.appendChild(wo);
       zeile.appendChild(text);
+
+      /* ══════════════════════════════════════════════════════════
+         MELDEN
+
+         Nur an fremden Zeilen und nur, wenn eine Adresse bekannt ist –
+         ohne sie liesse sich niemand zuordnen (ui/melden.js).
+
+         Das Fenster geht dabei zu: der Melde-Dialog liegt darueber, und
+         zwei offene Fenster uebereinander sind schwer zu bedienen. */
+      if (!person.selbst && person.email && window.Melden_) {
+        const melden = document.createElement('button');
+        melden.className = 'collab-melden';
+        melden.title = t('meldenTitel') || 'Jemanden melden';
+        melden.setAttribute('aria-label', melden.title);
+        melden.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+          + 'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
+          + '<path d="M3.6 14V2.6h7.6l-1 2.7 1 2.7H3.6"/></svg>';
+        melden.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          schliesseLeute();
+          window.Melden_.oeffne({ email: person.email, name: person.name });
+        });
+        zeile.appendChild(melden);
+      }
 
       karte.appendChild(zeile);
     }
@@ -2865,6 +2892,7 @@
   async function start(id, notebook, crdt, canEdit, opts = {}) {
     await stop();
     docId = id;
+    ownerUidJetzt = String(opts.ownerUid || '');
     liveNb = notebook;
     takeSnapshot();
 
@@ -3075,6 +3103,7 @@
     if (room) { try { await room.leave(); } catch (e) {} }
     room = null;
     docId = null;
+    ownerUidJetzt = '';
     others = [];
 
     for (const entry of docs.values()) { try { entry.ydoc.destroy(); } catch (e) {} }
@@ -3507,6 +3536,11 @@
     syncNow: syncStructure,
     // Fehlersuche: was fremde Anschläge mit der eigenen Marke gemacht haben
     caretLog: zeigeCaretLog,
+    /* Welches Dokument gerade offen ist, und wem es gehoert. ui/melden.js
+       braucht beides: die Meldung nennt das Dokument, und nur ueber
+       ownerUid darf der Besitzer sie spaeter lesen
+       (website/firestore.rules). */
+    offenesDokument: () => (docId ? { docId, ownerUid: ownerUidJetzt } : null),
     // offengelegt für scripts/test-collab-text.js
     _textDelta: textDelta,
     _shiftedPos: shiftedPos,

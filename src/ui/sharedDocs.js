@@ -1449,6 +1449,12 @@
       if (!docId) throw new Error('SHARE_NOT_FOUND');
 
       if (api.hasRealIdentity()) {
+        /* Zwei verschiedene Sperren, und sie sagen Verschiedenes:
+             'blocked'      der BESITZER hat mich aus SEINEM Dokument
+                            geworfen (blockedEmails)
+             darfIch(...)   die Verwaltung hat mich gesperrt
+           Deshalb beide, und jede mit ihrem eigenen Satz. */
+        if (window.Melden_ && !await window.Melden_.darfIch('neueFreigaben')) return;
         const outcome = await api.joinViaLink(docId);
         if (outcome === 'blocked') { toast(t('sharedBlocked'), true); return; }
       }

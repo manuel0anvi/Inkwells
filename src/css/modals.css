@@ -1498,6 +1498,106 @@
   gap: 0;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   MELDEN
+
+   Derselbe Dialog wie ueberall, nur schmaler: es sind fuenf Zeilen zum
+   Ankreuzen und ein Feld. Breiter gaebe es nur mehr leere Flaeche.
+   ══════════════════════════════════════════════════════════════════════ */
+.modal-melden {
+  max-width: 460px
+}
+
+.melden-wen {
+  margin: -4px 0 16px;
+  font-size: 13px;
+  color: var(--md)
+}
+
+.modal-melden textarea {
+  width: 100%;
+  padding: 9px 11px;
+  background: var(--sc);
+  border: 1px solid var(--sb);
+  border-radius: 7px;
+  color: var(--hi);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical
+}
+
+.modal-melden textarea:focus {
+  outline: none;
+  border-color: var(--gold)
+}
+
+.melden-zaehler {
+  margin-top: 5px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--md)
+}
+
+/* Was NICHT mitgeht, gehoert vor den Knopf und nicht in eine
+   Datenschutzerklaerung, die niemand aufschlaegt. */
+.melden-hinweis {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--sb2);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--md)
+}
+
+/* ── Was der Besitzer sieht ─────────────────────────────────────────── */
+.meldungen-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 52vh;
+  overflow-y: auto
+}
+
+.meldung-karte {
+  padding: 14px 16px;
+  border: 1px solid var(--sb);
+  border-left: 2px solid #d98b7a;
+  border-radius: 8px;
+  background: var(--sc)
+}
+
+.meldung-kopf {
+  font-size: 14px;
+  color: var(--hi);
+  margin-bottom: 6px
+}
+
+.meldung-wer,
+.meldung-wo {
+  font-size: 12px;
+  color: var(--md);
+  line-height: 1.6
+}
+
+.meldung-notiz {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--sb);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--hi);
+  white-space: pre-wrap
+}
+
+.meldung-knoepfe {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap
+}
+
 /* ── Auswahl mit Erklärtext (Freigabe- und Export-Dialog) ─────────────
    Vorher trug jede Zeile eigene Inline-Styles mit display:flex. Die
    Auswahlpunkte standen dadurch nicht sauber untereinander: sobald ein

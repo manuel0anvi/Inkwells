@@ -409,6 +409,12 @@
     const weg = el('chatctx-weg');
     if (weg) weg.style.display = m.selbst ? '' : 'none';
 
+    /* Melden umgekehrt: nur an fremden, und nur wenn eine Adresse
+       bekannt ist. Ohne sie weiss die Meldung nicht, wen sie meint
+       (ui/melden.js). */
+    const melden = el('chatctx-melden');
+    if (melden) melden.style.display = (!m.selbst && adresseZu(m) && window.Melden_) ? '' : 'none';
+
     menue.style.cssText = 'display:block;position:fixed;left:0;top:0';
     /* Erst zeigen, dann messen: ein Menü mit display:none hat keine
        Grösse, und es soll nicht über den Rand hinausstehen. */
@@ -418,6 +424,23 @@
     menue.style.top = Math.round(Math.max(8, Math.min(window.innerHeight - h - 8, y - h - 8))) + 'px';
 
     setTimeout(() => document.addEventListener('pointerdown', menueDraussen, true), 0);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WELCHE ADRESSE GEHOERT ZU DIESER ZEILE
+
+     Eine Chatzeile traegt nur uid und Namen – die Adresse waere in
+     jedem Chatverlauf mitgeschrieben und stuende dann in der Realtime
+     Database, wo sie nichts zu suchen hat.
+
+     Nachgeschlagen wird deshalb in der Anwesenheitsliste. Das heisst:
+     melden kann man nur, wer gerade DA ist. Das ist keine Einschraenkung,
+     sondern der gemeinte Fall – gemeldet wird, was gerade geschieht.
+     ══════════════════════════════════════════════════════════════════ */
+  function adresseZu(m) {
+    if (!m || !m.uid || !window.Collab || !window.Collab.people) return '';
+    const wer = window.Collab.people().find(p => String(p.uid) === String(m.uid));
+    return (wer && wer.email) || '';
   }
 
   function schliesseZeilenMenue() {
@@ -441,6 +464,12 @@
     const m = menueNachricht;
     schliesseZeilenMenue();
     if (m) nimmZurueck(m);
+  });
+
+  el('chatctx-melden')?.addEventListener('click', () => {
+    const m = menueNachricht;
+    schliesseZeilenMenue();
+    if (m && window.Melden_) window.Melden_.oeffne({ email: adresseZu(m), name: m.name });
   });
 
   /** Die gemeinte Zeile kurz hervorheben – wenn sie noch da ist. */
