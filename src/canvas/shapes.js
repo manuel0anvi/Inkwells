@@ -226,6 +226,29 @@ function insertShape(type) {
     if (objLayer && typeof placeObject === 'function') placeObject(objLayer, obj, page);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DIE NEUE FORM LIEGT SOFORT IN DER HAND
+
+     Anfassen kann man ein Objekt nur mit dem Zeiger (canvas/objects.js,
+     beginInteraction). Das Formen-Fenster laesst das Werkzeug aber
+     stehen, wie es war: wer mit dem Stift in der Hand eine Form
+     einsetzte, bekam sie hingelegt – und dann ging nichts mehr. Weder
+     schieben noch drehen noch die Farbe aendern, denn die Leiste
+     erscheint erst an der ausgewaehlten Form. Genau so wurde es
+     gemeldet: „Formen lassen sich nicht anfassen."
+
+     Eine gerade eingesetzte Form will man zurechtruecken, nicht
+     uebermalen. Deshalb wechselt der Zeiger hier von selbst herbei und
+     die Form ist ausgewaehlt. Zum Stift zurueck geht es mit einem Druck
+     – der Weg dahin ist kurz, der zur Erkenntnis „ich muss erst das
+     Werkzeug wechseln" war es nicht.
+     ══════════════════════════════════════════════════════════════════ */
+  if (S.mode !== 'cursor' && typeof switchMode === 'function') switchMode('cursor');
+  if (pageEl) {
+    const w = pageEl.querySelector('.obj-wrap[data-objid="' + obj.id + '"]');
+    if (w && typeof w._waehleObjekt === 'function') w._waehleObjekt();
+  }
+
   if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   return true;

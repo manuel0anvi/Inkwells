@@ -677,6 +677,20 @@ function placeObject(objLayer, obj, page) {
     placeBar();
   }
 
+  /**
+   * Nimmt der Finger dieses Ding schon beim ersten Zug mit?
+   *
+   * Ja, solange daneben noch genug Blatt zum Rollen bleibt. Gemessen
+   * wird nur die HOEHE: gerollt wird senkrecht, und ein breites, flaches
+   * Ding steht dem nicht im Weg. Ein Drittel der Seite ist die Grenze –
+   * darueber bliebe auf einem Handy kaum noch etwas uebrig, woran der
+   * Finger die Seite fassen koennte.
+   */
+  function passtInDenGriff() {
+    const ph = (page && page.h) || (typeof CFG !== 'undefined' ? CFG.PAGE_H : 1123);
+    return (obj.h || 0) <= ph / 3;
+  }
+
   /** Auswählen und, solange der Zeiger unten bleibt, verschieben. */
   function beginInteraction(e) {
     if (S.mode !== 'cursor') return;
@@ -684,21 +698,32 @@ function placeObject(objLayer, obj, page) {
     e.stopPropagation(); e.preventDefault();
 
     /* ══════════════════════════════════════════════════════════════
-       MIT DEM FINGER: ERST ANTIPPEN, DANN SCHIEBEN
+       MIT DEM FINGER: ERST ANTIPPEN, DANN SCHIEBEN – ABER NUR BEI
+       GROSSEN DINGEN
 
        Ein Bild ist gross, oft die halbe Seite. Faengt das Verschieben
        schon bei der ersten Beruehrung an, hat der Browser die Wahl
        zwischen Scrollen und Schieben – und er entscheidet sich fuers
        Scrollen: die Seite lief unter dem Finger weg, das Bild blieb
-       liegen. Genau so wurde es gemeldet.
+       liegen. Genau so wurde es gemeldet. Deshalb waehlt die erste
+       Beruehrung dort nur aus; erst am AUSGEWAEHLTEN Bild steht
+       touch-action: none (css/pages.css), und dann gehoert die Bewegung
+       dem Bild allein.
 
-       Deshalb waehlt die erste Beruehrung nur aus. Erst am
-       AUSGEWAEHLTEN Bild steht touch-action: none (css/pages.css), und
-       dann gehoert die Bewegung dem Bild allein. Ueber einem nicht
-       ausgewaehlten Bild scrollt der Finger weiter wie ueberall sonst.
-       Maus und Stift treffen genau, fuer sie bleibt es beim ersten
-       Griff. */
-    if (e.pointerType === 'touch' && _selObj !== wrap) {
+       >>> Warum das nicht fuer alles gilt <<<
+       Bei einer Form ist es genau verkehrt herum. Sie ist klein, und
+       rundherum bleibt Blatt genug zum Rollen – trotzdem musste man sie
+       zweimal anfassen, um sie einen Zentimeter zu schieben. Der erste
+       Zug tat sichtbar nichts, und das las sich wie „sie laesst sich
+       nicht anfassen". Genau so wurde es gemeldet.
+
+       Massgebend ist deshalb, ob das Ding das Rollen ueberhaupt
+       behindert: siehe passtInDenGriff(). Was schmal genug ist, gehoert
+       dem Finger sofort – dazu haelt der touchstart-Hoerer weiter unten
+       die Seite an. Was hoch ist, bleibt beim Antippen zuerst.
+
+       Maus und Stift treffen genau, fuer sie war es nie ein Problem. */
+    if (e.pointerType === 'touch' && _selObj !== wrap && !passtInDenGriff()) {
       select();
       /* Und die Berührung darf nicht gleich noch die Schreibmarke in die
          Zeile darunter setzen: auf einem Tablet fährt sonst die
@@ -953,10 +978,30 @@ function placeObject(objLayer, obj, page) {
   /* Für den Griff von außen: ein Bild hinter dem Text bekommt seinen
      Klick nicht selbst, den reicht der Fänger ganz oben herein. */
   wrap._beginObjInteraction = beginInteraction;
+  /* Damit eine frisch eingesetzte Form gleich in der Hand liegt
+     (canvas/shapes.js, insertShape). */
+  wrap._waehleObjekt = select;
 
   let pinchStartDist = 0, pinchStartW = 0, pinchStartH = 0;
   let _pinchHasMutated = false;
   body.addEventListener('touchstart', e => {
+    /* ══════════════════════════════════════════════════════════════
+       DEN FINGER FESTHALTEN
+
+       Ohne das entscheidet der Browser mitten in der Bewegung auf
+       Rollen, bricht die Zeigerfolge mit pointercancel ab, und das Ding
+       bleibt liegen, waehrend die Seite wegläuft. touch-action allein
+       reicht hier nicht: es steht nur am AUSGEWAEHLTEN Ding
+       (css/pages.css), und beim ersten Zug ist noch nichts ausgewaehlt.
+
+       Angehalten wird nur, was der Finger auch wirklich mitnimmt –
+       dieselbe Bedingung wie oben in beginInteraction(). Ueber allem
+       anderen rollt die Seite weiter wie gewohnt.
+       ══════════════════════════════════════════════════════════════ */
+    if (e.touches.length === 1 && S.mode === 'cursor' && passtInDenGriff()) {
+      e.preventDefault();
+      return;
+    }
     if (e.touches.length === 2 && S.mode === 'cursor') {
       e.stopPropagation(); e.preventDefault();
       pinchStartDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
