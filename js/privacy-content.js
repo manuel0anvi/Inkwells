@@ -14,7 +14,7 @@
      · die Freigabe-Kopien in Firestore (website/js/share.js)
    ══════════════════════════════════════════════════════════════════════ */
 
-const PRIVACY_UPDATED = '2026-08-17';
+const PRIVACY_UPDATED = '2026-08-19';
 
 const PRIVACY = {
   de: {
@@ -184,13 +184,32 @@ const PRIVACY = {
         ]
       },
       {
-        h: '13. Kinder',
+        h: '13. Wenn du jemanden meldest',
+        p: [
+          'In einem gemeinsam bearbeiteten Dokument kannst du eine andere Person melden. Das ist der einzige Fall, in dem Angaben über eine andere Person bei uns landen.',
+          'Mitgeschickt wird: die E-Mail-Adresse der gemeldeten Person, ihr angezeigter Name, deine eigene E-Mail-Adresse, die Kennung und der Titel des Dokuments, ein Grund aus einer festen Liste und, wenn du magst, bis zu 300 Zeichen Text von dir.',
+          'Nicht mitgeschickt wird der Inhalt: keine Seiten, keine Handschrift, keine Chat-Nachrichten. Wir sehen also nicht, was vorgefallen ist, sondern nur, dass du es gemeldet hast und wie du es einordnest.',
+          'Die Meldung geht an zwei Stellen: an die Person, der das Dokument gehört – sie allein kann jemanden aus ihrer Freigabe nehmen –, und an die Verwaltung von Inkwells. Die gemeldete Person erfährt nicht, wer sie gemeldet hat; der Besitzer bekommt deine Adresse nicht zu sehen.',
+          'Eine Meldung wird gelöscht, sobald sie erledigt ist, spätestens aber nach sechs Monaten.'
+        ]
+      },
+      {
+        h: '14. Sperren',
+        p: [
+          'Führt eine Meldung dazu, dass jemand gesperrt wird, speichern wir dazu: die E-Mail-Adresse, was genau gesperrt ist, bis wann, und eine kurze interne Notiz. Gespeichert wird das unter der E-Mail-Adresse selbst, damit die Sperre auch dann greift, wenn sich die Person neu anmeldet.',
+          'Eine Sperre betrifft nur das Teilen mit anderen. Deine eigenen Notizbücher auf deinem Gerät bleiben unberührt, und du kommst weiter an alles heran, was dir gehört.',
+          'Ist die Sperre abgelaufen, wirkt sie nicht mehr. Der Eintrag selbst wird spätestens ein Jahr nach Ablauf gelöscht.',
+          'Zu einer Sperre kann eine Nachricht gehören, die nur du zu sehen bekommst. Sie liegt unter deiner E-Mail-Adresse und ist für niemanden sonst lesbar.'
+        ]
+      },
+      {
+        h: '15. Kinder',
         p: [
           'Inkwells richtet sich nicht gezielt an Kinder unter 16 Jahren. Da wir keine Daten über Nutzerinnen und Nutzer sammeln, werden auch keine Daten von Kindern erhoben. Für die Anmeldung mit Google oder Microsoft gelten zusätzlich die Altersgrenzen der jeweiligen Anbieter.'
         ]
       },
       {
-        h: '14. Änderungen',
+        h: '16. Änderungen',
         p: [
           'Ändert sich die Funktionsweise von Inkwells, wird diese Seite angepasst. Der jeweils aktuelle Stand ist oben angegeben. Die Änderungshistorie ist im öffentlichen Repository nachvollziehbar.'
         ]
@@ -365,13 +384,32 @@ const PRIVACY = {
         ]
       },
       {
-        h: '13. Children',
+        h: '13. When you report someone',
+        p: [
+          'In a document you are working on together, you can report another person. This is the only case in which information about someone else reaches us.',
+          'What is sent: the reported person’s email address, their displayed name, your own email address, the id and title of the document, a reason from a fixed list and, if you like, up to 300 characters of your own text.',
+          'What is not sent: the content. No pages, no handwriting, no chat messages. We do not see what happened – only that you reported it and how you classify it.',
+          'The report goes to two places: to the person who owns the document – only they can remove someone from their share – and to the Inkwells administration. The reported person is not told who reported them; the owner does not get to see your address.',
+          'A report is deleted once it has been dealt with, and after six months at the latest.'
+        ]
+      },
+      {
+        h: '14. Blocks',
+        p: [
+          'If a report leads to someone being blocked, we store: the email address, exactly what is blocked, until when, and a short internal note. This is stored under the email address itself so that the block still applies if the person signs in again.',
+          'A block only affects sharing with others. Your own notebooks on your device are untouched, and you can still reach everything that belongs to you.',
+          'Once a block has expired it no longer has any effect. The entry itself is deleted at the latest one year after expiry.',
+          'A block may come with a message that only you can see. It is stored under your email address and is not readable by anyone else.'
+        ]
+      },
+      {
+        h: '15. Children',
         p: [
           'Inkwells is not specifically aimed at children under 16. Since we collect no data about users, no data about children is collected either. Google\'s and Microsoft\'s own age requirements additionally apply to signing in.'
         ]
       },
       {
-        h: '14. Changes',
+        h: '16. Changes',
         p: [
           'If the way Inkwells works changes, this page is updated. The current version date is shown above. The history of changes can be followed in the public repository.'
         ]
@@ -546,13 +584,32 @@ const PRIVACY = {
         ]
       },
       {
-        h: '13. Minori',
+        h: '13. Quando segnali qualcuno',
+        p: [
+          'In un documento su cui lavorate insieme puoi segnalare un’altra persona. È l’unico caso in cui arrivano da noi informazioni su qualcun altro.',
+          'Viene inviato: l’indirizzo e-mail della persona segnalata, il nome che mostra, il tuo indirizzo e-mail, l’identificativo e il titolo del documento, un motivo da un elenco fisso e, se vuoi, fino a 300 caratteri scritti da te.',
+          'Non viene inviato il contenuto: nessuna pagina, nessuna scrittura a mano, nessun messaggio di chat. Non vediamo che cosa è successo, ma solo che tu l’hai segnalato e come lo inquadri.',
+          'La segnalazione arriva in due posti: alla persona a cui appartiene il documento – solo lei può togliere qualcuno dalla propria condivisione – e all’amministrazione di Inkwells. La persona segnalata non viene a sapere chi l’ha segnalata; al proprietario non viene mostrato il tuo indirizzo.',
+          'Una segnalazione viene cancellata appena è stata trattata, e comunque al più tardi dopo sei mesi.'
+        ]
+      },
+      {
+        h: '14. Blocchi',
+        p: [
+          'Se una segnalazione porta al blocco di qualcuno, conserviamo: l’indirizzo e-mail, che cosa esattamente è bloccato, fino a quando e una breve nota interna. Il tutto è salvato sotto l’indirizzo e-mail stesso, così il blocco vale anche se la persona accede di nuovo.',
+          'Un blocco riguarda solo la condivisione con altri. I tuoi quaderni sul tuo dispositivo restano intatti e continui ad avere accesso a tutto ciò che è tuo.',
+          'Scaduto il blocco, non ha più alcun effetto. La voce stessa viene cancellata al più tardi un anno dopo la scadenza.',
+          'A un blocco può accompagnarsi un messaggio che vedi solo tu. Si trova sotto il tuo indirizzo e-mail e nessun altro può leggerlo.'
+        ]
+      },
+      {
+        h: '15. Minori',
         p: [
           'Inkwells non si rivolge specificamente a minori di 16 anni. Poiché non raccogliamo dati sugli utenti, non vengono raccolti nemmeno dati di minori. Per l\'accesso valgono inoltre i limiti di età previsti da Google e Microsoft.'
         ]
       },
       {
-        h: '14. Modifiche',
+        h: '16. Modifiche',
         p: [
           'Se il funzionamento di Inkwells cambia, questa pagina viene aggiornata. La data di riferimento è indicata in alto. La cronologia delle modifiche è consultabile nel repository pubblico.'
         ]

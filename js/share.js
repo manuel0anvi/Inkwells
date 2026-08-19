@@ -44,7 +44,7 @@
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion
+  addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
@@ -3562,6 +3562,177 @@ function beobachteNachrichten(beiAenderung) {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   MELDEN UND SPERREN
+
+   Was gilt, steht in src/core/melden.js (rein, mit node prüfbar). Hier
+   steht nur, wie es zu Firestore kommt und zurück.
+
+   Die Regeln dazu stehen in website/firestore.rules unter /meldungen,
+   /sperren und /direktpost. Sie prüfen dasselbe noch einmal – was hier
+   steht, ist die Höflichkeit für den ehrlichen Weg; die Sperre wirkt
+   auch, wenn jemand an der App vorbeigeht.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Aus einem Firestore-Zeitstempel eine ISO-Zeichenkette machen. */
+function alsIso(wert) {
+  if (!wert) return null;
+  if (typeof wert === 'string') return wert;
+  if (typeof wert.toDate === 'function') return wert.toDate().toISOString();
+  if (typeof wert.seconds === 'number') return new Date(wert.seconds * 1000).toISOString();
+  return null;
+}
+
+/**
+ * Jemanden melden.
+ *
+ * @param {{gemeldetEmail: string, gemeldetName?: string, docId: string,
+ *          docTitel?: string, ownerUid: string,
+ *          grund: string, notiz?: string}} m
+ * @returns {Promise<{ok: boolean, fehler?: string}>}
+ */
+async function meldeNutzer(m) {
+  const ich = currentIdentity();
+  const melderEmail = normalizeEmail(ich && ich.email);
+
+  /* Die Pruefung steht in core/melden.js. Diese Datei wird auch auf die
+     Website kopiert (scripts/sync-share.js), und dort gibt es melden.js
+     nicht – gemeldet wird nur aus der App heraus. Ohne die Abfrage
+     stuerzte das Modul dort beim Laden nicht ab, aber ein Aufruf schon,
+     und der Fehler stuende an der falschen Stelle. */
+  const M = (typeof window !== 'undefined' && window.Melden) || null;
+  if (!M) return { ok: false, fehler: 'nichtGespeichert' };
+
+  const geprueft = M.pruefeMeldung({
+    melderEmail,
+    gemeldetEmail: normalizeEmail(m && m.gemeldetEmail),
+    docId: (m && m.docId) || '',
+    grund: (m && m.grund) || '',
+    notiz: (m && m.notiz) || ''
+  });
+  if (!geprueft.ok) return geprueft;
+
+  try {
+    await addDoc(collection(db, 'meldungen'), {
+      erstellt: serverTimestamp(),
+      melderEmail,
+      gemeldetEmail: normalizeEmail(m.gemeldetEmail),
+      gemeldetName: String(m.gemeldetName || '').slice(0, 120),
+      docId: String(m.docId),
+      docTitel: String(m.docTitel || '').slice(0, 200),
+      ownerUid: String(m.ownerUid || ''),
+      grund: m.grund,
+      notiz: String(m.notiz || '').slice(0, 300),
+      erledigt: false
+    });
+    return { ok: true };
+  } catch (err) {
+    console.warn('[Melden] Nicht abgeschickt:', err.message);
+    return { ok: false, fehler: 'nichtGespeichert' };
+  }
+}
+
+/**
+ * Die Meldungen, die MICH als Besitzer angehen.
+ *
+ * Die Regel lässt nur Meldungen zu Dokumenten durch, deren ownerUid ich
+ * bin – deshalb muss die Abfrage genau danach fragen. Eine Abfrage ohne
+ * diese Einschränkung würde als Ganzes abgelehnt.
+ */
+async function ladeMeldungenFuerMich() {
+  const ich = currentIdentity();
+  if (!ich || !ich.uid) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'meldungen'),
+      where('ownerUid', '==', ich.uid),
+      where('erledigt', '==', false)
+    ));
+    return snap.docs.map(d => ({ id: d.id, ...d.data(), erstellt: alsIso(d.data().erstellt) }));
+  } catch (err) {
+    console.warn('[Melden] Meldungen nicht ladbar:', err.message);
+    return [];
+  }
+}
+
+/** Eine Meldung abhaken – der Besitzer hat sich darum gekümmert. */
+async function hakeMeldungAb(meldungId) {
+  try {
+    await updateDoc(doc(db, 'meldungen', String(meldungId)), { erledigt: true });
+    return true;
+  } catch (err) {
+    console.warn('[Melden] Nicht abgehakt:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Läuft gegen mich eine Sperre?
+ *
+ * Gibt es keine, kommt null zurück – NICHT ein leeres Objekt: die
+ * Oberfläche soll „nichts vorhanden" und „vorhanden, aber abgelaufen"
+ * unterscheiden können.
+ *
+ * Ein Fehler beim Lesen heisst ebenfalls null. Wer wirklich gesperrt
+ * ist, merkt es spätestens an der Regel; die App deswegen zuzusperren,
+ * wäre die schlechtere Antwort.
+ */
+async function ladeMeineSperre() {
+  const ich = currentIdentity();
+  const key = normalizeEmail(ich && ich.email);
+  if (!key) return null;
+  try {
+    const snap = await getDoc(doc(db, 'sperren', key));
+    if (!snap.exists()) return null;
+    const d = snap.data() || {};
+    return { ...d, bis: alsIso(d.bis) };
+  } catch (err) {
+    console.warn('[Sperre] Nicht ladbar:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Nachrichten, die NUR an mich gehen.
+ *
+ * Aufbau wie site_content/nachrichten, damit das Postfach beide Quellen
+ * einfach hintereinanderhängen kann (ui/postfach.js). Der Unterschied
+ * liegt allein in den Regeln: dieses Dokument liest nur der Empfänger.
+ */
+async function ladeDirektpost() {
+  const ich = currentIdentity();
+  const key = normalizeEmail(ich && ich.email);
+  if (!key) return [];
+  try {
+    const snap = await getDoc(doc(db, 'direktpost', key));
+    if (!snap.exists()) return [];
+    const d = snap.data() || {};
+    return Array.isArray(d.liste) ? d.liste : [];
+  } catch (err) {
+    console.warn('[Postfach] Direktpost nicht ladbar:', err.message);
+    return [];
+  }
+}
+
+/** Horcht auf neue Direktpost – damit „sofort" auch hier sofort ist. */
+function beobachteDirektpost(beiAenderung) {
+  const ich = currentIdentity();
+  const key = normalizeEmail(ich && ich.email);
+  if (!key) return () => {};
+  try {
+    return onSnapshot(
+      doc(db, 'direktpost', key),
+      (snap) => {
+        const d = snap.exists() ? (snap.data() || {}) : {};
+        beiAenderung(Array.isArray(d.liste) ? d.liste : []);
+      },
+      (err) => console.warn('[Postfach] Direktpost-Beobachtung abgebrochen:', err.message)
+    );
+  } catch (err) {
+    return () => {};
+  }
+}
+
 /** Der Gelesen-Stand dieser Kennung. Ohne Anmeldung: leer. */
 async function ladePostfachStand() {
   const ich = currentIdentity();
@@ -3674,6 +3845,14 @@ const InkwellsShare = {
   beobachteNachrichten,
   ladePostfachStand,
   sichrePostfachStand,
+  ladeDirektpost,
+  beobachteDirektpost,
+
+  // Melden und Sperren
+  meldeNutzer,
+  ladeMeldungenFuerMich,
+  hakeMeldungAb,
+  ladeMeineSperre,
 
   // Live-Bearbeitung
   joinDocRoom,

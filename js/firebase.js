@@ -35,7 +35,8 @@ import {
   query,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  limit
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth,
@@ -508,6 +509,131 @@ async function ladeNachrichten() {
     String(b.erstellt || '').localeCompare(String(a.erstellt || '')));
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   MELDUNGEN, SPERREN UND DIREKTPOST — die Seite der Verwaltung
+
+   Was gilt, steht in src/core/melden.js (in der App). Hier steht nur der
+   Weg zu Firestore. Die Regeln dazu: website/firestore.rules unter
+   /meldungen, /sperren und /direktpost — sie lassen all das
+   ausschliesslich dem Adminkonto durch.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const MELDUNGEN = 'meldungen';
+const SPERREN = 'sperren';
+const DIREKTPOST = 'direktpost';
+
+/** Aus einem Firestore-Zeitstempel ein Date. */
+function alsDatum(wert) {
+  if (!wert) return null;
+  if (typeof wert.toDate === 'function') return wert.toDate();
+  if (typeof wert === 'string') { const d = new Date(wert); return isNaN(d) ? null : d; }
+  if (typeof wert.seconds === 'number') return new Date(wert.seconds * 1000);
+  return null;
+}
+
+/**
+ * Alle Meldungen, neueste zuerst.
+ *
+ * Auch die erledigten: sie sind der einzige Hinweis darauf, wenn jemand
+ * das Melden selbst missbraucht — dreissig Meldungen von derselben
+ * Adresse sagen mehr als jede einzelne davon.
+ */
+async function ladeMeldungen() {
+  const snap = await getDocs(query(collection(db, MELDUNGEN), orderBy('erstellt', 'desc'), limit(200)));
+  return snap.docs.map(d => {
+    const x = d.data() || {};
+    return {
+      id: d.id,
+      erstellt: alsDatum(x.erstellt),
+      melderEmail: String(x.melderEmail || ''),
+      gemeldetEmail: String(x.gemeldetEmail || ''),
+      gemeldetName: String(x.gemeldetName || ''),
+      docId: String(x.docId || ''),
+      docTitel: String(x.docTitel || ''),
+      grund: String(x.grund || ''),
+      notiz: String(x.notiz || ''),
+      erledigt: x.erledigt === true
+    };
+  });
+}
+
+/** Abgehakt — die Verwaltung hat sich darum gekümmert. */
+async function hakeMeldungAb(id, erledigt = true) {
+  await updateDoc(doc(db, MELDUNGEN, String(id)), { erledigt: erledigt === true });
+}
+
+async function loescheMeldung(id) {
+  await deleteDoc(doc(db, MELDUNGEN, String(id)));
+}
+
+/** Alle laufenden und abgelaufenen Sperren. */
+async function ladeSperren() {
+  const snap = await getDocs(collection(db, SPERREN));
+  return snap.docs.map(d => {
+    const x = d.data() || {};
+    return {
+      email: d.id,
+      bis: alsDatum(x.bis),
+      umfang: (x.umfang && typeof x.umfang === 'object') ? x.umfang : {},
+      grund: String(x.grund || ''),
+      gesetztAm: alsDatum(x.gesetztAm)
+    };
+  }).sort((a, b) => (b.gesetztAm || 0) - (a.gesetztAm || 0));
+}
+
+/**
+ * Eine Sperre setzen oder ändern.
+ *
+ * `bis` kommt als ISO-Zeichenkette aus core/melden.js und wird HIER zu
+ * einem echten Zeitstempel. Das ist keine Kosmetik: die Sicherheitsregel
+ * vergleicht ihn mit request.time, und eine Zeichenkette liesse diesen
+ * Vergleich in einen Fehler laufen — die Regel würde dann ausgerechnet
+ * das Erlaubte abweisen.
+ */
+async function setzeSperre(sperre) {
+  const key = String(sperre.email || '').trim().toLowerCase();
+  if (!key) throw new Error('Ohne Adresse geht das nicht.');
+  await setDoc(doc(db, SPERREN, key), {
+    email: key,
+    bis: sperre.bis ? new Date(sperre.bis) : null,
+    umfang: {
+      neueFreigaben: sperre.umfang.neueFreigaben === true,
+      selbstTeilen:  sperre.umfang.selbstTeilen === true,
+      laufendeRaus:  sperre.umfang.laufendeRaus === true
+    },
+    grund: String(sperre.grund || '').slice(0, 300),
+    gesetztAm: serverTimestamp()
+  });
+}
+
+/** Sperre aufheben — das Dokument verschwindet ganz. */
+async function hebeSperreAuf(email) {
+  await deleteDoc(doc(db, SPERREN, String(email).trim().toLowerCase()));
+}
+
+/** Was schon an diese eine Adresse geschickt wurde. */
+async function ladeDirektpost(email) {
+  const snap = await getDoc(doc(db, DIREKTPOST, String(email).trim().toLowerCase()));
+  if (!snap.exists()) return [];
+  const d = snap.data() || {};
+  return Array.isArray(d.liste) ? d.liste : [];
+}
+
+/**
+ * Eine Nachricht an EINEN Nutzer hängen.
+ *
+ * Angehängt, nicht ersetzt: eine frühere Verwarnung soll nicht
+ * verschwinden, weil eine zweite kommt.
+ */
+async function schickeDirektpost(email, nachricht) {
+  const key = String(email).trim().toLowerCase();
+  const bisher = await ladeDirektpost(key);
+  await setDoc(doc(db, DIREKTPOST, key), {
+    liste: bisher.concat([nachricht]),
+    updated_at: serverTimestamp()
+  });
+}
+
 /** Schreibt die ganze Liste zurück. */
 async function sichreNachrichten(liste) {
   await setDoc(doc(db, SITE_CONTENT, NACHRICHTEN_DOC), {
@@ -612,6 +738,15 @@ window.InkwellsForum = {
 
   // Nachrichten an die App
   ladeNachrichten,
+  // Melden und Sperren
+  ladeMeldungen,
+  hakeMeldungAb,
+  loescheMeldung,
+  ladeSperren,
+  setzeSperre,
+  hebeSperreAuf,
+  ladeDirektpost,
+  schickeDirektpost,
   verschickeNachricht,
   ziehNachrichtZurueck,
   raeumeNachrichtenAuf

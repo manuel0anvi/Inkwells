@@ -123,6 +123,134 @@ body[data-admin="yes"] .admin-gate { display: none; }
   margin: -2px 0 12px 14px; padding-left: 14px;
   border-left: 2px solid var(--gold-dim, var(--navy-border));
 }
+/* ══════════════════════════════════════════════════════════════════
+   MELDUNGEN UND SPERREN
+
+   Eine Meldung ist eine Karte mit einem roten Streifen links – dieselbe
+   Bauart wie die Antwort des Teams im Forum (css/forum.css), nur in der
+   Warnfarbe statt in Gold. Wer sie erledigt hat, verblasst; weg ist sie
+   damit nicht, denn drei erledigte Meldungen gegen dieselbe Person sind
+   selbst eine Auskunft.
+   ══════════════════════════════════════════════════════════════════ */
+.admin-untertitel {
+  margin: 34px 0 14px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px; font-style: italic;
+  color: var(--gold-light);
+}
+
+.meldungen-liste, .sperren-liste {
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.meldung-karte {
+  padding: 16px 18px;
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  border-left: 2px solid #b8524a;
+  border-radius: 4px;
+}
+.meldung-karte.erledigt { opacity: .5; border-left-color: var(--navy-border); }
+
+.meldung-kopf {
+  font-size: 15px; color: var(--cream); margin-bottom: 10px;
+}
+.meldung-fertig, .meldung-gesperrt {
+  display: inline-block; margin-left: 8px;
+  padding: 2px 8px; border-radius: 3px;
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--navy); border: 0.5px solid var(--navy-border);
+  color: var(--text-muted);
+}
+.meldung-gesperrt { border-color: #b8524a; color: #d98b7a; }
+
+.meldung-zeile {
+  font-size: 13px; color: var(--text-body); line-height: 1.7;
+}
+.meldung-zeile b { color: var(--text-muted); font-weight: 400; }
+.meldung-zeile.dim { color: var(--text-muted); font-size: 12px; }
+
+/* Wie oft schon – die Zahl, die aus einem Einzelfall ein Muster macht */
+.meldung-oft {
+  font-size: 11px; color: var(--gold-light);
+  border-bottom: 1px dotted var(--gold-dark);
+}
+.meldung-oft.warn { color: #d98b7a; border-bottom-color: #b8524a; }
+
+.meldung-notiz {
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--navy); border-radius: 4px;
+  font-size: 13px; line-height: 1.7; color: var(--cream);
+  white-space: pre-wrap;
+}
+
+.meldung-knoepfe {
+  display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; align-items: center;
+}
+
+.sperre-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: 6px 16px; align-items: center;
+  padding: 12px 16px;
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  border-left: 2px solid #b8524a;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.sperre-wer { color: var(--cream); word-break: break-all; }
+.sperre-was, .sperre-bis { color: var(--text-muted); font-size: 12px; }
+.sperre-grund {
+  grid-column: 1 / -1; color: var(--text-muted);
+  font-size: 12px; font-style: italic;
+}
+
+/* Die Zahl am Reiter: nur da, wenn wirklich etwas offen ist */
+.tab-zahl {
+  display: inline-block; margin-left: 6px;
+  min-width: 16px; padding: 1px 4px;
+  border-radius: 8px; background: #b8524a; color: #fff;
+  font-size: 10px; line-height: 14px; text-align: center;
+}
+
+/* ── Der Massnahmen-Dialog ─────────────────────────────────────────
+   Ueber der Seite statt darin: Sperren ist eine Entscheidung, und sie
+   soll nicht zwischen zwei Listen verschwinden. */
+.admin-dialog-hg {
+  position: fixed; inset: 0; z-index: 900;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(6, 9, 20, .78);
+}
+.admin-dialog {
+  width: 100%; max-width: 520px;
+  max-height: 88vh; overflow-y: auto;
+  padding: 28px 30px;
+  background: var(--navy-card);
+  border: 0.5px solid var(--navy-border);
+  border-radius: 6px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
+}
+.admin-dialog h3 {
+  margin: 0 0 6px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px; font-style: italic; color: var(--gold-light);
+}
+.massnahme-wen {
+  margin: 0 0 22px; font-size: 13px; color: var(--text-muted);
+}
+.admin-dialog-btns {
+  display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;
+  margin-top: 8px;
+}
+.admin-dialog .admin-field input + textarea { margin-top: 8px; }
+
+@media (max-width: 620px) {
+  .sperre-zeile { grid-template-columns: 1fr; }
+  .admin-dialog { padding: 22px 18px; }
+}
+
 .admin-check {
   display: flex; align-items: center; gap: 10px; cursor: pointer;
   font-family: 'Jost', sans-serif; font-weight: 300; font-size: 14px;
@@ -268,6 +396,9 @@ body[data-admin="yes"] .admin-gate { display: none; }
       <button type="button" class="admin-tab active" data-panel="moderation" data-i18n="admin_tab_moderation">Community</button>
       <button type="button" class="admin-tab" data-panel="privacy" data-i18n="admin_tab_privacy">Datenschutz</button>
       <button type="button" class="admin-tab" data-panel="nachrichten" data-i18n="admin_tab_nachrichten">Nachrichten</button>
+      <!-- Die Beschriftung braucht ein eigenes Element: die Uebersetzung
+           setzt textContent und loeschte die Zahl daneben gleich mit. -->
+      <button type="button" class="admin-tab" data-panel="meldungen"><span data-i18n="admin_tab_meldungen">Meldungen</span><span class="tab-zahl" id="meldungen-zahl" style="display:none">0</span></button>
       <button type="button" class="admin-tab" data-panel="password" data-i18n="admin_tab_password">Passwort</button>
     </div>
     <div class="lang-sw">
@@ -546,6 +677,95 @@ body[data-admin="yes"] .admin-gate { display: none; }
     </section>
 
     <!-- ── Passwort ─────────────────────────────────────────────────── -->
+    <!-- ══════════════════════════════════════════════════════════════
+         MELDUNGEN UND SPERREN
+
+         Links die Meldungen, rechts die laufenden Sperren. Aus einer
+         Meldung heraus laesst sich beides tun: eine Nachricht an genau
+         diesen Nutzer schicken und ihn sperren – der Umfang wird dabei
+         ausgesucht, nicht vorgegeben.
+
+         Warum die Adresse hier steht: ohne sie liesse sich weder
+         sperren noch schreiben. Sie steht in der Datenschutzerklaerung
+         (js/privacy-content.js).
+         ══════════════════════════════════════════════════════════════ -->
+    <section class="admin-panel" id="panel-meldungen">
+      <p class="admin-hint" data-i18n="admin_meldungen_hint"></p>
+
+      <div class="nachricht-kopfzeile">
+        <label class="admin-check">
+          <input type="checkbox" id="meldungen-auch-erledigte">
+          <span data-i18n="admin_meldungen_auch_erledigte">Auch erledigte zeigen</span>
+        </label>
+        <button type="button" class="btn-m" id="meldungen-neu-laden" data-i18n="admin_meldungen_neu_laden">Neu laden</button>
+      </div>
+
+      <div id="meldungen-liste" class="meldungen-liste">
+        <div class="forum-loading" data-i18n="admin_meldungen_laden">Lade Meldungen …</div>
+      </div>
+
+      <h3 class="admin-untertitel" data-i18n="admin_sperren_titel">Laufende Sperren</h3>
+      <div id="sperren-liste" class="sperren-liste"></div>
+
+      <div id="meldung-status"></div>
+    </section>
+
+    <!-- Sperren und Schreiben: geht aus einer Meldung heraus auf -->
+    <div class="admin-dialog-hg" id="massnahme-hg" style="display:none">
+      <div class="admin-dialog">
+        <h3 id="massnahme-titel">Maßnahme</h3>
+        <p class="massnahme-wen" id="massnahme-wen"></p>
+
+        <div class="admin-field">
+          <label data-i18n="admin_massnahme_umfang">Was soll gelten?</label>
+          <div class="ziel-zeile">
+            <label class="admin-check"><input type="checkbox" id="sperr-neueFreigaben">
+              <span data-i18n="admin_sperre_neue">Kommt in kein geteiltes Dokument mehr hinein</span></label>
+            <label class="admin-check"><input type="checkbox" id="sperr-selbstTeilen">
+              <span data-i18n="admin_sperre_teilen">Gibt selbst nichts mehr frei</span></label>
+            <label class="admin-check"><input type="checkbox" id="sperr-laufendeRaus">
+              <span data-i18n="admin_sperre_raus">Verliert auch die Dokumente, in denen er schon ist</span></label>
+          </div>
+        </div>
+
+        <div class="admin-field">
+          <label for="sperr-tage" data-i18n="admin_sperre_dauer">Wie lange?</label>
+          <select id="sperr-tage">
+            <option value="1">1 Tag</option>
+            <option value="7" selected>7 Tage</option>
+            <option value="14">14 Tage</option>
+            <option value="30">30 Tage</option>
+            <option value="90">90 Tage</option>
+            <option value="0" data-i18n="admin_sperre_unbegrenzt">Unbegrenzt</option>
+          </select>
+        </div>
+
+        <div class="admin-field">
+          <label for="sperr-grund" data-i18n="admin_sperre_grund">Notiz für dich selbst</label>
+          <input type="text" id="sperr-grund" maxlength="300" data-i18n-placeholder="admin_sperre_grund_platzhalter" placeholder="Wofür, damit du es später noch weißt">
+        </div>
+
+        <!-- ── Die Nachricht an genau diesen Nutzer ──────────────────
+             Freiwillig. Ohne sie erfaehrt der Gesperrte nur, DASS etwas
+             nicht mehr geht – die App sagt ihm das (src/ui/melden.js),
+             aber nicht warum. Ein Satz hier ist meist die halbe Sache.
+
+             Sie landet unter direktpost/{adresse} und ist nur fuer ihn
+             lesbar (website/firestore.rules). -->
+        <div class="admin-field">
+          <label data-i18n="admin_massnahme_nachricht">Nachricht an diesen Nutzer (freiwillig)</label>
+          <input type="text" id="massnahme-titel-de" maxlength="120" data-i18n-placeholder="admin_massnahme_ueberschrift" placeholder="Überschrift">
+          <textarea id="massnahme-text-de" maxlength="1200" rows="4" data-i18n-placeholder="admin_massnahme_text" placeholder="Was vorgefallen ist und was jetzt gilt"></textarea>
+        </div>
+
+        <div class="admin-dialog-btns">
+          <button type="button" class="btn-m" id="massnahme-abbruch" data-i18n="downgrade_cancel">Abbrechen</button>
+          <button type="button" class="btn-m" id="massnahme-nur-nachricht" data-i18n="admin_massnahme_nur_nachricht">Nur schreiben</button>
+          <button type="button" class="btn-p" id="massnahme-sperren" data-i18n="admin_massnahme_sperren">Sperren</button>
+        </div>
+      </div>
+    </div>
+
     <section class="admin-panel" id="panel-password">
       <form id="password-form" autocomplete="off" style="max-width:460px;">
         <div class="admin-field">
@@ -994,7 +1214,308 @@ for (const tab of document.querySelectorAll('.admin-tab')) {
   // Die Liste jedes Mal frisch: sie ist kurz, und ein veralteter Stand
   // waere hier schlimmer als ein Zugriff mehr.
   if (name === 'nachrichten') nachrichtenZeichnen();
+  if (name === 'meldungen') meldungenZeichnen();
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   MELDUNGEN UND SPERREN
+
+   Was gilt, steht in src/core/melden.js (in der App). Diese Seite kennt
+   dieselben Regeln noch einmal – sie laeuft im Browser und kann das
+   Modul der App nicht laden. Wer dort etwas aendert, muss hier
+   nachsehen: die Umfangs-Namen und die Gruende stehen an beiden Orten,
+   und zusaetzlich in website/firestore.rules.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const SPERR_UMFANG = ['neueFreigaben', 'selbstTeilen', 'laufendeRaus'];
+
+const GRUND_TEXTE = {
+  beleidigung:   'Beleidigung oder Bedrohung',
+  fremdeInhalte: 'Unangemessene Inhalte',
+  zerstoerung:   'Zerstört die gemeinsame Arbeit',
+  werbung:       'Werbung',
+  sonstiges:      'Etwas anderes'
+};
+
+let meldungen = [];
+let sperren = [];
+/* Wen die Massnahme betrifft. Steht hier und nicht im Formular, weil das
+   Formular nur Umfang, Dauer und Text traegt. */
+let massnahmeZiel = null;
+
+function sperreLaeuft(sp) {
+  if (!sp) return false;
+  if (!SPERR_UMFANG.some(k => sp.umfang && sp.umfang[k] === true)) return false;
+  if (!sp.bis) return true;
+  const bis = (sp.bis instanceof Date) ? sp.bis.getTime() : Date.parse(sp.bis);
+  return !Number.isNaN(bis) && bis > Date.now();
+}
+
+function umfangText(umfang) {
+  const teile = [];
+  if (umfang.neueFreigaben) teile.push(t('admin_sperre_neue_kurz'));
+  if (umfang.selbstTeilen)  teile.push(t('admin_sperre_teilen_kurz'));
+  if (umfang.laufendeRaus)  teile.push(t('admin_sperre_raus_kurz'));
+  return teile.join(' · ');
+}
+
+async function meldungenZeichnen() {
+  const liste = document.getElementById('meldungen-liste');
+  const sperrBox = document.getElementById('sperren-liste');
+  if (!liste) return;
+
+  try {
+    const api = adminApi;
+    [meldungen, sperren] = await Promise.all([api.ladeMeldungen(), api.ladeSperren()]);
+  } catch (err) {
+    liste.innerHTML = '<div class="forum-error">' + escapeHtml(describeAdminError(err)) + '</div>';
+    return;
+  }
+
+  const auchErledigte = document.getElementById('meldungen-auch-erledigte').checked;
+  const zeigen = meldungen.filter(m => auchErledigte || !m.erledigt);
+
+  // Die Zahl am Reiter zaehlt nur das Offene – das ist es, was Arbeit macht
+  const offen = meldungen.filter(m => !m.erledigt).length;
+  const zahl = document.getElementById('meldungen-zahl');
+  if (zahl) {
+    zahl.textContent = String(offen);
+    zahl.style.display = offen ? '' : 'none';
+  }
+
+  liste.innerHTML = '';
+  if (!zeigen.length) {
+    liste.innerHTML = '<div class="v-loading" style="border:0.5px solid var(--navy-border); background:var(--navy-card);">'
+      + escapeHtml(t('admin_meldungen_keine')) + '</div>';
+  }
+
+  for (const m of zeigen) {
+    const karte = document.createElement('div');
+    karte.className = 'meldung-karte' + (m.erledigt ? ' erledigt' : '');
+
+    /* Wie oft ist diese Adresse schon aufgefallen? Eine einzelne Meldung
+       sagt wenig; fuenf gegen dieselbe Person sagen viel. Und andersherum
+       genauso: wer selbst staendig meldet, faellt hier ebenfalls auf. */
+    const gegenIhn = meldungen.filter(x => x.gemeldetEmail === m.gemeldetEmail).length;
+    const vonIhm = meldungen.filter(x => x.melderEmail === m.melderEmail).length;
+    const sp = sperren.find(x => x.email === m.gemeldetEmail);
+
+    karte.innerHTML =
+      '<div class="meldung-kopf">' + escapeHtml(GRUND_TEXTE[m.grund] || m.grund)
+        + (m.erledigt ? ' <span class="meldung-fertig">' + escapeHtml(t('admin_meldung_erledigt')) + '</span>' : '')
+        + (sperreLaeuft(sp) ? ' <span class="meldung-gesperrt">' + escapeHtml(t('admin_meldung_gesperrt')) + '</span>' : '')
+      + '</div>'
+      + '<div class="meldung-zeile"><b>' + escapeHtml(t('admin_meldung_gegen')) + '</b> '
+        + escapeHtml(m.gemeldetName ? m.gemeldetName + ' · ' + m.gemeldetEmail : m.gemeldetEmail)
+        + (gegenIhn > 1 ? ' <span class="meldung-oft">' + escapeHtml(t('admin_meldung_mehrfach').replace('{n}', gegenIhn)) + '</span>' : '')
+      + '</div>'
+      + '<div class="meldung-zeile"><b>' + escapeHtml(t('admin_meldung_von')) + '</b> '
+        + escapeHtml(m.melderEmail)
+        + (vonIhm > 3 ? ' <span class="meldung-oft warn">' + escapeHtml(t('admin_meldung_vielmelder').replace('{n}', vonIhm)) + '</span>' : '')
+      + '</div>'
+      + '<div class="meldung-zeile dim">' + escapeHtml([m.docTitel, m.docId,
+          m.erstellt ? m.erstellt.toLocaleString() : ''].filter(Boolean).join(' · ')) + '</div>'
+      + (m.notiz ? '<div class="meldung-notiz">' + escapeHtml(m.notiz) + '</div>' : '');
+
+    const knoepfe = document.createElement('div');
+    knoepfe.className = 'meldung-knoepfe';
+
+    const massnahme = document.createElement('button');
+    massnahme.type = 'button';
+    massnahme.className = 'btn-p';
+    massnahme.textContent = t('admin_meldung_massnahme');
+    massnahme.addEventListener('click', () => oeffneMassnahme(m.gemeldetEmail, m.gemeldetName));
+    knoepfe.appendChild(massnahme);
+
+    const haken = document.createElement('button');
+    haken.type = 'button';
+    haken.className = 'btn-m';
+    haken.textContent = m.erledigt ? t('admin_meldung_wieder_offen') : t('admin_meldung_abhaken');
+    haken.addEventListener('click', async () => {
+      haken.disabled = true;
+      try {
+        const api = adminApi;
+        await api.hakeMeldungAb(m.id, !m.erledigt);
+        await meldungenZeichnen();
+      } catch (err) {
+        showStatus('meldung-status', describeAdminError(err), 'err');
+        haken.disabled = false;
+      }
+    });
+    knoepfe.appendChild(haken);
+
+    const weg = document.createElement('button');
+    weg.type = 'button';
+    weg.className = 'forum-del-btn';
+    weg.textContent = t('admin_meldung_loeschen');
+    weg.addEventListener('click', async () => {
+      if (!confirm(t('admin_meldung_loeschen_frage'))) return;
+      try {
+        const api = adminApi;
+        await api.loescheMeldung(m.id);
+        await meldungenZeichnen();
+      } catch (err) {
+        showStatus('meldung-status', describeAdminError(err), 'err');
+      }
+    });
+    knoepfe.appendChild(weg);
+
+    karte.appendChild(knoepfe);
+    liste.appendChild(karte);
+  }
+
+  // ── Die laufenden Sperren ───────────────────────────────────────────
+  sperrBox.innerHTML = '';
+  const laufend = sperren.filter(sperreLaeuft);
+  if (!laufend.length) {
+    sperrBox.innerHTML = '<div class="v-loading" style="border:0.5px solid var(--navy-border); background:var(--navy-card);">'
+      + escapeHtml(t('admin_sperren_keine')) + '</div>';
+  }
+  for (const sp of laufend) {
+    const zeile = document.createElement('div');
+    zeile.className = 'sperre-zeile';
+    zeile.innerHTML =
+      '<div class="sperre-wer">' + escapeHtml(sp.email) + '</div>'
+      + '<div class="sperre-was">' + escapeHtml(umfangText(sp.umfang)) + '</div>'
+      + '<div class="sperre-bis">' + escapeHtml(sp.bis
+          ? t('admin_sperre_bis').replace('{d}', sp.bis.toLocaleDateString())
+          : t('admin_sperre_unbegrenzt')) + '</div>'
+      + (sp.grund ? '<div class="sperre-grund">' + escapeHtml(sp.grund) + '</div>' : '');
+
+    const auf = document.createElement('button');
+    auf.type = 'button';
+    auf.className = 'btn-m';
+    auf.textContent = t('admin_sperre_aufheben');
+    auf.addEventListener('click', async () => {
+      auf.disabled = true;
+      try {
+        const api = adminApi;
+        await api.hebeSperreAuf(sp.email);
+        await meldungenZeichnen();
+      } catch (err) {
+        showStatus('meldung-status', describeAdminError(err), 'err');
+        auf.disabled = false;
+      }
+    });
+    zeile.appendChild(auf);
+    sperrBox.appendChild(zeile);
+  }
+}
+
+/* ── Der Massnahmen-Dialog ──────────────────────────────────────────── */
+
+function oeffneMassnahme(email, name) {
+  massnahmeZiel = { email, name: name || '' };
+
+  const vorhanden = sperren.find(x => x.email === email);
+  for (const k of SPERR_UMFANG) {
+    document.getElementById('sperr-' + k).checked =
+      !!(vorhanden && vorhanden.umfang && vorhanden.umfang[k]);
+  }
+  /* Nichts angekreuzt heisst: noch keine Sperre. Dann die Vorauswahl, die
+     man in neun von zehn Faellen will – nicht mehr hineinlassen, aber die
+     eigenen Sachen weiter behalten duerfen. */
+  if (!SPERR_UMFANG.some(k => document.getElementById('sperr-' + k).checked)) {
+    document.getElementById('sperr-neueFreigaben').checked = true;
+  }
+
+  document.getElementById('sperr-grund').value = (vorhanden && vorhanden.grund) || '';
+  document.getElementById('massnahme-titel-de').value = '';
+  document.getElementById('massnahme-text-de').value = '';
+  document.getElementById('massnahme-wen').textContent =
+    t('admin_massnahme_wen').replace('{n}', name ? name + ' · ' + email : email);
+
+  document.getElementById('massnahme-hg').style.display = 'flex';
+}
+
+function schliesseMassnahme() {
+  document.getElementById('massnahme-hg').style.display = 'none';
+  massnahmeZiel = null;
+}
+
+/** Die Nachricht aus dem Dialog – oder null, wenn keine geschrieben wurde. */
+function massnahmeNachricht() {
+  const titel = (document.getElementById('massnahme-titel-de').value || '').trim();
+  const text = (document.getElementById('massnahme-text-de').value || '').trim();
+  if (!titel || !text) return null;
+
+  /* Aufbau wie in site_content/nachrichten, damit das Postfach der App
+     beide Quellen gleich behandeln kann (src/ui/postfach.js).
+
+     Kein `ziel`: die Nachricht liegt schon unter der Adresse des
+     Empfaengers, und niemand sonst darf sie lesen. `sofort` ist wahr –
+     wer gerade gesperrt wurde, soll nicht bis zum naechsten Start
+     warten, um zu erfahren warum. */
+  return {
+    id: 'dp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+    erstellt: new Date().toISOString(),
+    titel: { de: titel, en: '', it: '' },
+    text: { de: text, en: '', it: '' },
+    art: 'fenster',
+    sofort: true,
+    ziel: {},
+    gueltigBis: null
+  };
+}
+
+document.getElementById('massnahme-abbruch')?.addEventListener('click', schliesseMassnahme);
+
+document.getElementById('massnahme-hg')?.addEventListener('click', (e) => {
+  if (e.target.id === 'massnahme-hg') schliesseMassnahme();
+});
+
+document.getElementById('massnahme-nur-nachricht')?.addEventListener('click', async () => {
+  if (!massnahmeZiel) return;
+  const nachricht = massnahmeNachricht();
+  if (!nachricht) { showStatus('meldung-status', t('admin_massnahme_ohne_text'), 'err'); return; }
+  try {
+    const api = adminApi;
+    await api.schickeDirektpost(massnahmeZiel.email, nachricht);
+    schliesseMassnahme();
+    showStatus('meldung-status', t('admin_massnahme_geschickt'), 'ok');
+  } catch (err) {
+    showStatus('meldung-status', describeAdminError(err), 'err');
+  }
+});
+
+document.getElementById('massnahme-sperren')?.addEventListener('click', async () => {
+  if (!massnahmeZiel) return;
+
+  const umfang = {};
+  for (const k of SPERR_UMFANG) umfang[k] = document.getElementById('sperr-' + k).checked;
+  if (!SPERR_UMFANG.some(k => umfang[k])) {
+    showStatus('meldung-status', t('admin_sperre_ohne_umfang'), 'err');
+    return;
+  }
+
+  const tage = Number(document.getElementById('sperr-tage').value) || 0;
+  const bis = tage > 0 ? new Date(Date.now() + tage * 864e5).toISOString() : null;
+
+  try {
+    const api = adminApi;
+    await api.setzeSperre({
+      email: massnahmeZiel.email,
+      bis,
+      umfang,
+      grund: (document.getElementById('sperr-grund').value || '').trim()
+    });
+
+    /* Die Nachricht danach: geht sie schief, ist die Sperre trotzdem
+       gesetzt. Andersherum stuende eine Verwarnung im Postfach, ohne
+       dass etwas gilt – das waere die schlechtere Reihenfolge. */
+    const nachricht = massnahmeNachricht();
+    if (nachricht) await api.schickeDirektpost(massnahmeZiel.email, nachricht);
+
+    schliesseMassnahme();
+    await meldungenZeichnen();
+    showStatus('meldung-status', t('admin_sperre_gesetzt'), 'ok');
+  } catch (err) {
+    showStatus('meldung-status', describeAdminError(err), 'err');
+  }
+});
+
+document.getElementById('meldungen-neu-laden')?.addEventListener('click', () => meldungenZeichnen());
+document.getElementById('meldungen-auch-erledigte')?.addEventListener('change', () => meldungenZeichnen());
 
 /* ══════════════════════════════════════════════════════════════════════
    COMMUNITY
