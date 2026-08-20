@@ -45,6 +45,45 @@ function objLayerOf(obj) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   HAELT GERADE JEMAND ANDERES DIESES DING?
+
+   Beim Text sperrt eine Zeile (ui/collab.js). Fuer ein Bild, eine Form
+   oder eine Formel ist das Gegenstueck das Ding selbst: wer es anfasst,
+   hat es, bis er loslaesst.
+
+   >>> Warum das noetig ist, obwohl die Live-Bearbeitung zusammenfuehrt <<<
+   Zusammengefuehrt wird TEXT. Die Lage eines Bildes sind zwei Zahlen im
+   Kopf der Seite, und die werden schlicht ueberschrieben. Schieben zwei
+   dasselbe Rechteck, schreibt jeder abwechselnd seine eigene Lage hinein:
+   es zappelt zwischen zwei Stellen, und am Ende gewinnt, wer zuletzt
+   losgelassen hat.
+
+   Ohne laufende Zusammenarbeit ist hier immer alles frei – dann gibt es
+   window.Collab gar nicht.
+   ══════════════════════════════════════════════════════════════════════ */
+function fremdGehalten(wrap) {
+  if (!window.Collab || typeof window.Collab.objektGesperrtVon !== 'function') return null;
+  const pgEl = wrap && wrap.closest ? wrap.closest('[data-pgid]') : null;
+  if (!pgEl || !wrap.dataset || !wrap.dataset.objid) return null;
+  return window.Collab.objektGesperrtVon(pgEl.dataset.pgid, wrap.dataset.objid);
+}
+
+/* Hoechstens so oft ein Hinweis – wie bei der Zeilensperre. */
+let letzterObjHinweis = 0;
+const OBJ_HINWEIS_MS = 2500;
+
+/** Sagt einmal Bescheid, warum sich nichts bewegt. */
+function sagWemEsGehoert(person) {
+  const jetzt = Date.now();
+  if (jetzt - letzterObjHinweis < OBJ_HINWEIS_MS) return;
+  letzterObjHinweis = jetzt;
+  const wer = (person && (person.name || person.email)) || '?';
+  const satz = (typeof t === 'function' && t('collabObjLocked'))
+    || '{name} bearbeitet das gerade';
+  if (typeof toast === 'function') toast(satz.replace('{name}', wer));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    AUF DEM BLATT BLEIBEN
 
    Ein Bild, eine Form oder eine Formel liess sich beliebig weit ueber den
@@ -362,6 +401,15 @@ function placeObject(objLayer, obj, page) {
   ['tl', 'tr', 'bl', 'br'].forEach(pos => {
     const h = document.createElement('div'); h.className = 'obj-handle ' + pos; chrome.appendChild(h);
     h.addEventListener('pointerdown', e => {
+      /* Auch hier fragen: die Griffe gehen an beginInteraction vorbei,
+         und ueber sie liesse sich sonst weiter aendern, was jemand
+         anderes gerade in der Hand hat. */
+      const fremd = fremdGehalten(wrap);
+      if (fremd) { e.stopPropagation(); e.preventDefault(); sagWemEsGehoert(fremd); return; }
+      if (window.Collab && typeof window.Collab.beansprucheObjekt === 'function') {
+        const pgEl = wrap.closest('[data-pgid]');
+        if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
+      }
       e.stopPropagation(); e.preventDefault();
       h.setPointerCapture(e.pointerId);
       const sx = e.clientX, sy = e.clientY, ow = obj.w, oh = obj.h, ox = obj.x, oy = obj.y, ratio = oh / ow;
@@ -406,13 +454,22 @@ function placeObject(objLayer, obj, page) {
           placeBar();
         }
       };
-      const up = (ev) => { hideSnaps(); h.releasePointerCapture(ev.pointerId); h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
+      const up = (ev) => { hideSnaps(); if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); h.releasePointerCapture(ev.pointerId); h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
       h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
     });
   });
 
   const rotH = document.createElement('div'); rotH.className = 'obj-handle rot'; rotH.textContent = '↻'; chrome.appendChild(rotH);
   rotH.addEventListener('pointerdown', e => {
+    /* Auch hier fragen: die Griffe gehen an beginInteraction vorbei, und
+       ueber sie liesse sich sonst weiter aendern, was jemand anderes
+       gerade in der Hand haelt. */
+    const fremd = fremdGehalten(wrap);
+    if (fremd) { e.stopPropagation(); e.preventDefault(); sagWemEsGehoert(fremd); return; }
+    if (window.Collab && typeof window.Collab.beansprucheObjekt === 'function') {
+      const pgEl = wrap.closest('[data-pgid]');
+      if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
+    }
     e.stopPropagation(); e.preventDefault(); rotH.setPointerCapture(e.pointerId);
     const r = wrap.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const sa = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI, sr = obj.rot || 0;
@@ -423,7 +480,7 @@ function placeObject(objLayer, obj, page) {
       for (const sp of [0, 90, 180, 270, 360, -90, -180, -270, -360]) if (Math.abs(newRot - sp) < 10) { newRot = sp; break; }
       obj.rot = newRot; applyRotation();
     };
-    const up = (ev) => { rotH.releasePointerCapture(ev.pointerId); rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
+    const up = (ev) => { if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); rotH.releasePointerCapture(ev.pointerId); rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
     rotH.addEventListener('pointermove', mv); rotH.addEventListener('pointerup', up);
   });
   }
@@ -454,6 +511,15 @@ function placeObject(objLayer, obj, page) {
       griffe.push(g);
 
       g.addEventListener('pointerdown', e => {
+      /* Auch hier fragen: die Griffe gehen an beginInteraction vorbei,
+         und ueber sie liesse sich sonst weiter aendern, was jemand
+         anderes gerade in der Hand hat. */
+      const fremd = fremdGehalten(wrap);
+      if (fremd) { e.stopPropagation(); e.preventDefault(); sagWemEsGehoert(fremd); return; }
+      if (window.Collab && typeof window.Collab.beansprucheObjekt === 'function') {
+        const pgEl = wrap.closest('[data-pgid]');
+        if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
+      }
         e.stopPropagation(); e.preventDefault();
         g.setPointerCapture(e.pointerId);
 
@@ -509,6 +575,7 @@ function placeObject(objLayer, obj, page) {
           placeBar();
         };
         const up = ev => {
+          if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei();
           try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
           g.removeEventListener('pointermove', mv);
           g.removeEventListener('pointerup', up);
@@ -769,6 +836,13 @@ function placeObject(objLayer, obj, page) {
   function beginInteraction(e) {
     if (S.mode !== 'cursor') return;
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
+
+    /* Haelt es gerade jemand anderes? Dann gar nicht erst anfassen –
+       auch nicht auswaehlen, denn an der Auswahl haengt die Leiste, und
+       darueber liesse es sich weiter aendern. */
+    const fremd = fremdGehalten(wrap);
+    if (fremd) { e.stopPropagation(); e.preventDefault(); sagWemEsGehoert(fremd); return; }
+
     e.stopPropagation(); e.preventDefault();
 
     /* ══════════════════════════════════════════════════════════════
@@ -808,6 +882,11 @@ function placeObject(objLayer, obj, page) {
     }
 
     select();
+    // Ab hier gehoert es einem – die anderen fassen es nicht mehr an
+    if (window.Collab && typeof window.Collab.beansprucheObjekt === 'function') {
+      const pgEl = wrap.closest('[data-pgid]');
+      if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
+    }
     body.setPointerCapture(e.pointerId);
     // Waehrend des Zugs darf das Bild ueber den Seitenrand hinausragen
     let aktPgEl = wrap.closest('.j-page');
@@ -947,6 +1026,9 @@ function placeObject(objLayer, obj, page) {
     };
     const up = (ev) => {
       hideSnaps();
+      if (window.Collab && typeof window.Collab.gibObjektFrei === 'function') {
+        window.Collab.gibObjektFrei();
+      }
       try { body.releasePointerCapture(ev.pointerId); } catch (err) { }
       body.removeEventListener('pointermove', mv);
       body.removeEventListener('pointerup', up);

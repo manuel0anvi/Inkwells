@@ -186,17 +186,72 @@ app.on('ready', async () => {
 
     const baender = await B('pruefstand.baender()');
     notiz('Bänder: ' + JSON.stringify(baender));
-    pruefe('Gesperrt sind zwei Zeilen: die eigene und die nächste',
-      baender.length >= 2, baender.length + ' Band/Bänder');
+    /* ══════════════════════════════════════════════════════════════
+       GESPERRT IST GENAU EINE ZEILE
 
-    if (baender.length >= 2) {
+       Hier stand „zwei Zeilen: die eigene und die nächste". Das war die
+       Absicht, solange gedacht war, dass ein Anschlag am Zeilenende in
+       die Zeile darunter läuft. In der Anwendung war es eine Zeile zu
+       viel: das Band sperrt auch (trifftSperrband), und auf einer Seite
+       mit wenig Text war damit alles zu, sobald einer eine Taste
+       anfasste. Gemeldet als „der andere kann nicht mal die Marke
+       setzen" (src/ui/collab.js, lockSpanFor). */
+    pruefe('Gesperrt ist genau die eigene Zeile',
+      baender.length === 1, baender.length + ' Band/Bänder');
+
+    if (baender.length) {
       const z0 = await B(`pruefstand.zeileVon(${baender[0].top})`);
-      const z1 = await B(`pruefstand.zeileVon(${baender[1].top})`);
-      pruefe('Das erste Band liegt auf Zeile 2 – gemessen ' + z0,
+      pruefe('Das Band liegt auf Zeile 2 – gemessen ' + z0,
         Math.abs(z0 - 2) < 0.01, 'es liegt ' + (z0 - 2) + ' Zeilen daneben');
-      pruefe('Das zweite direkt darunter auf Zeile 3 – gemessen ' + z1,
-        Math.abs(z1 - 3) < 0.01, 'es liegt ' + (z1 - 3) + ' Zeilen daneben');
     }
+
+    /* Und die Zeile DARUNTER ist frei – genau das war vorher nicht so.
+       Der Takt, der die Marke herausschiebt, laeuft alle 600 ms; deshalb
+       hier warten und danach nachsehen, wo sie wirklich steht. */
+    await B('pruefstand.markeAuf(18)');
+    await warte(900);
+    const untenGelandet = await B('pruefstand.eigeneStelle()');
+    notiz('in Zeile 4 auf 18 gesetzt, gelandet auf ' + untenGelandet);
+    pruefe('In der Zeile darunter bleibt die Marke stehen',
+      untenGelandet === 18, 'sie wurde herausgeschoben (' + untenGelandet + ')');
+
+    /* ══════════════════════════════════════════════════════════════════
+       2b. WER EINE FORM ANFASST, HAT SIE
+
+       Die Zeilensperre schuetzt den Text. Bei Bildern, Formen und
+       Formeln gibt es nichts zusammenzufuehren: ihre Lage sind zwei
+       Zahlen im Kopf der Seite, und die werden schlicht ueberschrieben.
+       Schieben zwei dasselbe Rechteck, zappelt es zwischen zwei Stellen
+       hin und her. Genau so wurde es gemeldet.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Wer eine Form anfasst, hat sie');
+
+    const freiVorher = await B('pruefstand.formGehoert("o1")');
+    pruefe('Vorher gehoert sie niemandem', freiVorher === null,
+      'sie gilt als gehalten von ' + freiVorher);
+
+    await A('pruefstand.formAnfassen("o1")');
+    await warte(300);
+    const formBeiB = await B('pruefstand.formGehoert("o1")');
+    notiz('B sieht: ' + JSON.stringify(formBeiB));
+    pruefe('Faellt A sie an, ist sie fuer B gesperrt', formBeiB === 'A',
+      'B sieht ' + JSON.stringify(formBeiB));
+
+    const andere = await B('pruefstand.formGehoert("o2")');
+    pruefe('Eine ANDERE Form bleibt frei', andere === null,
+      'auch o2 gilt als gehalten (' + andere + ')');
+
+    /* Und A selbst darf weiter – die eigene Sperre gilt nicht gegen
+       einen selbst. others enthaelt nur die anderen. */
+    const beiAselbst = await A('pruefstand.formGehoert("o1")');
+    pruefe('A selbst wird nicht ausgesperrt', beiAselbst === null,
+      'A sieht die eigene Sperre als fremd (' + beiAselbst + ')');
+
+    await A('pruefstand.formLoslassen()');
+    await warte(300);
+    const wiederFrei = await B('pruefstand.formGehoert("o1")');
+    pruefe('Laesst A los, ist sie wieder frei', wiederFrei === null,
+      'sie gilt weiter als gehalten von ' + wiederFrei);
 
     /* ══════════════════════════════════════════════════════════════════
        2a. IN EINER GESPERRTEN ZEILE STEHT KEINE MARKE

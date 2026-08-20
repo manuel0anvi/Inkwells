@@ -599,13 +599,47 @@ Versuch. Jetzt sagt die Ankündigung, dass noch etwas fehlt (`hasBg`,
 gestaffelt erneut, und `forceSharedDocSave()` wartet einen laufenden
 Speichervorgang ab, statt ihn zu übergehen.
 
-**Zeilensperre (neu).** Die Zeile, an der jemand schreibt, und die darauf
-folgende gehören ihm; für alle anderen sind sie gesperrt. Sichtbar als
-zartes Band in seiner Farbe mit Schloss und Namen, durchgesetzt in
-`beforeinput` (`Collab.editBlockedBy`). Gemeldet wird der Bereich mit der
-Anwesenheit (`lockFrom`, `lockTo`, `lockAt` – die Felder mussten in
+**Zeilensperre (neu).** Die Zeile, an der jemand schreibt, gehört ihm;
+für alle anderen ist sie gesperrt. Sichtbar als zartes Band in seiner
+Farbe, durchgesetzt in `beforeinput` (`Collab.editBlockedBy`). Gemeldet
+wird der Bereich mit der Anwesenheit (`lockFrom`, `lockTo`, `lockAt` – die
+Felder mussten in
 [`website/database.rules.json`](website/database.rules.json) ergänzt
 werden, die Regel weist unbekannte Felder ab).
+
+> **Nachtrag: eine Zeile, nicht zwei.** Hier stand „und die darauf
+> folgende". Der Gedanke dahinter war richtig — wer am Zeilenende
+> weitertippt, schiebt Text nach unten. Die Rechnung ging trotzdem nicht
+> auf, weil das Band nicht nur *anzeigt*, sondern auch *sperrt*
+> (`trifftSperrband` entscheidet über die Bänder, nicht über die
+> gemeldete Stelle). Zwei beanspruchte Zeilen plus `LOCK_MIN_ZEILEN = 2`
+> hießen auf einer Seite mit wenig Text: alles zu, sobald einer eine
+> Taste anfasste. Gemeldet als *„sobald einer schreibt, kann der andere
+> nicht mal die Schreibmarke setzen."*
+>
+> Seither: genau die eigene Zeile, `LOCK_MIN_ZEILEN = 1`, und der
+> Nachlauf `LOCK_CLAIM_MS` von 10 s auf 5 s. Der Fall, den die zweite
+> Zeile abfangen sollte, löst sich von selbst — läuft der Text wirklich
+> nach unten, steht die eigene Marke schon dort und die Sperre wandert
+> mit.
+
+**Formensperre (neu).** Das Gegenstück für Bilder, Formen und Formeln.
+Beim Text führt Yjs zusammen; die Lage eines Objekts sind dagegen zwei
+Zahlen im Kopf der Seite, und die werden schlicht überschrieben. Schoben
+zwei dasselbe Rechteck, zappelte es zwischen zwei Stellen hin und her,
+und am Ende gewann, wer zuletzt losließ.
+
+Wer ein Objekt anfasst, hält es, bis er loslässt. Gemeldet über zwei
+weitere Anwesenheitsfelder (`objLock` als `seite#objekt`, `objLockAt`),
+gefragt wird in `canvas/objects.js` vor jedem Anfassen — auch an den
+Griffen für Größe, Drehung und Linienenden, die an `beginInteraction`
+vorbeigehen. Der Anspruch verfällt nach `OBJ_LOCK_TTL_MS` (4 s) und wird
+währenddessen selbst aufgefrischt; wem die Leitung abreißt, während er
+ein Bild hält, behält es nicht für immer. Sichtbar als Rahmen in seiner
+Farbe (`.obj-wrap.obj-fremd`).
+
+Beides ist bewusst Sache der **Oberfläche**, nicht der Absicherung: es
+hält Leute auseinander, es schützt keine Daten.
 
 Gemeint ist die **sichtbare** Zeile, nicht die logische. Der erste Anlauf
 nahm die logische, und das ging in diesem Editor gründlich daneben: beim

@@ -2371,7 +2371,7 @@ const OP_EXTRAS = ['c', 'lf', 'lt', 'cx'];
 /* Dasselbe für die Anwesenheit. Hier wiegt es schwerer: eine abgewiesene
    Karte lässt joinDocRoom scheitern, und damit gäbe es überhaupt keine
    Live-Sitzung mehr. */
-const PRESENCE_EXTRAS = ['lockFrom', 'lockTo', 'lockAt', 'cx'];
+const PRESENCE_EXTRAS = ['lockFrom', 'lockTo', 'lockAt', 'cx', 'objLock', 'objLockAt'];
 
 // So viele zurückliegende Änderungen werden beim Betreten nachgeholt.
 const OP_BACKLOG = 200;
@@ -2549,7 +2549,7 @@ function warteAufEinlass(mod, rtdb, docId, uid, timeoutMs = 25000) {
 async function joinDocRoom(docId, options = {}) {
   const me = requireIdentity();
   const { mod, db: rtdb } = await loadRealtime();
-  const { ref, child, push, set, remove, onValue, onChildAdded, onChildRemoved,
+  const { ref, child, push, set, update, remove, onValue, onChildAdded, onChildRemoved,
           onDisconnect, query: rtQuery, limitToLast,
           serverTimestamp: rtNow, get: rtGet } = mod;
 
@@ -2721,6 +2721,22 @@ async function joinDocRoom(docId, options = {}) {
        Gegenseite die Stelle auch dann wieder, wenn sich der Text seither
        verschoben hat – etwa weil dort jemand gleichzeitig tippt. */
     cx: '',
+    /* ══════════════════════════════════════════════════════════════
+       WELCHE FORM GERADE JEMAND IN DER HAND HAT
+
+       Beim Text sperrt eine ZEILE; bei Bildern, Formen und Formeln ist
+       das Gegenstueck das einzelne Objekt. Zwei Leute, die dasselbe
+       Rechteck gleichzeitig schieben, schreiben abwechselnd ihre eigene
+       Lage hinein – es zappelt zwischen zwei Stellen hin und her, und
+       am Ende gewinnt der, der zuletzt losgelassen hat. Genau so wurde
+       es gemeldet.
+
+       Aufbau: "seitenkennung#objektkennung", leer heisst: nichts in der
+       Hand. Beansprucht wird beim Anfassen und beim Loslassen wieder
+       freigegeben (canvas/objects.js) – und wie beim Text verfaellt der
+       Anspruch von selbst, wenn nichts mehr gemeldet wird. */
+    objLock: '',
+    objLockAt: 0,
     at: rtNow()
   };
 
@@ -2736,7 +2752,7 @@ async function joinDocRoom(docId, options = {}) {
     for (const key of PRESENCE_EXTRAS) delete card[key];
     await set(meRef, card);
     console.warn('[Share] Die veröffentlichten Regeln kennen die Felder '
-      + PRESENCE_EXTRAS.join(', ') + ' noch nicht – die Zeilensperre bleibt aus. '
+      + PRESENCE_EXTRAS.join(', ') + ' noch nicht – Zeilen- und Formensperre bleiben aus. '
       + 'Abhilfe: website/database.rules.json in der Firebase Console unter '
       + 'Realtime Database → Regeln veröffentlichen.');
   }
@@ -2794,6 +2810,32 @@ async function joinDocRoom(docId, options = {}) {
   let extrasWarned = false;
 
   /* ── Anwesenheit ── */
+
+  /**
+   * Sagt, welche Form gerade angefasst ist – oder dass keine mehr.
+   *
+   * Getrennt von setPage(), weil es an einer ganz anderen Geste haengt:
+   * setPage folgt der Schreibmarke und wird gebremst, das hier muss beim
+   * Anfassen SOFORT hinaus. Wer eine halbe Sekunde spaeter erfaehrt,
+   * dass die Form schon jemandem gehoert, hat sie laengst mitgezogen.
+   *
+   * @param {string} pageId
+   * @param {string|number} objId  leer/null = wieder freigeben
+   */
+  function setObjLock(pageId, objId) {
+    if (left || !lockFieldsOk) return;
+    const wert = (pageId && objId) ? (String(pageId) + '#' + String(objId)) : '';
+    if (wert === card.objLock) return;
+
+    card.objLock = wert;
+    card.objLockAt = wert ? Date.now() : 0;
+
+    /* Ohne Umweg ueber pendingPage: das ist die eine Meldung, die nicht
+       warten darf. Ein Fehlschlag ist verkraftbar – dann greift die
+       Sperre eben nicht, und der Rest laeuft weiter. */
+    update(meRef, { objLock: card.objLock, objLockAt: card.objLockAt, at: rtNow() })
+      .catch(err => console.warn('[Share] Formensperre nicht gemeldet:', err.message));
+  }
 
   /**
    * Meldet, wo diese Person gerade ist: auf welcher Seite, an welcher
@@ -3483,7 +3525,7 @@ const CHAT_QUOTE_LEN = 140;
   }
 
   return {
-    me: card, setPage, onPresence, onOwnerAway, sendOp, onOp, setRoles,
+    me: card, setPage, setObjLock, onPresence, onOwnerAway, sendOp, onOp, setRoles,
     onConnection, leave,
     // Das Gespräch neben dem Dokument
     sendChat, deleteChat, onChat, onChatRemoved, setTyping, onTyping, onChatStatus

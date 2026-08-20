@@ -624,6 +624,7 @@ const TRANSLATIONS = {
     collabNoPage: 'noch auf keiner Seite',
     collabOffline: 'Live-Übertragung aus',
     collabLineLocked: '{name} schreibt gerade an dieser Zeile',
+    collabObjLocked: '{name} bearbeitet das gerade',
 
     // Chat im Live-Betrieb (ui/chat.js)
     chatTitle: 'Chat',
@@ -1483,6 +1484,7 @@ const TRANSLATIONS = {
     collabNoPage: 'not on a page yet',
     collabOffline: 'Live sync off',
     collabLineLocked: '{name} is writing on this line',
+    collabObjLocked: '{name} is working on that right now',
 
     // Chat during live editing (ui/chat.js)
     chatTitle: 'Chat',
@@ -2333,6 +2335,7 @@ const TRANSLATIONS = {
     collabNoPage: 'non ancora su una pagina',
     collabOffline: 'Sincronizzazione live spenta',
     collabLineLocked: '{name} sta scrivendo su questa riga',
+    collabObjLocked: '{name} ci sta lavorando adesso',
 
     // Chat durante la modifica in diretta (ui/chat.js)
     chatTitle: 'Chat',

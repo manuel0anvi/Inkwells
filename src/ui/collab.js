@@ -1162,9 +1162,22 @@
 
   // Mehr Zeilen als das kann eine Sperre nie umfassen – Notbremse
   const LOCK_MAX_ZEILEN = 6;
-  // So viele Zeilen MINDESTENS sperren – der andere soll sehen, dass
-  // hier geschrieben wird, nicht nur einen schmalen Strich
-  const LOCK_MIN_ZEILEN = 2;
+  /* ══════════════════════════════════════════════════════════════════
+     WIE VIELE ZEILEN DAS BAND MINDESTENS DECKT
+
+     Hier stand 2, „damit der andere sieht, dass hier geschrieben wird".
+     Der Preis dafuer war zu hoch: das Band ist nicht nur Anzeige, es
+     sperrt auch (trifftSperrband entscheidet ueber die BAENDER, nicht
+     ueber die gemeldete Stelle). Zwei Zeilen Mindestband hiessen also
+     zwei gesperrte Zeilen, auch wenn nur eine beansprucht war – und auf
+     einer Seite mit drei Zeilen Text war damit fast alles zu. Gemeldet
+     wurde genau das: „sobald einer schreibt, kann der andere nicht mal
+     die Schreibmarke setzen."
+
+     Jetzt deckt das Band genau das, was auch beansprucht ist. Zu sehen
+     ist der andere ohnehin: seine Schreibmarke steht mit seinem Namen in
+     derselben Zeile. */
+  const LOCK_MIN_ZEILEN = 1;
 
   /**
    * Die Zeilenkästen eines gesperrten Bereichs – einer je Bildschirmzeile.
@@ -1265,6 +1278,8 @@
     }
 
     aufraeumen(lockEls, gebraucht);
+    // Objekte haengen an denselben Meldungen wie die Zeilenbaender
+    try { renderObjLocks(); } catch (err) { }
   }
 
   /* Wann zuletzt getippt wurde, je Seite. Entscheidet, ob die eigene
@@ -1277,11 +1292,20 @@
      ohne ihn landet die Marke beim Austausch des Inhalts auf Stelle 0. */
   const letzteEigeneStelle = new Map();
 
-  /* So lange nach dem letzten Anschlag gilt man noch als „am Schreiben".
-     Das ist die Zeit, die eine Zeile für die anderen belegt bleibt –
-     vier Sekunden waren zu knapp: wer einen Satz überlegt, hatte seine
-     Zeile schon wieder freigegeben, während er noch daran arbeitete. */
-  const LOCK_CLAIM_MS = 10000;
+  /* ══════════════════════════════════════════════════════════════════
+     WIE LANGE EINE ZEILE NACH DEM LETZTEN ANSCHLAG BELEGT BLEIBT
+
+     Vier Sekunden waren zu knapp: wer einen Satz ueberlegt, hatte seine
+     Zeile schon wieder freigegeben, waehrend er noch daran arbeitete.
+     Zehn waren dann zu viel – zu zweit an einer Seite hiess das, dass
+     nach jedem Wort des einen der andere zehn Sekunden wartete. Beide
+     zusammen ergaben ein Heft, in dem immer gerade der andere dran war.
+     Genau so wurde es gemeldet.
+
+     Fuenf Sekunden sind der Mittelweg: lang genug fuer ein Nachdenken
+     mitten im Satz, kurz genug, dass eine Pause auch als Pause ankommt.
+     Wer weiterschreibt, frischt ohnehin ununterbrochen auf. */
+  const LOCK_CLAIM_MS = 5000;
 
   /**
    * Schreibt diese Person gerade auf dieser Seite?
@@ -1331,8 +1355,10 @@
   }
 
   /**
-   * Welche Zeilen beansprucht diese Person gerade? Die, in der sie steht,
-   * und die darauf folgende – aber nur, solange sie auch wirklich tippt.
+   * Welche Zeilen beansprucht diese Person gerade?
+   *
+   * Genau die eine, in der sie steht – und auch die nur, solange sie
+   * wirklich tippt.
    */
   function lockSpanFor(pageId, textDiv, offset) {
     /* Bei jedem dieser Abbrüche gehört der gemerkte Anspruch weg und
@@ -1344,8 +1370,36 @@
     if (!schreibtGerade(pageId)) { eigeneSperre.delete(pageId); return null; }
     if (typeof flatTextOf !== 'function') { eigeneSperre.delete(pageId); return null; }
 
+    /* ══════════════════════════════════════════════════════════════
+       DIE ZEILE DANACH NUR, WENN DER TEXT AUCH DORTHIN LAEUFT
+
+       Beansprucht wurde immer „diese Zeile und die naechste". Der Grund
+       dafuer ist echt: wer am Zeilenende weitertippt, schiebt Text in
+       die Zeile darunter, und die gehoerte dann kurz zwei Leuten.
+
+       Nur trifft dieser Grund fast nie zu. Wer mitten in einer Zeile
+       schreibt, laesst die naechste in Ruhe – und sperrte sie trotzdem.
+       Auf einer Seite mit wenig Text war damit alles belegt, sobald
+       einer eine Taste anfasste. Gemeldet als „der andere kann gar
+       nichts mehr machen".
+
+       >>> Warum die naechste Zeile trotzdem ganz entfaellt <<<
+       Der erste Versuch war, sie nur am Zeilenende mitzunehmen. Damit
+       wechselte die Sperre beim Tippen staendig zwischen einer und zwei
+       Zeilen – und mit ihr die Zahl der Baender. Die werden aber
+       wiederverwendet und nicht neu gebaut; wechselt ihre Zahl, wird
+       jedes Mal eines weggeworfen und ein neues eingesetzt, samt
+       Einblend-Bewegung. Der Prueffstand hat das sofort gemeldet
+       („sie werden weggeworfen und neu gebaut – daher das Flackern").
+
+       Sie entfaellt deshalb ganz. Der Fall, den sie abfangen sollte,
+       loest sich von selbst: sobald der Text wirklich in die Zeile
+       darunter laeuft, steht die eigene Marke schon dort, und die
+       Sperre wandert mit. Und wo wirklich zwei aufeinandertreffen,
+       schneidet ohneFremdeStellen den Anspruch ohnehin zurueck.
+       ══════════════════════════════════════════════════════════════ */
     let span = null;
-    try { span = visualLineSpan(textDiv, offset); } catch (err) { return null; }
+    try { span = visualLineSpan(textDiv, offset, 0); } catch (err) { return null; }
     span = ohneFremdeStellen(span, pageId, textDiv, offset);
 
     /* Was hier herauskommt, ist der eigene Anspruch – merken, damit
@@ -1357,6 +1411,95 @@
 
   /* Der zuletzt gemeldete eigene Anspruch, je Seite. */
   const eigeneSperre = new Map();
+
+  /* ══════════════════════════════════════════════════════════════════
+     FORMEN, BILDER UND FORMELN SPERREN
+
+     Beim Text sperrt eine Zeile. Das Gegenstueck fuer ein Objekt ist das
+     Objekt selbst: wer es anfasst, hat es, bis er loslaesst.
+
+     >>> Warum das noetig ist, obwohl Yjs zusammenfuehrt <<<
+     Yjs fuehrt TEXT zusammen. Die Lage eines Bildes ist aber kein Text,
+     sondern zwei Zahlen im Kopf der Seite, und die werden schlicht
+     ueberschrieben. Zwei Leute, die dasselbe Rechteck gleichzeitig
+     schieben, schreiben abwechselnd ihre eigene Lage hinein: es zappelt
+     zwischen zwei Stellen hin und her, und am Ende gewinnt, wer zuletzt
+     losgelassen hat. Genau so wurde es gemeldet.
+
+     >>> Warum der Anspruch verfaellt <<<
+     Aus demselben Grund wie bei der Zeile: wem die Leitung abreisst,
+     waehrend er ein Bild haelt, soll es nicht fuer immer behalten. Der
+     Nachlauf ist kuerzer als bei der Zeile – eine Zeile beansprucht man
+     denkend, ein Bild nur, solange man den Finger daraufhat.
+     ══════════════════════════════════════════════════════════════════ */
+  const OBJ_LOCK_TTL_MS = 4000;
+
+  /** Wer haelt dieses Objekt gerade? null, wenn es frei ist. */
+  function objektGesperrtVon(pageId, objId) {
+    if (!others.length || !pageId || !objId) return null;
+    const marke = String(pageId) + '#' + String(objId);
+    const jetzt = Date.now();
+    for (const person of others) {
+      if (person.objLock !== marke) continue;
+      /* Ohne Zeitstempel (aeltere Fassung am anderen Ende) gilt der
+         Anspruch nicht – lieber gar nicht sperren als unbegrenzt. */
+      if (!Number.isFinite(person.objLockAt) || jetzt - person.objLockAt > OBJ_LOCK_TTL_MS) continue;
+      return person;
+    }
+    return null;
+  }
+
+  /* Was man selbst gerade haelt – und ein Takt, der es auffrischt.
+     Ohne das Auffrischen liefe der eigene Anspruch beim anderen nach
+     OBJ_LOCK_TTL_MS ab, waehrend man das Bild noch in der Hand hat. */
+  let gehaltenesObjekt = null;
+  let objFrischTimer = null;
+
+  function beansprucheObjekt(pageId, objId) {
+    if (!room || typeof room.setObjLock !== 'function') return;
+    gehaltenesObjekt = { pageId: String(pageId), objId: String(objId) };
+    room.setObjLock(gehaltenesObjekt.pageId, gehaltenesObjekt.objId);
+    if (objFrischTimer) clearInterval(objFrischTimer);
+    objFrischTimer = setInterval(() => {
+      if (!gehaltenesObjekt || !room) return;
+      /* setObjLock schweigt, wenn sich nichts geaendert hat – deshalb
+         hier ueber den Umweg leer/wieder-voll auffrischen. */
+      room.setObjLock('', '');
+      room.setObjLock(gehaltenesObjekt.pageId, gehaltenesObjekt.objId);
+    }, Math.round(OBJ_LOCK_TTL_MS / 2));
+  }
+
+  function gibObjektFrei() {
+    if (objFrischTimer) { clearInterval(objFrischTimer); objFrischTimer = null; }
+    gehaltenesObjekt = null;
+    if (room && typeof room.setObjLock === 'function') room.setObjLock('', '');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND MAN SIEHT ES DEM OBJEKT AN
+
+     Ein Rahmen in der Farbe dessen, der es haelt – dieselbe Farbe wie
+     seine Schreibmarke und sein Sperrband. Ohne das faende man den
+     Grund nicht: man zoege am Bild, es bewegte sich nicht, und nichts
+     sagte warum.
+     ══════════════════════════════════════════════════════════════════ */
+  function renderObjLocks() {
+    const alle = document.querySelectorAll('.obj-wrap[data-objid]');
+    if (!alle.length) return;
+    for (const wrap of alle) {
+      const pgEl = wrap.closest('[data-pgid]');
+      const person = pgEl ? objektGesperrtVon(pgEl.dataset.pgid, wrap.dataset.objid) : null;
+      if (person) {
+        wrap.classList.add('obj-fremd');
+        wrap.style.setProperty('--obj-lock-color', person.color || 'var(--gold)');
+        if (wrap.dataset.lockName !== (person.name || '')) wrap.dataset.lockName = person.name || '';
+      } else if (wrap.classList.contains('obj-fremd')) {
+        wrap.classList.remove('obj-fremd');
+        wrap.style.removeProperty('--obj-lock-color');
+        delete wrap.dataset.lockName;
+      }
+    }
+  }
 
   /* ══════════════════════════════════════════════════════════════════
      WER SCHREIBT, HAT DIE VOLLMACHT ÜBER SEINE ZEILE
@@ -3100,6 +3243,11 @@
     for (const undo of stops) { try { undo(); } catch (e) {} }
     stops = [];
 
+    /* Vor dem Verlassen: solange der Raum noch steht, kommt die
+       Freigabe auch an. Danach waere nur noch der Takt abgestellt, und
+       beim anderen bliebe das Bild bis zum Ablauf belegt. */
+    gibObjektFrei();
+
     if (room) { try { await room.leave(); } catch (e) {} }
     room = null;
     docId = null;
@@ -3530,6 +3678,9 @@
     fremdeMarken: zeigeFremdeMarken,
     // Zeilensperre – app.js fragt vor jeder Eingabe nach
     editBlockedBy, warnLocked, lockOwner, caretOf,
+    /* Formensperre – canvas/objects.js fragt vor jedem Anfassen nach
+       und meldet Anfang und Ende der Bewegung. */
+    objektGesperrtVon, beansprucheObjekt, gibObjektFrei,
     // ... und canvas/input.js vor jedem Klick, siehe dort
     trifftSperrband, markeWeg,
     // Sofort abgleichen, ohne auf den Takt zu warten (Tests, Schließen)

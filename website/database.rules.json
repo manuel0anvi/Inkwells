@@ -149,6 +149,12 @@
           "cx": {
             ".validate": "newData.isString() && newData.val().length <= 64"
           },
+          "objLock": {
+            ".validate": "newData.isString() && newData.val().length <= 96"
+          },
+          "objLockAt": {
+            ".validate": "newData.isNumber()"
+          },
           "at": {
             ".validate": "newData.isNumber()"
           },

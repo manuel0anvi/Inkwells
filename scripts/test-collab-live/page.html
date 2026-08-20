@@ -116,7 +116,8 @@ let presenceCb = null, opCb = null;
 const meineKarte = {
   uid: WER, name: WER, email: WER.toLowerCase() + '@probe.example',
   color: FARBEN[WER] || '#2e8a46',
-  pageId: '', offset: -1, lockFrom: -1, lockTo: -1, lockAt: 0, cx: '', at: Date.now()
+  pageId: '', offset: -1, lockFrom: -1, lockTo: -1, lockAt: 0, cx: '',
+  objLock: '', objLockAt: 0, at: Date.now()
 };
 
 ipcRenderer.on('praesenz', (_e, liste) => {
@@ -134,6 +135,17 @@ window.InkwellsShare = {
       meineKarte.lockTo = lock && Number.isFinite(lock.to) ? lock.to : -1;
       if (meineKarte.lockFrom >= 0) meineKarte.lockAt = Date.now();
       meineKarte.cx = String(anchor || '').slice(0, 64);
+      meineKarte.at = Date.now();
+      ipcRenderer.send('praesenz', { ...meineKarte });
+    },
+    /* Wie in core/share.js: eine eigene Meldung, die nicht gebremst
+       wird. Wer eine halbe Sekunde spaeter erfaehrt, dass die Form schon
+       jemandem gehoert, hat sie laengst mitgezogen. */
+    setObjLock(pageId, objId) {
+      const wert = (pageId && objId) ? (String(pageId) + '#' + String(objId)) : '';
+      if (wert === meineKarte.objLock) return;
+      meineKarte.objLock = wert;
+      meineKarte.objLockAt = wert ? Date.now() : 0;
       meineKarte.at = Date.now();
       ipcRenderer.send('praesenz', { ...meineKarte });
     },
@@ -218,6 +230,17 @@ window.pruefstand = {
     textDiv.focus();
     setFlatCaret(textDiv, stelle);
     const p = Collab.editBlockedBy(seite.id, textDiv, art || 'insertText');
+    return p ? (p.name || p.uid) : null;
+  },
+
+  /* ── Formensperre ───────────────────────────────────────────────
+     canvas/objects.js laeuft hier nicht mit – das braeuchte den halben
+     Editor. Geprueft wird die Auskunft, auf die es sich verlaesst,
+     genau wie bei anschlagAn() weiter oben. */
+  formAnfassen(objId) { Collab.beansprucheObjekt(seite.id, objId); return true; },
+  formLoslassen() { Collab.gibObjektFrei(); return true; },
+  formGehoert(objId) {
+    const p = Collab.objektGesperrtVon(seite.id, objId);
     return p ? (p.name || p.uid) : null;
   },
 

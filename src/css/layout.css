@@ -359,6 +359,35 @@
    und mit demselben Namen. Zwei Schilder in einer Zeile verdeckten
    genau den Text, um den es ging. */
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE FORM, DIE GERADE JEMAND ANDERES HAELT
+
+   Dasselbe Bild wie beim Sperrband der Zeile, nur um das Ding herum
+   statt darunter: ein Rahmen in der Farbe dessen, der es angefasst hat
+   – dieselbe Farbe wie seine Schreibmarke.
+
+   Ohne das faende man den Grund nicht: man zieht am Bild, es bewegt
+   sich nicht, und nichts sagt warum. Der Name steht im Hinweis, der
+   beim Anfassen erscheint (canvas/objects.js), nicht als Schild am
+   Rahmen – ein Schild verdeckte genau das, worum es geht.
+
+   Die Huelle laesst Klicks ohnehin durch (pointer-events: none in
+   css/pages.css); abgewiesen wird im Zeiger-Hoerer, nicht hier. Der
+   Rahmen ist reine Auskunft.
+   ══════════════════════════════════════════════════════════════════════ */
+.obj-wrap.obj-fremd {
+  outline: 1.5px solid var(--obj-lock-color, var(--gold));
+  outline-offset: 3px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--obj-lock-color, var(--gold)) 16%, transparent);
+  transition: outline-color .12s ease-out
+}
+
+/* Und der Zeiger sagt es auch: hier ist nichts zu greifen. */
+.obj-wrap.obj-fremd .obj-body {
+  cursor: not-allowed
+}
+
 /* Kurzes Aufblinken, wenn jemand doch hineintippt */
 .collab-lock.bump {
   animation: collab-lock-bump .32s ease-out
