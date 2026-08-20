@@ -202,7 +202,10 @@
     const box = E('meldungen-liste');
     if (!ov || !box) return;
 
-    box.innerHTML = '';
+    /* Steht schon eines offen, kommt das Neue dazu, statt das Alte zu
+       ersetzen: sonst verschwaende eine Meldung, die gerade gelesen
+       wird, weil im selben Augenblick die naechste eintrifft. */
+    if (ov.style.display !== 'flex') box.innerHTML = '';
     for (const m of liste) {
       const karte = document.createElement('div');
       karte.className = 'meldung-karte';
@@ -235,7 +238,9 @@
 
       const raus = document.createElement('button');
       raus.className = 'btn-m danger';
-      raus.textContent = T('meldungEntfernen', 'Aus der Freigabe nehmen');
+      raus.textContent = T('meldungEntfernen', 'Aus diesem Dokument verbannen');
+      raus.title = T('meldungEntfernenHinweis',
+        'Nimmt die Freigabe zurück und lässt die Person auch über den Link nicht wieder herein.');
       raus.addEventListener('click', async () => {
         raus.disabled = true;
         const ok = await entferneAusFreigabe(m);
@@ -295,6 +300,11 @@
      die Meldung – nicht zwei Fenster übereinander.
      ══════════════════════════════════════════════════════════════════ */
   let schonNachgesehen = '';
+  let abbestellen = null;
+  /* Welche Meldungen schon gezeigt wurden. Ohne das ginge das Fenster bei
+     jeder Kleinigkeit wieder auf – der Strom meldet sich auch, wenn sich
+     an einer bestehenden Meldung nur das Häkchen ändert. */
+  const gezeigt = new Set();
 
   async function nachsehen() {
     const S_ = window.InkwellsShare;
@@ -304,9 +314,35 @@
     const kennung = (ich && ich.uid) || '';
     if (!kennung || kennung === schonNachgesehen) return;
     schonNachgesehen = kennung;
+    gezeigt.clear();
 
-    const liste = await S_.ladeMeldungenFuerMich();
-    if (liste.length) setTimeout(() => zeigeMeldungen(liste), 2500);
+    /* ══════════════════════════════════════════════════════════════
+       ZUHOEREN, NICHT EINMAL NACHSEHEN
+
+       Hier stand eine einzelne Abfrage beim Start. Wer als Besitzer im
+       Dokument sass und dort jemanden meldete, bekam davon nichts mit:
+       die Meldung lag zwar in der Datenbank, aber nachgesehen wurde
+       erst beim naechsten Start. Genau so wurde es gemeldet.
+
+       Jetzt ein Strom. Er liefert sofort den bestehenden Stand mit –
+       der Fall „beim Start liegt etwas vor" ist damit derselbe Weg und
+       kein zweiter. */
+    if (abbestellen) { try { abbestellen(); } catch (e) { } }
+
+    if (!S_.beobachteMeldungenFuerMich) {
+      const liste = await S_.ladeMeldungenFuerMich();
+      if (liste.length) setTimeout(() => zeigeMeldungen(liste), 2500);
+      return;
+    }
+
+    abbestellen = S_.beobachteMeldungenFuerMich((liste) => {
+      const neu = liste.filter(m => !gezeigt.has(m.id));
+      if (!neu.length) return;
+      for (const m of neu) gezeigt.add(m.id);
+      /* Kurz warten, damit sich das Fenster nicht mit dem Postfach um
+         denselben Platz streitet (ui/postfach.js). */
+      setTimeout(() => zeigeMeldungen(neu), 1800);
+    });
   }
 
   function anlaufen() {
@@ -332,17 +368,28 @@
      ══════════════════════════════════════════════════════════════════ */
 
   /**
-   * Darf ich das gerade?
+   * Der Satz zur laufenden Sperre – oder null, wenn keine gilt.
+   *
+   * >>> Warum das getrennt von darfIch() steht <<<
+   * Weil es zwei Wege gibt, an einer Sperre anzustossen. Der eine ist
+   * die Frage vorher: „darf ich das ueberhaupt" – dort will man den Satz
+   * ALS Meldung. Der andere ist eine Regel, die eine Anfrage abweist,
+   * die schon unterwegs war; dort steht der Satz an der Stelle, wo sonst
+   * die Fehlermeldung der Datenbank stuende (ui/sharedDocs.js).
+   *
+   * Genau dieser zweite Weg fehlte: wer gesperrt war und ein geteiltes
+   * Dokument oeffnete, las „Missing or insufficient permissions". Genau
+   * so wurde es gemeldet.
    *
    * @param {'neueFreigaben'|'selbstTeilen'|'laufendeRaus'} was
-   * @returns {Promise<boolean>} true = erlaubt
+   * @returns {Promise<string|null>}
    */
-  async function darfIch(was) {
+  async function sperrSatz(was) {
     const S_ = window.InkwellsShare;
-    if (!S_ || !S_.ladeMeineSperre || !window.Melden) return true;
+    if (!S_ || !S_.ladeMeineSperre || !window.Melden) return null;
 
     const sperre = await S_.ladeMeineSperre();
-    if (!window.Melden.gesperrtFuer(sperre, was, Date.now())) return true;
+    if (!window.Melden.gesperrtFuer(sperre, was, Date.now())) return null;
 
     const bis = sperre.bis ? datumText(sperre.bis) : '';
     const saetze = {
@@ -356,10 +403,39 @@
         ? T('sperreRausBis', 'Dein Zugang zu geteilten Dokumenten ruht bis zum {d}.')
         : T('sperreRaus', 'Dein Zugang zu geteilten Dokumenten ruht zurzeit.')
     };
-    melde((saetze[was] || '').replace('{d}', bis)
-      + ' ' + T('sperreNachlesen', 'Mehr steht im Postfach.'));
+    return (saetze[was] || '').replace('{d}', bis)
+      + ' ' + T('sperreNachlesen', 'Mehr steht im Postfach.');
+  }
+
+  /**
+   * Irgendeine laufende Sperre, die erklaeren wuerde, warum eine Anfrage
+   * abgewiesen wurde. Der Reihe nach: erst das Naheliegendste.
+   *
+   * Gedacht fuer den Fall, dass eine REGEL abgewiesen hat und man nur
+   * weiss „keine Berechtigung", aber nicht wofuer.
+   *
+   * @returns {Promise<string|null>}
+   */
+  async function sperrSatzIrgendeiner() {
+    for (const was of ['laufendeRaus', 'neueFreigaben', 'selbstTeilen']) {
+      const satz = await sperrSatz(was);
+      if (satz) return satz;
+    }
+    return null;
+  }
+
+  /**
+   * Darf ich das gerade? Sagt es auch gleich, wenn nicht.
+   *
+   * @param {'neueFreigaben'|'selbstTeilen'|'laufendeRaus'} was
+   * @returns {Promise<boolean>} true = erlaubt
+   */
+  async function darfIch(was) {
+    const satz = await sperrSatz(was);
+    if (!satz) return true;
+    melde(satz);
     return false;
   }
 
-  window.Melden_ = { oeffne, darfIch };
+  window.Melden_ = { oeffne, darfIch, sperrSatz, sperrSatzIrgendeiner };
 })();

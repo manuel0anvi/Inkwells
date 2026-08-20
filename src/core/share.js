@@ -3685,6 +3685,40 @@ async function ladeMeldungenFuerMich() {
   }
 }
 
+/**
+ * Horcht auf Meldungen zu den eigenen Dokumenten.
+ *
+ * >>> Warum das nicht beim Start genuegt <<<
+ * Genau so war es zuerst: einmal beim Oeffnen der App nachsehen. Wer als
+ * Besitzer im Dokument sass und dort jemanden meldete, bekam davon
+ * nichts mit – die eigene Meldung lag zwar in der Datenbank, aber
+ * nachgesehen wurde erst beim naechsten Start. Genau so wurde es
+ * gemeldet: „habe jemanden gemeldet, aber keine Nachricht bekommen."
+ *
+ * Dieselbe Abfrage wie ladeMeldungenFuerMich, nur als Strom.
+ *
+ * @param {(liste: object[]) => void} beiAenderung
+ * @returns {Function} zum Abbestellen
+ */
+function beobachteMeldungenFuerMich(beiAenderung) {
+  const ich = currentIdentity();
+  if (!ich || !ich.uid) return () => {};
+  try {
+    return onSnapshot(
+      query(collection(db, 'meldungen'),
+            where('ownerUid', '==', ich.uid),
+            where('erledigt', '==', false)),
+      (snap) => beiAenderung(snap.docs.map(d => ({
+        id: d.id, ...d.data(), erstellt: alsIso(d.data().erstellt)
+      }))),
+      (err) => console.warn('[Melden] Beobachtung abgebrochen:', err.message)
+    );
+  } catch (err) {
+    console.warn('[Melden] Beobachtung nicht moeglich:', err.message);
+    return () => {};
+  }
+}
+
 /** Eine Meldung abhaken – der Besitzer hat sich darum gekümmert. */
 async function hakeMeldungAb(meldungId) {
   try {
@@ -3881,6 +3915,7 @@ const InkwellsShare = {
   // Melden und Sperren
   meldeNutzer,
   ladeMeldungenFuerMich,
+  beobachteMeldungenFuerMich,
   hakeMeldungAb,
   ladeMeineSperre,
 

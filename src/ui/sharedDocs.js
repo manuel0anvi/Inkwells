@@ -374,9 +374,9 @@
 
       body.append(punkte, name, badge, meta);
       card.append(spine, body);
-      card.addEventListener('click', () => openSharedDocument(head).catch(err => {
+      card.addEventListener('click', () => openSharedDocument(head).catch(async err => {
         console.error('[SharedDocs] Öffnen fehlgeschlagen:', err);
-        toast(describeError(err), true);
+        toast(await fehlerText(err), true);
       }));
       card.addEventListener('contextmenu', e => {
         e.preventDefault();
@@ -425,7 +425,7 @@
       else toast(t('sharedLeft'));
     } catch (err) {
       console.error('[SharedDocs] Verlassen fehlgeschlagen:', err);
-      toast(describeError(err), true);
+      toast(await fehlerText(err), true);
     }
   });
 
@@ -437,6 +437,38 @@
     if (msg === 'DOC_OUTDATED') return t('sharedOutdated');
     if (msg === 'NOT_ALLOWED') return t('sharedNoRight');
     return t('shareFailed').replace('{msg}', msg || '?');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WARUM ES WIRKLICH NICHT GEHT
+
+     Eine Sperre der Verwaltung wirkt in den Sicherheitsregeln
+     (website/firestore.rules). Für die App sieht das aus wie jeder
+     andere abgewiesene Zugriff: „Missing or insufficient permissions".
+     Genau das stand dem Gesperrten dann auch da – zusammen mit „failed
+     to load", und ohne eine Ahnung, woran es liegt. Gemeldet als: „es
+     sollte stehen, dass ich bis zum … gesperrt bin."
+
+     Vorher fragen hilft nur an den Stellen, an denen man weiss, was
+     gleich versucht wird (ui/share.js beim Freigeben, weiter unten beim
+     Beitreten). Hier ist es andersherum: die Anfrage war schon
+     unterwegs, und erst die Antwort sagt, dass etwas fehlt. Deshalb wird
+     jetzt NACH dem Fehlschlag nachgesehen, ob eine Sperre läuft – und
+     wenn ja, steht ihr Satz da, wo sonst die Fehlermeldung der Datenbank
+     stünde.
+
+     Nur bei fehlendem Recht: ein Netzfehler hat mit der Sperre nichts zu
+     tun, und ein Nachschlagen bei jedem Fehler wäre eine Abfrage mehr
+     für nichts.
+     ══════════════════════════════════════════════════════════════════ */
+  async function fehlerText(err) {
+    if (rechtFehlt(err) && window.Melden_ && window.Melden_.sperrSatzIrgendeiner) {
+      try {
+        const satz = await window.Melden_.sperrSatzIrgendeiner();
+        if (satz) return satz;
+      } catch (e) { /* dann eben die gewöhnliche Meldung */ }
+    }
+    return describeError(err);
   }
 
   /**
@@ -517,11 +549,16 @@
         if (activeTab === 'shared') renderShared();
         checkStillAllowed();
       },
-      (err) => {
+      async (err) => {
         /* Reißt die Beobachtung ab (Netz weg, Regeln abgelehnt), kommt sie
            von selbst nicht wieder. Vorher blieb der Tab dann stumm leer –
-           genau das Verhalten von „erscheint erst ganz spät". */
-        listError = t('sharedListError').replace('{msg}', err?.message || '?');
+           genau das Verhalten von „erscheint erst ganz spät".
+
+           Läuft eine Sperre, steht deren Satz hier statt der Meldung der
+           Datenbank: mit „laufende Freigaben" gilt man in den Regeln
+           nicht mehr als Mitglied, und dann scheitert schon das
+           Auflisten (siehe fehlerText). */
+        listError = await fehlerText(err);
         if (activeTab === 'shared') renderShared();
 
         clearTimeout(retryTimer);
@@ -1422,7 +1459,7 @@
         }
       } else {
         console.warn('[SharedDocs] Speichern fehlgeschlagen:', err?.message || err);
-        toast(describeError(err), true);
+        toast(await fehlerText(err), true);
       }
     } finally {
       saving = false;
@@ -1463,7 +1500,7 @@
       await openSharedDocument(head);
     } catch (err) {
       console.error('[SharedDocs] Link konnte nicht geöffnet werden:', err);
-      toast(describeError(err), true);
+      toast(await fehlerText(err), true);
     }
   }
 
@@ -1573,7 +1610,7 @@
       await openSharedDocument(head);
     } catch (err) {
       console.error('[SharedDocs] Dokument konnte nicht geöffnet werden:', err);
-      toast(describeError(err), true);
+      toast(await fehlerText(err), true);
     }
   };
   window.flushSharedDocSave = startSave;

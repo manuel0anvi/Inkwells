@@ -804,6 +804,33 @@ function headData(overrides = {}) {
   await denied('Aber nicht den Vorwurf umschreiben',
     updateDoc(doc(fsOf(OWNER), 'meldungen/m1'), { grund: 'sonstiges' }));
 
+  section('Rausgeworfen heisst auch: nicht ueber den Link');
+
+  /* dok2 hat einen offenen Link. BLOCKED steht in seiner blockedEmails –
+     der Besitzer hat ihn aus dem Dokument geworfen. Bis hierher las er
+     es trotzdem weiter, weil der Link offen ist. */
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'docs/dok2'), headData({
+      linkMode: 'edit', linkId: 'link2', memberEmails: [], members: {}, memberVia: {},
+      blockedEmails: [BLOCKED.mail]
+    }));
+  });
+
+  await denied('Der Hinausgeworfene liest den Kopf nicht mehr',
+    getDoc(doc(fsOf(BLOCKED), 'docs/dok2')));
+
+  await denied('Und den Inhalt erst recht nicht',
+    getDoc(doc(fsOf(BLOCKED), 'docs/dok2/pages/p1')));
+
+  await ok('Ein anderer Angemeldeter kommt weiter ueber den Link',
+    getDoc(doc(fsOf(STRANGER), 'docs/dok2')));
+
+  /* Ohne Konto gibt es keine Adresse, an der eine Sperre haengen koennte.
+     Ein offener Link bleibt fuer Unangemeldete offen - das ist die Natur
+     eines Links und steht so in den Regeln. */
+  await ok('Ohne Anmeldung bleibt ein offener Link offen',
+    getDoc(doc(ohne(), 'docs/dok2')));
+
   section('Sperren: nur die Verwaltung setzt sie');
 
   const sperre = (umfang, bis = null) => ({

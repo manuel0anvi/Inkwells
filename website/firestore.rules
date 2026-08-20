@@ -474,6 +474,26 @@ service cloud.firestore {
         return head().linkMode in ['view', 'edit'];
       }
 
+      /* ══════════════════════════════════════════════════════════════
+         WER HINAUSGEWORFEN WURDE, KOMMT AUCH UEBER DEN LINK NICHT
+
+         removeMember() traegt die Adresse in blockedEmails ein. Geprueft
+         wurde sie bisher nur beim Selbsteintrag (selfJoin) – nicht beim
+         LESEN ueber den offenen Link. Der Hinausgeworfene sah das
+         Dokument also weiter, er stand nur nicht mehr in der Liste.
+         Schreiben konnte er nicht (dafuer braucht es die Mitgliedschaft),
+         aber mitlesen schon, und darum ging es dem Besitzer gerade nicht.
+
+         >>> Was das NICHT kann <<<
+         Gesperrt wird nach ADRESSE. Wer den Link ohne Konto oeffnet, hat
+         keine – fuer den bleibt ein offener Link offen. Das ist die Natur
+         eines Links; wer wirklich zumachen will, stellt ihn auf 'off'
+         oder wuerfelt ihn neu (rotateLink).
+         ══════════════════════════════════════════════════════════════ */
+      function rausgeworfen() {
+        return myEmail() != '' && myEmail() in head().blockedEmails;
+      }
+
       /* Lesen einzeln: Besitzer, Mitglied oder offener Link.
 
          `resource == null` steht bewusst vorn: fragt jemand nach einem
@@ -492,6 +512,7 @@ service cloud.firestore {
                     || isDocOwner()
                     || isMember()
                     || (linkIsOpen()
+                        && !rausgeworfen()
                         && !gesperrtFuer('laufendeRaus')
                         && !gesperrtFuer('neueFreigaben'));
 
@@ -687,7 +708,11 @@ service cloud.firestore {
                /* Der offene Link steht bewusst hinter derselben Sperre:
                   sonst käme der Hinausgeworfene über den Link, den er ja
                   schon hat, sofort wieder herein – nur ohne Namen. */
+               /* Und wer aus DIESEM Dokument hinausgeworfen wurde,
+                  liest es auch ueber den Link nicht weiter – siehe
+                  rausgeworfen() beim Kopf. */
                || (docHead().linkMode in ['view', 'edit']
+                   && !(myEmail() != '' && myEmail() in docHead().blockedEmails)
                    && !gesperrtFuer('laufendeRaus')
                    && !gesperrtFuer('neueFreigaben'));
       }
