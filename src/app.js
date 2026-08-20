@@ -93,6 +93,16 @@ function _applyPageSnapshot(page, snap) {
     // Die Spaltenbreite der freien Absätze gehört nicht ins Heft, sie
     // wird gerechnet – siehe ordneFreieAbsaetze in canvas/text.js
     if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv);
+
+    /* ── Und im geteilten Dokument gehört es hinaus ────────────────────
+       Der 'input'-Griff steigt bei S._isUndoingOrRedoing aus, gemeldet
+       wurde hier also nichts: Strg+Z wirkte nur örtlich. Der Yjs-Stand
+       behielt derweil den alten Text, die nächste eingehende Änderung
+       holte ihn zurück, und irgendwann schickte ein zufälliger Anschlag
+       den ganzen Unterschied auf einmal hinaus. */
+    if (window.Collab && typeof Collab.noteTextChange === 'function') {
+      Collab.noteTextChange(page.id, page.textContent);
+    }
   }
 
   // Entlastete Zeichenflächen erst wieder aufbauen, sonst geht das Zeichnen ins Leere
@@ -174,17 +184,15 @@ function ohneGriffe(textDiv) {
      mit, stünde in zwei Heften derselbe Text mit verschiedenen Massen,
      und der Abgleich hätte ohne Grund etwas zu tun.
 
-     Gemeint sind margin-left/-top und max-width. In left/top steht
-     dagegen die gewählte Stelle – die gehört ins Heft. */
-  const geschoben = textDiv.querySelector(
-    'p.j-frei[style*="margin"], p.j-frei[style*="max-width"]');
+     Gemeint sind margin-left und margin-top. In left/top steht dagegen
+     die gewählte Stelle – die gehört ins Heft. */
+  const geschoben = textDiv.querySelector('p.j-frei[style*="margin"]');
   if (!griffe && !marken && !geschoben) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
 
   const kopie = textDiv.cloneNode(true);
   kopie.querySelectorAll('p.j-frei').forEach(p => {
     p.style.marginLeft = '';
     p.style.marginTop = '';
-    p.style.maxWidth = '';
     if (!p.getAttribute('style')) p.removeAttribute('style');
   });
   kopie.querySelectorAll(GRIFF_WAHL).forEach(g => g.remove());
@@ -196,6 +204,50 @@ function ohneGriffe(textDiv) {
   });
   return kopie.innerHTML;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER EINE WEG VOM EDITOR INS HEFT
+
+   Was am Text geändert wurde, muss DREI Dinge auslösen, und zwar immer
+   alle drei: ins Datenmodell schreiben, an die anderen melden, das Heft
+   als geändert markieren.
+
+   >>> Warum das jetzt an einer Stelle steht <<<
+   Es waren sechs Abschriften, und drei davon hatten nur den ersten
+   Schritt. Gefunden beim Durchgehen, alle drei mit demselben Muster:
+
+     · Der SEITENUMBRUCH (checkPageOverflow). Der Yjs-Stand der Quellseite
+       enthielt weiterhin, was gerade weitergereicht worden war; beim
+       anderen blieb es stehen, und die nächste eingehende Änderung holte
+       es hier wieder zurück.
+     · RÜCKGÄNGIG (_applyPageSnapshot). Der 'input'-Griff steigt wegen
+       S._isUndoingOrRedoing vorher aus, gemeldet wurde also nichts.
+       Strg+Z wirkte damit nur örtlich – bis irgendein späterer Anschlag
+       zufällig einen riesigen Unterschied hinausschickte.
+     · ÜBERSCHRIFT SETZEN (ui/toolbar.js). Dort fehlte zusätzlich das
+       Markieren als geändert; die Auszeichnung konnte beim Schliessen
+       verloren gehen.
+
+   Wer von hier aus schreibt, kann keines der drei vergessen.
+
+   @param {object} page
+   @param {HTMLElement} textDiv
+   @param {boolean} [stillOhneMelden] Nur ins Modell – für die Stelle in
+     checkPageOverflow, die den Text gleich noch einmal anfasst.
+   ══════════════════════════════════════════════════════════════════════ */
+function uebernimmText(page, textDiv, stillOhneMelden = false) {
+  if (!page || !textDiv) return;
+  page.textContent = ohneGriffe(textDiv);
+  if (stillOhneMelden) return;
+
+  // Geteiltes Dokument: die Änderung geht sofort an die anderen
+  // (ui/collab.js bremst das auf einen sinnvollen Takt).
+  if (window.Collab && typeof Collab.noteTextChange === 'function') {
+    Collab.noteTextChange(page.id, page.textContent);
+  }
+  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+}
+window.uebernimmText = uebernimmText;
 
 /* ══════════════════════════════════════════════════════════════════════
    DIE EINSTELLUNG WIRKT SOFORT – UND IM GETEILTEN HEFT BEI ALLEN
@@ -682,6 +734,10 @@ function appendPageDOM(page, index) {
     // Der Sicherungspunkt wird schon in 'beforeinput' gesetzt (pushTypingHistory),
     // dort ist der Text noch im Zustand vor der Änderung.
     updateUndoRedoUI();
+    /* Ein <br>, das contenteditable hinterlassen hat, wird zu einem
+       echten Umbruch – sonst löscht ihn die nächste Runde über
+       textContent stillschweigend weg (canvas/text.js). */
+    if (typeof normalisiereUmbrueche === 'function') normalisiereUmbrueche(textDiv);
     let guard = 0;
     while (guard < 4 && applyHangingIndentWrap(textDiv)) guard++;
     /* „1. " oder „- " am Zeilenanfang wird zur Aufzählung – wie in Word.
@@ -695,19 +751,16 @@ function appendPageDOM(page, index) {
         if (trimmed !== txt) h.textContent = trimmed;
       });
     }
-    /* Die Greifstreifen an den Spalten sind Bedienteil, kein Inhalt
-       (core/tables.js). Sie duerfen den Text nie erreichen – sonst reisen
-       sie durch Yjs mit und wachsen bei jedem Abgleich nach. */
-    page.textContent = ohneGriffe(textDiv);
-    // Geteiltes Dokument: die Änderung geht sofort an die anderen
-    // (ui/collab.js bremst das auf einen sinnvollen Takt).
-    if (window.Collab) Collab.noteTextChange(page.id, page.textContent);
+    /* Ins Heft, an die anderen und auf den Merkzettel fürs Sichern – über
+       uebernimmText, damit alle drei zusammen geschehen. Die Greifstreifen
+       an den Spalten bleiben dabei draussen (core/tables.js): sie sind
+       Bedienteil, kein Inhalt, und wüchsen sonst bei jedem Abgleich nach. */
+    uebernimmText(page, textDiv);
     // Nicht bei jedem Anschlag den ganzen Baum neu bauen
     scheduleSideTree();
     maybeAutoPage();
     checkPageOverflow(textDiv, page);
     if (window._showWhitespaceDebug) updateWhitespaceDebugOverlays();
-    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
   /* Vor der Änderung sichern – hier ist der Text noch im alten Zustand.
      pushTypingHistory fasst schnelles Tippen zu einem Schritt zusammen.
@@ -812,15 +865,14 @@ function appendPageDOM(page, index) {
     if (e.key === 'Enter' && !e.shiftKey) {
       const caretOffset = getCaretTextOffset(textDiv);
       if (caretOffset !== null) {
-        const raw = ((isPlainTextEditable(textDiv) ? textDiv.textContent : textDiv.innerText) || '').replace(/\r/g, '');
-        const lineStart = raw.lastIndexOf('\n', Math.max(0, caretOffset - 1)) + 1;
-        const lineEndIdx = raw.indexOf('\n', caretOffset);
-        const lineEnd = lineEndIdx === -1 ? raw.length : lineEndIdx;
-        const lineText = raw.slice(lineStart, lineEnd);
-        const indent = (lineText.match(/^[ \t]*/) || [''])[0];
+        /* Der Einzug der jetzigen Zeile – über einzugDerZeile, weil hier
+           zwei verschiedene Masse aufeinandertrafen und die neue Zeile
+           dadurch den Einzug einer ganz anderen bekam (canvas/text.js). */
+        const indent = einzugDerZeile(textDiv);
         e.preventDefault();
 
         if (isPlainTextEditable(textDiv)) {
+          const raw = (textDiv.textContent || '').replace(/\r/g, '');
           const nextText = raw.slice(0, caretOffset) + '\n' + indent + raw.slice(caretOffset);
           commitPlainTextEdit(nextText, caretOffset + 1 + indent.length);
         } else if (typeof imFreienAbsatz === 'function' && imFreienAbsatz(textDiv)) {
@@ -884,17 +936,12 @@ function appendPageDOM(page, index) {
     const text = daten.getData('text');
     if (!text) return;
 
-    // Smart indent: get current line indentation
-    const caret = getCaretTextOffset(textDiv);
-    let indent = '';
-    if (caret !== null) {
-      const raw = (textDiv.innerText || '').replace(/\r/g, '');
-      const lineStart = raw.lastIndexOf('\n', Math.max(0, caret - 1)) + 1;
-      const lineEndIdx = raw.indexOf('\n', caret);
-      const lineEnd = lineEndIdx === -1 ? raw.length : lineEndIdx;
-      const lineText = raw.slice(lineStart, lineEnd);
-      indent = (lineText.match(/^[ \t]*/) || [''])[0]; // existing indent of current line
-    }
+    /* Der Einzug der jetzigen Zeile. Über einzugDerZeile und nicht mehr
+       über innerText gegen getCaretTextOffset gerechnet: die beiden
+       zählen die Zeilengrenzen verschieden, und der Einzug kam dadurch
+       aus einer ganz anderen Zeile (canvas/text.js). Beim Einfügen wog
+       das doppelt – er kam auf JEDE eingefügte Zeile. */
+    const indent = einzugDerZeile(textDiv);
 
     // Apply indent to all subsequent lines
     const lines = text.split(/\r?\n/);
@@ -977,17 +1024,115 @@ function checkPageOverflow(textDiv, page) {
     nextPage = makePage((sec?.defaultBg) || nb.defaultBg || 'ruled');
     insertPageInto(nb, sec, nextPage, pageNumberOf(nb, page.id));
   }
-  const overflow = [];
-  while (textDiv.scrollHeight > availH + lh && textDiv.children.length > 0) { const last = textDiv.lastElementChild; overflow.unshift(last.outerHTML); last.remove(); }
-  if (!overflow.length) return;
-  page.textContent = ohneGriffe(textDiv);
+  const uebersteht = nimmUeberlauf(textDiv, availH, lh);
+  if (!uebersteht) return;
+  uebernimmText(page, textDiv);
   if (isNew) { const pgEl = appendPageDOM(nextPage, pages.length); pgEl.style.opacity = '0'; pgEl.style.transform = 'translateY(12px)'; pgEl.style.transition = 'opacity .25s,transform .25s'; requestAnimationFrame(() => requestAnimationFrame(() => { pgEl.style.opacity = '1'; pgEl.style.transform = 'none'; })); }
   const nextPgEl = E('pg-scroll').querySelector('[data-pgid="' + nextPage.id + '"]'); if (!nextPgEl) return;
   const nextTD = nextPgEl.querySelector('.j-text'); if (!nextTD) return;
-  nextTD.innerHTML = overflow.join('') + nextTD.innerHTML; nextPage.textContent = ohneGriffe(nextTD);
+  /* Reiner Text stiesse sonst an das, was auf der Folgeseite schon steht,
+     und aus zwei Zeilen würde eine. Ein Umbruch dazwischen. */
+  const letztes = uebersteht.lastChild;
+  if (letztes && letztes.nodeType === Node.TEXT_NODE && nextTD.firstChild) letztes.nodeValue += '\n';
+  nextTD.insertBefore(uebersteht, nextTD.firstChild);
+  /* Frei stehende Absätze liegen nach dem Umzug womöglich auf dem, was
+     auf der Folgeseite schon stand – ordneFreieAbsaetze bringt sie
+     auseinander (canvas/text.js). */
+  if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(nextTD);
+  uebernimmText(nextPage, nextTD);
   nextTD.focus(); const r = document.createRange(); r.setStart(nextTD, 0); r.collapse(true); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   nextPgEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActivePg(nextPage.id); renderSideTree();
-  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WAS NICHT MEHR AUFS BLATT PASST
+
+   Nimmt aus dem Textbereich heraus, was unter der Unterkante steht, und
+   gibt es als Fragment zurück – bereit, oben auf der Folgeseite
+   eingehängt zu werden.
+
+   >>> Was hier vorher schiefging <<<
+   Es stand eine Schleife da, die `textDiv.lastElementChild` nahm, bis es
+   wieder passte. Zwei Fehler in einer Zeile:
+
+     · DAS FALSCHE STÜCK. Frei stehende Absätze stehen im DOM in der
+       Reihenfolge, in der sie ANGELEGT wurden – nicht in der, in der sie
+       auf dem Blatt liegen (canvas/text.js). Der zuletzt angeklickte kann
+       ganz oben sitzen. Auf die Folgeseite wanderte damit womöglich die
+       oberste Zeile, während die unterste blieb.
+
+     · GAR KEIN STÜCK. Wer einfach lostippt, ohne vorher irgendwohin zu
+       klicken, füllt .j-text mit einem reinen Textknoten – Enter schreibt
+       dort ein echtes '\n' (white-space: pre-wrap). Dann ist
+       `children.length === 0`, die Schleife lief nie, und der Text lief
+       unten aus dem Papier heraus, ohne dass je eine Folgeseite entstand.
+       Das ist der häufigste Weg, überhaupt anzufangen.
+
+   Deshalb zwei Wege: Elemente nach ihrer LAGE aussuchen, reinen Text an
+   einer gemessenen Stelle trennen.
+
+   @returns {DocumentFragment|null} null, wenn nichts übersteht
+   ══════════════════════════════════════════════════════════════════════ */
+function nimmUeberlauf(textDiv, availH, lh) {
+  const feld = textDiv.getBoundingClientRect();
+  const zoom = textDiv.offsetHeight > 0 ? (feld.height / textDiv.offsetHeight) : 1;
+  // Unterkante des Blattes, in Bildschirm-Pixeln
+  const grenzeY = feld.top + availH * Math.max(0.01, zoom);
+
+  const frag = document.createDocumentFragment();
+
+  /* ── Reiner Text: an einer gemessenen Stelle trennen ──────────────── */
+  if (isPlainTextEditable(textDiv) && typeof stelleUnterhalb === 'function') {
+    const schnitt = stelleUnterhalb(textDiv, grenzeY);
+    if (schnitt <= 0) return null;
+
+    const roh = (textDiv.textContent || '');
+    /* Der Umbruch vor der Trennstelle gehört zur alten Seite und bliebe
+       dort als leere Zeile stehen – er wird mit weggenommen. */
+    const bis = (roh[schnitt - 1] === '\n') ? schnitt - 1 : schnitt;
+    textDiv.textContent = roh.slice(0, bis);
+    frag.appendChild(document.createTextNode(roh.slice(schnitt)));
+    return frag;
+  }
+
+  /* ── Sonst: Elemente, das unterste zuerst ─────────────────────────── */
+  const unterkante = el => (el.offsetTop || 0) + (el.offsetHeight || 0);
+  const umgezogen = [];
+  let schutz = 0;
+  while (textDiv.scrollHeight > availH + lh && textDiv.children.length > 0 && schutz++ < 400) {
+    let tiefstes = null;
+    for (const el of textDiv.children) {
+      if (!tiefstes || unterkante(el) > unterkante(tiefstes)) tiefstes = el;
+    }
+    /* Steht auch das unterste noch ganz auf dem Blatt, kommt der Überlauf
+       von etwas anderem her – dann darf hier nichts weggenommen werden.
+       Ohne diese Bremse räumte die Schleife die Seite leer. */
+    if (!tiefstes || unterkante(tiefstes) <= availH) break;
+    umgezogen.unshift(tiefstes);
+    tiefstes.remove();
+  }
+  if (!umgezogen.length) return null;
+
+  /* ── Und die Lage auf die neue Seite umrechnen ─────────────────────
+     Ein frei stehender Absatz trägt seine Höhe in `top`. Ohne diese
+     Rechnung säße er auf der Folgeseite wieder ganz unten – und liefe
+     dort beim nächsten Anschlag gleich wieder über. Alle rücken um
+     denselben Betrag hoch, damit ihr Abstand zueinander bleibt; der
+     oberste landet auf der ersten Zeile. */
+  const pt = parseFloat(getComputedStyle(textDiv).paddingTop) || 0;
+  const freie = umgezogen.filter(el => el.classList && el.classList.contains('j-frei'));
+  if (freie.length) {
+    const hoechstes = Math.min(...freie.map(el => parseFloat(el.style.top) || 0));
+    const hoch = Math.round((hoechstes - pt) / lh) * lh;
+    if (hoch > 0) {
+      for (const el of freie) {
+        el.style.top = Math.max(pt, (parseFloat(el.style.top) || 0) - hoch) + 'px';
+      }
+    }
+  }
+
+  for (const el of umgezogen) frag.appendChild(el);
+  return frag;
 }
 
 /* ── PANEL TOGGLE ── */

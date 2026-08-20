@@ -962,9 +962,12 @@ function toggleHeading(tag) {
     if (info) {
       const pgEl = E('pages-wrap')?.querySelector('[data-pgid="' + info.page.id + '"]');
       const textDiv = pgEl?.querySelector('.j-text');
-      // Über ohneGriffe: sonst reist die Anzeige mit (app.js)
-      if (textDiv) info.page.textContent = typeof ohneGriffe === 'function'
-        ? ohneGriffe(textDiv) : textDiv.innerHTML;
+      /* Über uebernimmText (app.js): das schreibt ins Heft, meldet es an
+         die anderen und markiert das Heft als geändert. Hier stand nur
+         das Erste – im geteilten Dokument kam die Überschrift beim
+         anderen nie an, und beim Schliessen konnte sie ganz verloren
+         gehen. */
+      if (textDiv && typeof uebernimmText === 'function') uebernimmText(info.page, textDiv);
     }
   }, 50);
 }
@@ -1178,9 +1181,12 @@ E('fmt-p').addEventListener('mousedown', e => {
     if (info) {
       const pgEl = E('pages-wrap')?.querySelector('[data-pgid="' + info.page.id + '"]');
       const textDiv = pgEl?.querySelector('.j-text');
-      // Über ohneGriffe: sonst reist die Anzeige mit (app.js)
-      if (textDiv) info.page.textContent = typeof ohneGriffe === 'function'
-        ? ohneGriffe(textDiv) : textDiv.innerHTML;
+      /* Über uebernimmText (app.js): das schreibt ins Heft, meldet es an
+         die anderen und markiert das Heft als geändert. Hier stand nur
+         das Erste – im geteilten Dokument kam die Überschrift beim
+         anderen nie an, und beim Schliessen konnte sie ganz verloren
+         gehen. */
+      if (textDiv && typeof uebernimmText === 'function') uebernimmText(info.page, textDiv);
     }
   }, 50);
 });

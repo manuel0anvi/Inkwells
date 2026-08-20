@@ -636,6 +636,37 @@ function flatLineSpan(text, pos, extraLines = 1) {
   return { from, to: end };
 }
 
+/**
+ * Die erste Stelle im Text, die unterhalb dieser Höhe steht.
+ *
+ * Gebraucht für den Seitenumbruch bei REINEM Text (app.js): dort gibt es
+ * keine Elemente, die man einzeln weiterreichen könnte – die ganze Seite
+ * ist ein Textknoten, der bloss umbricht. Getrennt werden muss deshalb an
+ * einer Stelle IM Text, und die kann nur gemessen werden.
+ *
+ * Halbieren geht, weil die Zeile einer Stelle mit der Stelle nur tiefer
+ * werden kann. Herauskommt der Anfang der ersten Zeile, die nicht mehr
+ * aufs Blatt passt – mitten in ein Wort trifft es also nie.
+ *
+ * @param {HTMLElement} textDiv
+ * @param {number} grenzeY  in BILDSCHIRM-Pixeln (clientY)
+ * @returns {number} −1, wenn alles darüber bleibt
+ */
+function stelleUnterhalb(textDiv, grenzeY) {
+  const inhalt = flatTextOf(textDiv);
+  if (!inhalt.length) return -1;
+
+  let lo = 0, hi = inhalt.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    let r = null;
+    try { r = caretRectAt(textDiv, mid, inhalt); } catch (err) { r = null; }
+    if (r && r.top >= grenzeY) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo >= inhalt.length ? -1 : lo;
+}
+
 function getRenderedContentBottom(textDiv, top, pt, lh) {
   if (!textDiv) return top + pt + lh;
   const range = document.createRange();
@@ -822,9 +853,23 @@ function _nimmZurueck(el) {
   el[ZURUECK] = null;
 }
 
-/** Das vorläufig Angelegte wieder wegnehmen – falls es noch leer ist. */
+/**
+ * Das vorläufig Angelegte wieder wegnehmen – falls es noch leer ist.
+ *
+ * >>> Warum hier am Ende neu gerechnet wird <<<
+ * Das Anlegen ruft ordneFreieAbsaetze, und das setzt den Nachbarn ein
+ * margin-left, damit sie dem neuen Absatz ausweichen. Nahm man ihn
+ * danach wieder weg, blieb dieses Ausweichen stehen – bis zum nächsten
+ * Anschlag, der irgendwann kam oder auch nicht. Von aussen: man
+ * verklickt sich, klickt zurück, und die Seite steht schief.
+ *
+ * Deshalb rechnet das Wegräumen selbst nach. So kann keine der drei
+ * Stellen, die es rufen (placeCaretAnywhere, der blur-Griff in app.js,
+ * ui/collab.js), es vergessen.
+ */
 function raeumeVorlaeufiges(textDiv, ausser) {
   if (!textDiv || !textDiv.querySelectorAll) return;
+  let entfernt = false;
   for (const el of [...textDiv.querySelectorAll('p, span.j-luecke')]) {
     if (!el[VORLAEUFIG] || el === ausser) continue;
     /* Steht inzwischen etwas darin, bleibt es: dann war es kein blosser
@@ -832,7 +877,58 @@ function raeumeVorlaeufiges(textDiv, ausser) {
     if (el.tagName === 'P' && (el.textContent || '').trim()) { el[VORLAEUFIG] = false; continue; }
     _nimmZurueck(el);
     el.remove();
+    entfernt = true;
   }
+  if (entfernt) ordneFreieAbsaetze(textDiv);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ANGEKLICKTE STELLE ÜBERLEBT EINE FREMDE ÄNDERUNG
+
+   >>> Der Fall, den das repariert <<<
+   Man klickt auf eine freie Stelle. Der vorläufige Absatz entsteht, es
+   geht aber kein 'input' hinaus – er steht in page.textContent also noch
+   gar nicht. Tippt jetzt der andere, tauscht applyRemoteText das ganze
+   innerHTML aus (ui/collab.js). Der eben angelegte Absatz ist damit weg,
+   und die Marke wird irgendwo anders wiederhergestellt.
+
+   Von aussen: „ich klicke hin, warte kurz, und schreibe dann woanders."
+   In einer lebhaften Sitzung mehrmals in der Minute.
+
+   Die Markierung liegt bewusst als JS-Eigenschaft am Element und nicht
+   als Attribut – sie darf nie in page.textContent landen. Einen Tausch
+   des innerHTML übersteht sie deshalb nicht von selbst; sie wird vorher
+   abgeschrieben und danach wieder angelegt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Was gerade vorläufig dasteht – zum Wiederanlegen nach einem Tausch. */
+function merkeVorlaeufiges(textDiv) {
+  if (!textDiv || !textDiv.querySelectorAll) return null;
+  for (const el of textDiv.querySelectorAll('p.j-frei')) {
+    if (!el[VORLAEUFIG]) continue;
+    if ((el.textContent || '').trim()) continue;   // dann ist es kein blosser Klick mehr
+    return { links: parseFloat(el.style.left) || 0, oben: parseFloat(el.style.top) || 0 };
+  }
+  return null;
+}
+
+/**
+ * Legt die gemerkte Stelle wieder an und setzt die Marke hinein.
+ * @returns {boolean} ob etwas angelegt wurde
+ */
+function stelleVorlaeufigesWiederHer(textDiv, gemerkt) {
+  if (!textDiv || !gemerkt) return false;
+
+  const neu = _freierAbsatz(gemerkt.links, gemerkt.oben);
+  neu[VORLAEUFIG] = true;
+  textDiv.appendChild(neu);
+  ordneFreieAbsaetze(textDiv);
+
+  const range = document.createRange();
+  _setRangeEndOfNode(range, neu);
+  const sel = window.getSelection && window.getSelection();
+  if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+  return true;
 }
 
 /** Der erste Anschlag macht aus „vorläufig" „bleibend". */
@@ -987,15 +1083,146 @@ function ausweichArt(nb) {
   return (wahl === 'fest') ? 'fest' : 'elastisch';
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN ABSATZ IST NICHT EIN RECHTECK, SONDERN SEINE ZEILEN
+
+   >>> Der Fall, den das repariert <<<
+   Gemeldet: „ich schreibe in eine freie Zeile zwischen zwei Zeilen, und
+   das Geschriebene darüber und darunter rutscht nach rechts."
+
+   Ein Umbruch teilt einen frei stehenden Absatz nicht – er lässt ihn
+   nach unten wachsen (app.js, insertLineBreak). „OBEN", Leerzeile,
+   „UNTEN" ist damit EIN Element von drei Zeilen Höhe. Gemessen wurde
+   hier aber nur der umschliessende Kasten: ein volles Rechteck über
+   alle drei Zeilen, die leere in der Mitte eingeschlossen. Wer dort
+   hineinschrieb, stiess also gegen einen Kasten, in dem an dieser Stelle
+   gar nichts steht – und der ganze Absatz wich aus, mit der Zeile
+   darüber und der darunter im Schlepptau.
+
+   Gemessen: beide Zeilen sprangen von l=514 auf l=566.
+
+   Gefragt wird deshalb nach den ZEILEN. Ein Range über den Inhalt
+   liefert mit getClientRects() ein Rechteck je Bildschirmzeile, eng um
+   die Zeichen – eine leere Zeile ist darin 0 px breit und stösst an
+   nichts. Dieselbe Messung benutzt canvas/input.js für den Treffertest
+   (beschriebeneKaesten); wer das eine ändert, sollte das andere ansehen.
+
+   Der Schub bleibt eine Sache des ganzen Absatzes: er hat nur ein
+   left/top. Gerechnet wird er als das Grösste über alle seine Zeilen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Ein Zeilenkasten, der schmaler ist als das, ist keiner: eine leere
+   Zeile, ein blosser Umbruch. Deckt sich mit der Grenze in
+   canvas/input.js (rc.width > 1) und mit dem min-width:1px, das ein
+   frisch angelegter Absatz aus css/pages.css mitbekommt. */
+const FREI_ZEILE_MIN_PX = 2;
+
+/**
+ * Die Zeilen eines Absatzes – in Seiten-Pixeln, gemessen am Inhalt.
+ *
+ * @returns {Array<{links:number, oben:number, breit:number, hoch:number}>}
+ */
+function _zeilenKaesten(p, feld, zoom) {
+  const roh = [];
+  if (typeof document !== 'undefined' && document.createRange) {
+    try {
+      const bereich = document.createRange();
+      bereich.selectNodeContents(p);
+      for (const rc of bereich.getClientRects()) roh.push(rc);
+    } catch (err) { /* dann der Kasten, siehe unten */ }
+  }
+
+  /* Nichts Messbares – ein leerer Absatz, oder eine Umgebung ohne
+     Layout (Prüfstand ohne Fenster). Dann gilt der Kasten selbst; er ist
+     dank min-width nur ein Pixel breit und stösst damit an nichts. */
+  const zeilen = [];
+  for (const rc of roh) {
+    const breit = rc.width / zoom;
+    if (breit < FREI_ZEILE_MIN_PX) continue;
+    zeilen.push({
+      links: (rc.left - feld.left) / zoom,
+      oben: (rc.top - feld.top) / zoom,
+      breit,
+      hoch: (rc.height / zoom) || 32
+    });
+  }
+  if (zeilen.length) return zeilen;
+
+  return [{ links: p.offsetLeft, oben: p.offsetTop,
+            breit: p.offsetWidth, hoch: p.offsetHeight || 32 }];
+}
+
 /** Die freien Absätze, so wie sie gerade auf dem Blatt liegen. */
-function _freieKaesten(alle) {
-  return alle.map(p => ({
-    p,
-    links: p.offsetLeft,
-    oben: p.offsetTop,
-    breit: p.offsetWidth,
-    hoch: p.offsetHeight || 32
-  }));
+function _freieKaesten(alle, textDiv) {
+  /* Gemessen wird in BILDSCHIRM-Pixeln, gerechnet in Seiten-Pixeln: die
+     Seite wird über transform gezoomt, offsetLeft/-Top sind davon
+     unberührt und die beiden dürfen nicht durcheinandergehen. */
+  const feld = (textDiv && typeof textDiv.getBoundingClientRect === 'function')
+    ? textDiv.getBoundingClientRect() : { left: 0, top: 0, width: 0 };
+  const zoom = (textDiv && textDiv.offsetWidth > 0 && feld.width)
+    ? (feld.width / textDiv.offsetWidth) : 1;
+
+  return alle.map(p => {
+    const zeilen = _zeilenKaesten(p, feld, Math.max(0.01, zoom));
+    return {
+      p,
+      zeilen,
+      links: p.offsetLeft,
+      oben: p.offsetTop,
+      breit: p.offsetWidth,
+      hoch: p.offsetHeight || 32
+    };
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AUSGEWICHEN WIRD NUR IN EINE RICHTUNG
+
+   Die Reihenfolge, in der die Absätze durchgegangen werden, sagt bisher
+   allein, wer stehen bleibt und wer weicht: sortiert wird nach dem
+   KASTEN. Das genügte, solange ein Kasten eine Zeile war.
+
+   Seit Zeile gegen Zeile geprüft wird, genügt es nicht mehr: der Kasten
+   von „OBEN / Leerzeile / UNTEN" fängt oben an, seine dritte Zeile liegt
+   aber UNTER allem, was auf der zweiten steht. Ohne die Frage nach der
+   Richtung schob diese dritte Zeile den Text auf der zweiten nach unten –
+   ein Absatz drückte also etwas weg, das über ihm liegt.
+
+   Gemessen: der Text in der Lücke bekam margin-top: 51px und sass
+   plötzlich unter „UNTEN" statt zwischen den beiden.
+
+   Deshalb wird ausdrücklich gefragt, wer wo liegt. Waagerecht schiebt
+   nur, was wirklich links steht; senkrecht nur, was wirklich darüber
+   liegt.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Stossen zwei Absätze auf irgendeiner ihrer Zeilen waagerecht zusammen? */
+function _schubWaagerecht(steht, kommt) {
+  let schub = 0;
+  for (const a of steht.zeilen) {
+    for (const b of kommt.zeilen) {
+      // Verschiedene Zeilen berühren sich nie
+      if (a.oben + a.hoch <= b.oben || a.oben >= b.oben + b.hoch) continue;
+      // Und geschoben wird nur nach rechts – siehe oben
+      if (a.links > b.links) continue;
+      schub = Math.max(schub, (a.links + a.breit + FREI_LUFT_PX) - b.links);
+    }
+  }
+  return schub;
+}
+
+/** Dasselbe senkrecht: wer von oben hineinwächst, schiebt nach unten. */
+function _schubSenkrecht(steht, kommt) {
+  let schub = 0;
+  for (const a of steht.zeilen) {
+    for (const b of kommt.zeilen) {
+      if (a.links + a.breit <= b.links || a.links >= b.links + b.breit) continue;
+      // Nur, was wirklich darüber liegt – siehe oben
+      if (a.oben >= b.oben) continue;
+      schub = Math.max(schub, (a.oben + a.hoch) - b.oben);
+    }
+  }
+  return schub;
 }
 
 /**
@@ -1018,7 +1245,6 @@ function ordneFreieAbsaetze(textDiv, art) {
   for (const p of alle) {
     p.style.marginLeft = '';
     p.style.marginTop = '';
-    p.style.maxWidth = '';
   }
   if (alle.length < 2) return;
 
@@ -1026,20 +1252,19 @@ function ordneFreieAbsaetze(textDiv, art) {
 
   /* ── Waagerecht ────────────────────────────────────────────────────
      Von links nach rechts: jeder muss hinter allen bleiben, die schon
-     stehen und sich mit ihm auf derselben Höhe befinden. */
-  let kaesten = _freieKaesten(alle).sort((a, b) => a.links - b.links);
+     stehen und sich mit ihm auf derselben Höhe befinden. Geprüft wird
+     Zeile gegen Zeile – siehe _freieKaesten. */
+  let kaesten = _freieKaesten(alle, textDiv).sort((a, b) => a.links - b.links);
   const gesetzt = [];
   for (const k of kaesten) {
-    let mindest = k.links;
-    for (const v of gesetzt) {
-      if (v.oben + v.hoch <= k.oben || v.oben >= k.oben + k.hoch) continue;
-      mindest = Math.max(mindest, v.links + v.breit + FREI_LUFT_PX);
-    }
-    const schub = Math.max(0, Math.round(mindest - k.links));
+    let schub = 0;
+    for (const v of gesetzt) schub = Math.max(schub, _schubWaagerecht(v, k));
+    schub = Math.max(0, Math.round(schub));
     if (schub > 0) {
       if (fest) k.p.style.left = _abstandWert((parseFloat(k.p.style.left) || 0) + schub) + 'px';
       else k.p.style.marginLeft = schub + 'px';
       k.links += schub;
+      for (const z of k.zeilen) z.links += schub;
     }
     gesetzt.push(k);
   }
@@ -1047,20 +1272,18 @@ function ordneFreieAbsaetze(textDiv, art) {
   /* ── Und senkrecht dasselbe ────────────────────────────────────────
      Neu gemessen, weil ein nach rechts gerückter Absatz schmaler werden
      und damit umbrechen kann – dann ist er höher als vorher. */
-  kaesten = _freieKaesten([...textDiv.querySelectorAll('p.j-frei')])
+  kaesten = _freieKaesten([...textDiv.querySelectorAll('p.j-frei')], textDiv)
     .sort((a, b) => a.oben - b.oben);
   const drüber = [];
   for (const k of kaesten) {
-    let mindest = k.oben;
-    for (const v of drüber) {
-      if (v.links + v.breit <= k.links || v.links >= k.links + k.breit) continue;
-      mindest = Math.max(mindest, v.oben + v.hoch);
-    }
-    const schub = Math.max(0, Math.round(mindest - k.oben));
+    let schub = 0;
+    for (const v of drüber) schub = Math.max(schub, _schubSenkrecht(v, k));
+    schub = Math.max(0, Math.round(schub));
     if (schub > 0) {
       if (fest) k.p.style.top = _abstandWert((parseFloat(k.p.style.top) || 0) + schub) + 'px';
       else k.p.style.marginTop = schub + 'px';
       k.oben += schub;
+      for (const z of k.zeilen) z.oben += schub;
     }
     drüber.push(k);
   }
@@ -1180,6 +1403,55 @@ function isPlainTextEditable(textDiv) {
   return [...textDiv.childNodes].every(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR'));
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN <br> IM REINEN TEXT WIRD ZU EINEM ECHTEN UMBRUCH
+
+   >>> Der Fall, den das repariert <<<
+   isPlainTextEditable lässt Textknoten UND <br> als „reinen Text"
+   durchgehen. Alles, was danach kommt, liest und schreibt aber über
+   textContent – und textContent kennt kein <br>: der Umbruch taucht beim
+   Lesen nicht auf und ist beim Zurückschreiben fort. Zwei Zeilen wurden
+   dabei stillschweigend zu einer.
+
+   Betroffen sind applyHangingIndentWrap (gleich unten) und
+   commitPlainTextEdit (app.js, Tab und Enter) – also der Weg, den fast
+   jeder Anschlag auf einer noch unformatierten Seite nimmt.
+
+   Das Feld steht auf white-space: pre-wrap (app.js), ein '\n' bricht
+   dort genauso um wie ein <br>. Auf dem Papier ändert sich also nichts;
+   textContent sagt danach nur die Wahrheit.
+
+   >>> Warum das LETZTE <br> stehen bleibt <<<
+   Das ist keine Zeile, sondern der Platzhalter, den contenteditable an
+   das Ende eines Blocks setzt. Es zählt in flatTextParts ausdrücklich
+   nicht mit (letztesImBlock); machte man ein '\n' daraus, wäre der flache
+   Text plötzlich ein Zeichen länger und jede gemerkte Stelle – die eigene
+   Marke, die fremde, das Sperrband – säße daneben. Chromium setzt es
+   ohnehin von selbst wieder.
+   ══════════════════════════════════════════════════════════════════════ */
+function normalisiereUmbrueche(textDiv) {
+  if (!textDiv || !isPlainTextEditable(textDiv)) return false;
+
+  const brs = [...textDiv.childNodes].filter(
+    n => n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR');
+  // Das letzte ist der Platzhalter – siehe oben
+  if (textDiv.lastChild && textDiv.lastChild.nodeName === 'BR') brs.pop();
+  if (!brs.length) return false;
+
+  /* Die Marke sitzt mitten darin. Der flache Text ändert sich durch den
+     Tausch nicht (ein <br> zählt dort schon als '\n'), also lässt sie
+     sich hinterher auf dieselbe Zahl zurücksetzen – normalize() legt
+     Textknoten zusammen und würde sie sonst mitziehen. */
+  let marke = null;
+  try { marke = flatCaretPos(textDiv); } catch (err) { marke = null; }
+
+  for (const br of brs) br.replaceWith(document.createTextNode('\n'));
+  textDiv.normalize();
+
+  if (marke !== null) { try { setFlatCaret(textDiv, marke); } catch (err) { /* egal */ } }
+  return true;
+}
+
 function applyHangingIndentWrap(textDiv) {
   if (!isPlainTextEditable(textDiv)) return false;
   const caret = getCaretTextOffset(textDiv);
@@ -1207,6 +1479,51 @@ function applyHangingIndentWrap(textDiv) {
 
   setPlainCaret(textDiv, caret > (lineStart + breakAt) ? caret + indent.length : caret);
   return true;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER EINZUG DER ZEILE, IN DER DIE MARKE STEHT
+
+   Gebraucht beim Umbruch und beim Einfügen (app.js): die neue Zeile
+   bekommt denselben Einzug wie die, aus der sie kommt – wie in jedem
+   Editor.
+
+   >>> Warum das eine eigene Funktion geworden ist <<<
+   An beiden Stellen standen zwei MASSE nebeneinander, die nicht
+   dasselbe zählen:
+
+     getCaretTextOffset   zählt nur die Zeichen in den Textknoten
+     innerText            hat an jeder Blockgrenze ein zusätzliches \n
+
+   Die beiden driften mit jedem Absatz um ein Zeichen auseinander –
+   gemessen: getCaretTextOffset 36 gegen innerText 38 bei bloss zwei
+   Absätzen. Bei sechs zeigte die Stelle schon in eine ganz andere Zeile.
+   Fing DIE mit Leerzeichen an, wurde deren Einzug an die neue Zeile
+   gehängt: Text rückte beim Umbruch grundlos nach rechts, und beim
+   Einfügen gleich jede eingefügte Zeile.
+
+   flatTextOf und flatCaretPos zählen beide die Zeilengrenzen mit und
+   gehören zusammen. Nur solange der Inhalt reiner Text ist, sind die
+   alten Masse gleichwertig – dort bleibt es bei textContent, weil der
+   Umbruch gleich darauf ebenfalls darüber geschrieben wird.
+   ══════════════════════════════════════════════════════════════════════ */
+function einzugDerZeile(textDiv) {
+  if (!textDiv) return '';
+
+  let roh, bei;
+  if (isPlainTextEditable(textDiv)) {
+    roh = (textDiv.textContent || '').replace(/\r/g, '');
+    bei = getCaretTextOffset(textDiv);
+  } else {
+    roh = (typeof flatTextOf === 'function') ? flatTextOf(textDiv) : '';
+    bei = (typeof flatCaretPos === 'function') ? flatCaretPos(textDiv) : null;
+  }
+  if (bei === null) return '';
+
+  const anfang = roh.lastIndexOf('\n', Math.max(0, bei - 1)) + 1;
+  const ende = roh.indexOf('\n', bei);
+  const zeile = roh.slice(anfang, ende === -1 ? roh.length : ende);
+  return (zeile.match(/^[ \t]*/) || [''])[0];
 }
 
 function _visibleWhitespaceText(raw) {

@@ -281,6 +281,55 @@ app.on('ready', async () => {
   await js(`Settings.set ? Settings.set('textFluss', 'elastisch')
             : Settings.update({ textFluss: 'elastisch' })`);
 
+  /* ══════════════════════════════════════════════════════════════════
+     4d  IN DIE LEERE ZEILE EINES MEHRZEILIGEN ABSATZES
+
+     Gemeldet: „oft, wenn man mehrere Zeilen Schrift hat und man
+     dazwischen – in den freien Zeilen dazwischen – etwas schreibt,
+     verschiebt sich das Geschriebene oben und unten nach rechts."
+
+     Ein Umbruch teilt einen freien Absatz nicht, er laesst ihn wachsen
+     (Abschnitt 4). „OBEN", Leerzeile, „UNTEN" ist damit EIN Element von
+     drei Zeilen Hoehe. Gemessen wurde aber nur der umschliessende
+     Kasten – die leere Mitte eingeschlossen. Wer dort hineinschrieb,
+     stiess gegen etwas, wo gar nichts steht, und der ganze Absatz wich
+     aus: mit der Zeile darueber UND der darunter.
+
+     Gemessen, bevor es behoben war: beide sprangen von l=514 auf l=566.
+     ══════════════════════════════════════════════════════════════════ */
+  zeilen.push('\n  4d Dazwischenschreiben schiebt nichts zur Seite');
+  await js(`(() => { document.querySelector('.j-text').innerHTML = ''; return true; })()`);
+  await klick(feld.l + 200, zeileY(1));
+  await tippe('OBEN');
+  await enter(); await enter();          // eine leere Zeile dazwischen
+  await tippe('UNTEN');
+  const vorLuecke = { o: await wortOrt('OBEN'), u: await wortOrt('UNTEN') };
+  pruefe('Beide Zeilen stehen in EINEM Absatz',
+    (await js(`document.querySelectorAll('.j-text p.j-frei').length`)) === 1,
+    await inhalt());
+
+  // Weit links in die leere Zeile dazwischen – und genug schreiben,
+  // dass es unter dem Absatz hindurchreicht.
+  await klick(feld.l + 20, zeileY(2));
+  await tippe('LUECKENTEXTLANGGENUG');
+  const nachLuecke = { o: await wortOrt('OBEN'), u: await wortOrt('UNTEN') };
+  pruefe('„OBEN" steht immer noch still',
+    JSON.stringify(nachLuecke.o) === JSON.stringify(vorLuecke.o),
+    JSON.stringify(vorLuecke.o) + ' -> ' + JSON.stringify(nachLuecke.o));
+  pruefe('„UNTEN" auch',
+    JSON.stringify(nachLuecke.u) === JSON.stringify(vorLuecke.u),
+    JSON.stringify(vorLuecke.u) + ' -> ' + JSON.stringify(nachLuecke.u));
+  pruefe('Und der Absatz hat kein Ausweichen bekommen',
+    !/margin-left/.test(await inhalt()), await inhalt());
+  /* Zwanzig Bildschirm-Pixel vom Rand sind innerhalb des Magneten
+     (ANHAFT_MM_TEXT, canvas/text.js) – der Zeilenanfang zieht also an,
+     und genau dort soll der Text auch stehen. */
+  const ortLuecke = await wortOrt('LUECKENTEXTLANGGENUG');
+  pruefe('Der neue Text steht am Zeilenanfang, auf der mittleren Zeile',
+    ortLuecke && Math.abs(ortLuecke.l - feld.l) < 8
+    && Math.abs(ortLuecke.t - (vorLuecke.o.t + feld.lh)) < 8,
+    JSON.stringify(ortLuecke) + ' zu ' + JSON.stringify(vorLuecke));
+
   // ── 5  Ein blosser Klick hinterlaesst nichts ──────────────────────
   zeilen.push('\n  5  Der blosse Klick');
   const vorher = await inhalt();
@@ -289,6 +338,11 @@ app.on('ready', async () => {
   await js(`(() => { document.querySelector('.j-text').blur(); return true; })()`);
   await new Promise(r => setTimeout(r, 300));
   pruefe('Ohne Tippen ist sie danach wieder weg', (await inhalt()) === vorher, await inhalt());
+  /* Und das Ausweichen, das beim Anlegen gerechnet wurde, ist mit ihm
+     verschwunden: raeumeVorlaeufiges rechnet nach. Blieb es stehen,
+     stand die Seite nach einem blossen Verklicken schief. */
+  pruefe('Und kein Ausweichen bleibt zurueck',
+    !/margin-left|margin-top/.test(await inhalt()), await inhalt());
 
   // ── 6  Was der Rest der App daraus macht ──────────────────────────
   zeilen.push('\n  6  Sanitizer und Word-Export');
@@ -302,6 +356,104 @@ app.on('ready', async () => {
 
   /* Der Word-Export hat seinen eigenen Prüfstand (npm run test:docx) –
      htmlToParagraphs steht im Fenster gar nicht global. */
+
+  /* ══════════════════════════════════════════════════════════════════
+     7  WAS NICHT MEHR AUFS BLATT PASST
+
+     checkPageOverflow nahm `textDiv.lastElementChild`, bis es wieder
+     passte. Zwei Fehler in einer Zeile:
+
+       · DAS FALSCHE STUECK. Freie Absaetze stehen im DOM in der
+         Reihenfolge, in der sie ANGELEGT wurden – nicht in der, in der
+         sie auf dem Blatt liegen. Auf die Folgeseite wanderte damit
+         womoeglich die oberste Zeile, waehrend die unterste blieb.
+       · GAR KEIN STUECK. Wer einfach lostippt, fuellt .j-text mit einem
+         reinen Textknoten. Dann ist children.length null, die Schleife
+         lief nie, und der Text lief unten aus dem Papier heraus, ohne
+         dass je eine Folgeseite entstand. Das ist der haeufigste Weg,
+         ueberhaupt anzufangen.
+     ══════════════════════════════════════════════════════════════════ */
+  zeilen.push('\n  7  Der Seitenumbruch');
+
+  const seiten = () => js(`document.querySelectorAll('.j-page').length`);
+  const seitenText = (n) => js(
+    `(document.querySelectorAll('.j-page')[${n}].querySelector('.j-text').textContent || '')`);
+
+  // ── 7a  Reiner Text laeuft auf die naechste Seite ─────────────────
+  await js(`(() => {
+    const nb = { id: 'p7a', name: 'P7a', color: '#c8a96e', defaultBg: 'ruled',
+                 pages: [makePage('ruled')], sections: [], created: Date.now() };
+    S.notebooks = [nb]; openNotebook('p7a'); return true; })()`);
+  await new Promise(r => setTimeout(r, 600));
+
+  const ZEILEN = 45;
+  await js(`(() => {
+    const td = document.querySelector('.j-text');
+    td.focus();
+    td.textContent = Array.from({ length: ${ZEILEN} }, (_, i) => 'Zeile' + (i + 1)).join('\\n');
+    td.dispatchEvent(new Event('input', { bubbles: true }));
+    return true; })()`);
+  await new Promise(r => setTimeout(r, 700));
+
+  /* Mehr als zwei duerfen es sein: wer ans Ende rollt, bekommt ohnehin
+     ein leeres Blatt nachgelegt (maybeAutoPage). Zwei muessen es sein. */
+  const wieViele = await seiten();
+  pruefe('Reiner Text bekommt eine Folgeseite', wieViele >= 2,
+    wieViele + ' Seite(n) – der Text laeuft unten aus dem Papier');
+
+  if (wieViele >= 2) {
+    const eins = await seitenText(0);
+    const zwei = await seitenText(1);
+    const alle = [];
+    for (let i = 0; i < wieViele; i++) alle.push(await seitenText(i));
+    pruefe('Auf der ersten Seite steht der Anfang',
+      eins.startsWith('Zeile1\n'), JSON.stringify(eins.slice(0, 30)));
+    pruefe('Und keine Zeile geht dabei verloren',
+      alle.join('\n').split('\n').filter(Boolean).length === ZEILEN,
+      alle.join('\n').split('\n').filter(Boolean).length + ' von ' + ZEILEN + ' Zeilen');
+    pruefe('Getrennt wurde an einer Zeilengrenze, nicht im Wort',
+      /^Zeile\d+(\n|$)/.test(zwei), JSON.stringify(zwei.slice(0, 20)));
+    pruefe('Und die erste Seite ist wirklich voll geworden',
+      eins.split('\n').filter(Boolean).length > 20,
+      eins.split('\n').filter(Boolean).length + ' Zeilen darauf');
+  }
+
+  // ── 7b  Umgezogen wird das UNTERSTE, nicht das zuletzt angelegte ──
+  await js(`(() => {
+    const nb = { id: 'p7b', name: 'P7b', color: '#c8a96e', defaultBg: 'ruled',
+                 pages: [makePage('ruled')], sections: [], created: Date.now() };
+    S.notebooks = [nb]; openNotebook('p7b'); return true; })()`);
+  await new Promise(r => setTimeout(r, 600));
+
+  /* Der UNTERSTE steht zuerst im DOM, der oberste zuletzt – genau
+     andersherum als auf dem Blatt. lastElementChild haette also den
+     obersten weitergereicht. */
+  await js(`(() => {
+    const td = document.querySelector('.j-text');
+    td.focus();
+    td.innerHTML = '<p class="j-frei" style="left:0px;top:1080px">UNTERSTER</p>'
+                 + '<p class="j-frei" style="left:0px;top:51px">OBERSTER</p>';
+    td.dispatchEvent(new Event('input', { bubbles: true }));
+    return true; })()`);
+  await new Promise(r => setTimeout(r, 700));
+
+  pruefe('Der ueberhaengende Absatz bekommt eine Folgeseite',
+    (await seiten()) >= 2, (await seiten()) + ' Seite(n)');
+  if ((await seiten()) >= 2) {
+    pruefe('„OBERSTER" bleibt auf Seite 1',
+      (await seitenText(0)).includes('OBERSTER')
+      && !(await seitenText(0)).includes('UNTERSTER'), await seitenText(0));
+    pruefe('Und „UNTERSTER" geht auf Seite 2',
+      (await seitenText(1)).includes('UNTERSTER'), await seitenText(1));
+    /* Und er faengt dort oben wieder an – sonst saesse er auch auf der
+       Folgeseite ganz unten und liefe gleich wieder ueber. */
+    const obenWieder = await js(
+      `(() => { const p = document.querySelectorAll('.j-page')[1]
+           .querySelector('.j-text p.j-frei');
+         return p ? parseFloat(p.style.top) : null; })()`);
+    pruefe('Und faengt dort oben wieder an (top ' + obenWieder + ')',
+      obenWieder !== null && obenWieder < 200, obenWieder + 'px');
+  }
 
   fertig(fehl ? 1 : 0);
  } catch (err) {

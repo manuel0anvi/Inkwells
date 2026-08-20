@@ -110,8 +110,11 @@ console.log('Kein roher Editor-Inhalt im Datenmodell\n');
      Spaltenbreite der frei stehenden Absätze (canvas/text.js). */
   check('Der Weg ohne Kopie fragt ALLE Fälle ab',
     /if \(!griffe && !marken && !geschoben\) return textDiv\.innerHTML;/.test(fn), true);
+  /* Gemeint sind margin-left und margin-top. Ein max-width stand hier
+     auch einmal – vergeben hat es aber nie jemand, ordneFreieAbsaetze
+     setzte es nur bei jedem Durchgang zurueck. Beides ist raus. */
   check('Und das gerechnete Ausweichen bleibt draussen',
-    /p\.style\.marginLeft = '';/.test(fn) && /p\.style\.maxWidth = '';/.test(fn), true);
+    /p\.style\.marginLeft = '';/.test(fn) && /p\.style\.marginTop = '';/.test(fn), true);
 }
 
 console.log('');

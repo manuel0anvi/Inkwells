@@ -876,6 +876,49 @@
      also nur, wenn jemand gar nichts mehr meldet (Absturz, Leitung weg). */
   const LOCK_TTL_MS = 10000;
 
+  /* ══════════════════════════════════════════════════════════════════
+     DER NACHLAUF LÄUFT NACH BEIDEN UHREN – ES GILT DIE STRENGERE
+
+     `lockAt` setzt der Absender (core/share.js), geprüft wird es gegen
+     die eigene Uhr. Darin steckt eine Unfairness, die beim gemeinsamen
+     Schreiben auf EINER Zeile den Ausschlag gibt: geht die Uhr des einen
+     zwei Sekunden vor, hält seine Sperre zwei Sekunden länger als die
+     des anderen – bei sonst gleichem Verhalten.
+
+     Ganz auf die eigene Uhr umstellen geht aber nicht: in `lockAt` steht
+     eine echte Auskunft, nämlich „so alt ist mein Anspruch". Wer sie
+     wegwirft, kann eine Sperre nicht mehr als abgelaufen erkennen,
+     solange nur noch Lebenszeichen hereinkommen.
+
+     Also beides, und die strengere Antwort gewinnt: eine Sperre verfällt,
+     sobald EINE der beiden Uhren sagt, dass sie zu alt ist. Der Absender
+     kann sie damit nicht länger halten, als sie hier bekannt ist – und
+     eine ausdrücklich alt gemeldete gilt weiterhin nicht.
+
+     Gestempelt wird beim EINTREFFEN und nur dann neu, wenn sich der
+     beanspruchte Bereich geändert hat. Sonst verlängerte jedes
+     Lebenszeichen die Sperre unbegrenzt.
+     ══════════════════════════════════════════════════════════════════ */
+  const sperrEingang = new Map();   // uid -> { von, bis, at }
+
+  function stempleSperre(person) {
+    const von = Number(person.lockFrom);
+    const bis = Number(person.lockTo);
+    if (!Number.isFinite(von) || von < 0) { sperrEingang.delete(person.uid); return person; }
+
+    const alt = sperrEingang.get(person.uid);
+    if (!alt || alt.von !== von || alt.bis !== bis) {
+      sperrEingang.set(person.uid, { von, bis, at: Date.now() });
+    }
+    return person;
+  }
+
+  /** Seit wann ist dieser Anspruch HIER bekannt? 0 = noch gar nicht. */
+  function sperreSeitHier(uid) {
+    const eintrag = sperrEingang.get(uid);
+    return eintrag ? eintrag.at : 0;
+  }
+
   // Höchstens so oft ein Hinweis, wenn jemand in eine gesperrte Zeile tippt
   const LOCK_HINT_MS = 2500;
   let lastLockHint = 0;
@@ -897,6 +940,12 @@
       /* Ohne Zeitstempel (ältere Fassung am anderen Ende) gilt die Sperre
          nicht – lieber gar nicht sperren als unbegrenzt. */
       if (!Number.isFinite(person.lockAt) || now - person.lockAt > LOCK_TTL_MS) continue;
+      /* Und dasselbe nach der eigenen Uhr – siehe stempleSperre. Über die
+         Textänderung eingetroffene Sperren haben hier keinen Eintrag;
+         deren lockAt steht ohnehin schon auf der eigenen Uhr
+         (noteCaretFromOp), also zählt dann nur die Zeile darüber. */
+      const seitHier = sperreSeitHier(person.uid);
+      if (seitHier && now - seitHier > LOCK_TTL_MS) continue;
       out.push(person);
     }
     return out;
@@ -1282,10 +1331,73 @@
     try { renderObjLocks(); } catch (err) { }
   }
 
-  /* Wann zuletzt getippt wurde, je Seite. Entscheidet, ob die eigene
-     Zeile für die anderen gesperrt wird: eine Sperre am bloß abgelegten
-     Cursor würde eine Zeile blockieren, obwohl niemand daran arbeitet. */
+  /* ══════════════════════════════════════════════════════════════════
+     WANN UND WO ZULETZT GETIPPT WURDE
+
+     Je Seite: { zeit, von, bis } – der Zeitpunkt des letzten Anschlags
+     und die Zeile, in der er stattfand.
+
+     >>> Warum die ZEILE dazugekommen ist <<<
+     Hier stand nur der Zeitpunkt. `schreibtGerade` galt damit fünf
+     Sekunden lang für die GANZE Seite, und lockSpanFor beanspruchte
+     jede Zeile, in der die Marke in dieser Zeit landete – auch eine, in
+     die man bloss hineingeklickt hatte.
+
+     Genau daraus wurde der gemeldete Fall: „A schreibt auf einer Zeile,
+     B legt dort seinen Cursor ab, und A kann nicht mehr schreiben."
+     B hatte kurz vorher irgendwo auf derselben Seite getippt; sein Klick
+     meldete deshalb sofort eine volle Sperre auf A's Zeile. Die Sperre
+     tat, was sie soll – sie zeigte nur auf den Falschen.
+
+     Ein Anspruch entsteht durch SCHREIBEN, nicht durch Hinzeigen. Wer
+     nach dem Tippen woandershin klickt, beansprucht dort nichts mehr.
+     ══════════════════════════════════════════════════════════════════ */
   const typedAt = new Map();
+
+  /** Merkt, wo der letzte Anschlag auf dieser Seite stattfand. */
+  function merkeAnschlag(pageId) {
+    const jetzt = Date.now();
+    const alt = typedAt.get(pageId);
+
+    /* ── Allein im Heft wird gar nicht erst gemessen ──────────────────
+       Die Zeile zu bestimmen kostet ein Dutzend Layout-Rechnungen, und
+       das bei JEDEM Anschlag. Gebraucht wird sie nur, um anderen etwas
+       zu melden – ist niemand da, ist die Frage gegenstandslos.
+
+       noteTextChange läuft auch ganz ohne Live-Verbindung (der gemeinsame
+       Text wird immer mitgeführt), sonst zahlte jedes Tippen im eigenen
+       Heft für eine Auskunft, die niemand hört. */
+    if (!room || !others.length) {
+      typedAt.set(pageId, { zeit: jetzt, von: -1, bis: -1 });
+      return;
+    }
+
+    /* Die Zeile mitmessen kostet Layout-Rechnung – deshalb nur, wenn die
+       Marke auch wirklich auf dieser Seite steht. Sonst bleibt die
+       zuletzt bekannte stehen; sie verfällt ohnehin mit LOCK_CLAIM_MS. */
+    const focused = document.activeElement;
+    const passt = focused && focused.classList && focused.classList.contains('j-text')
+      && focused.closest('[data-pgid]')
+      && focused.closest('[data-pgid]').dataset.pgid === pageId;
+
+    if (!passt || typeof flatCaretPos !== 'function') {
+      typedAt.set(pageId, { zeit: jetzt, von: alt ? alt.von : -1, bis: alt ? alt.bis : -1 });
+      return;
+    }
+
+    let stelle = null;
+    try { stelle = flatCaretPos(focused); } catch (err) { stelle = null; }
+    if (stelle === null) {
+      typedAt.set(pageId, { zeit: jetzt, von: alt ? alt.von : -1, bis: alt ? alt.bis : -1 });
+      return;
+    }
+
+    let zeile = null;
+    try { zeile = visualLineSpan(focused, stelle, 0); } catch (err) { zeile = null; }
+    typedAt.set(pageId, zeile
+      ? { zeit: jetzt, von: zeile.from, bis: zeile.to }
+      : { zeit: jetzt, von: stelle, bis: stelle });
+  }
 
   /* Wo die eigene Marke zuletzt stand, je Seite. Rückfall für
      applyRemoteText, wenn die Auswahl im Augenblick nicht auslesbar ist –
@@ -1323,8 +1435,29 @@
    * Sperrband erscheinen deshalb zusammen und verschwinden zusammen.
    */
   function schreibtGerade(pageId) {
-    const last = typedAt.get(pageId) || 0;
-    return Date.now() - last <= LOCK_CLAIM_MS;
+    const last = typedAt.get(pageId);
+    return !!last && Date.now() - last.zeit <= LOCK_CLAIM_MS;
+  }
+
+  /**
+   * Wurde an DIESER Stelle auch wirklich getippt?
+   *
+   * Der Unterschied zu schreibtGerade: dort geht es um die Seite, hier um
+   * die Zeile. Nur wo geschrieben wurde, entsteht ein Anspruch – siehe
+   * den Kasten bei typedAt.
+   *
+   * Ein wenig Luft nach beiden Seiten, weil zwischen dem Anschlag und
+   * dieser Frage schon wieder ein paar Zeichen liegen können und die
+   * gemessene Zeilengrenze auf ein Zeichen genau nie stimmt.
+   */
+  const ANSCHLAG_LUFT = 2;
+
+  function tippteHier(pageId, stelle) {
+    const last = typedAt.get(pageId);
+    if (!last || Date.now() - last.zeit > LOCK_CLAIM_MS) return false;
+    // Ohne bekannte Zeile gilt wie bisher die ganze Seite
+    if (!(last.von >= 0)) return true;
+    return stelle >= last.von - ANSCHLAG_LUFT && stelle <= last.bis + ANSCHLAG_LUFT;
   }
 
   /* Die eigene Position melden. Ausgelöst von jeder Bewegung der
@@ -1368,6 +1501,10 @@
        Zeile, in die man inzwischen ganz woanders geklickt hatte. */
     if (!canWrite || S.readOnly) { eigeneSperre.delete(pageId); return null; }
     if (!schreibtGerade(pageId)) { eigeneSperre.delete(pageId); return null; }
+    /* Und geschrieben werden muss HIER, nicht bloss irgendwo auf dieser
+       Seite. Ohne das beanspruchte ein blosser Klick in eine fremde Zeile
+       sie sofort ganz – siehe der Kasten bei typedAt. */
+    if (!tippteHier(pageId, offset)) { eigeneSperre.delete(pageId); return null; }
     if (typeof flatTextOf !== 'function') { eigeneSperre.delete(pageId); return null; }
 
     /* ══════════════════════════════════════════════════════════════
@@ -1529,74 +1666,33 @@
     if (Date.now() - eigen.at > LOCK_TTL_MS) return false;
     if (stelle < eigen.from || stelle > eigen.to) return false;
 
-    /* ── Und die Zeile, in der ein anderer WIRKLICH sitzt, nie ────────
-       Der eigene Anspruch umfasst die eigene Zeile und die nächste. Steht
-       in dieser nächsten inzwischen jemand anderes und schreibt dort, ist
-       sie seine – der eigene Anspruch von vorhin gilt dort nicht mehr.
+    /* ── Und was ein anderer AUSDRÜCKLICH beansprucht, nie ────────────
+       Hier stand `!fremdeZeileDeckt(...)`: gefragt wurde nach der ganzen
+       sichtbaren ZEILE, in der die fremde Marke steht. Das war einmal
+       richtig – damals umfasste ein Anspruch die eigene Zeile UND die
+       darauffolgende, und diese Zusatzzeile durfte kein Recht sein.
 
-       Ohne diese Frage liess sich die Sperre aushebeln, und genau so ist
-       es gemeldet worden: „öfter auf die gesperrte Zeile drücken und
-       dabei tippen, irgendwann geht es doch". Der Weg dahin:
+       Die Zusatzzeile gibt es nicht mehr: lockSpanFor ruft
+       visualLineSpan(…, 0) und beansprucht nur noch die eine Zeile. Die
+       Wache ist übrig geblieben, ihr Anlass nicht – und sie richtete
+       Schaden an, weil sie GENAU DEN FALL traf, für den die Vollmacht da
+       ist: sitzt ein anderer irgendwo auf meiner Zeile, deckt seine Zeile
+       auch meine Stelle mit ab, und meine eigene Vollmacht war weg. Wer
+       zuerst da war und schreibt, verlor sie damit an den, der bloss
+       hinzeigt. Genau so wurde es gemeldet.
 
-         B schreibt in Zeile 4, sein Anspruch reicht bis Zeile 5.
-         A schreibt in Zeile 5 – die ist gesperrt.
-         B klickt in Zeile 5. Sein eigener Anspruch deckt sie ja noch,
-         also liess ihn trifftSperrband durch, editBlockedBy liess ihn
-         schreiben, und der Takt liess seine Marke stehen.
-
-       Die Zusatzzeile ist eine Höflichkeit (siehe ohneFremdeStellen) –
-       sie endet, sobald sie jemandem gehört. Gefragt wird nach der
-       Zeile, in der die fremde Marke steht, NICHT nach seinem ganzen
-       Sperrbereich: dessen Zusatzzeile ist genauso wenig ein Recht, und
-       sie über die eigene zu legen war der Fehler von letztem Mal. */
-    return !fremdeZeileDeckt(pageId, stelle);
+       Gefragt wird deshalb nach dem gemeldeten Bereich des anderen – und
+       da ohneFremdeStellen auf beiden Seiten zuschneidet, überschneiden
+       sich zwei ehrliche Ansprüche gar nicht mehr. Nebenbei kostet der
+       Vergleich zweier Zahlen nichts, wo vorher ein Dutzend Messungen im
+       Text standen; das lief bei JEDEM Anschlag. */
+    return !fremderAnspruchDeckt(pageId, stelle);
   }
 
-  /* Kurzgedächtnis für fremdeZeile(). Die Frage kommt bei jedem Anschlag,
-     und jede Antwort kostet ein Dutzend Messungen im Text. 300 ms sind
-     kurz genug, dass sie beim Tippen des anderen nicht veraltet – seine
-     Meldungen kommen ohnehin seltener. */
-  const zeilenMerk = new Map();
-  const ZEILEN_MERK_MS = 300;
-
-  /**
-   * Die Zeile, in der die Marke dieser Person steht – ohne die
-   * Zusatzzeile ihres Anspruchs.
-   */
-  function fremdeZeile(person, textDiv) {
-    let stelle = Number(person.offset);
-    if (!Number.isFinite(stelle) || stelle < 0) stelle = Number(person.lockFrom);
-    if (!Number.isFinite(stelle) || stelle < 0) return null;
-
-    const jetzt = Date.now();
-    const schluessel = (person.uid || '?') + ':' + stelle;
-    const alt = zeilenMerk.get(schluessel);
-    if (alt && jetzt - alt.at < ZEILEN_MERK_MS) return alt.zeile;
-
-    let zeile = { from: stelle, to: stelle };
-    try {
-      const gemessen = visualLineSpan(textDiv, stelle, 0);
-      if (gemessen) zeile = gemessen;
-    } catch (err) { /* dann gilt wenigstens die Stelle selbst */ }
-
-    // Damit die Karte bei langen Sitzungen nicht wächst
-    if (zeilenMerk.size > 64) zeilenMerk.clear();
-    zeilenMerk.set(schluessel, { at: jetzt, zeile });
-    return zeile;
-  }
-
-  /** Liegt diese Stelle in der Zeile eines anderen, der gerade schreibt? */
-  function fremdeZeileDeckt(pageId, stelle) {
-    const sperren = activeLocks(pageId);
-    if (!sperren.length) return false;
-
-    const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
-    const textDiv = pgEl ? pgEl.querySelector('.j-text') : null;
-    if (!textDiv) return false;
-
-    for (const person of sperren) {
-      const zeile = fremdeZeile(person, textDiv);
-      if (zeile && stelle >= zeile.from && stelle <= zeile.to) return true;
+  /** Liegt diese Stelle im gemeldeten Anspruch eines anderen? */
+  function fremderAnspruchDeckt(pageId, stelle) {
+    for (const person of activeLocks(pageId)) {
+      if (stelle >= person.lockFrom && stelle <= person.lockTo) return true;
     }
     return false;
   }
@@ -1624,20 +1720,54 @@
      Dann schneidet jeder dem anderen die Zusatzzeile weg, und beide
      behalten ihre eigene. Das ist das gewollte Ergebnis: wer schreibt,
      behält seine Zeile.
+
+     >>> WARUM MIT LUFT UND NICHT AUF DAS ZEICHEN GENAU <<<
+     Zurückgewichen wurde bis auf ein Zeichen an die fremde Stelle heran.
+     Die ist aber nie taufrisch: sie kommt über die Anwesenheit, und die
+     wird in core/share.js gebremst. Wer TIPPT, ist längst weiter, als er
+     zuletzt gemeldet hat – wer bloss dasitzt, meldet dagegen genau.
+
+     Daraus wurde ein Zusammenstoss, der immer denselben traf: B legt
+     seinen Cursor rechts neben A auf dieselbe Zeile und beansprucht
+     alles ab A's Stelle VON VORHIN. A tippt zwei Zeichen weiter und steht
+     damit mitten in B's Anspruch – ausgesperrt wurde also der, der zuerst
+     da war und wirklich schrieb.
+
+     Ein paar Zeichen Abstand um die fremde Marke fangen den Meldeverzug
+     ab. Sie kosten nichts: an dieser Stelle schreibt ohnehin niemand.
      ══════════════════════════════════════════════════════════════════ */
+
+  /* Ungefähr ein Wort – so weit ist jemand zwischen zwei Meldungen
+     gekommen (CARET_THROTTLE_MS in core/share.js). */
+  const FREMD_LUFT = 8;
   function ohneFremdeStellen(span, pageId, textDiv, offset) {
     if (!span || !others.length) return span;
 
     let von = span.from;
     let bis = span.to;
 
-    for (const person of peopleOnPage(pageId, textDiv)) {
+    /* ── Zurückgewichen wird nur vor jemandem, der SELBST SCHREIBT ────
+       Hier stand peopleOnPage: jede fremde Marke schnitt etwas weg, auch
+       eine, die bloss dalag. Damit gab man seine eigene Zeile an den ab,
+       der nur hinzeigt – und der durfte dann darin schreiben, während
+       man selbst noch daran arbeitete. Das ist der gemeldete Fall, nur
+       von der anderen Seite gesehen.
+
+       Ein Anspruch weicht einem Anspruch. Wer keinen hat (activeLocks
+       lässt ihn dann gar nicht erst durch), bekommt auch nichts. */
+    for (const person of activeLocks(pageId)) {
       const stelle = Number(person.offset);
       if (!Number.isFinite(stelle) || stelle < 0) continue;
+      // Nur, wer wirklich in dieser Zeile sitzt, schneidet etwas weg
       if (stelle < von || stelle > bis) continue;
-      // Die eigene Zeile bleibt: nur zurückweichen, nie darüber hinaus
-      if (stelle > offset) bis = Math.min(bis, stelle - 1);
-      else if (stelle < offset) von = Math.max(von, stelle + 1);
+      /* Zurückgewichen wird mit Luft – aber NIE über die eigene Stelle
+         hinaus. Ohne diese Klammer schnitt die Luft den Anspruch unter
+         die eigene Marke, die Abfrage darunter warf ihn ganz weg, und
+         wer schrieb, hatte plötzlich gar keine Zeile mehr. Gemessen im
+         Prüfstand: A tippte, B stand vier Zeichen hinter A's Zeile, und
+         A's Sperre verschwand. */
+      if (stelle > offset) bis = Math.min(bis, Math.max(offset, stelle - 1 - FREMD_LUFT));
+      else if (stelle < offset) von = Math.max(von, Math.min(offset, stelle + 1 + FREMD_LUFT));
     }
 
     if (bis < offset || von > offset) return null;   // nichts mehr übrig
@@ -1913,14 +2043,18 @@
    * Die SICHTBARE Zeile an dieser Stelle, und die darunter.
    *
    * >>> Warum nicht die logische Zeile <<<
-   * Dieser Editor setzt beim Klicken keine Zeilenumbrüche, sondern füllt
-   * mit Leerzeichen auf (placeCaretAnywhere in canvas/text.js). Eine Seite
-   * besteht dadurch oft aus einer EINZIGEN sehr langen Zeile, die bloß
-   * umbricht. „Die logische Zeile" hieß damit in der Praxis „von hier bis
-   * zum Ende der Seite" – das Band begann weit über der Marke und deckte
-   * fast alles zu.
+   * Wer einfach lostippt, füllt .j-text mit EINEM Textknoten, der bloß
+   * umbricht – Absätze gibt es dann keine. „Die logische Zeile" hieß in
+   * diesem, dem häufigsten Fall also „von hier bis zum Ende der Seite":
+   * das Band begann weit über der Marke und deckte fast alles zu.
    *
-   * Verlässlich ist stattdessen, wo der Text tatsächlich umbricht.
+   * (Hier stand einmal, ein Klick fülle „mit Leerzeichen auf". Das galt
+   * bis zum 17.8.2026; seither legt ein Klick einen frei stehenden Absatz
+   * an, und ein Umbruch lässt ihn wachsen, statt ihn zu teilen. Am Grund
+   * für die sichtbare Zeile ändert das nichts – wer die Sperre aber nach
+   * dem alten Satz repariert, repariert das Falsche.)
+   *
+   * Verlässlich ist, wo der Text tatsächlich umbricht.
    *
    * >>> Warum das NICHT mehr über caretRangeFromPoint geht <<<
    * Vorher wurde der Browser an den Rändern der Zeile gefragt: „welche
@@ -2117,6 +2251,13 @@
     const vorher = (caret !== null && typeof flatTextOf === 'function')
       ? flatTextOf(textDiv) : null;
 
+    /* Die angeklickte, noch leere Stelle steht im Text noch gar nicht –
+       sie entsteht erst mit dem ersten Anschlag (canvas/text.js). Der
+       Tausch gleich darunter würde sie deshalb wegwerfen, und wer eben
+       noch dorthin gezeigt hat, schriebe danach woanders. */
+    const gemerkteStelle = (hadFocus && typeof merkeVorlaeufiges === 'function')
+      ? merkeVorlaeufiges(textDiv) : null;
+
     /* Der Text kommt aus dem Raum, also von aussen – bereinigen, bevor
        er ins DOM geht. Der Yjs-Stand bleibt unangetastet: dort steht
        weiterhin, was der andere geschickt hat, sonst liefen die beiden
@@ -2132,13 +2273,24 @@
        sie beim Schreiber sauber nebeneinander stehen. */
     if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv);
 
+    /* Die angeklickte Stelle wieder hinstellen – samt Marke. Steht sie
+       wieder, ist das Zurücksetzen der Marke weiter unten gegenstandslos:
+       sie steht dann schon dort, wo hingezeigt wurde. */
+    const wiederHergestellt = gemerkteStelle
+      && typeof stelleVorlaeufigesWiederHer === 'function'
+      && stelleVorlaeufigesWiederHer(textDiv, gemerkteStelle);
+
     // Kommentar-Marken aus dem fremden Text wiederfinden
     if (pgEl && typeof ensureCommentsFromMarkers === 'function') {
       ensureCommentsFromMarkers(pgEl);
       if (typeof window.refreshComments === 'function') window.refreshComments();
     }
 
-    if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
+    if (wiederHergestellt) {
+      /* Nichts weiter: die Marke steht in der wieder angelegten Stelle.
+         letzteEigeneStelle bleibt, wie sie war – die angeklickte Stelle
+         hat noch keine eigene Zahl im Text, sie ist ja leer. */
+    } else if (hadFocus && caret !== null && typeof setFlatCaret === 'function') {
       let ziel = caret;
       const nachher = flatTextOf(textDiv);
       /* Den Anker VOR dem DOM-Tausch nehmen. Er sucht dieselben
@@ -3126,7 +3278,8 @@
       const newest = list.reduce(
         (max, p) => (typeof p.at === 'number' && p.at > max ? p.at : max), 0);
       const fresh = Math.max(Date.now(), newest) - PRESENCE_STALE_MS;
-      others = list.filter(p => typeof p.at !== 'number' || p.at > fresh);
+      others = list.filter(p => typeof p.at !== 'number' || p.at > fresh)
+                   .map(stempleSperre);
 
       /* Alles Zeichnen zusammen abgesichert. Reißt eine einzelne
          Darstellung, darf sie nicht den Rückruf der Anwesenheit mit
@@ -3236,6 +3389,7 @@
     verbindungSteht = null;
     reloading.clear();
     typedAt.clear();
+    sperrEingang.clear();
     letzteEigeneStelle.clear();
     liveNb = null;
     snapshot = null;
@@ -3303,8 +3457,10 @@
     const entry = docs.get(pageId) || docFor(pageId, '', null);
     if (entry.applying) return;
 
-    // Ab jetzt gilt diese Zeile als in Arbeit – siehe lockSpanFor
-    typedAt.set(pageId, Date.now());
+    /* Ab jetzt gilt DIESE ZEILE als in Arbeit – nicht die Seite. Wo
+       genau, misst merkeAnschlag; daran hängt, was lockSpanFor
+       beanspruchen darf (siehe der Kasten bei typedAt). */
+    merkeAnschlag(pageId);
     pendingText.set(pageId, html);
 
     const seit = Date.now() - (lastFlush.get(pageId) || 0);

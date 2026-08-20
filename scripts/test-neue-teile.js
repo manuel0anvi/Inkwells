@@ -541,6 +541,42 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
     && /const fest = \(wahl === 'fest'\)/.test(textQuelle), true);
   check('Und das Zusammenwachsen ist draussen',
     /verschmelzeBeruehrende/.test(textQuelle), false);
+
+  /* ══════════════════════════════════════════════════════════════════
+     7a. EIN ABSATZ IST SEINE ZEILEN, NICHT SEIN KASTEN
+
+     Gemeldet: „ich schreibe in eine freie Zeile zwischen zwei Zeilen,
+     und das Geschriebene darueber und darunter rutscht nach rechts."
+
+     Ein Umbruch teilt einen freien Absatz nicht, er laesst ihn wachsen
+     (siehe oben). „OBEN", Leerzeile, „UNTEN" ist damit EIN Element von
+     drei Zeilen Hoehe. Gemessen wurde aber nur der umschliessende
+     Kasten – ein volles Rechteck, die leere Mitte eingeschlossen. Wer
+     dort hineinschrieb, stiess gegen etwas, wo gar nichts steht, und
+     der ganze Absatz wich aus: mit der Zeile darueber und der darunter.
+     Gemessen mit echten Klicks, beide sprangen von l=514 auf l=566. */
+  check('Gemessen werden die Zeilen eines freien Absatzes',
+    /function _zeilenKaesten/.test(textQuelle)
+    && /bereich\.selectNodeContents\(p\)/.test(textQuelle), true);
+  check('Und verglichen wird Zeile gegen Zeile',
+    /function _schubWaagerecht/.test(textQuelle)
+    && /function _schubSenkrecht/.test(textQuelle), true);
+  check('Eine leere Zeile stoesst an nichts',
+    /if \(breit < FREI_ZEILE_MIN_PX\) continue;/.test(textQuelle), true);
+
+  /* 7a2. Das Ausweichen der Nachbarn wird beim Anlegen gerechnet. Nahm
+     man den vorlaeufigen Absatz wieder weg, blieb es stehen – bis zum
+     naechsten Anschlag, der irgendwann kam oder auch nicht. */
+  check('Wegraeumen rechnet die Nachbarn zurueck',
+    /if \(entfernt\) ordneFreieAbsaetze\(textDiv\);/.test(textQuelle), true);
+
+  /* 7a3. Die angeklickte, noch leere Stelle steht im Text noch nicht –
+     ein Tausch des innerHTML durch eine fremde Aenderung warf sie weg,
+     und wer eben hingezeigt hatte, schrieb danach woanders. */
+  check('Die angeklickte Stelle ueberlebt eine fremde Aenderung',
+    /function merkeVorlaeufiges/.test(textQuelle)
+    && /function stelleVorlaeufigesWiederHer/.test(textQuelle)
+    && /gemerkteStelle/.test(lies('src', 'ui', 'collab.js')), true);
   /* 7b. Der Magnet: knapp daneben geklickt heisst „hin". */
   check('Vorhandener Text zieht auf etwa einem Zentimeter an',
     /const ANHAFT_MM = 10/.test(lies('src', 'canvas', 'input.js'))
@@ -585,22 +621,83 @@ console.log('\nWer schreibt, hat die Vollmacht ueber seine Zeile\n');
      Gemeldet: „wenn ich oefter auf die gesperrte Zeile druecke und
      dabei tippe, kann man irgendwann trotzdem darin schreiben."
 
-     Der Weg dahin ging ueber den eigenen Anspruch: er umfasst die
+     Der Weg dahin ging ueber den eigenen Anspruch: er umfasste die
      eigene Zeile UND die naechste. Sass in dieser naechsten inzwischen
      jemand anderes und schrieb dort, deckte der eigene Anspruch sie
      immer noch – und damit liessen trifftSperrband, editBlockedBy und
-     der Takt alles durch. */
+     der Takt alles durch.
+
+     >>> Wie das Loch heute zu ist <<<
+     Die Zusatzzeile gibt es nicht mehr: lockSpanFor beansprucht ueber
+     visualLineSpan(…, 0) nur die eine Zeile, in der man steht. Damit
+     schlaegt schon der schlichte Bereichsvergleich in eigeneSperreDeckt
+     zu, sobald man in eine andere Zeile klickt.
+
+     Die Wache dagegen (fremdeZeileDeckt) ist weg – und zwar, weil sie
+     inzwischen selbst Schaden anrichtete: sie fragte nach der ganzen
+     sichtbaren Zeile des anderen, und die deckte auch die eigene Stelle
+     mit ab, sobald jemand nur seinen Cursor dort ablegte. Wer zuerst da
+     war und wirklich schrieb, verlor damit seine Vollmacht an den, der
+     bloss hinzeigte. Gemeldet als „ich war doch als Erster auf dieser
+     Zeile". Gefragt wird jetzt nach seinem GEMELDETEN Bereich. */
   const collabQuelle = lies('src', 'ui', 'collab.js');
 
-  check('Der eigene Anspruch endet an der Zeile eines anderen',
-    /function fremdeZeileDeckt/.test(collabQuelle)
-    && /return !fremdeZeileDeckt\(pageId, stelle\)/.test(collabQuelle), true);
-  check('Gefragt wird nach seiner Zeile, nicht nach seinem Sperrbereich',
-    /visualLineSpan\(textDiv, stelle, 0\)/.test(collabQuelle), true);
+  check('Der Anspruch umfasst nur die eigene Zeile',
+    /span = visualLineSpan\(textDiv, offset, 0\)/.test(collabQuelle), true);
+  check('Und endet an dem, was ein anderer ausdruecklich beansprucht',
+    /function fremderAnspruchDeckt/.test(collabQuelle)
+    && /return !fremderAnspruchDeckt\(pageId, stelle\)/.test(collabQuelle), true);
+  check('Nach seinem Bereich, nicht nach seiner ganzen Zeile',
+    /function fremdeZeileDeckt/.test(collabQuelle), false);
+  check('Ausserhalb des eigenen Anspruchs gilt er nicht',
+    /if \(stelle < eigen\.from \|\| stelle > eigen\.to\) return false;/.test(collabQuelle), true);
   check('Die Zeile laesst sich ohne die Zusatzzeile messen',
     /function visualLineSpan\(textDiv, offset, zeilenDanach = 1\)/.test(collabQuelle), true);
   check('Und der Anspruch faellt weg, sobald man aufhoert',
     /if \(!schreibtGerade\(pageId\)\) \{ eigeneSperre\.delete\(pageId\); return null; \}/.test(collabQuelle), true);
+
+  /* ══════════════════════════════════════════════════════════════════
+     EIN ANSPRUCH ENTSTEHT DURCH SCHREIBEN, NICHT DURCH HINZEIGEN
+
+     Gemeldet: „ich habe auf einer Zeile geschrieben, jemand anders hat
+     dort seinen Cursor hingelegt, und ICH konnte nicht mehr schreiben."
+
+     schreibtGerade galt fuer die ganze SEITE und fuenf Sekunden lang.
+     Wer eben irgendwo getippt hatte und dann in eine fremde Zeile
+     klickte, meldete dort sofort eine volle Sperre. typedAt merkt sich
+     deshalb jetzt auch, WO getippt wurde. */
+  check('Gemerkt wird auch die Zeile des letzten Anschlags',
+    /function merkeAnschlag/.test(collabQuelle)
+    && /typedAt\.set\(pageId, zeile/.test(collabQuelle), true);
+  check('Und ohne Anschlag an dieser Stelle kein Anspruch',
+    /function tippteHier/.test(collabQuelle)
+    && /if \(!tippteHier\(pageId, offset\)\) \{ eigeneSperre\.delete\(pageId\); return null; \}/
+      .test(collabQuelle), true);
+
+  /* Der Zuschnitt wich bis auf EIN Zeichen an die fremde Marke heran.
+     Die ist aber nie taufrisch (CARET_THROTTLE_MS in core/share.js) –
+     wer tippt, stand damit beim naechsten Anschlag mitten im Anspruch
+     dessen, der eben noch woanders war.
+
+     Zweierlei gehoert dazu: die Luft selbst, und dass sie nie ueber die
+     EIGENE Stelle hinausschneidet – sonst warf die Abfrage darunter den
+     ganzen Anspruch weg, und wer schrieb, hatte gar keine Zeile mehr. */
+  check('Um eine fremde Marke bleibt Luft',
+    /const FREMD_LUFT = \d+/.test(collabQuelle)
+    && /bis = Math\.min\(bis, Math\.max\(offset, stelle - 1 - FREMD_LUFT\)\)/.test(collabQuelle), true);
+
+  /* Und zurueckgewichen wird nur vor jemandem, der selbst schreibt. Vor
+     jeder herumliegenden Marke zurueckzuweichen hiess, die eigene Zeile
+     an den abzugeben, der nur hinzeigt. */
+  check('Ein Anspruch weicht nur einem Anspruch',
+    /for \(const person of activeLocks\(pageId\)\) \{\s*\n\s*const stelle = Number\(person\.offset\);/
+      .test(collabQuelle), true);
+
+  /* lockAt kommt von der Uhr des Absenders. Geht die vor, hielte seine
+     Sperre laenger als die des anderen – bei sonst gleichem Verhalten. */
+  check('Der Nachlauf laeuft auch nach der eigenen Uhr',
+    /function sperreSeitHier/.test(collabQuelle)
+    && /if \(seitHier && now - seitHier > LOCK_TTL_MS\) continue;/.test(collabQuelle), true);
 }
 
 console.log('\nEin fremdes Dokument wird nicht auf die Platte geschrieben\n');
@@ -622,6 +719,73 @@ console.log('\nEin fremdes Dokument wird nicht auf die Platte geschrieben\n');
     && /keinSchreibrecht = true/.test(geteiltQuelle), true);
   check('Ein Netzfehler bleibt dagegen ein Wiederholungsfall',
     /if \(live === session && !rechtFehlt\(err\)\) dirty = true;/.test(geteiltQuelle), true);
+}
+
+console.log('\nDer eine Weg vom Editor ins Heft\n');
+{
+  /* ══════════════════════════════════════════════════════════════════
+     Was am Text geaendert wurde, muss drei Dinge ausloesen, und zwar
+     immer alle drei: ins Datenmodell schreiben, an die anderen melden,
+     das Heft als geaendert markieren.
+
+     Es waren sechs Abschriften, und drei davon hatten nur das Erste:
+     der Seitenumbruch, Rueckgaengig und das Setzen einer Ueberschrift.
+     Im geteilten Dokument kam davon beim anderen also nichts an. */
+  const appQuelle = lies('src', 'app.js');
+  const leisteQuelle = lies('src', 'ui', 'toolbar.js');
+
+  check('Es gibt einen Weg, der alle drei Schritte tut',
+    /function uebernimmText/.test(appQuelle)
+    && /Collab\.noteTextChange\(page\.id, page\.textContent\)/.test(appQuelle)
+    && /markCurrentNotebookDirty/.test(appQuelle), true);
+  check('Der Seitenumbruch geht darueber',
+    /uebernimmText\(page, textDiv\);/.test(appQuelle)
+    && /uebernimmText\(nextPage, nextTD\);/.test(appQuelle), true);
+  check('Rueckgaengig meldet sich im geteilten Dokument',
+    /Collab\.noteTextChange\(page\.id, page\.textContent\);/.test(appQuelle), true);
+  check('Und die Ueberschrift ebenso',
+    /uebernimmText\(info\.page, textDiv\)/.test(leisteQuelle), true);
+
+  /* ══════════════════════════════════════════════════════════════════
+     WAS NICHT MEHR AUFS BLATT PASST
+
+     Es stand eine Schleife da, die `lastElementChild` nahm. Freie
+     Absaetze stehen im DOM aber in der Reihenfolge, in der sie ANGELEGT
+     wurden – auf die Folgeseite wanderte damit womoeglich die oberste
+     Zeile. Und bei reinem Text (der haeufigste Weg, ueberhaupt
+     anzufangen) ist children.length null: die Schleife lief nie, und
+     der Text lief unten aus dem Papier heraus. */
+  check('Umgezogen wird nach der Lage, nicht nach der DOM-Reihenfolge',
+    /function nimmUeberlauf/.test(appQuelle)
+    && /unterkante\(el\) > unterkante\(tiefstes\)/.test(appQuelle), true);
+  check('Und reiner Text wird an einer gemessenen Stelle getrennt',
+    /function stelleUnterhalb/.test(lies('src', 'canvas', 'text.js'))
+    && /const schnitt = stelleUnterhalb\(textDiv, grenzeY\);/.test(appQuelle), true);
+  check('Ein umgezogener freier Absatz faengt oben wieder an',
+    /el\.style\.top = Math\.max\(pt,/.test(appQuelle), true);
+  check('Passt das Unterste noch aufs Blatt, wird nichts weggenommen',
+    /if \(!tiefstes \|\| unterkante\(tiefstes\) <= availH\) break;/.test(appQuelle), true);
+
+  /* ══════════════════════════════════════════════════════════════════
+     ZWEI MASSE, DIE NICHT DASSELBE ZAEHLEN
+
+     getCaretTextOffset zaehlt keine Zeilengrenzen, innerText hat an
+     jeder Blockgrenze ein zusaetzliches \n. Der Umbruch holte den Einzug
+     dadurch aus einer ganz anderen Zeile – und beim Einfuegen kam er
+     gleich auf jede eingefuegte Zeile. */
+  check('Der Einzug kommt aus einem einzigen Mass',
+    /function einzugDerZeile/.test(lies('src', 'canvas', 'text.js'))
+    && /const indent = einzugDerZeile\(textDiv\);/.test(appQuelle), true);
+  check('Und innerText wird dafuer nicht mehr gegen die Marke gerechnet',
+    /textDiv\.innerText \|\| ''\)\.replace\(\/\\r\/g, ''\);\s*\n\s*const lineStart/.test(appQuelle), false);
+
+  /* Ein <br> ueberlebt textContent nicht – aus zwei Zeilen wurde eine. */
+  check('Ein <br> im reinen Text wird zu einem echten Umbruch',
+    /function normalisiereUmbrueche/.test(lies('src', 'canvas', 'text.js'))
+    && /normalisiereUmbrueche\(textDiv\)/.test(appQuelle), true);
+  check('Der Platzhalter am Ende bleibt aber stehen',
+    /if \(textDiv\.lastChild && textDiv\.lastChild\.nodeName === 'BR'\) brs\.pop\(\);/
+      .test(lies('src', 'canvas', 'text.js')), true);
 }
 
 console.log('');

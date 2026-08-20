@@ -321,6 +321,65 @@ app.on('ready', async () => {
       'die Sperre greift zu weit');
 
     /* ══════════════════════════════════════════════════════════════════
+       2d. WER ZUERST DA WAR UND SCHREIBT, BEHÄLT SEINE ZEILE
+
+       Gemeldet: „ich habe auf einer Zeile geschrieben, jemand anders hat
+       dort seinen Cursor hingelegt, und ICH konnte nicht mehr schreiben.
+       Gut, dass gesperrt wird – aber es sollte den anderen aussperren,
+       ich war ja als Erster auf dieser Zeile."
+
+       Drei Dinge kamen dafür zusammen (ui/collab.js):
+
+         · schreibtGerade galt für die ganze SEITE und fünf Sekunden
+           lang. Wer eben irgendwo getippt hatte und dann in eine fremde
+           Zeile klickte, meldete dort sofort eine volle Sperre.
+         · Der Zuschnitt (ohneFremdeStellen) wich bis auf EIN Zeichen an
+           die fremde Marke heran. Die ist beim Tippen aber nie taufrisch,
+           also stand der Schreibende beim nächsten Anschlag mitten im
+           Anspruch dessen, der nur dasass.
+         · Und eigeneSperreDeckt hob die eigene Vollmacht auf, sobald ein
+           fremder Cursor irgendwo auf derselben Zeile stand – also genau
+           in dem Fall, für den sie da ist.
+
+       Geprüft wird der gemeldete Ablauf, in dieser Reihenfolge: B tippt
+       zuerst, A legt danach nur seinen Cursor daneben.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Wer zuerst da war und schreibt, behaelt seine Zeile');
+
+    /* A tippt in Zeile 0 – A ist also auf dieser SEITE gerade taetig.
+       Genau das liess A gleich darauf jede Zeile beanspruchen, in die er
+       nur hineinklickte. */
+    await A('pruefstand.markeAuf(2)');
+    await A(`pruefstand.setzeText(${JSON.stringify('<p>EAins</p><p>Zwei</p><p>Drei</p><p>Vier</p>')}, 3)`);
+    await warte(700);
+
+    // B schreibt in Zeile 2 – und ist damit als Erster dort
+    await B('pruefstand.markeAuf(12)');
+    await B(`pruefstand.setzeText(${JSON.stringify('<p>EAins</p><p>Zwei</p><p>DBrei</p><p>Vier</p>')}, 13)`);
+    await warte(700);
+
+    // Und jetzt legt A bloss seinen Cursor auf B's Zeile – ohne zu tippen
+    await A('pruefstand.markeAuf(14)');
+    await warte(700);
+
+    const aSperrtB = await B('pruefstand.anschlagAn(13)');
+    pruefe('B schreibt weiter, obwohl A den Cursor daneben legt (' + aSperrtB + ')',
+      aSperrtB === null, 'B wird von A ausgesperrt, obwohl B zuerst dort war');
+
+    const bSperrtA = await A('pruefstand.anschlagAn(14)');
+    pruefe('A dagegen wird abgewiesen (' + bSperrtA + ')', bSperrtA === 'B',
+      'A kann in B\'s Zeile schreiben, obwohl B dort arbeitet');
+
+    /* Und B behält die Zeile auch, wenn er weitertippt – die fremde
+       Stelle darf nicht mit jedem Anschlag näher heranrücken. */
+    await B('pruefstand.markeAuf(13)');
+    await B(`pruefstand.setzeText(${JSON.stringify('<p>EAins</p><p>Zwei</p><p>DBBrei</p><p>Vier</p>')}, 14)`);
+    await warte(500);
+    const nochFrei = await B('pruefstand.anschlagAn(14)');
+    pruefe('Auch nach dem naechsten Anschlag (' + nochFrei + ')', nochFrei === null,
+      'B laeuft in den Anspruch dessen hinein, der nur dasitzt');
+
+    /* ══════════════════════════════════════════════════════════════════
        2b. WIE SCHNELL FOLGT DIE MARKE EINER REINEN BEWEGUNG?
 
        Beim Tippen gilt die Stelle aus der Textänderung – sie gehört zum
@@ -363,6 +422,22 @@ app.on('ready', async () => {
        sind.
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Die Marke wird bewegt, nicht neu gebaut');
+
+    /* >>> Warum hier erst getippt wird <<<
+       Ein Anspruch entsteht durch SCHREIBEN und endet, sobald man die
+       Zeile verlässt (ui/collab.js, tippteHier). Der Abschnitt davor
+       schickt A ans Textende – dort hat A zu Recht keine Sperre mehr,
+       und das Band ist weg. Zählte man von da an, waere das Auftauchen
+       des Bandes bei der Rueckkehr ein „neu gebautes Element", ohne dass
+       irgendetwas flackert: die Sperre ist wirklich erst weg und dann
+       wieder da.
+
+       Gemessen werden soll aber, ob sich bei UNVERAENDERTEM Zustand
+       etwas neu aufbaut. Also erst wieder in Zeile 2 tippen, und dann
+       nur noch INNERHALB dieser Zeile wandern. */
+    await A(`pruefstand.setzeText(${JSON.stringify('<p>Eins</p><p>Zwei</p><p>DXreiZ</p><p>Vier</p>')}, 12)`);
+    await warte(400);
+
     const gemerkt = await B('pruefstand.merkeElemente()');
     notiz('gemerkt: ' + gemerkt.marken + ' Marke(n), ' + gemerkt.gesamt + ' Elemente');
     for (let i = 0; i < 4; i++) {
