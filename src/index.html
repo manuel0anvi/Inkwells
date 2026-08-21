@@ -766,8 +766,17 @@
     <h3 id="nachricht-titel">Nachricht</h3>
     <div class="nachricht-datum" id="nachricht-datum"></div>
     <div class="nachricht-text" id="nachricht-text"></div>
+    <!-- ── Nur „Gelesen" ────────────────────────────────────────────
+         Hier stand daneben ein „Löschen". Das war eine Entscheidung zu
+         viel an der falschen Stelle: das Fenster springt von selbst auf,
+         und wer es gerade erst aufgeschlagen hat, weiss noch gar nicht,
+         ob er die Nachricht behalten will. Zwei gleich aussehende Knöpfe
+         zum Wegmachen heissen dann: einer davon ist der falsche.
+
+         Weg kann sie trotzdem – im Postfach steht an jeder Zeile ein ×
+         (ui/postfach.js, zeichneFach). Dort ist es die richtige Frage,
+         weil man den Text schon gelesen hat. -->
     <div class="modal-btns">
-      <button class="btn-m" id="nachricht-loeschen" data-i18n="postfachLoeschen">Löschen</button>
       <button class="btn-m primary" id="nachricht-ok" data-i18n="postfachGelesen">Gelesen</button>
     </div>
   </div>

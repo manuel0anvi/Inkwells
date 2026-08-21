@@ -149,23 +149,18 @@
          white-space: pre-wrap in modals.css. */
       E('nachricht-text').textContent = P.textFuer(n.text, spr);
 
+      /* Nur ein Knopf. Weggeworfen wird im Postfach, nicht hier – die
+         Begruendung steht am Fenster selbst (src/index.html). */
       const ok = E('nachricht-ok');
-      const weg = E('nachricht-loeschen');
 
-      const schliessen = async (auchLoeschen) => {
+      const beiOk = async () => {
         ok.removeEventListener('click', beiOk);
-        weg.removeEventListener('click', beiWeg);
         ov.style.display = 'none';
-        if (auchLoeschen) await wegwerfen(n.id);
-        else await alsGelesen(n.id);
+        await alsGelesen(n.id);
         fertig();
       };
 
-      const beiOk = () => schliessen(false);
-      const beiWeg = () => schliessen(true);
-
       ok.addEventListener('click', beiOk);
-      weg.addEventListener('click', beiWeg);
       ov.style.display = 'flex';
     });
   }
