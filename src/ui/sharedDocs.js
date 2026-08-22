@@ -1173,6 +1173,14 @@
     unwatchOpen = api.watchDocument(docId, (head) => {
       if (!S.sharedDoc || S.sharedDoc.docId !== docId) return;
 
+      /* Wer laut Kopf dazugehoert – fuer ALLE Beteiligten, nicht nur den
+         Besitzer. Daran erkennt die Anwesenheit, wessen Eintrag liegen
+         geblieben ist (ui/collab.js, gehoertDazu). */
+      if (head && window.Collab?.setzeTeilnehmer) {
+        window.Collab.setzeTeilnehmer(
+          (head.memberEmails || []).concat(head.ownerEmail ? [head.ownerEmail] : []));
+      }
+
       /* Der Besitzer kann sich nicht selbst aussperren. Ist das Dokument
          weg (auf einem anderen Gerät aufgehoben), endet nur die
          Live-Sitzung – sein Heft behält er. */

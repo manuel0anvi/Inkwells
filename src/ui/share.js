@@ -888,12 +888,24 @@
     }
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     ENTBANNEN HEISST NICHT EINLADEN
+
+     Aufgehoben wird nur die Sperre. Die Person ist danach weder Mitglied
+     noch gesperrt – sie steht also in KEINER der beiden Listen mehr und
+     verschwand bisher stillschweigend. Das sah aus, als sei sie geloescht
+     worden. Genau so wurde es gemeldet.
+
+     Der Satz sagt jetzt, was wirklich gilt: sie kommt ueber den Link
+     wieder herein, eingeladen ist sie damit aber nicht.
+     ══════════════════════════════════════════════════════════════════ */
   async function unblock(email) {
     if (!head) return;
     try {
       const api = await whenShareReady();
       await api.unblockMember(head.docId, email);
       await loadHead(head.docId);
+      statusEl.textContent = t('shareUnblocked').replace('{mail}', email);
     } catch (err) {
       statusEl.textContent = describeError(err);
     }

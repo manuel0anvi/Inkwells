@@ -191,7 +191,27 @@
     return namen[grund] || grund;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     KEIN 1. JANUAR 1970
+
+     `erstellt` wird mit serverTimestamp() gesetzt – der Wert entsteht
+     erst beim Server. Der Strom liefert die Meldung aber SOFORT aus,
+     noch ohne ihn. new Date(null) ist dann der Beginn der Zeitrechnung,
+     und genau der stand im Fenster.
+
+     Fehlt der Zeitstempel, ist die Meldung gerade eben entstanden –
+     dann steht das da und keine erfundene Zahl. */
   function datumText(iso) {
+    if (!iso) return T('meldungGerade', 'gerade eben');
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return T('meldungGerade', 'gerade eben');
+    return d.toLocaleString(undefined,
+      { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  /* Fuer die Sperre: dort ist ein fehlendes Datum etwas anderes als
+     „gerade eben", naemlich „unbegrenzt". Der Aufrufer entscheidet. */
+  function nurDatum(iso) {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -233,6 +253,21 @@
         .replace('{n}', m.gemeldetName ? (m.gemeldetName + ' · ' + m.gemeldetEmail) : m.gemeldetEmail);
       karte.appendChild(wer);
 
+      /* ══════════════════════════════════════════════════════════
+         WER GEMELDET HAT
+
+         Zuerst stand das hier bewusst NICHT: wer den Melder kennt,
+         koennte es ihm heimzahlen. Nur ist das eine Sorge fuer ein
+         grosses Forum – in einem geteilten Heft sitzen zwei oder drei
+         Leute, und wer gemeldet hat, weiss der Besitzer ohnehin nach
+         zwei Sekunden Nachdenken. Verschwiegen wurde damit nichts,
+         es fehlte nur die Auskunft, die er zum Beurteilen braucht.
+         Ausdruecklich so gewuenscht. */
+      const von = document.createElement('div');
+      von.className = 'meldung-wer';
+      von.textContent = T('meldungVon', 'Gemeldet von: {n}').replace('{n}', m.melderEmail || '?');
+      karte.appendChild(von);
+
       const wo = document.createElement('div');
       wo.className = 'meldung-wo';
       wo.textContent = [m.docTitel, datumText(m.erstellt)].filter(Boolean).join(' · ');
@@ -249,24 +284,23 @@
       knoepfe.className = 'meldung-knoepfe';
 
       const raus = document.createElement('button');
-      raus.className = 'btn-m danger';
+      raus.className = 'gefaehrlich';
       raus.textContent = T('meldungEntfernen', 'Aus diesem Dokument verbannen');
       raus.title = T('meldungEntfernenHinweis',
         'Nimmt die Freigabe zurück und lässt die Person auch über den Link nicht wieder herein.');
       raus.addEventListener('click', async () => {
         raus.disabled = true;
         const ok = await entferneAusFreigabe(m);
-        if (ok) { await abhaken(m, karte); }
+        if (ok) { await abhaken(m, karte, 'verbannt'); }
         else { raus.disabled = false; melde(T('meldungEntfernenFehler', 'Das hat nicht geklappt.')); }
       });
       knoepfe.appendChild(raus);
 
       const lassen = document.createElement('button');
-      lassen.className = 'btn-m';
       lassen.textContent = T('meldungLassen', 'Alles in Ordnung');
       lassen.addEventListener('click', async () => {
         lassen.disabled = true;
-        await abhaken(m, karte);
+        await abhaken(m, karte, 'nichts');
       });
       knoepfe.appendChild(lassen);
 
@@ -289,9 +323,20 @@
     }
   }
 
-  async function abhaken(m, karte) {
+  /* ══════════════════════════════════════════════════════════════════
+     WAS DER BESITZER ENTSCHIEDEN HAT, ERFAEHRT AUCH DIE VERWALTUNG
+
+     Vorher wurde die Meldung nur abgehakt. In der Verwaltung stand
+     danach „erledigt" – aber nicht, WIE. Ob der Besitzer jemanden
+     verbannt oder die Sache für harmlos gehalten hat, ist genau der
+     Unterschied, an dem sich entscheidet, ob die Verwaltung noch etwas
+     tun muss. Ausdruecklich so gewuenscht.
+
+     @param {'verbannt'|'nichts'} massnahme
+     ══════════════════════════════════════════════════════════════════ */
+  async function abhaken(m, karte, massnahme) {
     const S_ = window.InkwellsShare;
-    if (S_ && S_.hakeMeldungAb) await S_.hakeMeldungAb(m.id);
+    if (S_ && S_.hakeMeldungAb) await S_.hakeMeldungAb(m.id, massnahme);
     if (karte) karte.remove();
     const box = E('meldungen-liste');
     if (box && !box.children.length) E('ov-meldungen').style.display = 'none';
@@ -403,7 +448,7 @@
     const sperre = await S_.ladeMeineSperre();
     if (!window.Melden.gesperrtFuer(sperre, was, Date.now())) return null;
 
-    const bis = sperre.bis ? datumText(sperre.bis) : '';
+    const bis = sperre.bis ? nurDatum(sperre.bis) : '';
     const saetze = {
       neueFreigaben: bis
         ? T('sperreBeitretenBis', 'Du kannst bis zum {d} keinen geteilten Dokumenten mehr beitreten.')

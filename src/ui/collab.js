@@ -3279,6 +3279,7 @@
         (max, p) => (typeof p.at === 'number' && p.at > max ? p.at : max), 0);
       const fresh = Math.max(Date.now(), newest) - PRESENCE_STALE_MS;
       others = list.filter(p => typeof p.at !== 'number' || p.at > fresh)
+                   .filter(gehoertDazu)
                    .map(stempleSperre);
 
       /* Alles Zeichnen zusammen abgesichert. Reißt eine einzelne
@@ -3401,6 +3402,7 @@
        Freigabe auch an. Danach waere nur noch der Takt abgestellt, und
        beim anderen bliebe das Bild bis zum Ablauf belegt. */
     gibObjektFrei();
+    teilnehmer = null;
 
     if (room) { try { await room.leave(); } catch (e) {} }
     room = null;
@@ -3819,8 +3821,46 @@
       console.warn('[Collab] Rollen nicht aufgefrischt:', err?.message || err));
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WER HINAUSGEWORFEN WURDE, STEHT AUCH NICHT MEHR OBEN
+
+     Sein Eintrag in der Anwesenheit bleibt liegen, und zwar zwangslaeufig:
+     die Regel laesst nur ihn selbst dort schreiben, und mit der
+     Mitgliedschaft verliert er auch das Recht, den eigenen Eintrag zu
+     LOESCHEN. Er stand also weiter im Abzeichenband, als sei er noch
+     dabei. Genau so wurde es gemeldet.
+
+     Aufgeraeumt wird deshalb beim Lesen: massgeblich ist, wer im Kopf
+     des Dokuments steht, und den kennt jeder Beteiligte
+     (ui/sharedDocs.js meldet ihn her). Solange niemand ihn gemeldet hat
+     – etwa in einem Heft ohne Freigabe – wird nicht gefiltert; sonst
+     waere ploetzlich niemand mehr da.
+     ══════════════════════════════════════════════════════════════════ */
+  let teilnehmer = null;   // Set von Adressen, oder null = keine Auskunft
+
+  function setzeTeilnehmer(adressen) {
+    teilnehmer = Array.isArray(adressen)
+      ? new Set(adressen.map(a => String(a || '').trim().toLowerCase()).filter(Boolean))
+      : null;
+    /* Sofort neu zeichnen: sonst bliebe der Name stehen, bis der
+       naechste Anwesenheitstakt kommt. */
+    try { renderPresenceBar(); renderMarkers(); renderCarets(); renderLocks(); }
+    catch (err) { }
+  }
+
+  function gehoertDazu(person) {
+    if (!teilnehmer) return true;
+    const mail = String((person && person.email) || '').trim().toLowerCase();
+    // Ohne Adresse laesst sich nichts entscheiden – dann lieber zeigen
+    if (!mail) return true;
+    return teilnehmer.has(mail);
+  }
+
   window.Collab = {
     start, stop, setCanWrite, refreshRoomRoles,
+    /* Wer laut Kopf des Dokuments dazugehoert. ui/sharedDocs.js meldet
+       es bei jeder Aenderung – siehe gehoertDazu(). */
+    setzeTeilnehmer,
     noteTextChange, noteStroke, notePage, noteChange,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
     /* Wer außer einem selbst gerade da ist – flach kopiert, damit

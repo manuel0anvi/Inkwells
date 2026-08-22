@@ -1591,11 +1591,55 @@
   white-space: pre-wrap
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DIE KNOEPFE AN EINER MELDUNG
+
+   Sie stehen NICHT in .modal-btns, sondern mitten in der Karte – die
+   Regel dort greift also nicht, und hier stand zuerst `btn-m`. Das ist
+   eine Klasse der WEBSITE; in der App gibt es sie gar nicht. Heraus
+   kamen rohe Browser-Knoepfe, weiss und eckig mitten im dunklen Fenster.
+   Deshalb hier dieselbe Bauart wie in .modal-btns, ausgeschrieben.
+   ══════════════════════════════════════════════════════════════════════ */
 .meldung-knoepfe {
   display: flex;
   gap: 8px;
   margin-top: 14px;
   flex-wrap: wrap
+}
+
+.meldung-knoepfe button {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--sb2);
+  background: var(--sp);
+  color: var(--md);
+  cursor: pointer;
+  font-family: 'Crimson Pro', serif;
+  font-size: 13px;
+  transition: all .12s
+}
+
+.meldung-knoepfe button:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+/* Das Verbannen ist die schwerere Entscheidung – es soll sich auch so
+   anfuehlen, aber nicht schreien. Farbe erst beim Daraufzeigen. */
+.meldung-knoepfe button.gefaehrlich {
+  border-color: rgba(217, 139, 122, .4);
+  color: #d98b7a
+}
+
+.meldung-knoepfe button.gefaehrlich:hover {
+  background: rgba(217, 139, 122, .14);
+  border-color: #d98b7a;
+  color: #e8a294
+}
+
+.meldung-knoepfe button:disabled {
+  opacity: .5;
+  cursor: default
 }
 
 /* ── Auswahl mit Erklärtext (Freigabe- und Export-Dialog) ─────────────

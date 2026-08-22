@@ -381,7 +381,13 @@ service cloud.firestore {
                         || (request.auth != null
                             && m().ownerUid == request.auth.uid
                             && m().get('gegenBesitzer', false) == false))
-                    && request.resource.data.diff(m()).affectedKeys().hasOnly(['erledigt']);
+                    /* `massnahme` haelt fest, WIE der Besitzer entschieden
+                       hat: verbannt oder für harmlos befunden. Ohne das
+                       staende in der Verwaltung nur „erledigt". */
+                    && request.resource.data.diff(m()).affectedKeys()
+                         .hasOnly(['erledigt', 'massnahme'])
+                    && (!('massnahme' in request.resource.data)
+                        || request.resource.data.massnahme in ['verbannt', 'nichts']);
 
       allow delete: if isAdmin();
     }
