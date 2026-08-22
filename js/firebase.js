@@ -556,6 +556,9 @@ async function ladeMeldungen() {
          nur die Verwaltung sie gesehen – der Besitzer wurde bewusst
          nicht benachrichtigt (website/firestore.rules). */
       gegenBesitzer: x.gegenBesitzer === true,
+      /* Was der Besitzer entschieden hat: 'verbannt' oder 'nichts'.
+         Leer heisst: noch offen, oder aus der Zeit vor dem Feld. */
+      massnahme: String(x.massnahme || ''),
       erledigt: x.erledigt === true
     };
   });

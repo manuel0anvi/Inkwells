@@ -1310,7 +1310,10 @@ async function meldungenZeichnen() {
 
     karte.innerHTML =
       '<div class="meldung-kopf">' + escapeHtml(GRUND_TEXTE[m.grund] || m.grund)
-        + (m.erledigt ? ' <span class="meldung-fertig">' + escapeHtml(t('admin_meldung_erledigt')) + '</span>' : '')
+        + (m.erledigt ? ' <span class="meldung-fertig">' + escapeHtml(
+             m.massnahme === 'verbannt' ? t('admin_meldung_verbannt')
+             : m.massnahme === 'nichts' ? t('admin_meldung_geprueft')
+             : t('admin_meldung_erledigt')) + '</span>' : '')
         + (sperreLaeuft(sp) ? ' <span class="meldung-gesperrt">' + escapeHtml(t('admin_meldung_gesperrt')) + '</span>' : '')
         /* Der Besitzer wurde nicht benachrichtigt – hier liegt die Sache
            allein. Das muss dranstehen, sonst wartet man auf einen, der

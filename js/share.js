@@ -3757,10 +3757,21 @@ function beobachteMeldungenFuerMich(beiAenderung) {
   }
 }
 
-/** Eine Meldung abhaken – der Besitzer hat sich darum gekümmert. */
-async function hakeMeldungAb(meldungId) {
+/**
+ * Eine Meldung abhaken – der Besitzer hat sich darum gekümmert.
+ *
+ * `massnahme` haelt fest, WIE: verbannt oder für harmlos befunden. Ohne
+ * das stand in der Verwaltung nur „erledigt", und genau der Unterschied
+ * entscheidet, ob dort noch etwas zu tun ist.
+ *
+ * @param {string} meldungId
+ * @param {'verbannt'|'nichts'} [massnahme]
+ */
+async function hakeMeldungAb(meldungId, massnahme) {
+  const erlaubt = (massnahme === 'verbannt' || massnahme === 'nichts') ? massnahme : 'nichts';
   try {
-    await updateDoc(doc(db, 'meldungen', String(meldungId)), { erledigt: true });
+    await updateDoc(doc(db, 'meldungen', String(meldungId)),
+      { erledigt: true, massnahme: erlaubt });
     return true;
   } catch (err) {
     console.warn('[Melden] Nicht abgehakt:', err.message);
