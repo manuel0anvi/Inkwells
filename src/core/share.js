@@ -986,6 +986,17 @@ function describeDoc(docId, data) {
     textFluss: (data.textFluss === 'fest'
                 || data.textFluss === 'elastisch') ? data.textFluss : '',
     blockedEmails: Array.isArray(data.blockedEmails) ? data.blockedEmails : [],
+    /* ── Was jemand WAR, bevor er hinausgeworfen wurde ───────────────
+       { adresse: { role, via } }. Ohne das war das Entbannen eine
+       Sackgasse: die Adresse verschwand aus beiden Listen, und wer per
+       E-Mail eingeladen war, musste neu eingetippt werden – wer über den
+       Link kam, musste den Link noch einmal öffnen. Genau so wurde es
+       gemeldet.
+
+       Leer heisst: aus der Zeit davor. Dann wird beim Entbannen nur die
+       Sperre gelöst, wie bisher (entbannPlan). */
+    blockedInfo: (data.blockedInfo && typeof data.blockedInfo === 'object')
+      ? data.blockedInfo : {},
     updatedAt: toDate(data.updatedAt),
     createdAt: toDate(data.createdAt),
     sharedAt: toDate(data.sharedAt) || toDate(data.createdAt),
@@ -1370,6 +1381,7 @@ async function shareDocument(notebook, options = {}) {
     head.members = {};
     head.memberVia = {};
     head.blockedEmails = [];
+    head.blockedInfo = {};
     head.createdAt = serverTimestamp();
   }
 
@@ -1940,6 +1952,17 @@ async function removeMember(docId, email) {
 
   const members = { ...head.members };
   const memberVia = { ...head.memberVia };
+
+  /* Wer er war, bevor er hinausfliegt – damit das Entbannen ihn
+     zurückholen kann, statt nur die Sperre zu lösen (entbannPlan). */
+  const blockedInfo = { ...head.blockedInfo };
+  if (head.memberEmails.includes(key)) {
+    blockedInfo[key] = {
+      role: normalizeRole(members[key]),
+      via: memberVia[key] === 'link' ? 'link' : 'invite'
+    };
+  }
+
   delete members[key];
   delete memberVia[key];
 
@@ -1947,10 +1970,61 @@ async function removeMember(docId, email) {
     memberEmails: head.memberEmails.filter(e => e !== key),
     members,
     memberVia,
+    blockedInfo,
     blockedEmails: head.blockedEmails.includes(key)
       ? head.blockedEmails
       : head.blockedEmails.concat(key)
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ENTBANNEN HEISST ZURÜCKHOLEN
+
+   Aufgehoben wurde bisher nur die Sperre. Die Person war danach weder
+   Mitglied noch gesperrt – sie verschwand aus beiden Listen. Wer per
+   E-Mail eingeladen war, musste neu eingetippt werden; wer über den Link
+   gekommen war, musste den Link noch einmal öffnen, und bis dahin stand
+   das Dokument bei ihm nirgends. Genau so wurde es gemeldet.
+
+   Jetzt kommt zurück, was war: dieselbe Rolle, derselbe Weg. Der Kopf
+   hat es sich beim Hinauswerfen gemerkt (removeMember).
+
+   Reine Funktion, damit sie sich mit node prüfen lässt
+   (scripts/test-entbannen.js). Sie schreibt nichts – sie sagt nur, was
+   geschrieben werden soll.
+
+   @returns {{patch: object, wieder: 'mitglied'|'nurFrei', role?: string, via?: string}}
+   ══════════════════════════════════════════════════════════════════════ */
+function entbannPlan(head, email) {
+  const key = normalizeEmail(email);
+  const alleInfos = head.blockedInfo || {};
+  const info = alleInfos[key];
+
+  const blockedEmails = (head.blockedEmails || []).filter(e => e !== key);
+  const blockedInfo = { ...alleInfos };
+  delete blockedInfo[key];
+
+  // Nichts gemerkt (Sperre aus der Zeit davor): nur lösen, wie bisher
+  if (!info) return { patch: { blockedEmails, blockedInfo }, wieder: 'nurFrei' };
+
+  const role = normalizeRole(info.role);
+  const via = info.via === 'link' ? 'link' : 'invite';
+  const memberEmails = (head.memberEmails || []).includes(key)
+    ? head.memberEmails
+    : (head.memberEmails || []).concat(key);
+
+  return {
+    patch: {
+      blockedEmails,
+      blockedInfo,
+      memberEmails,
+      members: { ...head.members, [key]: role },
+      memberVia: { ...head.memberVia, [key]: via }
+    },
+    wieder: 'mitglied',
+    role,
+    via
+  };
 }
 
 /**
@@ -1980,10 +2054,13 @@ async function leaveDocument(docId) {
 /** Sperre aufheben, ohne gleich wieder einzuladen. */
 async function unblockMember(docId, email) {
   const me = requireIdentity();
-  const key = normalizeEmail(email);
   const head = await loadDocumentHead(docId);
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
-  await updateDocHead(docId, { blockedEmails: head.blockedEmails.filter(e => e !== key) });
+
+  const plan = entbannPlan(head, email);
+  await updateDocHead(docId, plan.patch);
+  // Der Aufrufer sagt damit, WAS geschehen ist (ui/share.js)
+  return plan;
 }
 
 /** Beide Wege gemischt: Eingeladene und über den Link Dazugekommene. */

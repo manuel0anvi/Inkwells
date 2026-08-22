@@ -336,7 +336,26 @@
      ══════════════════════════════════════════════════════════════════ */
   async function abhaken(m, karte, massnahme) {
     const S_ = window.InkwellsShare;
-    if (S_ && S_.hakeMeldungAb) await S_.hakeMeldungAb(m.id, massnahme);
+
+    /* ══════════════════════════════════════════════════════════════
+       EIN FEHLSCHLAG DARF NICHT WIE ERLEDIGT AUSSEHEN
+
+       Hier stand `await hakeMeldungAb(...)` ohne Blick auf das Ergebnis,
+       und die Karte verschwand danach in jedem Fall. Weist die Datenbank
+       das Schreiben ab – etwa weil die Regeln noch nicht veroeffentlicht
+       sind –, war die Meldung damit vom Bildschirm, aber nicht erledigt.
+       Beim naechsten Start stand sie wieder da, und niemand wusste warum.
+
+       Jetzt bleibt die Karte stehen, und es steht dabei, was los ist.
+       ══════════════════════════════════════════════════════════════ */
+    const ok = (S_ && S_.hakeMeldungAb) ? await S_.hakeMeldungAb(m.id, massnahme) : false;
+    if (!ok) {
+      melde(T('meldungNichtAbgehakt',
+        'Das ließ sich nicht speichern. Die Meldung bleibt offen.'));
+      for (const knopf of karte ? karte.querySelectorAll('button') : []) knopf.disabled = false;
+      return;
+    }
+
     if (karte) karte.remove();
     const box = E('meldungen-liste');
     if (box && !box.children.length) E('ov-meldungen').style.display = 'none';

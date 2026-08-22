@@ -903,9 +903,19 @@
     if (!head) return;
     try {
       const api = await whenShareReady();
-      await api.unblockMember(head.docId, email);
+      const plan = await api.unblockMember(head.docId, email);
       await loadHead(head.docId);
-      statusEl.textContent = t('shareUnblocked').replace('{mail}', email);
+
+      /* Zwei verschiedene Ausgaenge, zwei verschiedene Saetze. Wer vorher
+         Mitglied war, ist es wieder – mit derselben Rolle und auf
+         demselben Weg. Bei einer Sperre aus der Zeit vor blockedInfo ist
+         nur die Sperre gelöst; dann muss man wissen, dass die Einladung
+         fehlt. */
+      const zurueck = plan && plan.wieder === 'mitglied';
+      statusEl.textContent = (zurueck
+        ? t('shareUnblockedBack').replace('{rolle}',
+            plan.role === 'edit' ? t('roleEdit') : t('roleView'))
+        : t('shareUnblocked')).replace('{mail}', email);
     } catch (err) {
       statusEl.textContent = describeError(err);
     }
