@@ -163,6 +163,14 @@ body[data-admin="yes"] .admin-gate { display: none; }
   color: var(--text-muted);
 }
 .meldung-gesperrt { border-color: #b8524a; color: #d98b7a; }
+/* Meldung gegen den Besitzer: die sieht nur die Verwaltung */
+.meldung-besitzer {
+  display: inline-block; margin-left: 8px;
+  padding: 2px 8px; border-radius: 3px;
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--navy); border: 0.5px solid var(--gold-dark);
+  color: var(--gold-light);
+}
 
 .meldung-zeile {
   font-size: 13px; color: var(--text-body); line-height: 1.7;
@@ -1304,6 +1312,10 @@ async function meldungenZeichnen() {
       '<div class="meldung-kopf">' + escapeHtml(GRUND_TEXTE[m.grund] || m.grund)
         + (m.erledigt ? ' <span class="meldung-fertig">' + escapeHtml(t('admin_meldung_erledigt')) + '</span>' : '')
         + (sperreLaeuft(sp) ? ' <span class="meldung-gesperrt">' + escapeHtml(t('admin_meldung_gesperrt')) + '</span>' : '')
+        /* Der Besitzer wurde nicht benachrichtigt – hier liegt die Sache
+           allein. Das muss dranstehen, sonst wartet man auf einen, der
+           gar nichts davon weiss. */
+        + (m.gegenBesitzer ? ' <span class="meldung-besitzer">' + escapeHtml(t('admin_meldung_gegen_besitzer')) + '</span>' : '')
       + '</div>'
       + '<div class="meldung-zeile"><b>' + escapeHtml(t('admin_meldung_gegen')) + '</b> '
         + escapeHtml(m.gemeldetName ? m.gemeldetName + ' · ' + m.gemeldetEmail : m.gemeldetEmail)

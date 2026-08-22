@@ -552,6 +552,10 @@ async function ladeMeldungen() {
       docTitel: String(x.docTitel || ''),
       grund: String(x.grund || ''),
       notiz: String(x.notiz || ''),
+      /* Trifft die Meldung den Besitzer des Dokuments selbst? Dann hat
+         nur die Verwaltung sie gesehen – der Besitzer wurde bewusst
+         nicht benachrichtigt (website/firestore.rules). */
+      gegenBesitzer: x.gegenBesitzer === true,
       erledigt: x.erledigt === true
     };
   });
