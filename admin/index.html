@@ -1280,11 +1280,14 @@ async function meldungenZeichnen() {
     return;
   }
 
+  /* Massgeblich ist der EIGENE Haken, nicht der des Besitzers: dass er
+     jemanden verbannt hat, heisst nicht, dass hier nichts mehr zu tun ist
+     – im Gegenteil (siehe js/firebase.js, adminErledigt). */
   const auchErledigte = document.getElementById('meldungen-auch-erledigte').checked;
-  const zeigen = meldungen.filter(m => auchErledigte || !m.erledigt);
+  const zeigen = meldungen.filter(m => auchErledigte || !m.adminErledigt);
 
   // Die Zahl am Reiter zaehlt nur das Offene – das ist es, was Arbeit macht
-  const offen = meldungen.filter(m => !m.erledigt).length;
+  const offen = meldungen.filter(m => !m.adminErledigt).length;
   const zahl = document.getElementById('meldungen-zahl');
   if (zahl) {
     zahl.textContent = String(offen);
@@ -1299,7 +1302,7 @@ async function meldungenZeichnen() {
 
   for (const m of zeigen) {
     const karte = document.createElement('div');
-    karte.className = 'meldung-karte' + (m.erledigt ? ' erledigt' : '');
+    karte.className = 'meldung-karte' + (m.adminErledigt ? ' erledigt' : '');
 
     /* Wie oft ist diese Adresse schon aufgefallen? Eine einzelne Meldung
        sagt wenig; fuenf gegen dieselbe Person sagen viel. Und andersherum
@@ -1310,10 +1313,13 @@ async function meldungenZeichnen() {
 
     karte.innerHTML =
       '<div class="meldung-kopf">' + escapeHtml(GRUND_TEXTE[m.grund] || m.grund)
+        /* Was der Besitzer entschieden hat – und getrennt davon, ob hier
+           schon jemand daraufgesehen hat. */
         + (m.erledigt ? ' <span class="meldung-fertig">' + escapeHtml(
              m.massnahme === 'verbannt' ? t('admin_meldung_verbannt')
              : m.massnahme === 'nichts' ? t('admin_meldung_geprueft')
              : t('admin_meldung_erledigt')) + '</span>' : '')
+        + (m.adminErledigt ? ' <span class="meldung-fertig">' + escapeHtml(t('admin_meldung_abgehakt')) + '</span>' : '')
         + (sperreLaeuft(sp) ? ' <span class="meldung-gesperrt">' + escapeHtml(t('admin_meldung_gesperrt')) + '</span>' : '')
         /* Der Besitzer wurde nicht benachrichtigt – hier liegt die Sache
            allein. Das muss dranstehen, sonst wartet man auf einen, der
@@ -1345,12 +1351,12 @@ async function meldungenZeichnen() {
     const haken = document.createElement('button');
     haken.type = 'button';
     haken.className = 'btn-m';
-    haken.textContent = m.erledigt ? t('admin_meldung_wieder_offen') : t('admin_meldung_abhaken');
+    haken.textContent = m.adminErledigt ? t('admin_meldung_wieder_offen') : t('admin_meldung_abhaken');
     haken.addEventListener('click', async () => {
       haken.disabled = true;
       try {
         const api = adminApi;
-        await api.hakeMeldungAb(m.id, !m.erledigt);
+        await api.hakeMeldungAb(m.id, !m.adminErledigt);
         await meldungenZeichnen();
       } catch (err) {
         showStatus('meldung-status', describeAdminError(err), 'err');
