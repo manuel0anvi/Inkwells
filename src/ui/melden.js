@@ -206,6 +206,18 @@
        ersetzen: sonst verschwaende eine Meldung, die gerade gelesen
        wird, weil im selben Augenblick die naechste eintrifft. */
     if (ov.style.display !== 'flex') box.innerHTML = '';
+
+    /* ── Und nie eine Meldung ueber mich selbst ────────────────────
+       Die Regel haelt sie schon zurueck (website/firestore.rules,
+       gegenBesitzer). Meldungen aus der Zeit davor tragen den Vermerk
+       aber nicht und kaemen durch – dann staende hier "Gemeldet: ich"
+       samt Knopf, mich selbst zu verbannen. */
+    const S_ = window.InkwellsShare;
+    const ich = (S_ && S_.currentIdentity) ? S_.currentIdentity() : null;
+    const meine = String((ich && ich.email) || '').trim().toLowerCase();
+    if (meine) liste = liste.filter(m => String(m.gemeldetEmail || '').toLowerCase() !== meine);
+    if (!liste.length) return;
+
     for (const m of liste) {
       const karte = document.createElement('div');
       karte.className = 'meldung-karte';

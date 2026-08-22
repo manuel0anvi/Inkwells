@@ -3643,14 +3643,40 @@ async function meldeNutzer(m) {
   if (!geprueft.ok) return geprueft;
 
   try {
+    /* ══════════════════════════════════════════════════════════════
+       WIRD DER BESITZER SELBST GEMELDET?
+
+       Eine Meldung geht an zwei Stellen: an den Besitzer des Dokuments
+       und an die Verwaltung. Trifft sie den Besitzer SELBST, ist das
+       eine Stelle zu viel – er bekaeme die Beschwerde ueber sich
+       vorgelegt, koennte sie abhaken, und angeboten wuerde ihm
+       ausgerechnet, sich aus seinem eigenen Dokument zu verbannen.
+       Dann meldet ihn niemand mehr.
+
+       Solche Meldungen gehen deshalb nur an die Verwaltung. Die Regel
+       setzt das durch (website/firestore.rules); hier wird nur der
+       Vermerk gesetzt, an dem sie es erkennt.
+
+       >>> Warum der Kopf gefragt wird und nicht der Aufrufer <<<
+       Weil der Aufrufer die Oberflaeche ist, und die kann sich irren
+       oder umgangen werden. Wem ein Dokument gehoert, steht in seinem
+       Kopf. Nebenbei kommt von dort auch ownerUid – die entscheidet,
+       wer die Meldung ueberhaupt lesen darf, und sie aus der
+       Anwesenheitsliste zu nehmen hiesse, dem Melder zu glauben.
+       ══════════════════════════════════════════════════════════════ */
+    const kopf = await loadDocumentHead(String(m.docId));
+    const gemeldet = normalizeEmail(m.gemeldetEmail);
+    const gegenBesitzer = gemeldet === normalizeEmail(kopf.ownerEmail);
+
     await addDoc(collection(db, 'meldungen'), {
       erstellt: serverTimestamp(),
       melderEmail,
-      gemeldetEmail: normalizeEmail(m.gemeldetEmail),
+      gemeldetEmail: gemeldet,
       gemeldetName: String(m.gemeldetName || '').slice(0, 120),
       docId: String(m.docId),
-      docTitel: String(m.docTitel || '').slice(0, 200),
-      ownerUid: String(m.ownerUid || ''),
+      docTitel: String(m.docTitel || kopf.title || '').slice(0, 200),
+      ownerUid: String(kopf.owner || ''),
+      gegenBesitzer,
       grund: m.grund,
       notiz: String(m.notiz || '').slice(0, 300),
       erledigt: false

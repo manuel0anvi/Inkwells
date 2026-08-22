@@ -327,8 +327,26 @@ service cloud.firestore {
     match /meldungen/{meldungId} {
       function m() { return resource.data; }
 
+      /* ══════════════════════════════════════════════════════════════
+         WIRD DER BESITZER SELBST GEMELDET, SIEHT ER ES NICHT
+
+         Sonst bekaeme er die Beschwerde ueber sich vorgelegt, koennte
+         sie abhaken – und angeboten wuerde ihm ausgerechnet, sich aus
+         seinem eigenen Dokument zu verbannen. Dann meldet ihn niemand
+         mehr, und das Melden waere gegen den, der am meisten anrichten
+         kann, wertlos.
+
+         Solche Meldungen gehen nur an die Verwaltung.
+
+         get(…, false): Meldungen aus der Zeit vor diesem Feld haben es
+         nicht, und ein Zugriff auf einen fehlenden Schluessel laesst die
+         ganze Regel in einen Fehler laufen – sie wuerde dann auch das
+         Erlaubte abweisen. Ohne Angabe gilt: nicht gegen den Besitzer.
+         ══════════════════════════════════════════════════════════════ */
       allow get, list: if isAdmin()
-                       || (request.auth != null && m().ownerUid == request.auth.uid);
+                       || (request.auth != null
+                           && m().ownerUid == request.auth.uid
+                           && m().get('gegenBesitzer', false) == false);
 
       allow create: if isVerifiedUser()
                     && request.resource.data.melderEmail == myEmail()
@@ -339,12 +357,30 @@ service cloud.firestore {
                     && request.resource.data.docId is string
                     && request.resource.data.docId.size() > 0
                     && request.resource.data.ownerUid is string
+                    /* Der Vermerk muss stimmen: sonst koennte ein Melder
+                       ihn auf true setzen und damit JEDE Meldung am
+                       Besitzer vorbeischleusen – oder auf false, und der
+                       Besitzer bekaeme die Beschwerde ueber sich selbst
+                       doch zu sehen. Nachgeschlagen wird im Kopf des
+                       Dokuments; das kostet einen Lesevorgang, aber nur
+                       beim Melden, und das geschieht selten. */
+                    && request.resource.data.gegenBesitzer ==
+                         (request.resource.data.gemeldetEmail ==
+                          get(/databases/$(database)/documents/docs/$(request.resource.data.docId))
+                            .data.ownerEmail.lower())
                     && request.resource.data.notiz is string
                     && request.resource.data.notiz.size() <= 300
                     && request.resource.data.erledigt == false
                     && isServerTime(request.resource.data.erstellt);
 
-      allow update: if (isAdmin() || (request.auth != null && m().ownerUid == request.auth.uid))
+      /* Dieselbe Ausnahme wie beim Lesen: eine Meldung ueber den
+         Besitzer darf er auch nicht abhaken. Lesen konnte er sie schon
+         nicht – abhaken aber schon, und dazu braucht es nur die Kennung.
+         Gefunden hat das scripts/test-rules.js. */
+      allow update: if (isAdmin()
+                        || (request.auth != null
+                            && m().ownerUid == request.auth.uid
+                            && m().get('gegenBesitzer', false) == false))
                     && request.resource.data.diff(m()).affectedKeys().hasOnly(['erledigt']);
 
       allow delete: if isAdmin();

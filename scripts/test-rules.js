@@ -759,6 +759,7 @@ function headData(overrides = {}) {
     docId: 'dok1',
     docTitel: 'Mathematik',
     ownerUid: OWNER.uid,
+    gegenBesitzer: false,
     grund: 'beleidigung',
     notiz: 'Hat im Chat beleidigt.',
     erledigt: false,
@@ -830,6 +831,34 @@ function headData(overrides = {}) {
      eines Links und steht so in den Regeln. */
   await ok('Ohne Anmeldung bleibt ein offener Link offen',
     getDoc(doc(ohne(), 'docs/dok2')));
+
+  section('Wird der Besitzer gemeldet, sieht er es nicht');
+
+  /* Sonst bekaeme er die Beschwerde ueber sich selbst vorgelegt, koennte
+     sie abhaken – und angeboten wuerde ihm, sich aus seinem eigenen
+     Dokument zu verbannen. */
+  await ok('Der Besitzer laesst sich melden',
+    setDoc(doc(fsOf(MELDER), 'meldungen/mb1'),
+      meldung({ gemeldetEmail: OWNER.mail, gemeldetName: 'Besitzer', gegenBesitzer: true })));
+
+  await denied('Aber er sieht die Meldung nicht',
+    getDoc(doc(fsOf(OWNER), 'meldungen/mb1')));
+
+  await ok('Die Verwaltung schon',
+    getDoc(doc(fsOf(ADMIN), 'meldungen/mb1')));
+
+  await denied('Und er kann sie auch nicht abhaken',
+    updateDoc(doc(fsOf(OWNER), 'meldungen/mb1'), { erledigt: true }));
+
+  /* Der Vermerk laesst sich nicht faelschen: er wird gegen den Kopf des
+     Dokuments geprueft. */
+  await denied('Ein falscher Vermerk kommt nicht durch (Besitzer, aber false)',
+    setDoc(doc(fsOf(MELDER), 'meldungen/mb2'),
+      meldung({ gemeldetEmail: OWNER.mail, gegenBesitzer: false })));
+
+  await denied('Und andersherum genauso (Fremder, aber true)',
+    setDoc(doc(fsOf(MELDER), 'meldungen/mb3'),
+      meldung({ gemeldetEmail: GESPERRT.mail, gegenBesitzer: true })));
 
   section('Sperren: nur die Verwaltung setzt sie');
 
