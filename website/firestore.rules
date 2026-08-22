@@ -377,17 +377,30 @@ service cloud.firestore {
          Besitzer darf er auch nicht abhaken. Lesen konnte er sie schon
          nicht – abhaken aber schon, und dazu braucht es nur die Kennung.
          Gefunden hat das scripts/test-rules.js. */
-      allow update: if (isAdmin()
-                        || (request.auth != null
-                            && m().ownerUid == request.auth.uid
-                            && m().get('gegenBesitzer', false) == false))
-                    /* `massnahme` haelt fest, WIE der Besitzer entschieden
-                       hat: verbannt oder für harmlos befunden. Ohne das
-                       staende in der Verwaltung nur „erledigt". */
-                    && request.resource.data.diff(m()).affectedKeys()
-                         .hasOnly(['erledigt', 'massnahme'])
-                    && (!('massnahme' in request.resource.data)
-                        || request.resource.data.massnahme in ['verbannt', 'nichts']);
+      /* ══════════════════════════════════════════════════════════════
+         ZWEI HAKEN, ZWEI ZUSTAENDIGKEITEN
+
+         Der BESITZER setzt `erledigt` und `massnahme`: er hat
+         entschieden, ob jemand aus seinem Dokument fliegt. Die
+         VERWALTUNG setzt `adminErledigt`: ob darueber hinaus etwas
+         geschehen muss.
+
+         Getrennt, weil sonst der eine dem anderen die Meldung wegnaehme –
+         und weil gerade eine vom Besitzer erledigte Meldung fuer die
+         Verwaltung interessant bleibt.
+         ══════════════════════════════════════════════════════════════ */
+      allow update: if (
+                      (isAdmin()
+                       && request.resource.data.diff(m()).affectedKeys()
+                            .hasOnly(['adminErledigt']))
+                      || (request.auth != null
+                          && m().ownerUid == request.auth.uid
+                          && m().get('gegenBesitzer', false) == false
+                          && request.resource.data.diff(m()).affectedKeys()
+                               .hasOnly(['erledigt', 'massnahme'])
+                          && (!('massnahme' in request.resource.data)
+                              || request.resource.data.massnahme in ['verbannt', 'nichts']))
+                    );
 
       allow delete: if isAdmin();
     }
@@ -550,12 +563,23 @@ service cloud.firestore {
          Geworfene den Kopf einfach ueber den Link weiter, den er ja
          schon hatte – gefunden hat das scripts/test-rules.js.
          Dieselbe Ueberlegung wie bei mayReadContent() weiter unten. */
+      /* ══════════════════════════════════════════════════════════════
+         EINE NACHFRAGE STATT ZWEIER
+
+         Hier standen beide Sperren nebeneinander. Jede kostet ein
+         exists() und bis zu drei get() – und der Pruefstand meldete
+         schon „maximum of 1000 expressions reached". Eine Regel, die an
+         diese Grenze stoesst, weist ab, ohne dass etwas falsch waere.
+
+         Es genuegt auch eine: ueber den LINK kommt man herein, und wer
+         nicht mehr hereinkommen darf, ist mit 'neueFreigaben' gemeint.
+         'laufendeRaus' greift eine Zeile hoeher, in isMember().
+         ══════════════════════════════════════════════════════════════ */
       allow get: if resource == null
                     || isDocOwner()
                     || isMember()
                     || (linkIsOpen()
                         && !rausgeworfen()
-                        && !gesperrtFuer('laufendeRaus')
                         && !gesperrtFuer('neueFreigaben'));
 
       /* Auflisten nur über die Mitgliedschaft oder den eigenen Besitz –
@@ -609,7 +633,15 @@ service cloud.firestore {
          Ohne die Sperrliste könnte eine entfernte Person den Link einfach
          noch einmal öffnen und wäre sofort wieder dabei. */
       function selfJoin() {
-        return isVerifiedUser()
+        /* Zuerst die BILLIGSTE Frage: geht es ueberhaupt um diese Felder?
+           Bei einer Aenderung werden alle vier Erlaubnisse der Reihe nach
+           durchgerechnet, und zusammen stiessen sie an die Grenze von
+           1000 Ausdruecken – dann weist Firestore ab, ohne dass etwas
+           falsch waere. Der Pruefstand hat das gemeldet. Mit dieser Zeile
+           vorn laeuft je Aenderung nur noch EINE der vier ganz durch. */
+        return request.resource.data.diff(head()).affectedKeys()
+                 .hasOnly(['memberEmails', 'members', 'memberVia'])
+               && isVerifiedUser()
                && linkIsOpen()
                && !(myEmail() in head().blockedEmails)
                // Gesperrt heisst: in kein geteiltes Dokument mehr hinein
@@ -644,7 +676,10 @@ service cloud.firestore {
          sonst könnte sich jemand über diesen Weg in die Rollenliste
          schreiben lassen. Dasselbe Muster wie beim Selbsteintrag. */
       function selfRegisterUid() {
-        return isVerifiedUser()
+        // Dieselbe billige Vorfrage wie bei selfJoin – siehe dort
+        return request.resource.data.diff(head()).affectedKeys()
+                 .hasOnly(['memberUids'])
+               && isVerifiedUser()
                && myEmail() in head().memberEmails
                && request.resource.data.diff(head()).affectedKeys()
                     .hasOnly(['memberUids'])
@@ -680,13 +715,14 @@ service cloud.firestore {
          könnte er alle anderen aus dem Raum aussperren – und der
          Besitzer müsste jedes Mal hinterherwechseln. */
       function editorUpdate() {
-        return isVerifiedUser()
-               && canEdit()
-               && request.resource.data.diff(head()).affectedKeys()
+        // Billige Vorfrage nach vorn – siehe selfJoin
+        return request.resource.data.diff(head()).affectedKeys()
                     .hasOnly([
                       'pageOrder', 'pageCount', 'sections', 'activeSecId',
                       'chunkCount', 'revision', 'updatedAt'
                     ])
+               && isVerifiedUser()
+               && canEdit()
                // Nur vorwärts. Die Nummer ist kein Schloss mehr, sondern ein
                // Zähler, an dem die anderen Clients Neues erkennen.
                && request.resource.data.revision > head().revision;
@@ -696,7 +732,10 @@ service cloud.firestore {
          Für Empfänger ist das die Entsprechung zu „Löschen" – das fremde
          Heft selbst geht sie nichts an. */
       function selfLeave() {
-        return request.auth != null
+        // Dieselbe billige Vorfrage wie bei selfJoin – siehe dort
+        return request.resource.data.diff(head()).affectedKeys()
+                 .hasOnly(['memberEmails', 'members', 'memberVia'])
+               && request.auth != null
                && myEmail() != ''
                && myEmail() in head().memberEmails
                && request.resource.data.diff(head()).affectedKeys()
@@ -752,10 +791,10 @@ service cloud.firestore {
                   schon hat, sofort wieder herein – nur ohne Namen. */
                /* Und wer aus DIESEM Dokument hinausgeworfen wurde,
                   liest es auch ueber den Link nicht weiter – siehe
-                  rausgeworfen() beim Kopf. */
+                  rausgeworfen() beim Kopf. Nur EINE Sperre nachfragen,
+                  aus demselben Grund wie dort. */
                || (docHead().linkMode in ['view', 'edit']
                    && !(myEmail() != '' && myEmail() in docHead().blockedEmails)
-                   && !gesperrtFuer('laufendeRaus')
                    && !gesperrtFuer('neueFreigaben'));
       }
 

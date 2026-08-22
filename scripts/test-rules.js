@@ -805,6 +805,40 @@ function headData(overrides = {}) {
   await denied('Aber nicht den Vorwurf umschreiben',
     updateDoc(doc(fsOf(OWNER), 'meldungen/m1'), { grund: 'sonstiges' }));
 
+  section('Verbannen und zurueckholen');
+
+  /* Genau die zwei Schreibvorgaenge, die ui/share.js macht: erst
+     hinauswerfen (mit Merkzettel), dann zurueckholen. Gemeldet wurde
+     „beim Zurueckholen kommt ein Fehler" – hier faellt auf, ob eine
+     Regel im Weg steht. */
+  await ok('Hinauswerfen, mit Merkzettel',
+    updateDoc(doc(fsOf(OWNER), 'docs/dok1'), {
+      memberEmails: [READER.mail],
+      members: { [READER.mail]: 'view' },
+      memberVia: { [READER.mail]: 'invite' },
+      blockedEmails: [BLOCKED.mail, EDITOR.mail],
+      blockedInfo: { [EDITOR.mail]: { role: 'edit', via: 'invite' } }
+    }));
+
+  await ok('Und zurueckholen, mit Rolle und Weg',
+    updateDoc(doc(fsOf(OWNER), 'docs/dok1'), {
+      memberEmails: [READER.mail, EDITOR.mail],
+      members: { [READER.mail]: 'view', [EDITOR.mail]: 'edit' },
+      memberVia: { [READER.mail]: 'invite', [EDITOR.mail]: 'invite' },
+      blockedEmails: [BLOCKED.mail],
+      blockedInfo: {}
+    }));
+
+  await ok('Der Zurueckgeholte darf wieder lesen',
+    getDoc(doc(fsOf(EDITOR), 'docs/dok1')));
+
+  await ok('Und wieder schreiben',
+    setDoc(doc(fsOf(EDITOR), 'docs/dok1/pages/p1'),
+      { index: 0, text: '<p>Wieder da</p>', objects: [] }));
+
+  await denied('Ein Fremder darf das alles nicht',
+    updateDoc(doc(fsOf(STRANGER), 'docs/dok1'), { blockedInfo: {} }));
+
   section('Rausgeworfen heisst auch: nicht ueber den Link');
 
   /* dok2 hat einen offenen Link. BLOCKED steht in seiner blockedEmails –
