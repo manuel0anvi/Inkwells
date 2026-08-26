@@ -43,7 +43,7 @@ const {
 
 const {
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs,
-  serverTimestamp, arrayUnion, FieldPath
+  serverTimestamp, arrayUnion, arrayRemove, deleteField, FieldPath
 } = require('firebase/firestore');
 
 const { ref, set, get, remove } = require('firebase/database');
@@ -270,6 +270,82 @@ function headData(overrides = {}) {
     }));
   await denied('Besitzer gibt den Besitz nicht ab',
     updateDoc(doc(fsOf(OWNER), 'docs/dok1'), { owner: STRANGER.uid, updatedAt: serverTimestamp() }));
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND ZWAR IN DER FORM, DIE DIE APP WIRKLICH SCHICKT
+
+     setMember, removeMember, setLinkMode und unblockMember schrieben die
+     drei Mitgliederlisten als GANZES zurueck, gebildet aus dem Kopf von
+     einem Augenblick vorher. Waehrend jemand ueber den Link hereinkommt,
+     warf das ihn wieder hinaus – und er merkte nichts davon.
+
+     Jetzt haengen sie einzeln an (arrayUnion / arrayRemove) und fassen in
+     den Tabellen genau einen Schluessel an (FieldPath). Geprueft wird hier
+     die tatsaechliche Form, nicht eine nachgebaute: ein Punkt in der
+     Adresse darf keinen Unterordner ergeben, und deleteField muss durch
+     die Regel kommen.
+     ══════════════════════════════════════════════════════════════════ */
+  await ok('Einladen haengt an, statt die Liste zu ersetzen',
+    updateDoc(doc(fsOf(OWNER), 'docs/dok1'),
+      'memberEmails', arrayUnion(MELDER.mail),
+      new FieldPath('members', MELDER.mail), 'view',
+      new FieldPath('memberVia', MELDER.mail), 'invite',
+      'blockedEmails', arrayRemove(MELDER.mail),
+      'updatedAt', serverTimestamp()));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const d = (await getDoc(doc(ctx.firestore(), 'docs/dok1'))).data() || {};
+    gleich('Der Eingeladene steht drin', (d.memberEmails || []).includes(MELDER.mail), true);
+    gleich('Mit flacher Rolle', (d.members || {})[MELDER.mail], 'view');
+    gleich('Die anderen blieben unberührt', (d.members || {})[EDITOR.mail], 'edit');
+  });
+
+  await ok('Hinauswerfen nimmt nur den einen Eintrag',
+    updateDoc(doc(fsOf(OWNER), 'docs/dok1'),
+      'memberEmails', arrayRemove(MELDER.mail),
+      new FieldPath('members', MELDER.mail), deleteField(),
+      new FieldPath('memberVia', MELDER.mail), deleteField(),
+      new FieldPath('blockedInfo', MELDER.mail), { role: 'view', via: 'invite' },
+      'blockedEmails', arrayUnion(MELDER.mail),
+      'updatedAt', serverTimestamp()));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const d = (await getDoc(doc(ctx.firestore(), 'docs/dok1'))).data() || {};
+    gleich('Er ist wieder draussen', (d.memberEmails || []).includes(MELDER.mail), false);
+    gleich('Und aus der Rollentabelle weg', (d.members || {})[MELDER.mail], undefined);
+    gleich('Gemerkt ist, was er war', (d.blockedInfo || {})[MELDER.mail],
+      { role: 'view', via: 'invite' });
+    gleich('Die anderen stehen unveraendert da', (d.members || {})[EDITOR.mail], 'edit');
+  });
+
+  await ok('Entbannen holt ihn einzeln zurueck',
+    updateDoc(doc(fsOf(OWNER), 'docs/dok1'),
+      'blockedEmails', arrayRemove(MELDER.mail),
+      new FieldPath('blockedInfo', MELDER.mail), deleteField(),
+      'memberEmails', arrayUnion(MELDER.mail),
+      new FieldPath('members', MELDER.mail), 'view',
+      new FieldPath('memberVia', MELDER.mail), 'invite',
+      'updatedAt', serverTimestamp()));
+
+  // Und ein Bearbeiter kommt auch in dieser Form nicht an die Listen
+  await denied('Bearbeiter haengt sich niemanden an',
+    updateDoc(doc(fsOf(EDITOR), 'docs/dok1'),
+      'memberEmails', arrayUnion(STRANGER.mail),
+      new FieldPath('members', STRANGER.mail), 'edit',
+      'revision', 99, 'updatedAt', serverTimestamp()));
+
+  // Selbst aussteigen: nur der eigene Eintrag, ohne updatedAt
+  await ok('Selbst aussteigen nimmt nur den eigenen Eintrag',
+    updateDoc(doc(fsOf(MELDER), 'docs/dok1'),
+      'memberEmails', arrayRemove(MELDER.mail),
+      new FieldPath('members', MELDER.mail), deleteField(),
+      new FieldPath('memberVia', MELDER.mail), deleteField()));
+
+  await denied('Aber niemanden sonst hinaus',
+    updateDoc(doc(fsOf(READER), 'docs/dok1'),
+      'memberEmails', arrayRemove(EDITOR.mail),
+      new FieldPath('members', EDITOR.mail), deleteField(),
+      new FieldPath('memberVia', EDITOR.mail), deleteField()));
 
   /* ── Selbsteintrag über den Link ─────────────────────────────────── */
 

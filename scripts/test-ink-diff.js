@@ -58,6 +58,8 @@ function extract(name) {
 }
 
 const NAMES = ['inkPlan', 'inkSignatureOf', 'kurzhash', 'fingerprintNotebook',
+  // Rettet fremde Striche vor dem Neuschreiben der Boegen
+  'fremdeStricheRetten',
   // Die beiden Hälften des Merkzettels; fingerprintNotebook ruft sie
   'fingerprintSeite', 'fingerprintRahmen',
   'signatureOf', 'isInlineData',
@@ -68,7 +70,7 @@ const sandbox = { console, JSON };
 vm.createContext(sandbox);
 vm.runInContext(NAMES.map(extract).join('\n\n'), sandbox);
 
-const { inkPlan, inkSignatureOf, fingerprintNotebook } = sandbox;
+const { inkPlan, inkSignatureOf, fingerprintNotebook, fremdeStricheRetten } = sandbox;
 
 /* ── Prüfen ─────────────────────────────────────────────────────────── */
 
@@ -204,6 +206,55 @@ console.log('\nDer Merkzettel traegt die Unterschrift');
   check('Und passt zu inkSignatureOf',
     fp.pages.p1.inkSig, inkSignatureOf([strich('a')]));
   check('Die Anzahl steht weiterhin daneben', fp.pages.p1.strokes, 1);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   RADIEREN DARF NUR DAS EIGENE RADIEREN
+
+   rewritePageInk loescht alle Boegen einer Seite und schreibt die eigene
+   Liste hin. Was in Firestore steht und hier fehlt, gilt damit als
+   wegradiert – auch ein Strich, den der andere gerade gezeichnet hat und
+   der ueber den Live-Kanal nie ankam.
+
+   fremdeStricheRetten() unterscheidet die beiden Faelle an der Anzahl:
+   liegen in Firestore mehr Striche als im Merkzettel, ist die Differenz
+   dazugekommen, ohne dass wir davon wussten. Weil arrayUnion anhaengt und
+   die Boegen nach `no` geordnet sind, steht das Neueste hinten.
+
+   Beide Richtungen muessen stimmen, und die zweite ist die gefaehrliche:
+   ein zu grosszuegiges Retten laesst radierte Striche wieder auftauchen.
+   ══════════════════════════════════════════════════════════════════════ */
+console.log('\nFremde Striche ueberleben das Radieren');
+
+{
+  const a = strich('a'), b = strich('b'), c = strich('c'), d = strich('d');
+
+  check('Nur radiert: nichts wird gerettet',
+    fremdeStricheRetten([a, b, c], [a, c], 3), []);
+
+  check('Der andere hat einen dazugelegt: der bleibt',
+    fremdeStricheRetten([a, b, c, d], [a, c], 3), [d]);
+
+  check('Zwei dazugelegt, einer radiert: beide bleiben',
+    fremdeStricheRetten([a, b, c, d], [a, b], 2), [c, d]);
+
+  check('Ohne Merkzettel wird nichts gerettet',
+    fremdeStricheRetten([a, b, c], [a], undefined), []);
+
+  check('Gleich viele: nichts zu retten',
+    fremdeStricheRetten([a, b], [b, a], 2), []);
+
+  check('Firestore hat weniger: nichts zu retten',
+    fremdeStricheRetten([a], [a, b], 2), []);
+
+  /* Der gerettete Strich haengt HINTEN an – dort, wo er auch in
+     Firestore stand. Sonst wanderte er beim Radieren nach vorn. */
+  check('Die Reihenfolge bleibt',
+    fremdeStricheRetten([a, b, c, d], [a], 2), [c, d]);
+
+  // Ein Strich, der schon in der eigenen Liste steht, wird nicht doppelt
+  check('Nichts wird verdoppelt',
+    fremdeStricheRetten([a, b], [a, b], 1), []);
 }
 
 console.log('');
