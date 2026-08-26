@@ -69,6 +69,14 @@ const DEFAULT_SETTINGS = {
        { [heftId]: { shareId, url, mode } }            ältere Lesekopie
      Siehe core/share.js und ui/share.js. */
   shares: {},
+  /* ── Freigaben, die noch zurueckgezogen werden muessen ────────────
+     Wer ein freigegebenes Heft ohne Internet loescht, kann die Freigabe
+     in dem Augenblick nicht aufheben. Vorher war sie damit fuer immer
+     verloren: der Eintrag wurde vergessen, und die Eingeladenen behielten
+     das Dokument. Jetzt landet die Kennung hier und wird beim naechsten
+     Start nachgeholt (ui/share.js, holeRueckzugNach).
+       [{ docId, nbId, name, seit }] */
+  offeneRueckzuege: [],
   /* Wann der Tab „Geteilte Dokumente" zuletzt offen war. Alles, was neuer
      ist, gilt als neu – dadurch braucht es keinen eigenen
      Benachrichtigungs-Speicher und keinen zusätzlichen Schreibvorgang in

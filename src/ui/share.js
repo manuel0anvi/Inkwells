@@ -1073,17 +1073,102 @@
       const api = await whenShareReady();
       await api.unshareDocument(entry.docId);
     } catch (err) {
-      /* Nicht der Besitzer, kein Netz, schon weg – in allen Fällen soll
-         das Löschen weiterlaufen. Der Eintrag hier wird trotzdem
-         aufgeräumt, sonst zeigt die Oberfläche eine Freigabe an, die es
-         nicht mehr gibt. */
+      /* ══════════════════════════════════════════════════════════════
+         GESCHEITERT HEISST NICHT AUFGEGEBEN
+
+         Kein Netz, Firestore antwortet nicht, das Modul kam gar nicht
+         hoch: in all diesen Fällen soll das Löschen weiterlaufen – der
+         Papierkorb darf nicht an der Internetverbindung hängen.
+
+         Vorher wurde der Eintrag danach aber schlicht vergessen. Damit
+         war die Freigabe dauerhaft verloren: es gab nichts mehr, woran
+         ein Nachholen hätte ansetzen können, und die Eingeladenen
+         behielten das Dokument für immer. Wer sein Heft ohne Internet
+         löschte, gab es damit unbemerkt her.
+
+         Deshalb wandert die Kennung auf eine Nachholliste. Sie wird beim
+         nächsten Start abgearbeitet (holeRueckzugNach) – dieselbe
+         Vorgehensweise wie bei den Heften, die noch in die Cloud müssen.
+         ══════════════════════════════════════════════════════════════ */
       console.warn('[Share] Freigabe beim Löschen nicht zurückgezogen:',
         err?.message || err);
+      await merkeRueckzug(entry.docId, nbId);
     }
 
     await remember(nbId, null);
     return true;
   };
+
+  /* ── Die Nachholliste ─────────────────────────────────────────────── */
+
+  function offeneRueckzuege() {
+    const roh = Settings.get('offeneRueckzuege');
+    return Array.isArray(roh) ? roh : [];
+  }
+
+  async function merkeRueckzug(docId, nbId) {
+    if (!docId) return;
+    const liste = offeneRueckzuege();
+    if (liste.some(e => e && e.docId === docId)) return;
+
+    const nb = (S.notebooks || []).find(n => n.id === nbId);
+    liste.push({
+      docId,
+      nbId: nbId || '',
+      name: (nb && nb.name) || '',
+      seit: new Date().toISOString()
+    });
+    await Settings.update({ offeneRueckzuege: liste });
+    console.log('[Share] Rueckzug vorgemerkt:', docId);
+  }
+
+  async function vergissRueckzug(docId) {
+    const liste = offeneRueckzuege().filter(e => e && e.docId !== docId);
+    await Settings.update({ offeneRueckzuege: liste });
+  }
+
+  /**
+   * Holt beim Start nach, was ohne Netz nicht ging.
+   *
+   * >>> Warum ein Fehlschlag hier nichts wegnimmt <<<
+   * Steht der Rechner immer noch ohne Internet, bleibt der Eintrag
+   * stehen und wird beim uebernaechsten Start noch einmal versucht. Nur
+   * zwei Faelle raeumen ihn weg: es hat geklappt, oder das Dokument gibt
+   * es ohnehin nicht mehr. Alles andere ist ein Grund zum Wiederkommen.
+   */
+  async function holeRueckzugNach() {
+    const liste = offeneRueckzuege();
+    if (!liste.length) return;
+
+    let api;
+    try { api = await whenShareReady(); }
+    catch (err) { return; }              // ohne Modul kein Versuch
+
+    for (const eintrag of liste.slice()) {
+      if (!eintrag || !eintrag.docId) { await vergissRueckzug(eintrag?.docId); continue; }
+      try {
+        await api.unshareDocument(eintrag.docId);
+        await vergissRueckzug(eintrag.docId);
+        console.log('[Share] Rueckzug nachgeholt:', eintrag.name || eintrag.docId);
+      } catch (err) {
+        const msg = String(err?.message || '');
+        /* Schon weg oder nie da: dann ist das Ziel erreicht, wenn auch
+           anders als gedacht. Fehlendes Recht ebenso – dann gehoert das
+           Dokument jemand anderem und wir haben hier nichts zu suchen. */
+        if (/not-found|SHARE_NOT_FOUND|SHARE_NOT_OWNED|permission/i.test(msg)) {
+          await vergissRueckzug(eintrag.docId);
+          console.warn('[Share] Rueckzug erledigt sich von selbst:', msg);
+        } else {
+          console.warn('[Share] Rueckzug weiter offen:', msg);
+        }
+      }
+    }
+  }
+
+  /* Beim Start einmal versuchen – aber nicht sofort: das Anmelden läuft
+     noch, und ohne Kennung weist Firestore ohnehin ab. */
+  setTimeout(() => { holeRueckzugNach().catch(() => {}); }, 8000);
+  window.holeRueckzugNach = holeRueckzugNach;
 
   /* Auch die Empfängerseite braucht diese Auskunft (ui/sharedDocs.js).
      Dort stand bisher in JEDEM Fall „melde dich an" – auch dann, wenn man

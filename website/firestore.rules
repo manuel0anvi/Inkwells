@@ -377,30 +377,18 @@ service cloud.firestore {
          Besitzer darf er auch nicht abhaken. Lesen konnte er sie schon
          nicht – abhaken aber schon, und dazu braucht es nur die Kennung.
          Gefunden hat das scripts/test-rules.js. */
-      /* ══════════════════════════════════════════════════════════════
-         ZWEI HAKEN, ZWEI ZUSTAENDIGKEITEN
-
-         Der BESITZER setzt `erledigt` und `massnahme`: er hat
-         entschieden, ob jemand aus seinem Dokument fliegt. Die
-         VERWALTUNG setzt `adminErledigt`: ob darueber hinaus etwas
-         geschehen muss.
-
-         Getrennt, weil sonst der eine dem anderen die Meldung wegnaehme –
-         und weil gerade eine vom Besitzer erledigte Meldung fuer die
-         Verwaltung interessant bleibt.
-         ══════════════════════════════════════════════════════════════ */
-      allow update: if (
-                      (isAdmin()
-                       && request.resource.data.diff(m()).affectedKeys()
-                            .hasOnly(['adminErledigt']))
-                      || (request.auth != null
-                          && m().ownerUid == request.auth.uid
-                          && m().get('gegenBesitzer', false) == false
-                          && request.resource.data.diff(m()).affectedKeys()
-                               .hasOnly(['erledigt', 'massnahme'])
-                          && (!('massnahme' in request.resource.data)
-                              || request.resource.data.massnahme in ['verbannt', 'nichts']))
-                    );
+      /* Nur der BESITZER aendert etwas an einer Meldung, und auch er nur
+         zweierlei: dass er sich gekuemmert hat und wie. Die Verwaltung
+         hakt nichts ab – sie loescht, wenn sie fertig ist. Ein zweiter
+         Zustand dazwischen waere nur eine weitere Stelle, an der etwas
+         liegen bleiben kann. */
+      allow update: if request.auth != null
+                    && m().ownerUid == request.auth.uid
+                    && m().get('gegenBesitzer', false) == false
+                    && request.resource.data.diff(m()).affectedKeys()
+                         .hasOnly(['erledigt', 'massnahme'])
+                    && (!('massnahme' in request.resource.data)
+                        || request.resource.data.massnahme in ['verbannt', 'nichts']);
 
       allow delete: if isAdmin();
     }

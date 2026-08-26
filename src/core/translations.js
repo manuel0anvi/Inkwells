@@ -92,6 +92,8 @@ const TRANSLATIONS = {
     background: 'Hintergrund',
     create: 'Erstellen',
     save: 'Speichern',
+    saveSharedReadOnly: 'Dieses Dokument darfst du nur lesen – gespeichert wird nichts.',
+    saveSharedNothing: 'Alles ist schon bei den anderen.',
     cancel: 'Abbrechen',
     
     // Notebook card
@@ -969,6 +971,8 @@ const TRANSLATIONS = {
     background: 'Background',
     create: 'Create',
     save: 'Save',
+    saveSharedReadOnly: 'You may only read this document – nothing is saved.',
+    saveSharedNothing: 'Everything has already reached the others.',
     cancel: 'Cancel',
     
     // Notebook card
@@ -1827,6 +1831,8 @@ const TRANSLATIONS = {
     background: 'Sfondo',
     create: 'Crea',
     save: 'Salva',
+    saveSharedReadOnly: 'Questo documento puoi solo leggerlo: non viene salvato nulla.',
+    saveSharedNothing: 'Tutto è già arrivato agli altri.',
     cancel: 'Annulla',
     
     // Notebook card

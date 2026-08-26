@@ -95,16 +95,34 @@
        Weg für die eigene Datei an und meldete am Ende „gespeichert" –
        geschrieben worden war nichts. */
     if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) {
+      /* ══════════════════════════════════════════════════════════════
+         HIER MUSS IMMER ETWAS ZURUECKKOMMEN
+
+         Vorher konnte dieser Zweig vollstaendig schweigen: wer nur lesen
+         darf, kam gar nicht bis zum Schreiben, und wer nichts geaendert
+         hatte, bekam ebenfalls nichts zu sehen. Man drueckte auf
+         „Speichern" und die App tat, als habe man nichts gedrueckt –
+         schlimmer als eine Fehlermeldung, denn man versucht es wieder.
+
+         Drei Ausgaenge, drei Saetze: darf ich nicht, gab es nichts zu
+         tun, ist hinaus. Der Fehlerfall selbst gehoert weiterhin
+         saveOpenDocument – der weiss, WAS schiefging.
+         ══════════════════════════════════════════════════════════════ */
+      if (S.readOnly) {
+        toast(t('saveSharedReadOnly'));
+        return false;
+      }
+
       try {
         const ok = (typeof window.forceSharedDocSave === 'function')
           ? await window.forceSharedDocSave()
           : false;
-        // Ging nichts hinaus, hat saveOpenDocument den Grund schon gesagt
-        if (ok) toast(t('notebookSaved'));
+        toast(ok ? t('notebookSaved') : t('saveSharedNothing'));
         if (window.updateSaveStatus) window.updateSaveStatus();
         return true;
       } catch (err) {
         console.error('[SaveStatus] Geteiltes Dokument nicht gesichert:', err);
+        toast(t('saveError') + ': ' + (err?.message || '?'), true);
         return false;
       }
     }
