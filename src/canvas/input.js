@@ -110,13 +110,27 @@ function attachInput(canvas, textDiv, objLayer, page) {
       if (!rects.length) return true;
 
       const haft = anhaftPx();
-      const trifftText = rects.some(rc => (
-        rc.width > 1 &&
-        clientX >= rc.left - haft &&
-        clientX <= rc.right + haft &&
-        clientY >= rc.top - 1 &&
-        clientY <= rc.bottom + 1
-      ));
+      /* ── Senkrecht zieht die ganze Zeile an, nicht nur die Zeichen ──
+         Der Kasten um die Zeichen ist niedriger als der Zeilenabstand:
+         bei 17 px Schrift auf 32 px Zeile sind es 18,5 px, also gut
+         sechs Pixel Luft über und unter dem Text. Wer dort klickte,
+         galt als „daneben" und bekam einen frei stehenden Absatz mitten
+         auf einer beschriebenen Zeile. Von aussen sah das aus, als
+         hafte der Text mal an und mal nicht.
+
+         Die Luft wird an der Zeile gemessen und nicht geraten – so
+         bleibt sie bei einer Überschrift, die höhere Zeichen hat,
+         entsprechend kleiner und greift nie in die Nachbarzeile. */
+      const lh = parseFloat(getComputedStyle(textDiv).lineHeight) || 32;
+      const zoom = textDiv.offsetHeight > 0 ? (divRect.height / textDiv.offsetHeight) : 1;
+      const trifftText = rects.some(rc => {
+        const luft = Math.max(1, (lh * zoom - rc.height) / 2);
+        return rc.width > 1 &&
+          clientX >= rc.left - haft &&
+          clientX <= rc.right + haft &&
+          clientY >= rc.top - luft &&
+          clientY <= rc.bottom + luft;
+      });
       return !trifftText;
     } catch (err) {
       return true;
@@ -933,11 +947,23 @@ function attachInput(canvas, textDiv, objLayer, page) {
      Nur auf freier Fläche. Wer auf ein Zeichen klickt oder über Text
      zieht, soll den Browser weiter machen lassen: Markieren, Doppelklick
      aufs Wort, Ziehen über mehrere Zeilen kommen alle von dort.
+
+     >>> Warum auch neben dem Text, nicht nur weit weg davon <<<
+     Zwischen beidem liegt der Magnet: nah genug am Text, um an ihn zu
+     gehören, aber über keinem Kasten. Dort setzt placeCaretAnywhere die
+     Marke an die nächstgelegene Zeile (canvas/text.js) – und der
+     Browser schob sie danach an den Anfang des Feldes zurück, weil er
+     an dieser Stelle selbst nichts findet. Gemeldet als „ich klicke
+     neben den Doppelpunkt und lande am Anfang des Textes".
+
+     Erkennbar ist der Fall am Ziel des Klicks: liegt es auf .j-text
+     selbst, war unter dem Zeiger kein Inhalt – genau dann setzt die
+     Zeigerstellung unten die Marke auch selbst.
      ══════════════════════════════════════════════════════════════════ */
   textDiv.addEventListener('mousedown', e => {
     if (S.mode !== 'cursor' || S.readOnly || e.button !== 0) return;
     if (!textDiv.contains(e.target)) return;
-    if (!isFreeEditorAreaClick(e.clientX, e.clientY)) return;
+    if (e.target !== textDiv && !isFreeEditorAreaClick(e.clientX, e.clientY)) return;
     e.preventDefault();
   });
 

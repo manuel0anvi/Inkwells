@@ -888,6 +888,12 @@ function appendPageDOM(page, index) {
           const raw = (textDiv.textContent || '').replace(/\r/g, '');
           const nextText = raw.slice(0, caretOffset) + '\n' + indent + raw.slice(caretOffset);
           commitPlainTextEdit(nextText, caretOffset + 1 + indent.length);
+        } else if (typeof beendeUeberschrift === 'function' && beendeUeberschrift(textDiv)) {
+          /* Eine Überschrift hört mit ihrer Zeile auf: darunter beginnt
+             ein neuer, gewöhnlicher Absatz (canvas/text.js). Der Einzug
+             gilt weiter – er gehört zur Stelle, nicht zur Auszeichnung. */
+          if (indent) document.execCommand('insertText', false, indent);
+          setTimeout(() => checkPageOverflow(textDiv, page), 20);
         } else if (typeof imFreienAbsatz === 'function' && imFreienAbsatz(textDiv)) {
           /* ── Umbruch IN einem frei stehenden Absatz ──────────────────
              Ein Absatz, der frei auf dem Blatt steht (left/top, siehe

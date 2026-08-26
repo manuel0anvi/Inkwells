@@ -512,7 +512,14 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
   /* 4. Der Browser darf die Marke danach nicht noch einmal setzen. */
   check('Der Browser setzt die Marke nicht noch einmal',
     /addEventListener\('mousedown'/.test(eingabeQuelle)
-    && /if \(!isFreeEditorAreaClick\(e\.clientX, e\.clientY\)\) return;\s*\n\s*e\.preventDefault\(\)/.test(eingabeQuelle), true);
+    && /if \(e\.target !== textDiv && !isFreeEditorAreaClick\(e\.clientX, e\.clientY\)\) return;\s*\n\s*e\.preventDefault\(\)/.test(eingabeQuelle), true);
+  /* Auch NEBEN dem Text, nicht nur weit weg davon. Dort liegt gar kein
+     Inhalt: caretPositionFromPoint antwortete mit dem Feld selbst und
+     der Stelle 0, und die Marke sass am Anfang der Seite. Gemeldet als
+     „ich klicke neben den Doppelpunkt und lande am Anfang des Textes". */
+  check('Neben dem Text sucht die Marke die naechste Zeile',
+    /function _naechsteTextZeile/.test(textQuelle)
+    && /if \(!knoten \|\| knoten === textDiv\)/.test(textQuelle), true);
   check('Und von Hand gesetzt wird nur auf freier Flaeche',
     /placeCaretAnywhere\(textDiv, clientX, clientY, forceManual, page\)/.test(eingabeQuelle), true);
 
@@ -523,6 +530,15 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
     && /insertLineBreak/.test(lies('src', 'app.js')), true);
   check('Und zwei freie Absaetze werden auseinandergerueckt',
     /function richteFreieAbsaetze/.test(textQuelle), true);
+  /* 5b. Eine UEBERSCHRIFT ist davon ausgenommen: waechst ihr Absatz,
+     traegt die neue Zeile weiter deren Schrift, Groesse und Kursive.
+     Gemeldet als „ich druecke Enter und es schreibt viel duenner als
+     normal weiter". */
+  check('Eine Ueberschrift endet dagegen mit ihrer Zeile',
+    /function beendeUeberschrift/.test(textQuelle)
+    && /beendeUeberschrift\(textDiv\)/.test(lies('src', 'app.js')), true);
+  check('Und die neue Zeile traegt ihre Auszeichnung nicht mehr',
+    /_freierAbsatz\(parseFloat\(p\.style\.left\)/.test(textQuelle), true);
 
   /* 6. Ein blosser Klick hinterlaesst nichts. */
   check('Der blosse Klick raeumt sich wieder weg',
@@ -582,11 +598,15 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
     /const ANHAFT_MM = 10/.test(lies('src', 'canvas', 'input.js'))
     && /clientX >= rc\.left - haft/.test(lies('src', 'canvas', 'input.js'))
     && /clientX <= rc\.right \+ haft/.test(lies('src', 'canvas', 'input.js')), true);
-  /* Senkrecht darf er NICHT anziehen - sonst risse eine Zeile die Marke
-     aus der Zeile darunter zu sich herueber. */
-  check('Aber nur waagerecht, nicht nach oben und unten',
-    /clientY >= rc\.top - 1/.test(lies('src', 'canvas', 'input.js'))
-    && /clientY <= rc\.bottom \+ 1/.test(lies('src', 'canvas', 'input.js')), true);
+  /* Senkrecht zieht die ganze ZEILE an, aber keinen Deut mehr: die Luft
+     ist genau der halbe Abstand zwischen dem Kasten um die Zeichen und
+     der Zeilenhoehe. Gemessen und nicht geraten - so reisst keine Zeile
+     die Marke aus der darunter zu sich herueber, und die sechs Pixel
+     Luft ueber und unter dem Text zaehlen doch zur Zeile. */
+  check('Senkrecht nur bis zur Mitte zwischen zwei Zeilen',
+    /const luft = Math\.max\(1, \(lh \* zoom - rc\.height\) \/ 2\)/.test(lies('src', 'canvas', 'input.js'))
+    && /clientY >= rc\.top - luft/.test(lies('src', 'canvas', 'input.js'))
+    && /clientY <= rc\.bottom \+ luft/.test(lies('src', 'canvas', 'input.js')), true);
   check('Und der Zeilenanfang zieht ebenso an',
     /if \(linksPx < ANHAFT_MM_TEXT \* PX_PRO_MM_TEXT\) linksPx = 0;/.test(textQuelle), true);
 
@@ -859,6 +879,13 @@ console.log('\nDer eine Weg vom Editor ins Heft\n');
     /Collab\.noteTextChange\(page\.id, page\.textContent\);/.test(appQuelle), true);
   check('Und die Ueberschrift ebenso',
     /uebernimmText\(info\.page, textDiv\)/.test(leisteQuelle), true);
+  /* Und `info` gibt es dort auch wirklich. Es stand nirgends: jeder
+     Druck auf einen Formatknopf endete mit „info is not defined", und
+     genau diese Zeile blieb liegen - die Ueberschrift stand auf dem
+     Blatt, kam aber nie ins Heft. */
+  check('Und die Seite dafuer wird auch geholt',
+    /const info = \(typeof getPage === 'function' && S\.activePgId\) \? getPage\(S\.activePgId\) : null;/
+      .test(leisteQuelle), true);
 
   /* ══════════════════════════════════════════════════════════════════
      WAS NICHT MEHR AUFS BLATT PASST

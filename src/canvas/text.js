@@ -977,6 +977,85 @@ function _teileLuecke(halter, clientX, scaleX) {
   return zweiter;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE ÜBERSCHRIFT ENDET MIT IHRER ZEILE
+
+   >>> Der Fall, den das repariert <<<
+   Ein Umbruch teilt einen frei stehenden Absatz nicht, er lässt ihn nach
+   unten wachsen (app.js, insertLineBreak) – für gewöhnlichen Text genau
+   richtig. Bei einer ÜBERSCHRIFT sass die neue Zeile damit weiter in
+   deren Absatz und trug deren Auszeichnung: dieselbe Schrift, dieselbe
+   Kursive, dieselbe Grösse.
+
+   Von aussen: „ich schreibe eine Überschrift, drücke Enter, und es
+   schreibt in der Überschrift weiter. Schalte ich die Kursive ab, steht
+   da immer noch die dünne Schrift der Überschrift und nicht die
+   normale."
+
+   Deshalb hört die Überschrift beim Umbruch auf: darunter entsteht ein
+   NEUER freier Absatz ohne ihre Klasse, eine Zeile tiefer. Was rechts
+   der Marke noch stand, zieht mit – wer mitten in einer Überschrift
+   umbricht, will den Rest darunter haben, nicht verlieren.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Die Überschrift, in der die Marke steht – oder null. */
+function _ueberschriftUnterMarke(textDiv) {
+  const sel = window.getSelection && window.getSelection();
+  if (!sel || !sel.rangeCount || !textDiv) return null;
+  let n = sel.getRangeAt(0).startContainer;
+  if (n && n.nodeType === Node.TEXT_NODE) n = n.parentElement;
+  const p = (n && n.closest) ? n.closest('p.j-frei') : null;
+  if (!p || !textDiv.contains(p)) return null;
+  return /\bj-title-[123]\b/.test(p.className || '') ? p : null;
+}
+
+/**
+ * Der Umbruch am Ende einer freien Überschrift: eine normale Zeile.
+ *
+ * @returns {boolean} ob der Umbruch hier erledigt wurde
+ */
+function beendeUeberschrift(textDiv) {
+  const p = _ueberschriftUnterMarke(textDiv);
+  if (!p) return false;
+
+  const sel = window.getSelection();
+  const marke = sel.getRangeAt(0);
+  const rest = document.createRange();
+  rest.setStart(marke.startContainer, marke.startOffset);
+  rest.setEnd(p, p.childNodes.length);
+  const mitgenommen = rest.extractContents();
+
+  /* Ohne Platzhalter hat der leergeräumte Absatz keine Höhe mehr – und
+     die neue Zeile sässe in ihm statt darunter. */
+  if (!p.lastChild || p.lastChild.nodeName !== 'BR') p.appendChild(document.createElement('br'));
+
+  /* Eine Zeile tiefer, nicht „so hoch wie die Überschrift" – ihr Kasten
+     ist um ein, zwei Pixel höher als der Zeilenabstand, und der neue
+     Absatz sässe damit knapp neben der Linie des Papiers. */
+  const lh = parseFloat(getComputedStyle(textDiv).lineHeight) || 32;
+  const hoch = Math.max(1, Math.round((p.offsetHeight || lh) / lh)) * lh;
+  const neu = _freierAbsatz(parseFloat(p.style.left) || 0,
+                            (parseFloat(p.style.top) || 0) + hoch);
+  if ((mitgenommen.textContent || '').length) {
+    neu.textContent = '';
+    neu.appendChild(mitgenommen);
+  }
+  p.insertAdjacentElement('afterend', neu);
+  ordneFreieAbsaetze(textDiv);
+
+  const rg = document.createRange();
+  rg.setStart(neu, 0);
+  rg.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(rg);
+
+  /* Der Umbruch ist eine echte Änderung – von Hand gesetzte Knoten
+     melden das nicht von selbst. Ohne das stünde die neue Zeile weder
+     im Heft noch beim Mitschreibenden (app.js, das 'input'-Ereignis). */
+  textDiv.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
+
 /** Steht die Schreibmarke gerade in einem frei stehenden Absatz? */
 function imFreienAbsatz(textDiv) {
   const sel = window.getSelection && window.getSelection();
@@ -1298,6 +1377,48 @@ function _setRangeEndOfNode(range, node) {
   range.collapse(true);
 }
 
+/** Was der Browser an diesem Punkt für eine Textstelle hält. */
+function _stelleAmPunkt(x, y) {
+  if (document.caretPositionFromPoint) return document.caretPositionFromPoint(x, y);
+  if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+  return null;
+}
+
+/**
+ * Die geschriebene Zeile, die einem Punkt am nächsten liegt.
+ *
+ * Gemessen wird Textknoten für Textknoten, nicht am umschliessenden
+ * Kasten: ein Absatz ist so breit wie die Seite, seine Zeilen sind es
+ * nicht. Dieselbe Messung benutzt canvas/input.js für den Treffertest
+ * (beschriebeneKaesten).
+ *
+ * @returns {DOMRect|null} in Bildschirm-Pixeln
+ */
+function _naechsteTextZeile(textDiv, clientX, clientY) {
+  let beste = null;
+  let besteWeite = Infinity;
+  const bereich = document.createRange();
+  const lauf = document.createTreeWalker(textDiv, NodeFilter.SHOW_TEXT);
+
+  for (let n = lauf.nextNode(); n; n = lauf.nextNode()) {
+    if (!n.nodeValue || !n.nodeValue.length) continue;
+    bereich.selectNodeContents(n);
+    for (const rc of bereich.getClientRects()) {
+      if (rc.width <= 1) continue;
+      const dx = clientX < rc.left ? rc.left - clientX
+        : (clientX > rc.right ? clientX - rc.right : 0);
+      const dy = clientY < rc.top ? rc.top - clientY
+        : (clientY > rc.bottom ? clientY - rc.bottom : 0);
+      /* Senkrecht wiegt schwerer: das Ende DIESER Zeile ist näher
+         gemeint als der Anfang der Zeile darüber, auch wenn der Weg
+         dorthin in Pixeln länger ist. */
+      const weite = dx + dy * 4;
+      if (weite < besteWeite) { besteWeite = weite; beste = rc; }
+    }
+  }
+  return beste;
+}
+
 /**
  * Setzt die Schreibmarke dorthin, wo gezeigt wurde – auch wenn dort noch
  * gar nichts steht.
@@ -1353,10 +1474,39 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
      ihn wird die Stelle deshalb hier gesetzt – gemessen an derselben
      Stelle, die der Browser nehmen würde. */
   if (!forceManual) {
-    const treffer = document.caretPositionFromPoint
-      ? document.caretPositionFromPoint(clientX, clientY)
-      : (document.caretRangeFromPoint ? document.caretRangeFromPoint(clientX, clientY) : null);
-    const knoten = treffer ? (treffer.offsetNode || treffer.startContainer) : null;
+    let treffer = _stelleAmPunkt(clientX, clientY);
+    let knoten = treffer ? (treffer.offsetNode || treffer.startContainer) : null;
+
+    /* ── Neben dem Text weiss der Browser gar nichts ─────────────────
+       >>> Der Fall, den das repariert <<<
+       Ein frei stehender Absatz ist nur so breit wie sein Text. Klickt
+       jemand rechts daneben, liegt der Punkt über KEINEM Inhalt, und
+       caretPositionFromPoint antwortet mit dem Feld selbst und der
+       Stelle 0. Die Marke sass damit am Anfang der Seite, und der
+       nächste Buchstabe stand vor allem anderen.
+
+       Gemessen: ein Klick acht Pixel rechts neben „problem:" lieferte
+       DIV.j-text@0, und aus „problem:" wurde „Xproblem:". Genau so
+       gemeldet – „ich klicke neben den Doppelpunkt und lande am Anfang
+       des Textes".
+
+       Hierher kommt nur, was innerhalb des Magneten liegt
+       (canvas/input.js, isFreeEditorAreaClick) – der Klick will also an
+       den Text und nicht daneben. Gefragt wird der Browser deshalb ein
+       zweites Mal, mit einem Punkt, der in die nächstgelegene Zeile
+       hineingerückt ist. So kommt wieder die genaue Stelle im Wort
+       heraus, statt sie aus Zeichenbreiten zu schätzen. */
+    if (!knoten || knoten === textDiv) {
+      const zeile = _naechsteTextZeile(textDiv, clientX, clientY);
+      if (zeile) {
+        const nahX = Math.min(Math.max(clientX, zeile.left + 1), zeile.right - 1);
+        const nahY = Math.min(Math.max(clientY, zeile.top + 1), zeile.bottom - 1);
+        const zweiter = _stelleAmPunkt(nahX, nahY);
+        const knoten2 = zweiter ? (zweiter.offsetNode || zweiter.startContainer) : null;
+        if (knoten2 && knoten2 !== textDiv) { treffer = zweiter; knoten = knoten2; }
+      }
+    }
+
     if (knoten && textDiv.contains(knoten)) {
       const rg = document.createRange();
       rg.setStart(knoten, treffer.offset !== undefined ? treffer.offset : treffer.startOffset);

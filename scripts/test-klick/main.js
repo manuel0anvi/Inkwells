@@ -61,7 +61,16 @@ app.on('ready', async () => {
  try {
   const win = new BrowserWindow({
     width: 1400, height: 950, show: true, backgroundColor: '#12121a',
-    webPreferences: { preload: path.join(ROOT, 'preload.js'), contextIsolation: true }
+    /* ── Warum die Drosselung aus muss ────────────────────────────────
+       Chromium bremst Uhren in einem verdeckten Fenster auf etwa eine
+       Meldung je Sekunde. Die Leiste setzt die Ueberschrift aber ueber
+       ein setTimeout von 50 ms (ui/toolbar.js) – liegt ein anderes
+       Fenster davor, kommt sie erst eine Sekunde spaeter, und der
+       Pruefstand meldet einen Fehler, den es gar nicht gibt.
+       Gemessen: „Die Ueberschrift ist gesetzt" schlug fehl, obwohl sie
+       kurz danach dastand. */
+    webPreferences: { preload: path.join(ROOT, 'preload.js'), contextIsolation: true,
+                      backgroundThrottling: false }
   });
   /* Ein Fehler im Fenster erklaert mehr als jede fehlgeschlagene
      Pruefung – ohne das sucht man ihn im Dunkeln. */
@@ -119,6 +128,20 @@ app.on('ready', async () => {
          rg.setStart(n, i); rg.setEnd(n, i + ${wort.length});
          const r = rg.getBoundingClientRect();
          return { l: Math.round(r.left), t: Math.round(r.top) };
+       }
+       return null; })()`);
+
+  /** Und der ganze Kasten darum: {l, r, t, b} oder null */
+  const wortKasten = (wort) => js(
+    `(() => { const td = document.querySelector('.j-text');
+       const lauf = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+       for (let n = lauf.nextNode(); n; n = lauf.nextNode()) {
+         const i = n.nodeValue.indexOf(${JSON.stringify(wort)});
+         if (i < 0) continue;
+         const rg = document.createRange();
+         rg.setStart(n, i); rg.setEnd(n, i + ${wort.length});
+         const r = rg.getBoundingClientRect();
+         return { l: r.left, r: r.right, t: r.top, b: r.bottom };
        }
        return null; })()`);
 
@@ -329,6 +352,105 @@ app.on('ready', async () => {
     ortLuecke && Math.abs(ortLuecke.l - feld.l) < 8
     && Math.abs(ortLuecke.t - (vorLuecke.o.t + feld.lh)) < 8,
     JSON.stringify(ortLuecke) + ' zu ' + JSON.stringify(vorLuecke));
+
+  /* ══════════════════════════════════════════════════════════════════
+     4e  NEBEN DEN TEXT GEKLICKT – NICHT AN DEN ANFANG DER SEITE
+
+     Gemeldet: „ich klicke neben den Doppelpunkt, dort wo die naechste
+     Linie ist, also ziemlich nahe – und der Cursor springt an den
+     Anfang des Textes."
+
+     Ein frei stehender Absatz ist nur so breit wie sein Text. Rechts
+     daneben liegt gar kein Inhalt, und caretPositionFromPoint
+     antwortete dort mit dem Feld selbst und der Stelle 0. Gemessen bei
+     acht Pixeln Abstand: aus „problem:" wurde „Xproblem:".
+
+     Innerhalb des Magneten (canvas/input.js, ANHAFT_MM) gehoert der
+     Klick an den Text, ausserhalb wird ein neues Textfeld daraus.
+     ══════════════════════════════════════════════════════════════════ */
+  zeilen.push('\n  4e Neben den Text geklickt haftet an ihm');
+
+  async function nebenanTippen(dx, dy) {
+    await js(`(() => { document.querySelector('.j-text').innerHTML = ''; return true; })()`);
+    await klick(feld.l + 60, zeileY(2));
+    await tippe('problem:');
+    const rc = await wortKasten('problem:');
+    await klick(rc.r + dx,
+      dy === 0 ? (rc.t + rc.b) / 2 : (dy < 0 ? rc.t + dy : rc.b + dy));
+    await tippe('X');
+    return { text: await roherText(),
+             bloecke: await js(`document.querySelectorAll('.j-text p.j-frei').length`) };
+  }
+
+  for (const dx of [4, 20, 30]) {
+    const nah = await nebenanTippen(dx, 0);
+    pruefe(dx + ' px daneben: das X haengt sich ans Ende',
+      nah.text === 'problem:X', JSON.stringify(nah.text));
+  }
+  const weit = await nebenanTippen(80, 0);
+  pruefe('Weit daneben entsteht dagegen ein neues Textfeld',
+    weit.bloecke === 2, weit.bloecke + ' Absaetze, Text ' + JSON.stringify(weit.text));
+
+  /* Senkrecht zieht die ganze ZEILE an und nicht nur der Kasten um die
+     Zeichen: zwischen beidem liegen bei 17 px Schrift auf 32 px Zeile
+     gut sechs Pixel Luft. Wer dort klickte, bekam einen frei stehenden
+     Absatz mitten auf einer beschriebenen Zeile. */
+  const knappDrunter = await nebenanTippen(-2, 4);
+  pruefe('Vier Pixel unter den Zeichen gilt noch dieselbe Zeile',
+    knappDrunter.text === 'problem:X', JSON.stringify(knappDrunter.text));
+  const eineTiefer = await nebenanTippen(-2, 10);
+  pruefe('Eine ganze Zeile tiefer aber nicht mehr',
+    eineTiefer.bloecke === 2, eineTiefer.bloecke + ' Absaetze');
+
+  /* ══════════════════════════════════════════════════════════════════
+     4f  EINE UEBERSCHRIFT ENDET MIT IHRER ZEILE
+
+     Gemeldet: „ich schreibe eine Ueberschrift, druecke Enter – und es
+     schreibt in der Ueberschrift weiter. Schalte ich die Kursive ab,
+     steht da immer noch die duenne Schrift und nicht die normale."
+
+     Ein Umbruch teilt einen freien Absatz nicht, er laesst ihn wachsen
+     (Abschnitt 4) – die neue Zeile sass damit weiter in der Ueberschrift
+     und trug deren Schrift, Groesse und Kursive.
+     ══════════════════════════════════════════════════════════════════ */
+  zeilen.push('\n  4f Nach der Ueberschrift schreibt es normal weiter');
+  await js(`(() => { document.querySelector('.j-text').innerHTML = ''; return true; })()`);
+  await klick(feld.l + 60, zeileY(2));
+  await tippe('Titel');
+  await js(`(() => { toggleHeading('h1'); return true; })()`);
+  await new Promise(r => setTimeout(r, 600));
+  pruefe('Die Ueberschrift ist gesetzt', /j-title-1/.test(await inhalt()), await inhalt());
+  /* Und sie ist im Heft angekommen: der Handgriff dafuer stand jahrelang
+     hinter einem `info`, das es nirgends gab – jeder Formatknopf endete
+     mit „info is not defined", und alles danach blieb liegen. */
+  pruefe('Und ist auch ins Heft uebernommen worden',
+    /j-title-1/.test(await js(`getPage(S.activePgId).page.textContent || ''`)),
+    await js(`getPage(S.activePgId).page.textContent || ''`));
+
+  const obenTitel = await js(`parseFloat(document.querySelector('.j-text p.j-frei').style.top)`);
+  await enter();
+  await tippe('normal');
+  const html4f = await inhalt();
+  pruefe('Die neue Zeile steht in einem eigenen Absatz',
+    (await js(`document.querySelectorAll('.j-text p.j-frei').length`)) === 2, html4f);
+  pruefe('Der die Ueberschrift nicht mehr traegt', await js(
+    `(() => { const ps = [...document.querySelectorAll('.j-text p.j-frei')];
+       return !/j-title/.test(ps[ps.length - 1].className); })()`), html4f);
+  pruefe('Und wirklich in gewoehnlicher Schrift steht', await js(
+    `(() => { const ps = [...document.querySelectorAll('.j-text p.j-frei')];
+       const a = getComputedStyle(ps[0]), b = getComputedStyle(ps[ps.length - 1]);
+       return a.fontFamily !== b.fontFamily && b.fontStyle === 'normal'; })()`), html4f);
+  const obenNeu = await js(
+    `(() => { const ps = [...document.querySelectorAll('.j-text p.j-frei')];
+       return parseFloat(ps[ps.length - 1].style.top); })()`);
+  /* Genau eine Zeile tiefer – in SEITEN-Pixeln, denn dort steht `top`.
+     Der Kasten der Ueberschrift ist ein, zwei Pixel hoeher als der
+     Zeilenabstand; ungerastert saesse der neue Absatz neben der Linie. */
+  pruefe('Genau eine Zeile tiefer, auf der Linie des Papiers',
+    obenNeu - obenTitel === 32, obenTitel + ' -> ' + obenNeu);
+  pruefe('Der Knopf zeigt wieder das Absatzzeichen',
+    (await js(`document.getElementById('fmt-style-lbl').textContent`)) === '¶',
+    await js(`document.getElementById('fmt-style-lbl').textContent`));
 
   // ── 5  Ein blosser Klick hinterlaesst nichts ──────────────────────
   zeilen.push('\n  5  Der blosse Klick');
