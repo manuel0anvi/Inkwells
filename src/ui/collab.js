@@ -1995,6 +1995,44 @@
    *
    * @returns {number|null} null, wenn der Anker nicht wiederzufinden ist
    */
+  /* ══════════════════════════════════════════════════════════════════
+     WIE STRENG DIE HALBE SUCHE SEIN MUSS
+
+     Der erste Anlauf nahm die halben Anker so grosszuegig wie den ganzen:
+     ab vier Zeichen, im Umkreis von CTY (500). Das war zu weit. Waehrend
+     jemand tippt, passt sein Anker fast nie genau, und ein Stueck von
+     vier Zeichen findet sich auf 500 Zeichen Umkreis fast immer irgendwo
+     – bei jedem Anschlag woanders. Die fremde Marke sprang dadurch hin
+     und her und wurde jedes Mal neu gebaut; der Pruefstand meldete es
+     sofort als Flackern.
+
+     Eine echte Aenderung neben der Marke verschiebt sie um WENIGE
+     Zeichen. Deshalb: das Stueck muss laenger sein, und die Fundstelle
+     muss nah liegen. Der gemeldete Fall verschiebt um 1, der zweite um 7
+     – beide bleiben bequem darunter.
+     ══════════════════════════════════════════════════════════════════ */
+  const ANKER_MIN = 6;
+  const ANKER_NAH = 64;
+
+  /**
+   * Die Fundstelle von `was`, die dem erwarteten Ort am nächsten liegt.
+   *
+   * @param {number} [reichweite] wie weit sie höchstens abweichen darf
+   * @returns {number|null} der Index im Text – oder null, wenn keine
+   *   Fundstelle nah genug liegt. Weiter weg wäre ein Zufallstreffer,
+   *   und dann ist gar keine Antwort besser als eine falsche.
+   */
+  function naechsteFundstelle(text, was, erwartet, reichweite) {
+    let beste = -1;
+    let abstand = Infinity;
+    for (let i = text.indexOf(was); i !== -1; i = text.indexOf(was, i + 1)) {
+      const d = Math.abs(i - erwartet);
+      if (d < abstand) { abstand = d; beste = i; }
+    }
+    const grenze = Number.isFinite(reichweite) ? reichweite : CTY;
+    return (beste !== -1 && abstand <= grenze) ? beste : null;
+  }
+
   function stelleAusAnker(text, pos, anker) {
     if (typeof anker !== 'string' || !anker) return null;
 
@@ -2004,20 +2042,54 @@
     const davor = Math.min(pos, CTX);
     const beginn = pos - davor;
 
-    // Passt es dort, wo es soll? Der Normalfall, und er kostet fast nichts.
+    // 1. Passt es dort, wo es soll? Der Normalfall, und er kostet fast nichts.
     if (text.slice(beginn, beginn + anker.length) === anker) return pos;
 
-    // Sonst die nächstgelegene Fundstelle nehmen – aber nur,
-    // wenn sie nah genug liegt. Sonst ist es ein Zufallstreffer
-    // und die ursprüngliche Stelle ist der bessere Schätzwert.
-    let beste = -1;
-    let abstand = Infinity;
-    for (let i = text.indexOf(anker); i !== -1; i = text.indexOf(anker, i + 1)) {
-      const kandidat = i + davor;
-      const d = Math.abs(kandidat - pos);
-      if (d < abstand) { abstand = d; beste = kandidat; }
+    // 2. Sonst der ganze Anker an der nächstgelegenen Stelle.
+    const ganz = naechsteFundstelle(text, anker, beginn);
+    if (ganz !== null) return ganz + davor;
+
+    /* ══════════════════════════════════════════════════════════════════
+       3. DER ANKER UMSPANNT DIE MARKE – EINE HÄLFTE GENÜGT
+
+       Der Anker nimmt zwölf Zeichen vor und zwölf nach der Marke. Ändert
+       jemand etwas MITTEN darin, ist er als Ganzes nirgends mehr zu
+       finden – und der Rückfall lautete: „Stelle unverändert lassen".
+
+       Das ist genau der falsche Schluss. Ein Umbruch eine Zeile höher
+       schiebt alles darunter um ein Zeichen nach hinten; wer die Stelle
+       stehen lässt, zeigt danach eine Stelle zu früh, und das ist nach
+       einem eingefügten Umbruch die Zeile DARÜBER – die des anderen.
+       Beide standen dann auf derselben Zeile. Genau so wurde es gemeldet.
+
+       Nachgerechnet mit dem Fall aus dem Prüfstand:
+
+         alt   "Eins\nZwei\nDrei\nVXier\nFuenf", Marke auf 17
+         Anker "Zwei\nDrei\nVXier\nFuenf"
+         neu   "Eins\nZwei\nDrei\n\nVXier\nFuenf"  (Umbruch bei 15)
+
+         ganzer Anker  nicht auffindbar
+         Vorderteil    "Zwei\nDrei\nVX"  nicht auffindbar
+         Hinterteil    "ier\nFuenf"      bei 18  ← und 18 ist richtig
+
+       Deshalb: erst das Stück VOR der Marke – es endet an ihr. Findet es
+       sich nicht, das Stück DAHINTER, das an ihr beginnt. Eines von
+       beiden ist heil, solange die Änderung nur auf einer Seite lag.
+       ══════════════════════════════════════════════════════════════════ */
+    const vorn = anker.slice(0, davor);
+    const hinten = anker.slice(davor);
+
+    if (vorn.length >= ANKER_MIN) {
+      const v = naechsteFundstelle(text, vorn, pos - vorn.length, ANKER_NAH);
+      if (v !== null) return v + vorn.length;
     }
-    return (beste !== -1 && abstand <= CTY) ? beste : null;
+
+    if (hinten.length >= ANKER_MIN) {
+      const h = naechsteFundstelle(text, hinten, pos, ANKER_NAH);
+      if (h !== null) return h;
+    }
+
+    return null;
   }
 
   function findeStelle(text, pos, anker) {
@@ -4280,6 +4352,7 @@
     offenesDokument: () => (docId ? { docId, ownerUid: ownerUidJetzt } : null),
     // offengelegt für scripts/test-collab-text.js
     _textDelta: textDelta,
+    _stelleAusAnker: stelleAusAnker,
     _shiftedPos: shiftedPos,
     _seedUpdate: seedUpdate
   };

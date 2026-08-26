@@ -498,6 +498,71 @@ app.on('ready', async () => {
        von B muss dort bleiben, wo sie steht – sie darf nicht dorthin
        rutschen, wo der fremde Text erscheint.
        ══════════════════════════════════════════════════════════════════ */
+    /* ══════════════════════════════════════════════════════════════════
+       DER ANKER FINDET DIE STELLE WIEDER
+
+       Gemeldet: „einer schreibt, der andere faengt eine Zeile weiter oben
+       an, drueckt Enter – und dann schreiben beide auf derselben Zeile."
+
+       Der Weg dorthin: eine fremde Stelle wird in ZEICHEN gemeldet, und
+       der Empfaenger sucht sie in SEINEM Text ueber einen Anker wieder –
+       zwoelf Zeichen vor und zwoelf nach der Marke. Ein Umbruch eine
+       Zeile hoeher faellt mitten in dieses Fenster. Der Anker war damit
+       als Ganzes nirgends mehr zu finden, und der Rueckfall lautete
+       „Stelle unveraendert lassen". Das ist nach einem eingefuegten
+       Umbruch genau eine Stelle zu frueh – also die Zeile darueber, die
+       des anderen.
+
+       Geprueft wird die Rechnung selbst, nicht das Bild: Pixel sind hier
+       truegerisch, weil ein Sperrband eine ganze Zeile hoch ist und eine
+       Textzeile nicht.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Der Anker findet die Stelle wieder');
+
+    {
+      const faelle = [
+        {
+          was: 'Umbruch eine Zeile darueber',
+          alt: 'Eins\nZwei\nDrei\nVXier\nFuenf',
+          neu: 'Eins\nZwei\nDrei\n\nVXier\nFuenf',
+          pos: 17, soll: 18
+        },
+        {
+          /* Beide Haelften unbrauchbar: davor steht das eingefuegte
+             Wort, das Stueck dahinter ist zu kurz fuer einen Halt.
+             Dann gibt es KEINE Antwort - und das ist richtig: eine
+             erfundene Stelle waere schlimmer als gar keine. Der
+             Aufrufer behaelt dann die gemeldete (findeStelle). */
+          was: 'Beide Haelften unbrauchbar: lieber keine Antwort',
+          alt: 'Alpha\nBeta\nGamma',
+          neu: 'Alpha ZUSATZ\nBeta\nGamma',
+          pos: 12, soll: null
+        },
+        {
+          was: 'Aenderung dahinter laesst die Stelle stehen',
+          alt: 'Alpha\nBeta\nGamma',
+          neu: 'Alpha\nBeta\nGamma NOCHWAS',
+          pos: 3, soll: 3
+        },
+        {
+          was: 'Nichts geaendert',
+          alt: 'Alpha\nBeta\nGamma',
+          neu: 'Alpha\nBeta\nGamma',
+          pos: 8, soll: 8
+        }
+      ];
+
+      for (const f of faelle) {
+        const ergebnis = await B(`(() => {
+          const CTX = 12;
+          const anker = ${JSON.stringify(f.alt)}.slice(Math.max(0, ${f.pos} - CTX), ${f.pos} + CTX);
+          return Collab._stelleAusAnker(${JSON.stringify(f.neu)}, ${f.pos}, anker);
+        })()`);
+        pruefe(f.was + ' → ' + ergebnis,
+          ergebnis === f.soll, 'erwartet ' + f.soll + ', bekommen ' + ergebnis);
+      }
+    }
+
     abschnitt('Die eigene Marke bleibt, wo sie war');
 
     /* Sechs Zeilen, nicht drei: A schreibt oben, B steht unten. Mit drei
