@@ -1015,8 +1015,25 @@
        Derselbe Fehler stand in rerenderPages() (ui/collab.js) – ohne
        Abschnitte wurde dort gar nicht aufgebaut, mit Abschnitten sprang
        die Ansicht in den ersten. */
+    /* >>> Und die Ansicht bleibt, wo sie war <<<
+       Hier stand ein blosses openSection(sec) ohne Seite. openSection
+       setzt den Bildlauf dabei auf null und springt nur dorthin, wohin
+       es ausdrücklich geschickt wird. Wer sein Heft also dort aufschlug,
+       wo er es zugeklappt hatte, sah die richtige Seite einen Wimpernschlag
+       lang und wurde dann an den Anfang gerissen – und zwar jedes Mal,
+       sobald das Heft freigegeben ist, denn dieser Aufbau kommt nach dem
+       ersten. Genau so gemeldet.
+
+       Mitgegeben wird deshalb die Seite, auf der gerade jemand steht.
+       Dasselbe tut ui/collab.js beim Neuaufbau (rerenderPages). */
     if (S.activeNbId === nb.id && typeof openSection === 'function') {
-      openSection(typeof activeSection === 'function' ? activeSection(nb) : null);
+      const abschnitt = (typeof activeSection === 'function') ? activeSection(nb) : null;
+      const gezeigt = (abschnitt && typeof pagesOfSec === 'function')
+        ? pagesOfSec(abschnitt, nb)
+        : (typeof notebookPages === 'function' ? notebookPages(nb) : []);
+      const bleib = gezeigt.some(p => String(p.id) === String(S.activePgId || ''))
+        ? S.activePgId : null;
+      openSection(abschnitt, bleib);
     }
 
     watchOpenDocument(entry.docId);

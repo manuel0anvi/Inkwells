@@ -160,6 +160,38 @@ const warte = ms => new Promise(res => setTimeout(res, ms));
     check('Das Wiederbenutzte hat ueberlebt', ctx.getNotebookView('alt').pageId, 'p2');
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     UND DER ZWEITE AUFBAU REISST EINEN NICHT WIEDER WEG
+
+     >>> Der Fall, den das prueft <<<
+     Gemeldet: „ich starte die App, oeffne das Heft, bin auf der Seite,
+     wo ich aufgehoert habe - und dann springt es sofort zurueck an den
+     Anfang."
+
+     openNotebook springt richtig. Bei einem freigegebenen Heft baut
+     ui/sharedDocs.js die Seiten aber gleich darauf noch einmal auf, wenn
+     der Raum uebernommen wird - und rief openSection() dabei OHNE Seite.
+     openSection setzt den Bildlauf auf null und springt nur dorthin,
+     wohin es ausdruecklich geschickt wird. Gemessen im Fenster:
+     scrollTop 5486 -> 0, aktive Seite 5 -> 1.
+
+     Dieselbe Vorsicht steht in ui/collab.js (rerenderPages): dort werden
+     Bildlauf, Fokus und Schreibmarke ausdruecklich gerettet.
+     ══════════════════════════════════════════════════════════════════ */
+  {
+    const quelle = fs.readFileSync(path.join(root, 'src', 'ui', 'sharedDocs.js'), 'utf8');
+    ok('Der Aufbau nach dem Raum bekommt eine Seite mit',
+      /openSection\(abschnitt, bleib\)/.test(quelle));
+    ok('Und die ist die, auf der man gerade steht',
+      /bleib\s*=\s*gezeigt\.some\(p => String\(p\.id\) === String\(S\.activePgId \|\| ''\)\)/.test(quelle));
+    ok('Kein Aufbau mehr ganz ohne Seite',
+      !/openSection\(typeof activeSection === 'function' \? activeSection\(nb\) : null\)/.test(quelle));
+
+    const collabQuelle = fs.readFileSync(path.join(root, 'src', 'ui', 'collab.js'), 'utf8');
+    ok('Und der Neuaufbau im Raum rettet den Bildlauf weiterhin',
+      /scroller\.scrollTop = top;/.test(collabQuelle));
+  }
+
   if (failed > 0) {
     console.error(`\n${failed} Pruefung(en) fehlgeschlagen.`);
     process.exit(1);
