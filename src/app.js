@@ -79,9 +79,22 @@ function _applyPageSnapshot(page, snap) {
   if (snap.bg !== null) page.bg = snap.bg;
   if (snap.bgImg !== null) page.bgImg = snap.bgImg; else delete page.bgImg;
 
-  const strokes = JSON.parse(snap.strokes || '[]');
+  /* ── Was der andere gezeichnet hat, bleibt ───────────────────────────
+     Der Verlauf hält je Schritt die VOLLSTÄNDIGE Strichliste. Ein
+     Rückgängig setzte sie deshalb auch bei den Strichen zurück, die in
+     der Zwischenzeit vom anderen hereingekommen sind – und weil der
+     Vergleich das gleich darauf als geänderte Liste sieht, ging sie
+     hinaus und löschte seine Arbeit auch bei ihm. Für ihn sah es aus,
+     als habe man ihm den Strich weggewischt.
+
+     Welche Striche von aussen kamen, weiss ui/collab.js. Ohne
+     Live-Sitzung kommt hier unverändert zurück, was im Verlauf steht. */
+  const zurueck = JSON.parse(snap.strokes || '[]');
+  const strokes = (window.Collab && typeof Collab.behalteFremdeStriche === 'function')
+    ? Collab.behalteFremdeStriche(page.id, S.strokeHistory[page.id] || [], zurueck)
+    : zurueck;
   S.strokeHistory[page.id] = strokes;
-  page.inkStrokes = JSON.parse(snap.strokes || '[]');
+  page.inkStrokes = JSON.parse(JSON.stringify(strokes));
 
   // Darstellung nachziehen
   const pgEl = document.querySelector('[data-pgid="' + page.id + '"]');

@@ -755,6 +755,86 @@ console.log('\nEin fremdes Dokument wird nicht auf die Platte geschrieben\n');
     /revision,\s*\n\s*updatedAt: serverTimestamp\(\),/.test(shareQuelle), false);
 }
 
+console.log('\nZu zweit geht nichts mehr still verloren\n');
+{
+  const shareQuelle = lies('src', 'core', 'share.js');
+  const collabQuelle = lies('src', 'ui', 'collab.js');
+  const appQuelle = lies('src', 'app.js');
+
+  /* ── Radieren ──────────────────────────────────────────────────────
+     rewritePageInk loescht alle Boegen und schreibt die eigene Liste hin.
+     Ein Strich des anderen, der ueber den Live-Kanal nie ankam, galt
+     damit als wegradiert. */
+  check('Beim Neuschreiben werden fremde Striche gerettet',
+    /rewritePageInk\(docId, pageId, strokes, byUid, bekannt\)/.test(shareQuelle)
+    && /fremdeStricheRetten\(remote, strokes, bekannt\)/.test(shareQuelle), true);
+  check('Und die Strichzahl aus dem Merkzettel kommt dort an',
+    /base\.pages\[pageId\] \? base\.pages\[pageId\]\.strokes : undefined/.test(shareQuelle), true);
+
+  /* ── Der Strich selbst ─────────────────────────────────────────────
+     Er ging ungeprueft hinaus: ohne Schreibrecht, ohne Groessenmessung,
+     ohne Blick auf das Ergebnis. Beim Text war all das laengst da. */
+  check('Ein Strich geht nur hinaus, wenn man schreiben darf',
+    /function noteStroke[\s\S]{0,1400}?if \(!canWrite\) return;/.test(collabQuelle), true);
+  check('Zu grosse Striche nehmen den Weg über Firestore',
+    /function noteStroke[\s\S]{0,1800}?LIVE_OP_LIMIT[\s\S]{0,200}?sendViaFirestore/.test(collabQuelle), true);
+  check('Und ein Fehlschlag ebenfalls',
+    /k: 'ink'[\s\S]{0,220}?ok === false\) sendViaFirestore/.test(collabQuelle), true);
+
+  /* ── Rueckgaengig ──────────────────────────────────────────────────
+     Der Verlauf haelt die VOLLSTAENDIGE Strichliste. Zurueckgesetzt nahm
+     er die Striche des anderen mit – und loeschte sie ueber den
+     Vergleich auch bei ihm. */
+  check('Rückgängig behält die Striche der anderen',
+    /function behalteFremdeStriche/.test(collabQuelle)
+    && /behalteFremdeStriche,/.test(collabQuelle), true);
+  check('Und app.js fragt vor dem Zurücksetzen danach',
+    /Collab\.behalteFremdeStriche\(page\.id, S\.strokeHistory\[page\.id\] \|\| \[\], zurueck\)/
+      .test(appQuelle), true);
+
+  /* ── Bereinigung ───────────────────────────────────────────────────
+     Der bereinigte Text ging ins Feld, der Yjs-Stand blieb roh. Der
+     naechste eigene Anschlag verglich dann bereinigt gegen roh und
+     schickte die Bereinigung als eigene Aenderung hinaus – bei jedem
+     Anschlag erneut, mitten in das hinein, was der andere tippt. */
+  check('Der bereinigte Text landet auch im gemeinsamen Stand',
+    /if \(nextText !== entry\.ytext\.toString\(\)\)/.test(collabQuelle), true);
+
+  /* ── Mitgliederlisten ──────────────────────────────────────────────
+     Sie wurden als Ganzes zurueckgeschrieben und warfen damit jeden
+     wieder hinaus, der in diesem Augenblick ueber den Link hereinkam. */
+  check('An den Listen wird nur noch einzeln gedreht',
+    /function eintragSetzen/.test(shareQuelle)
+    && /function eintragLoeschen/.test(shareQuelle)
+    && /async function updateDocFelder/.test(shareQuelle), true);
+  /* entbannPlan() beschreibt weiterhin den ganzen Zustand danach – das
+     ist seine Aufgabe, und scripts/test-entbannen.js prueft genau das.
+     GESCHRIEBEN werden darf dieser Block aber nicht mehr, sonst naehme er
+     jeden mit, der gerade ueber den Link hereinkommt. */
+  check('Und der Entbann-Plan wird nicht mehr als Ganzes geschrieben',
+    /updateDocHead\(docId, plan\.patch\)/.test(shareQuelle), false);
+  check('Die fünf Wege an den Listen gehen alle über updateDocFelder',
+    (shareQuelle.match(/updateDocFelder\(docId, /g) || []).length >= 4, true);
+
+  /* ── Schreibrecht beim Absturz ─────────────────────────────────────
+     leave() nimmt es mit; beim Absturz lief leave() nie. */
+  check('Ein Absturz nimmt das Schreibrecht ebenfalls mit',
+    /onDisconnect\(child\(rolesRef, 'w'\)\)\.set\(\{ \[me\.uid\]: true \}\)/.test(shareQuelle), true);
+  check('Und ein verspäteter Auftrag wird überschrieben',
+    /ROLES_REFRESH_MS/.test(shareQuelle) && /rollenTakt = setInterval/.test(shareQuelle), true);
+
+  /* ── Kosten pro Anschlag ───────────────────────────────────────────
+     peopleOnPage und visualLineSpan liefen bei jedem Zeichen mehrfach
+     mit denselben Werten. Gemerkt wird am Text selbst, damit der
+     Zwischenspeicher nicht veralten KANN. */
+  check('Dieselbe Auskunft wird im selben Zug nur einmal gerechnet',
+    /gemerkt && gemerkt\.inhalt === inhalt/.test(collabQuelle)
+    && /zeilenCache/.test(collabQuelle), true);
+  check('Und die Zwischenspeicher halten nur einen Zug',
+    /Promise\.resolve\(\)\.then\(leuteCacheLeeren\)/.test(collabQuelle)
+    && /Promise\.resolve\(\)\.then\(zeilenCacheLeeren\)/.test(collabQuelle), true);
+}
+
 console.log('\nDer eine Weg vom Editor ins Heft\n');
 {
   /* ══════════════════════════════════════════════════════════════════

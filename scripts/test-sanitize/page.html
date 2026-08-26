@@ -215,6 +215,53 @@ const zweimal = sanitizePageHtml(sanitizePageHtml('<p><b>x</b></p>'));
 pruefe('Zweimal bereinigt aendert nichts mehr',
   zweimal === sanitizePageHtml('<p><b>x</b></p>'), zweimal);
 
+/* ══════════════════════════════════════════════════════════════════════
+   UND ZWAR BEI ALLEM — DARAN HAENGT DIE ZUSAMMENARBEIT
+
+   In einem geteilten Heft ist das nicht bloss eine schoene Eigenschaft.
+   ui/collab.js zieht den gemeinsamen Yjs-Stand nach, sobald die
+   Bereinigung etwas geaendert hat, und schickt den Unterschied hinaus.
+   Waere sanitizePageHtml KEIN Festpunkt, kaeme das nie zur Ruhe: jeder
+   bereinigte den bereinigten Text des anderen erneut, und der Text
+   flackerte zu zweit im Takt der Uebertragung hin und her.
+
+   Deshalb hier ueber alles, was oben vorkommt – Angriffe wie
+   Editor-Text. Nach dem ersten Durchgang darf sich nichts mehr ruehren.
+   ══════════════════════════════════════════════════════════════════════ */
+abschnitt('Bereinigen ist ein Festpunkt');
+
+const festpunktFaelle = angriffe.map(([, roh]) => roh).concat([
+  '<p>Hallo Welt</p>',
+  '<p><b>fett</b><i>kursiv</i><u>unter</u></p>',
+  '<h1>Ueberschrift</h1><h2>Zweite</h2>',
+  '<ul><li>eins</li><li>zwei</li></ul>',
+  '<ol><li>eins</li></ol>',
+  '<a href="https://inkwells.me/x">Verweis</a>',
+  '<p><span class="kommentar-mark" data-cid="k1">markiert</span></p>',
+  '<table class="j-table"><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>',
+  '<p>davor<img src="x" onerror="alert(1)">danach</p>',
+  '<p style="text-align:center">mittig</p>',
+  '<p><br></p>',
+  '<div><b><i>verschachtelt</i></b></div>',
+  '<p>Zeichen &amp; &lt; &gt; &quot; und ein Umlaut: äöü</p>',
+  '<p>&nbsp;&nbsp;Abstand</p>'
+]);
+
+let wackelt = 0;
+let wackelBeispiel = '';
+for (const roh of festpunktFaelle) {
+  const einmal = sanitizePageHtml(roh);
+  const nochmal = sanitizePageHtml(einmal);
+  if (einmal === nochmal) continue;
+  wackelt++;
+  if (!wackelBeispiel) {
+    wackelBeispiel = JSON.stringify(roh) + ' → ' + JSON.stringify(einmal)
+      + ' → ' + JSON.stringify(nochmal);
+  }
+}
+pruefe('Der zweite Durchgang aendert bei keinem Fall etwas',
+  wackelt === 0, wackelt + ' von ' + festpunktFaelle.length + ', z. B. ' + wackelBeispiel);
+
 window.__ergebnis = zeilen.join('\n');
 </script>
 </body>

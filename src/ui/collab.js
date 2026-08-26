@@ -1356,6 +1356,10 @@
 
   /** Merkt, wo der letzte Anschlag auf dieser Seite stattfand. */
   function merkeAnschlag(pageId) {
+    /* Der Text hat sich eben geändert – was im selben Zug schon einmal
+       aus ihm gerechnet wurde, gilt nicht mehr (siehe leuteCache). */
+    leuteCacheLeeren();
+
     const jetzt = Date.now();
     const alt = typedAt.get(pageId);
 
@@ -1871,6 +1875,8 @@
       eintrag.lockAt = eintrag.at;
     }
     opCarets.set(op.by, eintrag);
+    // Die Stelle des anderen ist eine neue – siehe leuteCache
+    leuteCacheLeeren();
 
     renderCarets();
     renderLocks();
@@ -2024,10 +2030,60 @@
    * umgerechnet sind. Eine Verschiebung der Marke verschiebt die Sperre
    * um denselben Betrag mit.
    */
+  /* ══════════════════════════════════════════════════════════════════
+     DIESELBE FRAGE IM SELBEN ZUG NUR EINMAL RECHNEN
+
+     peopleOnPage liest den ganzen flachen Text der Seite und sucht darin
+     für jeden Anwesenden seinen Anker wieder. Das ist nicht teuer, aber
+     es lief oft: bei JEDEM Anschlag ruft app.js editBlockedBy, und darin
+     hängen eigeneSperreDeckt, fremderAnspruchDeckt und lockOwner – jedes
+     über activeLocks, jedes mit einem eigenen Durchgang. Dazu kommt
+     lockSpanFor über ohneFremdeStellen. Vier Durchgänge für dieselbe
+     Auskunft, viermal je Zeichen. Und beim Zeichnen der Marken und
+     Bänder noch einmal zwei.
+
+     >>> Der Schlüssel ist der TEXT, nicht das Feld <<<
+     Erst stand hier das Element selbst als Schlüssel. Damit konnte der
+     Zwischenspeicher veralten: schreibt jemand dem Feld einen neuen
+     Inhalt, ohne es zu melden, ist es dasselbe Element mit anderem Text,
+     und es käme die Antwort von vorhin zurück. Genau das hat der
+     Prüfstand sofort gefunden (scripts/test-collab-sync.js setzt den Text
+     unmittelbar, wie es der Editor nicht tut, aber tun könnte).
+
+     Gemerkt wird deshalb am flachen Text selbst. Ihn zu holen ist ein
+     Durchgang durch das Feld und billig; teuer ist, was danach kommt –
+     für jeden Anwesenden seinen Anker in diesem Text wiederzufinden.
+     Stimmt der Text nicht mehr, ist es kein Treffer, und es wird
+     gerechnet. Ein falsches Ergebnis kann so nicht herauskommen.
+
+     Der Zwischenspeicher hält zusätzlich nur EINEN Zug lang: ein
+     Mikrotask leert ihn, spätestens mit dem Ende des laufenden
+     Ereignisses. Und er wird ausdrücklich geleert, wenn sich die
+     ANWESENHEIT ändert – die steht nicht im Text und wäre sonst das
+     Einzige, was der Schlüssel nicht bemerkt.
+     ══════════════════════════════════════════════════════════════════ */
+  let leuteCache = null;
+
+  function leuteCacheLeeren() { leuteCache = null; }
+
   function peopleOnPage(pageId, textDiv) {
     const inhalt = (textDiv && typeof flatTextOf === 'function')
       ? flatTextOf(textDiv) : null;
 
+    if (!leuteCache) {
+      leuteCache = new Map();
+      Promise.resolve().then(leuteCacheLeeren);
+    }
+    const schluessel = String(pageId);
+    const gemerkt = leuteCache.get(schluessel);
+    if (gemerkt && gemerkt.inhalt === inhalt) return gemerkt.wert;
+
+    const wert = peopleOnPageBerechnen(pageId, inhalt);
+    leuteCache.set(schluessel, { inhalt, wert });
+    return wert;
+  }
+
+  function peopleOnPageBerechnen(pageId, inhalt) {
     return peopleNow().filter(p => p.pageId === pageId).map(person => {
       if (inhalt === null || !Number.isFinite(person.offset) || person.offset < 0) return person;
 
@@ -2117,8 +2173,41 @@
    *   das braucht ohneFremdeStellen, um die Zeile eines anderen ganz
    *   auszusparen und nicht nur den Punkt, an dem seine Marke gerade steht.
    */
+  /* ══════════════════════════════════════════════════════════════════
+     UND DIESELBE ZEILE AUCH NUR EINMAL MESSEN
+
+     Die Zeile zu bestimmen kostet ein Dutzend caretRectAt – jedes davon
+     ein Range im Dokument und eine Messung. Bei JEDEM Anschlag lief das
+     zweimal mit denselben Werten: einmal in merkeAnschlag, um sich zu
+     merken, wo geschrieben wurde, und gleich darauf in lockSpanFor, um
+     genau dieselbe Zeile zu beanspruchen.
+
+     Gemerkt wird am TEXT, an der Stelle und an der Anzahl der Zeilen
+     danach – also an allem, woraus das Ergebnis entsteht. Was daneben
+     noch hineinspielt, ist die Darstellung (Zoom, Fensterbreite), und
+     die ändert sich innerhalb eines Zuges nicht: derselbe Mikrotask, der
+     leuteCache leert, leert auch diesen hier.
+     ══════════════════════════════════════════════════════════════════ */
+  let zeilenCache = null;
+
+  function zeilenCacheLeeren() { zeilenCache = null; }
+
   function visualLineSpan(textDiv, offset, zeilenDanach = 1) {
     const text = flatTextOf(textDiv);
+
+    if (!zeilenCache) {
+      zeilenCache = new Map();
+      Promise.resolve().then(zeilenCacheLeeren);
+    }
+    const schluessel = offset + ' ' + zeilenDanach + ' ' + text;
+    if (zeilenCache.has(schluessel)) return zeilenCache.get(schluessel);
+
+    const span = visualLineSpanMessen(textDiv, offset, zeilenDanach, text);
+    zeilenCache.set(schluessel, span);
+    return span;
+  }
+
+  function visualLineSpanMessen(textDiv, offset, zeilenDanach, text) {
     // Nie über den Absatz hinaus: ein Umbruch beendet die Sperre ohnehin
     const grenze = flatLineSpan(text, offset, zeilenDanach);
 
@@ -2239,6 +2328,38 @@
        nur bei etwas, das der Editor nie erzeugt. Dann aber soll das
        Aufgeraeumte auch das sein, was gesichert wird. */
     const nextText = sanitizePageHtml(entry.ytext.toString());
+
+    /* ══════════════════════════════════════════════════════════════
+       WAS BEREINIGT WURDE, GEHÖRT AUCH IN DEN GEMEINSAMEN TEXT
+
+       Hier stand: der bereinigte Text geht ins Modell und ins DOM, der
+       Yjs-Stand bleibt roh. Beides auseinanderlaufen zu lassen war
+       gemeint als „wir schreiben dem anderen nicht in seinen Stand
+       hinein" – es baut aber eine Falle auf, die beim nächsten eigenen
+       Anschlag zuschnappt.
+
+       noteTextChange vergleicht dann nämlich den Text aus dem DOM (also
+       bereinigt) mit dem Yjs-Stand (roh). Der Unterschied ist die
+       Bereinigung selbst, und die geht als eigene Änderung hinaus –
+       mitten in das hinein, was der andere gerade tippt. Bei jedem
+       weiteren Anschlag erneut, denn der Yjs-Stand bleibt ja roh.
+
+       Deshalb wird der Stand hier EINMAL nachgezogen. Das ist auch
+       inhaltlich das Richtige: was hier als gefährlich erkannt wurde,
+       soll bei allen verschwinden, nicht nur auf diesem Bildschirm.
+       Im Normalfall passiert gar nichts – sanitize ändert an dem, was
+       der Editor erzeugt, nichts, und dann sind beide schon gleich. */
+    if (nextText !== entry.ytext.toString()) {
+      const roh = entry.ytext.toString();
+      const d = textDelta(roh, nextText);
+      if (d) {
+        entry.ydoc.transact(() => {
+          if (d.remove > 0) entry.ytext.delete(d.at, d.remove);
+          if (d.insert) entry.ytext.insert(d.at, d.insert);
+        });
+      }
+    }
+
     if (info.page.textContent === nextText) return;
     info.page.textContent = nextText;
 
@@ -2293,6 +2414,8 @@
     entry.applying = true;
     textDiv.innerHTML = nextText;   // schon bereinigt, siehe oben
     entry.applying = false;
+    // Der Text ist ein anderer – siehe leuteCache
+    leuteCacheLeeren();
 
     /* Die Spaltenbreite der frei stehenden Absätze steht nicht im Text –
        sie ergibt sich aus der Lage der Nachbarn und wird deshalb bei
@@ -2408,6 +2531,52 @@
     return hash.toString(36) + ':' + roh.length;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     RÜCKGÄNGIG MACHT NUR DIE EIGENE ARBEIT RÜCKGÄNGIG
+
+     Der Verlauf hält je Schritt die VOLLSTÄNDIGE Strichliste einer Seite
+     (app.js, _snapshotPageState). Ein Rückgängig setzt sie zurück – und
+     nahm dabei alles mit, was der andere seither gezeichnet hatte. Weil
+     der Vergleich das gleich darauf als geänderte Liste sieht, ging sie
+     als 'inks'-Meldung hinaus und löschte seine Striche auch bei ihm.
+     Für ihn sah es aus, als habe man ihm die Arbeit weggewischt.
+
+     Hier steht deshalb, welche Striche von aussen kamen. Sie überleben
+     das Zurücksetzen; alles Eigene verhält sich wie vorher.
+
+     Bewusst NUR die einzeln eingetroffenen (applyRemoteStroke). Eine
+     ganze Liste vom anderen (applyInkSet) enthält auch die eigenen
+     Striche – die alle für unantastbar zu erklären hiesse, Rückgängig
+     auf dieser Seite abzuschaffen.
+     ══════════════════════════════════════════════════════════════════ */
+  const fremdeStriche = new Map();   // pageId -> Set der Abdrücke
+
+  /**
+   * Ergänzt eine zurückgesetzte Strichliste um die fremden Striche, die
+   * darin fehlen. Aufgerufen von app.js beim Rückgängig und Wiederholen.
+   *
+   * @param {string} pageId
+   * @param {object[]} vorher  die Liste, wie sie jetzt daliegt
+   * @param {object[]} nachher die Liste aus dem Verlauf
+   * @returns {object[]} die Liste, die wirklich gesetzt werden soll
+   */
+  function behalteFremdeStriche(pageId, vorher, nachher) {
+    const fremd = fremdeStriche.get(String(pageId));
+    if (!fremd || !fremd.size || !Array.isArray(vorher) || !Array.isArray(nachher)) {
+      return nachher;
+    }
+
+    const drin = new Set(nachher.map(strichAbdruck));
+    const out = nachher.slice();
+    for (const stroke of vorher) {
+      const key = strichAbdruck(stroke);
+      if (!fremd.has(key) || drin.has(key)) continue;
+      drin.add(key);
+      out.push(stroke);
+    }
+    return out;
+  }
+
   function inkSignatures(pageId) {
     let set = inkSeen.get(pageId);
     if (!set) {
@@ -2437,6 +2606,11 @@
     const key = strichAbdruck(stroke);
     if (seen.has(key)) return;
     seen.add(key);
+
+    /* Und merken, dass dieser Strich NICHT von hier stammt – siehe
+       behalteFremdeStriche(). Rückgängig darf ihn nicht mitnehmen. */
+    if (!fremdeStriche.has(pageId)) fremdeStriche.set(pageId, new Set());
+    fremdeStriche.get(pageId).add(key);
 
     S.strokeHistory[pageId].push(stroke);
     info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[pageId]));
@@ -2952,6 +3126,7 @@
 
     delete S.strokeHistory[pageId];
     inkSeen.delete(pageId);
+    fremdeStriche.delete(pageId);
     const entry = docs.get(pageId);
     if (entry) { try { entry.ydoc.destroy(); } catch (e) {} docs.delete(pageId); }
 
@@ -3014,7 +3189,15 @@
     const strokes = Array.isArray(data.strokes) ? data.strokes : [];
     info.page.inkStrokes = JSON.parse(JSON.stringify(strokes));
     S.strokeHistory[pageId] = JSON.parse(JSON.stringify(strokes));
-    inkSeen.set(pageId, new Set(strokes.map(strichAbdruck)));
+    const abdruecke = new Set(strokes.map(strichAbdruck));
+    inkSeen.set(pageId, abdruecke);
+
+    /* Der andere hat die Liste dieser Seite als Ganzes ersetzt. Was er
+       dabei weggelassen hat, hat er weggeradiert – ein Vermerk „das ist
+       fremd" darauf wäre von jetzt an falsch und liesse den Strich beim
+       nächsten Rückgängig wieder auftauchen (behalteFremdeStriche). */
+    const fremd = fremdeStriche.get(pageId);
+    if (fremd) for (const key of Array.from(fremd)) if (!abdruecke.has(key)) fremd.delete(key);
 
     const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
     const canvas = pgEl ? pgEl.querySelector('.j-canvas:not(.live-canvas)') : null;
@@ -3424,6 +3607,8 @@
       others = list.filter(p => typeof p.at !== 'number' || p.at > fresh)
                    .filter(gehoertDazu)
                    .map(stempleSperre);
+      // Wer wo steht, ist jetzt ein anderer Stand – siehe leuteCache
+      leuteCacheLeeren();
 
       /* Alles Zeichnen zusammen abgesichert. Reißt eine einzelne
          Darstellung, darf sie nicht den Rückruf der Anwesenheit mit
@@ -3582,6 +3767,7 @@
     for (const entry of docs.values()) { try { entry.ydoc.destroy(); } catch (e) {} }
     docs.clear();
     inkSeen.clear();
+    fremdeStriche.clear();
     opCarets.clear();
 
     document.querySelectorAll('.collab-marker, .collab-caret, .collab-lock').forEach(el => el.remove());
@@ -3685,7 +3871,39 @@
   /** Ein Strich ist fertig – sofort weitergeben. */
   function noteStroke(pageId, stroke) {
     if (!room || !stroke) return;
-    room.sendOp({ k: 'ink', p: pageId, s: JSON.parse(JSON.stringify(stroke)) });
+
+    /* ══════════════════════════════════════════════════════════════
+       EIN STRICH, DER NICHT ANKOMMT, IST EIN STRICH, DER STIRBT
+
+       Hier ging der Strich ungeprüft hinaus: keine Frage, ob man
+       überhaupt schreiben darf, keine Messung, ob er durch den Kanal
+       passt, und kein Blick auf das Ergebnis. Beim Text war all das
+       längst da (docFor).
+
+       Der Schaden entsteht erst später, dafür endgültig. Der Strich
+       liegt hier und wird von hier nach Firestore gesichert – beim
+       anderen kommt er nie an. Radiert der andere danach irgendetwas
+       auf derselben Seite, schreibt sein Client alle Bögen neu, und
+       dieser Strich ist überall weg. (Dagegen steht seit Neuestem
+       fremdeStricheRetten in core/share.js – aber der beste Schutz ist,
+       dass er gar nicht erst verlorengeht.)
+
+       Also: nur senden, wenn man darf; was nicht durchpasst, geht über
+       Firestore; und ein Fehlschlag nimmt denselben Weg.
+       ══════════════════════════════════════════════════════════════ */
+    if (!canWrite) return;
+
+    const nutzlast = JSON.parse(JSON.stringify(stroke));
+    if (JSON.stringify(nutzlast).length > LIVE_OP_LIMIT) {
+      console.warn('[Collab] Strich zu groß für den Live-Kanal – Seite ' + pageId
+        + ' geht über Firestore.');
+      sendViaFirestore(pageId);
+      return;
+    }
+
+    Promise.resolve(room.sendOp({ k: 'ink', p: pageId, s: nutzlast }))
+      .then((ok) => { if (ok === false) sendViaFirestore(pageId); })
+      .catch(() => sendViaFirestore(pageId));
 
     /* Den Vergleichsstand nachziehen. Ohne das sähe er gleich darauf eine
        veränderte Strichliste und schickte sie NOCH einmal, dann als
@@ -4031,6 +4249,9 @@
        es bei jeder Aenderung – siehe gehoertDazu(). */
     setzeTeilnehmer,
     noteTextChange, noteStroke, notePage, noteChange,
+    /* Rückgängig darf die Striche der anderen nicht mitnehmen – app.js
+       fragt vor jedem Zurücksetzen hier nach. */
+    behalteFremdeStriche,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
     /* Wer außer einem selbst gerade da ist – flach kopiert, damit
        niemand von außen in die laufende Liste hineinschreibt. Der Chat
