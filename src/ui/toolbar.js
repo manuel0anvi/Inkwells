@@ -958,7 +958,13 @@ function toggleHeading(tag) {
     normalizeActiveHeadingToLeft();
     updateHdrBtns();
     renderSideTree();
-    // Sync page content after change
+    /* ── Die Seite, auf der gerade geschrieben wird ──────────────────
+       Hier stand ein blosses `info`, das es nirgends gibt: jeder Druck
+       auf einen Formatknopf endete mit „info is not defined", und alles
+       ab dieser Zeile blieb liegen. Die Auszeichnung stand damit zwar
+       auf dem Blatt, kam aber nie ins Heft – beim Schliessen war sie
+       weg, und im geteilten Dokument sah der andere sie nie. */
+    const info = (typeof getPage === 'function' && S.activePgId) ? getPage(S.activePgId) : null;
     if (info) {
       const pgEl = E('pages-wrap')?.querySelector('[data-pgid="' + info.page.id + '"]');
       const textDiv = pgEl?.querySelector('.j-text');
@@ -1177,7 +1183,13 @@ E('fmt-p').addEventListener('mousedown', e => {
     clearTitleClasses(block);
     updateHdrBtns();
     renderSideTree();
-    // Sync page content after change
+    /* ── Die Seite, auf der gerade geschrieben wird ──────────────────
+       Hier stand ein blosses `info`, das es nirgends gibt: jeder Druck
+       auf einen Formatknopf endete mit „info is not defined", und alles
+       ab dieser Zeile blieb liegen. Die Auszeichnung stand damit zwar
+       auf dem Blatt, kam aber nie ins Heft – beim Schliessen war sie
+       weg, und im geteilten Dokument sah der andere sie nie. */
+    const info = (typeof getPage === 'function' && S.activePgId) ? getPage(S.activePgId) : null;
     if (info) {
       const pgEl = E('pages-wrap')?.querySelector('[data-pgid="' + info.page.id + '"]');
       const textDiv = pgEl?.querySelector('.j-text');
