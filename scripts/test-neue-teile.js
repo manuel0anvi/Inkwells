@@ -520,6 +520,14 @@ console.log('\nWo man hinklickt, kann man auch schreiben\n');
   check('Neben dem Text sucht die Marke die naechste Zeile',
     /function _naechsteTextZeile/.test(textQuelle)
     && /if \(!knoten \|\| knoten === textDiv\)/.test(textQuelle), true);
+  /* Der Treffertest antwortet ueber das, was am Punkt OBEN liegt. In
+     einer Live-Sitzung liegt dort allerhand: fremde Marken, das
+     Sperrband, Kommentarmarken. Kommt er nicht durch, wird die Stelle
+     gemessen statt geraten - und auf das Feld selbst wird die Marke nie
+     gesetzt, denn dessen Stelle 0 ist der Anfang der Seite. */
+  check('Und misst sie selbst, wenn der Treffertest nicht durchkommt',
+    /function _stelleInZeile/.test(textQuelle)
+    && /if \(knoten && knoten !== textDiv && textDiv\.contains\(knoten\)\)/.test(textQuelle), true);
   check('Und von Hand gesetzt wird nur auf freier Flaeche',
     /placeCaretAnywhere\(textDiv, clientX, clientY, forceManual, page\)/.test(eingabeQuelle), true);
 

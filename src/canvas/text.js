@@ -1392,7 +1392,7 @@ function _stelleAmPunkt(x, y) {
  * nicht. Dieselbe Messung benutzt canvas/input.js für den Treffertest
  * (beschriebeneKaesten).
  *
- * @returns {DOMRect|null} in Bildschirm-Pixeln
+ * @returns {{knoten: Text, rc: DOMRect}|null} in Bildschirm-Pixeln
  */
 function _naechsteTextZeile(textDiv, clientX, clientY) {
   let beste = null;
@@ -1413,8 +1413,56 @@ function _naechsteTextZeile(textDiv, clientX, clientY) {
          gemeint als der Anfang der Zeile darüber, auch wenn der Weg
          dorthin in Pixeln länger ist. */
       const weite = dx + dy * 4;
-      if (weite < besteWeite) { besteWeite = weite; beste = rc; }
+      if (weite < besteWeite) { besteWeite = weite; beste = { knoten: n, rc }; }
     }
+  }
+  return beste;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   OHNE TREFFERTEST: DIE STELLE WIRD GEMESSEN
+
+   >>> Warum es diesen zweiten Weg braucht <<<
+   caretPositionFromPoint ist ein Treffertest und antwortet deshalb über
+   das, was am Punkt OBEN liegt. In einer Live-Sitzung liegt dort aber
+   allerhand: fremde Schreibmarken, das Sperrband, die Kommentarmarken.
+   Trifft der Test eines davon, kommt eine Stelle ausserhalb von .j-text
+   zurück – oder gar keine.
+
+   Vorher blieb es dann bei der ersten Antwort, und die lautet neben dem
+   Text „das Feld selbst, Stelle 0": die Marke sass wieder am Anfang.
+   Genau das war noch übrig, nachdem der einfache Fall behoben war –
+   „es springt immer noch oft an den Anfang des Absatzes".
+
+   Gemessen wird stattdessen: Stelle für Stelle in dem Textknoten, der
+   die Zeile trägt, und genommen wird die, deren Ort dem Zeiger am
+   nächsten liegt. Ein Rechteck lügt nicht und liegt unter keinem
+   Belag. Das kostet einen Durchlauf über die Zeichen einer Zeile – bei
+   einem Klick ist das nichts.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Die Stelle in einer Zeile, die einem Punkt am nächsten liegt.
+ *
+ * @param {Text} knoten   der Textknoten, der die Zeile trägt
+ * @param {DOMRect} rc    das Rechteck DIESER Zeile
+ * @returns {number|null} Stelle im Knoten
+ */
+function _stelleInZeile(knoten, rc, clientX) {
+  const laenge = (knoten.nodeValue || '').length;
+  const rg = document.createRange();
+  let beste = null;
+  let besteWeite = Infinity;
+
+  for (let i = 0; i <= laenge; i++) {
+    rg.setStart(knoten, i);
+    rg.collapse(true);
+    const r = rg.getBoundingClientRect();
+    /* Nur, was auf DIESER Zeile sitzt. An einem Umbruch meldet Chromium
+       den Anfang der nächsten – die gehört nicht hierher. */
+    if (r.bottom < rc.top + 1 || r.top > rc.bottom - 1) continue;
+    const weite = Math.abs(r.left - clientX);
+    if (weite < besteWeite) { besteWeite = weite; beste = i; }
   }
   return beste;
 }
@@ -1496,20 +1544,38 @@ function placeCaretAnywhere(textDiv, clientX, clientY, forceManual = false, page
        zweites Mal, mit einem Punkt, der in die nächstgelegene Zeile
        hineingerückt ist. So kommt wieder die genaue Stelle im Wort
        heraus, statt sie aus Zeichenbreiten zu schätzen. */
+    let stelle = treffer ? (treffer.offset !== undefined ? treffer.offset : treffer.startOffset) : 0;
+
     if (!knoten || knoten === textDiv) {
       const zeile = _naechsteTextZeile(textDiv, clientX, clientY);
+      knoten = null;
       if (zeile) {
-        const nahX = Math.min(Math.max(clientX, zeile.left + 1), zeile.right - 1);
-        const nahY = Math.min(Math.max(clientY, zeile.top + 1), zeile.bottom - 1);
-        const zweiter = _stelleAmPunkt(nahX, nahY);
+        /* Erst noch einmal den Browser fragen, mit einem Punkt, der in
+           die Zeile hineingerückt ist – er kennt die Stelle im Wort
+           genauer als jede Rechnung. */
+        const rc = zeile.rc;
+        const zweiter = _stelleAmPunkt(
+          Math.min(Math.max(clientX, rc.left + 1), rc.right - 1),
+          Math.min(Math.max(clientY, rc.top + 1), rc.bottom - 1));
         const knoten2 = zweiter ? (zweiter.offsetNode || zweiter.startContainer) : null;
-        if (knoten2 && knoten2 !== textDiv) { treffer = zweiter; knoten = knoten2; }
+        if (knoten2 && knoten2 !== textDiv && textDiv.contains(knoten2)) {
+          knoten = knoten2;
+          stelle = zweiter.offset !== undefined ? zweiter.offset : zweiter.startOffset;
+        } else {
+          /* Der Treffertest kommt nicht durch – gemessen wird selbst. */
+          const gemessen = _stelleInZeile(zeile.knoten, rc, clientX);
+          if (gemessen !== null) { knoten = zeile.knoten; stelle = gemessen; }
+        }
       }
     }
 
-    if (knoten && textDiv.contains(knoten)) {
+    /* Auf das Feld selbst wird die Marke NIE gesetzt: dessen Stelle 0
+       ist der Anfang der Seite, und dorthin wollte niemand. Ist keine
+       Zeile zu finden, bleibt die Marke lieber, wo sie war. */
+    if (knoten && knoten !== textDiv && textDiv.contains(knoten)) {
       const rg = document.createRange();
-      rg.setStart(knoten, treffer.offset !== undefined ? treffer.offset : treffer.startOffset);
+      rg.setStart(knoten, Math.min(stelle, knoten.nodeType === Node.TEXT_NODE
+        ? knoten.nodeValue.length : knoten.childNodes.length));
       rg.collapse(true);
       const sel = window.getSelection();
       if (sel) { sel.removeAllRanges(); sel.addRange(rg); }
