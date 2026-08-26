@@ -43,7 +43,7 @@ const {
 
 const {
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs,
-  serverTimestamp
+  serverTimestamp, arrayUnion, FieldPath
 } = require('firebase/firestore');
 
 const { ref, set, get, remove } = require('firebase/database');
@@ -70,6 +70,17 @@ async function denied(label, promise) {
     failed++;
     console.error('  ✗ ' + label + ' — hätte verweigert werden müssen');
   }
+}
+
+/* Nicht jede Frage ist „darf er?". Manchmal zählt, WAS nach einem
+   erlaubten Schreibvorgang wirklich im Dokument steht – etwa ob ein
+   Anhängen die Einträge der anderen stehen lässt. */
+function gleich(label, actual, expected) {
+  if (JSON.stringify(actual) === JSON.stringify(expected)) { console.log('  ✓ ' + label); return; }
+  failed++;
+  console.error('  ✗ ' + label);
+  console.error('      erwartet: ' + JSON.stringify(expected));
+  console.error('      bekommen: ' + JSON.stringify(actual));
 }
 
 /* ── Konten ──────────────────────────────────────────────────────────
@@ -321,6 +332,62 @@ function headData(overrides = {}) {
       members: { [STRANGER.mail]: 'view' },
       memberVia: { [STRANGER.mail]: 'link' }
     }));
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND ZWAR IN DER FORM, DIE joinViaLink WIRKLICH SCHICKT
+
+     Die Listen wurden dort als GANZES neu geschrieben, gebildet aus dem
+     Kopf von einem Augenblick vorher. Zwei Leute, die denselben Link im
+     selben Moment öffnen – der Normalfall, wenn er an eine Gruppe geht –,
+     löschten einander damit wieder heraus. Wer verlor, konnte über den
+     Link zwar weiter lesen, stand aber in keiner Liste: der Besitzer
+     bekam ihn nie in die Rollenliste des Raums, und die Live-Sitzung
+     endete bei ihm mit ROOM_NOT_ADMITTED.
+
+     Deshalb hängt joinViaLink jetzt an (arrayUnion) und fasst in den
+     Tabellen genau einen Schlüssel an (FieldPath — mit der Schreibweise
+     über den Punkt würde die Adresse zu Unterordnern zerfallen). Hier
+     wird geprüft, dass die Regel selfJoin() genau diese Form annimmt.
+     ══════════════════════════════════════════════════════════════════ */
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'docs/dok3b'), headData({
+      linkMode: 'view', linkId: 'link3b',
+      memberEmails: [READER.mail],
+      members: { [READER.mail]: 'view' },
+      memberVia: { [READER.mail]: 'link' }
+    }));
+  });
+
+  await ok('Selbsteintrag hängt an, statt die Liste zu ersetzen',
+    updateDoc(doc(fsOf(STRANGER), 'docs/dok3b'),
+      'memberEmails', arrayUnion(STRANGER.mail),
+      new FieldPath('members', STRANGER.mail), 'view',
+      new FieldPath('memberVia', STRANGER.mail), 'link'));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await getDoc(doc(ctx.firestore(), 'docs/dok3b'));
+    const d = snap.data() || {};
+    gleich('Der andere steht noch drin', (d.memberEmails || []).includes(READER.mail), true);
+    gleich('Und der neue auch', (d.memberEmails || []).includes(STRANGER.mail), true);
+    gleich('Die fremde Rolle blieb unangetastet', (d.members || {})[READER.mail], 'view');
+    /* Der Punkt in der Adresse darf KEINEN Unterordner ergeben – dafür
+       steht FieldPath statt der Schreibweise mit Punkt. */
+    gleich('Die eigene Rolle steht flach darin', (d.members || {})[STRANGER.mail], 'view');
+  });
+
+  // Angehängt oder nicht: gesperrt bleibt gesperrt
+  await denied('Auch angehängt kommt ein Gesperrter nicht herein',
+    updateDoc(doc(fsOf(BLOCKED), 'docs/dok3b'),
+      'memberEmails', arrayUnion(BLOCKED.mail),
+      new FieldPath('members', BLOCKED.mail), 'view',
+      new FieldPath('memberVia', BLOCKED.mail), 'link'));
+
+  // Und ein Lese-Link macht auch in dieser Form keinen Bearbeiter
+  await denied('Auch angehängt bleibt es beim Lesen',
+    updateDoc(doc(fsOf(GESPERRT), 'docs/dok3b'),
+      'memberEmails', arrayUnion(GESPERRT.mail),
+      new FieldPath('members', GESPERRT.mail), 'edit',
+      new FieldPath('memberVia', GESPERRT.mail), 'link'));
 
   await denied('Über einen Nur-lesen-Link bleibt es beim Lesen',
     setDoc(doc(fsOf(STRANGER), 'docs/dok3/pages/p1'), { text: '<p>heimlich</p>' }, { merge: true }));

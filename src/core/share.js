@@ -32,7 +32,8 @@
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion
+  addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion,
+  FieldPath
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
@@ -1449,15 +1450,47 @@ async function clearDocContent(docId) {
 function fingerprintNotebook(notebook) {
   const pages = {};
   for (const page of (notebook.pages || [])) {
-    const strokes = page.inkStrokes || [];
-    pages[String(page.id)] = {
-      sig: signatureOf(page, commentsForPage(notebook, page.id)),
-      strokes: strokes.length,
-      inkSig: inkSignatureOf(strokes)
-    };
+    pages[String(page.id)] = fingerprintSeite(notebook, page);
   }
+  return { pages, ...fingerprintRahmen(notebook) };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EINE SEITE ALLEIN NACHTRAGEN
+
+   >>> Warum das eine eigene Funktion braucht <<<
+   ui/sharedDocs.js zieht den Merkzettel nach, sobald eine fremde
+   Änderung eingearbeitet ist (noteRemoteApplied) – sonst hielte die
+   nächste Sicherung das Empfangene für etwas Eigenes und schriebe es
+   zurück. Dafür rief es fingerprintNotebook() und nahm daraus EINEN
+   Eintrag.
+
+   Das ist die ganze Rechnung für einen Bruchteil des Ergebnisses: jede
+   Seite wird unterschrieben, und dazu gehört, die vollständige
+   Strichliste in eine Zeichenkette zu verwandeln. Ein Heft mit zwanzig
+   handgeschriebenen Seiten sind schnell einige Megabyte – und das bei
+   JEDER eingehenden Struktur-Änderung, also bis zu viermal in der
+   Sekunde, solange der andere arbeitet. Genau daher kommt das Stocken,
+   das sich beim Arbeiten zu zweit einstellt und beim Arbeiten allein
+   nicht.
+
+   Der Rahmen (Reihenfolge und Kopfangaben) bleibt dabei, er kostet
+   nichts – dort steht keine Handschrift drin.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Der Eintrag EINER Seite im Merkzettel. */
+function fingerprintSeite(notebook, page) {
+  const strokes = page.inkStrokes || [];
   return {
-    pages,
+    sig: signatureOf(page, commentsForPage(notebook, page.id)),
+    strokes: strokes.length,
+    inkSig: inkSignatureOf(strokes)
+  };
+}
+
+/** Reihenfolge und Kopfangaben – alles ausser den Seiten selbst. */
+function fingerprintRahmen(notebook) {
+  return {
     order: (notebook.pages || []).map(p => String(p.id)),
     headSig: JSON.stringify({
       name: notebook.name, color: notebook.color, defaultBg: notebook.defaultBg,
@@ -1569,6 +1602,63 @@ function inkPlan(strokes, merk, jetzt) {
   return { was: 'neu', ab: 0 };
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER KOPF WIRD FORTGESCHRIEBEN — UND ZWAR GEGEN DIE JETZIGE NUMMER
+
+   editorUpdate() in website/firestore.rules verlangt
+   `revision > head().revision`. Die Nummer wird hier aber aus dem Kopf
+   gerechnet, der GANZ AM ANFANG des Sicherns gelesen wurde – und
+   dazwischen liegt die ganze Arbeit: Seiten, Handschrift, Bilder,
+   gelöschte Seiten. Das dauert bei einem vollen Heft Sekunden.
+
+   >>> Was in dieser Zeit passiert, und was es angerichtet hat <<<
+   Sichert der andere in genau dieser Zeit, steht seine Nummer schon im
+   Kopf. Unsere ist dann nicht mehr grösser, sondern gleich – die Regel
+   weist ab, und zwar mit „permission-denied".
+
+   Für ui/sharedDocs.js sah das aus wie ein entzogenes Schreibrecht:
+   rechtFehlt() traf zu, keinSchreibrecht wurde gesetzt, der Takt
+   abgestellt. Ab da sicherte dieser Mensch für den REST DER SITZUNG
+   nicht mehr nach Firestore. Seine Arbeit lebte nur noch im Live-Kanal
+   und war beim Schliessen weg.
+
+   Und das ist kein Ausnahmefall: zwei Bearbeitende sichern beide im
+   Vier-Sekunden-Takt. Sie treffen sich zwangsläufig, meist innerhalb
+   der ersten Minuten. Genau das ist „zu zweit wird alles buggy".
+
+   Deshalb: bei einer Abweisung den Kopf noch einmal lesen und mit der
+   jetzigen Nummer weitermachen. Fehlt das Recht wirklich, ist der Kopf
+   entweder gar nicht mehr lesbar oder seine Nummer kleiner als unsere –
+   dann bleibt es bei der Absage, und die Auskunft stimmt wieder.
+   ══════════════════════════════════════════════════════════════════════ */
+const KOPF_VERSUCHE = 4;
+
+/**
+ * @param {string} docId
+ * @param {object} patch    alles ausser revision und updatedAt
+ * @param {number} revision die Nummer, mit der es zuerst versucht wird
+ * @returns {Promise<number>} die Nummer, die wirklich im Kopf steht
+ */
+async function schreibeKopfFort(docId, patch, revision) {
+  for (let versuch = 1; ; versuch++) {
+    try {
+      const nummer = revision;
+      await step('Stand fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
+        ...patch, revision: nummer, updatedAt: serverTimestamp()
+      }));
+      return nummer;
+    } catch (err) {
+      if (err?.code !== 'permission-denied' || versuch >= KOPF_VERSUCHE) throw err;
+
+      const frisch = await loadDocumentHead(docId).catch(() => null);
+      // Nicht lesbar, oder unsere Nummer war ohnehin schon die grössere:
+      // dann lag es nicht am Wettlauf, und die Absage bleibt bestehen.
+      if (!frisch || frisch.revision < revision) throw err;
+      revision = frisch.revision + 1;
+    }
+  }
+}
+
 /**
  * Schreibt Änderungen an einem geteilten Dokument zurück.
  *
@@ -1628,16 +1718,13 @@ async function saveDocumentContent(docId, notebook, options = {}) {
   if (!base) {
     await step('Alten Inhalt entfernen', () => clearDocContent(docId));
     await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid));
-    const rev = head.revision + 1;
-    await step('Stand fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
+    const rev = await schreibeKopfFort(docId, {
       pageOrder: parts.head.pageOrder,
       pageCount: parts.head.pageCount,
       sections: parts.head.sections,
-      revision: rev,
-      updatedAt: serverTimestamp(),
       // Die Entscheidung des Besitzers reist mit – siehe describeDoc
       ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
-    }));
+    }, head.revision + 1);
     return { revision: rev, fingerprint, written: parts.pages.length };
   }
 
@@ -1686,16 +1773,13 @@ async function saveDocumentContent(docId, notebook, options = {}) {
   /* Der Kopf trägt nur noch Reihenfolge, Abschnitte und den Zeitstempel.
      Er wird auch geschrieben, wenn sich am Inhalt nichts getan hat – daran
      erkennen die anderen Clients, dass es etwas Neues gibt. */
-  const revision = head.revision + 1;
-  await step('Stand fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
+  const revision = await schreibeKopfFort(docId, {
     pageOrder: parts.head.pageOrder,
     pageCount: parts.head.pageCount,
     sections: parts.head.sections,
-    revision,
-    updatedAt: serverTimestamp(),
     // Die Entscheidung des Besitzers reist mit – siehe describeDoc
     ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
-  }));
+  }, head.revision + 1);
 
   return { revision, fingerprint, written };
 }
@@ -1745,9 +1829,29 @@ async function appendStrokes(docId, pageId, strokes, byUid) {
 
     if (!last || bytes + size > INK_SHEET_LIMIT) {
       const id = `${pageId}__${nextNo}`;
+      /* ══════════════════════════════════════════════════════════════
+         ANLEGEN IST HIER AUCH EIN ANHÄNGEN
+
+         Hier stand ein setDoc OHNE merge, mit `strokes: [stroke]`. Die
+         Bogennummer wird aber aus dem gerechnet, was einen Augenblick
+         vorher in der Datenbank stand – und zwei Leute, die gleichzeitig
+         auf DERSELBEN Seite zeichnen, rechnen dabei dieselbe Nummer aus.
+         Wer als Zweiter schrieb, ersetzte den Bogen des Ersten
+         vollständig: dessen Striche waren weg, ohne dass es jemand
+         merkte.
+
+         Der häufigste Fall ist die noch leere Seite. Dort gibt es
+         überhaupt keinen Bogen, beide fangen mit `pageId__0` an, und
+         einer von beiden verliert alles, was er gerade gezeichnet hat.
+
+         Mit merge und arrayUnion ist das Anlegen dasselbe wie das
+         Anhängen weiter unten: Firestore führt zwei arrayUnion auf
+         demselben Feld zusammen, und beide Striche stehen darin. Genau
+         das ist beim Zeichnen auch das richtige Ergebnis.
+         ══════════════════════════════════════════════════════════════ */
       await step('Handschrift anlegen', () => setDoc(doc(db, DOCS, docId, INK, id), {
-        pageId, no: nextNo, strokes: [stroke], by: byUid
-      }));
+        pageId, no: nextNo, strokes: arrayUnion(stroke), by: byUid
+      }, { merge: true }));
       last = { id, no: nextNo, strokes: [stroke] };
       bytes = size;
       nextNo++;
@@ -2216,17 +2320,32 @@ async function joinViaLink(docId) {
     return 'already';
   }
 
-  const memberEmails = head.memberEmails.includes(me.email)
-    ? head.memberEmails.slice()
-    : head.memberEmails.concat(me.email);
+  /* ══════════════════════════════════════════════════════════════════
+     NUR DEN EIGENEN EINTRAG ANFASSEN, NICHT DIE GANZE LISTE
 
-  // Nur die eigene Adresse und nur mit der Rolle, die der Link hergibt –
-  // die Regel prüft beides noch einmal.
-  await updateDoc(doc(db, DOCS, docId), {
-    memberEmails,
-    members: { ...head.members, [me.email]: role },
-    memberVia: { ...head.memberVia, [me.email]: head.memberVia[me.email] || 'link' }
-  });
+     Hier wurden `memberEmails`, `members` und `memberVia` als GANZES neu
+     geschrieben, gebildet aus dem Kopf, der einen Augenblick vorher
+     gelesen wurde. Zwei Leute, die denselben Link im selben Moment
+     öffnen – der Normalfall, wenn ein Link an eine Gruppe geht –,
+     löschten einander damit wieder heraus: der Zweite schrieb die Liste
+     von vorhin zurück, in der der Erste noch nicht stand.
+
+     Wer dabei verlor, merkte nichts. Das Dokument liess sich über den
+     Link weiter lesen, aber er stand in keiner Liste: der Besitzer
+     bekam ihn nie in die Rollenliste des Raums, und die Live-Sitzung
+     endete bei ihm mit ROOM_NOT_ADMITTED – „ich sehe nichts von den
+     anderen, und niemand sieht mich."
+
+     arrayUnion hängt an, statt zu ersetzen; FieldPath fasst in den
+     Tabellen genau einen Schlüssel an. Ein Punkt in der Adresse macht
+     dabei KEINEN Unterordner daraus – deshalb FieldPath und nicht die
+     Schreibweise mit Punkt wie bei memberUids (dort sind es Kennungen
+     ohne Punkt). Die Regel selfJoin() prüft beides noch einmal. */
+  await updateDoc(doc(db, DOCS, docId),
+    'memberEmails', arrayUnion(me.email),
+    new FieldPath('members', me.email), role,
+    new FieldPath('memberVia', me.email), head.memberVia[me.email] || 'link'
+  );
 
   return 'joined';
 }
@@ -2898,11 +3017,22 @@ async function joinDocRoom(docId, options = {}) {
    *
    * @param {string} pageId
    * @param {string|number} objId  leer/null = wieder freigeben
+   * @param {boolean} [erzwingen] Auch melden, wenn sich nichts geändert
+   *   hat – zum Auffrischen eines Anspruchs, den man weiter hält.
+   *
+   *   >>> Wozu das gebraucht wird <<<
+   *   ui/collab.js hat bisher über den Umweg „erst leer, dann wieder
+   *   voll" aufgefrischt, weil diese Funktion sonst schwieg. Zwischen
+   *   den beiden Meldungen stand bei allen anderen für einen Augenblick
+   *   „das Bild ist frei": der Rahmen flackerte im Zwei-Sekunden-Takt,
+   *   und wer in genau diesem Augenblick zugriff, bekam es mit – beide
+   *   hielten dann dasselbe Objekt. Mit einer einzigen Meldung gibt es
+   *   diesen Augenblick nicht mehr.
    */
-  function setObjLock(pageId, objId) {
+  function setObjLock(pageId, objId, erzwingen) {
     if (left || !lockFieldsOk) return;
     const wert = (pageId && objId) ? (String(pageId) + '#' + String(objId)) : '';
-    if (wert === card.objLock) return;
+    if (wert === card.objLock && !erzwingen) return;
 
     card.objLock = wert;
     card.objLockAt = wert ? Date.now() : 0;
@@ -4017,6 +4147,9 @@ const InkwellsShare = {
   splitNotebook,
   assembleNotebook,
   fingerprintNotebook,
+  // Einzelne Seite nachtragen, ohne das ganze Heft zu rechnen
+  fingerprintSeite,
+  fingerprintRahmen,
 
   // Postfach
   ladeNachrichten,

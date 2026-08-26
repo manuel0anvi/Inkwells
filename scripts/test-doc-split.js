@@ -47,6 +47,8 @@ function extract(name) {
 
 const NAMES = [
   'splitNotebook', 'assembleNotebook', 'fingerprintNotebook',
+  // Die beiden Hälften des Merkzettels; fingerprintNotebook ruft sie
+  'fingerprintSeite', 'fingerprintRahmen',
   'signatureOf', 'isInlineData', 'splitIntoChunks',
   // Baut die Heft-Reihenfolge; splitNotebook hängt daran
   'pagesInOrder',

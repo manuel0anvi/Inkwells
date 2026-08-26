@@ -58,6 +58,8 @@ function extract(name) {
 }
 
 const NAMES = ['inkPlan', 'inkSignatureOf', 'kurzhash', 'fingerprintNotebook',
+  // Die beiden Hälften des Merkzettels; fingerprintNotebook ruft sie
+  'fingerprintSeite', 'fingerprintRahmen',
   'signatureOf', 'isInlineData',
   // Die Unterschrift einer Seite zaehlt die Kommentare mit
   'commentsForPage'];
