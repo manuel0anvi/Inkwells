@@ -454,8 +454,13 @@ function placeObject(objLayer, obj, page) {
           placeBar();
         }
       };
-      const up = (ev) => { hideSnaps(); if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); h.releasePointerCapture(ev.pointerId); h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
-      h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+      /* pointercancel gehoert dazu: nimmt das System den Zeiger an sich
+         (Handballen, Systemfenster, Bildlauf), kommt kein pointerup mehr.
+         Ohne das blieb die Form fuer alle anderen gesperrt – der Anspruch
+         wird im Live-Raum aufgefrischt, solange er gehalten gilt
+         (ui/collab.js). */
+      const up = (ev) => { hideSnaps(); if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { h.releasePointerCapture(ev.pointerId); } catch (err) { } h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
+      h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
     });
   });
 
@@ -480,8 +485,9 @@ function placeObject(objLayer, obj, page) {
       for (const sp of [0, 90, 180, 270, 360, -90, -180, -270, -360]) if (Math.abs(newRot - sp) < 10) { newRot = sp; break; }
       obj.rot = newRot; applyRotation();
     };
-    const up = (ev) => { if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); rotH.releasePointerCapture(ev.pointerId); rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); if (_hasMutated) noteObjectChanged(); };
-    rotH.addEventListener('pointermove', mv); rotH.addEventListener('pointerup', up);
+    // pointercancel wie beim Ziehgriff – siehe dort
+    const up = (ev) => { if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { rotH.releasePointerCapture(ev.pointerId); } catch (err) { } rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); rotH.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
+    rotH.addEventListener('pointermove', mv); rotH.addEventListener('pointerup', up); rotH.addEventListener('pointercancel', up);
   });
   }
 
@@ -579,10 +585,13 @@ function placeObject(objLayer, obj, page) {
           try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
           g.removeEventListener('pointermove', mv);
           g.removeEventListener('pointerup', up);
+          g.removeEventListener('pointercancel', up);
           if (_hasMutated) noteObjectChanged();
         };
         g.addEventListener('pointermove', mv);
         g.addEventListener('pointerup', up);
+        // pointercancel wie beim Ziehgriff – siehe dort
+        g.addEventListener('pointercancel', up);
       });
     });
 

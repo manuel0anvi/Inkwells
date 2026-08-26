@@ -207,7 +207,8 @@ function makeClient(name, uid, notebook) {
         bus.listeners.push(wrapped);
         return () => {};
       },
-      sendOp(op) { publish({ ...op, by: uid }); return Promise.resolve(); },
+      // true wie der echte Raum: sendOp meldet, OB die Änderung ankam
+      sendOp(op) { publish({ ...op, by: uid }); return Promise.resolve(true); },
       leave: async () => {}
     })
   };

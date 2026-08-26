@@ -1592,17 +1592,45 @@
   let gehaltenesObjekt = null;
   let objFrischTimer = null;
 
+  /* ══════════════════════════════════════════════════════════════════
+     UND IRGENDWANN IST AUCH EIN GEHALTENES OBJEKT WIEDER FREI
+
+     Der Anspruch verfaellt beim anderen nach OBJ_LOCK_TTL_MS – aber nur,
+     wenn er nicht mehr aufgefrischt wird. Genau das war die Falle: der
+     Takt hier frischte auf, SOLANGE gehaltenesObjekt gesetzt war, und
+     gesetzt blieb es, bis ein pointerup den Griff wieder losliess.
+
+     Ein pointerup kommt aber nicht immer. Verschwindet das Griff-Element
+     mitten im Ziehen aus dem Dokument – und das passiert beim
+     gemeinsamen Arbeiten laufend, weil eine fremde Struktur-Aenderung
+     den Abschnitt neu aufbaut (rerenderPages) –, dann verliert es auch
+     seinen Zeiger, und der Hoerer, der freigeben sollte, feuert nie.
+     Das Bild gehoerte danach fuer den Rest der Sitzung diesem einen
+     Fenster; alle anderen sahen einen fremden Rahmen darum und kamen
+     nicht mehr heran.
+
+     Zwei Netze dagegen: ein Zeitlimit hier, und der Hoerer am Fenster
+     (siehe start), der jedes Loslassen mitbekommt – auch eines, das
+     kein Element mehr erreicht.
+     ══════════════════════════════════════════════════════════════════ */
+  const OBJ_HOLD_MAX_MS = 60 * 1000;
+
   function beansprucheObjekt(pageId, objId) {
     if (!room || typeof room.setObjLock !== 'function') return;
-    gehaltenesObjekt = { pageId: String(pageId), objId: String(objId) };
+    gehaltenesObjekt = { pageId: String(pageId), objId: String(objId), seit: Date.now() };
     room.setObjLock(gehaltenesObjekt.pageId, gehaltenesObjekt.objId);
     if (objFrischTimer) clearInterval(objFrischTimer);
     objFrischTimer = setInterval(() => {
       if (!gehaltenesObjekt || !room) return;
-      /* setObjLock schweigt, wenn sich nichts geaendert hat – deshalb
-         hier ueber den Umweg leer/wieder-voll auffrischen. */
-      room.setObjLock('', '');
-      room.setObjLock(gehaltenesObjekt.pageId, gehaltenesObjekt.objId);
+      if (Date.now() - gehaltenesObjekt.seit > OBJ_HOLD_MAX_MS) {
+        console.warn('[Collab] Formensperre lief zu lange – wird freigegeben.');
+        gibObjektFrei();
+        return;
+      }
+      /* Eine EINZIGE Meldung. Der frühere Umweg über leer/wieder-voll
+         zeigte den anderen zwischendurch ein freies Objekt – siehe
+         setObjLock in core/share.js. */
+      room.setObjLock(gehaltenesObjekt.pageId, gehaltenesObjekt.objId, true);
     }, Math.round(OBJ_LOCK_TTL_MS / 2));
   }
 
@@ -2605,10 +2633,84 @@
     const text = JSON.stringify(payload || {});
 
     if (text.length <= LIVE_OP_LIMIT) {
-      room.sendOp({ k: kind, p: pageId, u: text });
+      /* >>> Das Ergebnis MUSS gelesen werden <<<
+         Siehe merkeUnzugestellt(). Ohne diese Zeile galt eine abgewiesene
+         Meldung als zugestellt und wurde nie wieder angeboten.
+
+         Auf `ok === false` und nicht auf `!ok`: ein Raum, der gar keine
+         Auskunft gibt (ältere core/share.js, Prüfstand), meldet
+         `undefined` – das ist „weiss nicht", nicht „nicht angekommen".
+         Als Fehlschlag gedeutet, schickte er jede Meldung endlos noch
+         einmal. */
+      Promise.resolve(room.sendOp({ k: kind, p: pageId, u: text }))
+        .then((ok) => { if (ok === false) merkeUnzugestellt(kind, pageId); })
+        .catch(() => merkeUnzugestellt(kind, pageId));
       return;
     }
     sendViaFirestore(pageId);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WAS NICHT ANGEKOMMEN IST, GILT ALS NICHT GESENDET
+
+     doSyncStructure schreibt den Vergleichsstand am Ende fort – bisher
+     IMMER, auch für eine Meldung, die die Datenbank abgewiesen hat.
+     Damit galt die Änderung als übertragen und wurde nie wieder
+     angeboten: eine neue Seite, ein verschobenes Bild, ein umbenannter
+     Abschnitt, eine gelöschte Seite kamen beim anderen einfach nicht an.
+     Es half nur, das Dokument zuzumachen und neu zu öffnen.
+
+     Beim TEXT war genau das längst abgefangen (docFor nimmt bei einem
+     Fehlschlag den Weg über Firestore), bei allem Übrigen nicht – und
+     dabei ist die Absage hier kein Ausnahmefall:
+
+       · Verlässt der Besitzer kurz den Raum, nimmt er das Schreibrecht
+         mit (leave in core/share.js). Jede Meldung in diesem Augenblick
+         läuft ins Leere.
+       · Ebenso beim Wechsel des Raums, bei einem Rechtewechsel und in
+         jedem Aussetzer der Leitung.
+
+     Zurückgesetzt wird nur das, was zu dieser Meldung gehört – der
+     nächste Vergleich sieht den Unterschied dann wieder und schickt sie
+     noch einmal. Der Takt dafür läuft ohnehin (staleTimer, 1,5 s);
+     ausdrücklich anzustossen wäre bei einer dauerhaften Absage eine
+     Schleife im Viertelsekundentakt.
+
+     Der Vergleichsstand ist zu diesem Zeitpunkt schon fortgeschrieben:
+     doSyncStructure läuft synchron zu Ende, die Antwort auf sendOp kommt
+     erst danach. Es wird also der NEUE Stand zurückgenommen, und das ist
+     der richtige.
+     ══════════════════════════════════════════════════════════════════ */
+  /* 'get' hängt an der Bild-Unterschrift: nur wenn die sich unterscheidet,
+     stösst doSyncStructure den Umweg über Firestore an. Sie
+     zurückzusetzen ist deshalb genau das, was einen verlorenen
+     „hol dich neu"-Hinweis wieder anbietet. */
+  const SNAPSHOT_FELD = { pgm: 'meta', obj: 'objs', inks: 'ink', get: 'img' };
+
+  function merkeUnzugestellt(kind, pageId) {
+    if (!snapshot) return;
+    const id = String(pageId);
+
+    if (kind === 'st') {
+      snapshot.struct = '';
+      snapshot.order = '';
+      return;
+    }
+    if (kind === 'pg+') {
+      // Wieder unbekannt: der nächste Vergleich hält sie erneut für neu
+      delete snapshot.pages[id];
+      return;
+    }
+    if (kind === 'pg-') {
+      /* Andersherum: gemeldet wird eine Löschung daran, dass die Seite im
+         Vergleichsstand noch steht und jetzt fehlt. Also muss sie dort
+         wieder auftauchen. Die Werte sind gleichgültig – die Seite gibt
+         es hier nicht mehr, verglichen wird nur ihr Dasein. */
+      snapshot.pages[id] = { meta: '', objs: '', img: '', ink: '' };
+      return;
+    }
+    const feld = SNAPSHOT_FELD[kind];
+    if (feld && snapshot.pages[id]) snapshot.pages[id][feld] = '';
   }
 
   /* Seiten, für die noch ein „hol dich neu" ansteht. Ein PDF mit zwanzig
@@ -2652,7 +2754,12 @@
 
       Promise.resolve(save).catch(() => {}).then(() => {
         if (!room) return;
-        for (const id of wanted) room.sendOp({ k: 'get', p: id, u: '{}' });
+        for (const id of wanted) {
+          // Auch hier zählt das Ergebnis – siehe merkeUnzugestellt()
+          Promise.resolve(room.sendOp({ k: 'get', p: id, u: '{}' }))
+            .then((ok) => { if (ok === false) merkeUnzugestellt('get', id); })
+            .catch(() => merkeUnzugestellt('get', id));
+        }
       });
     }, 60);
   }
@@ -3171,6 +3278,27 @@
 
   /* ── Betreten und Verlassen ───────────────────────────────────────── */
 
+  /* ══════════════════════════════════════════════════════════════════
+     WELCHE SITZUNG GERADE GILT
+
+     Der Raum zu betreten dauert – auf einer trägen Leitung bis zu einer
+     halben Minute (warteAufEinlass in core/share.js). Wer das Dokument
+     in dieser Zeit zumacht, ruft stop(): dort steht `room` noch auf null,
+     es gibt also nichts zu verlassen, und danach ist alles aufgeräumt.
+
+     Nur kam der Beitritt anschliessend trotzdem zurück und setzte `room`.
+     Damit stand ein betretener Raum ohne Dokument da: die Anwesenheit
+     blieb bei allen anderen sichtbar, die Beobachter liefen weiter, und
+     eingehende Änderungen fielen auf ein `liveNb`, das es nicht mehr
+     gibt. Verlassen wurde er erst beim nächsten Öffnen irgendeines
+     Dokuments – oder nie.
+
+     Die Nummer sagt, ob das Ergebnis noch zu der Sitzung gehört, die
+     gerade gilt. stop() zählt sie ebenfalls hoch: ein Ergebnis, das
+     danach eintrifft, wird höflich wieder verlassen.
+     ══════════════════════════════════════════════════════════════════ */
+  let sitzungNr = 0;
+
   /**
    * Wird von ui/sharedDocs.js aufgerufen, sobald ein geteiltes Dokument
    * offen ist.
@@ -3186,6 +3314,7 @@
    */
   async function start(id, notebook, crdt, canEdit, opts = {}) {
     await stop();
+    const meineSitzung = ++sitzungNr;
     docId = id;
     ownerUidJetzt = String(opts.ownerUid || '');
     liveNb = notebook;
@@ -3204,7 +3333,7 @@
     }
 
     try {
-      room = await window.InkwellsShare.joinDocRoom(id, {
+      const betreten = await window.InkwellsShare.joinDocRoom(id, {
         isOwner: !!opts.isOwner,
         ownerUid: opts.ownerUid || '',
         /* Der Name des Live-Raums aus dem Kopf. Ohne Angabe ist es die
@@ -3214,6 +3343,17 @@
         // Nur der Besitzer schreibt sie – siehe database.rules.json
         memberUids: opts.memberUids || {}
       });
+
+      /* Inzwischen zugemacht (oder ein anderes Dokument offen)? Dann
+         gehört dieser Raum niemandem mehr – siehe der Kasten bei
+         sitzungNr. Ordentlich wieder verlassen, sonst bleibt die eigene
+         Anwesenheit bei allen anderen stehen. */
+      if (meineSitzung !== sitzungNr) {
+        try { await betreten.leave(); } catch (e) {}
+        return;
+      }
+
+      room = betreten;
       lastError = '';
 
       /* Ab jetzt folgt der Streifen der Leitung. null heisst "noch nichts
@@ -3227,6 +3367,9 @@
         });
       }
     } catch (err) {
+      // Zu einer Sitzung, die es nicht mehr gibt, gehört auch keine Meldung
+      if (meineSitzung !== sitzungNr) return;
+
       /* Bisher stand das nur in der Konsole – der Nutzer sah eine App, die
          aussah, als liefe alles, und wunderte sich, warum nichts ankommt.
          Jetzt sagt es der Streifen über dem Dokument. */
@@ -3347,6 +3490,27 @@
       scroller.addEventListener('scroll', onScroll, { passive: true });
       stops.push(() => scroller.removeEventListener('scroll', onScroll));
     }
+
+    /* ── Wer loslaesst, gibt frei – auch wenn nichts mehr zuhoert ────
+       Die Griffe an einem Bild geben ihren Anspruch im eigenen
+       pointerup wieder her (canvas/objects.js). Erreicht dieses Ereignis
+       den Griff nicht mehr – weil er mitten im Ziehen aus dem Dokument
+       verschwunden ist, etwa durch einen Neuaufbau nach einer fremden
+       Aenderung –, blieb das Objekt fuer alle anderen gesperrt.
+
+       Am Fenster kommt jedes Loslassen an. Zweimal freigeben schadet
+       nicht: setObjLock schweigt, wenn schon nichts mehr gehalten wird. */
+    /* Mit typeof gefragt: der Prüfstand scripts/test-collab-sync.js fährt
+       diese Datei in einem nachgebauten DOM ohne Fenster-Hörer. */
+    if (typeof window.addEventListener === 'function') {
+      const losgelassen = () => { if (gehaltenesObjekt) gibObjektFrei(); };
+      window.addEventListener('pointerup', losgelassen, true);
+      window.addEventListener('pointercancel', losgelassen, true);
+      stops.push(() => {
+        window.removeEventListener('pointerup', losgelassen, true);
+        window.removeEventListener('pointercancel', losgelassen, true);
+      });
+    }
   }
 
   /**
@@ -3360,6 +3524,11 @@
    */
   async function stop(expectedDocId) {
     if (expectedDocId && docId !== expectedDocId) return;
+
+    /* Ab jetzt gilt keine Sitzung mehr. Ein Beitritt, der noch unterwegs
+       ist, verlässt seinen Raum von selbst wieder – siehe der Kasten bei
+       sitzungNr. */
+    sitzungNr++;
 
     // Was noch wartet, gehört noch hinaus – sonst fehlt es beim anderen
     // und in dem Stand, der gleich gesichert wird.
