@@ -44,7 +44,8 @@
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion
+  addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion,
+  arrayRemove, deleteField, FieldPath
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
@@ -1461,15 +1462,47 @@ async function clearDocContent(docId) {
 function fingerprintNotebook(notebook) {
   const pages = {};
   for (const page of (notebook.pages || [])) {
-    const strokes = page.inkStrokes || [];
-    pages[String(page.id)] = {
-      sig: signatureOf(page, commentsForPage(notebook, page.id)),
-      strokes: strokes.length,
-      inkSig: inkSignatureOf(strokes)
-    };
+    pages[String(page.id)] = fingerprintSeite(notebook, page);
   }
+  return { pages, ...fingerprintRahmen(notebook) };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EINE SEITE ALLEIN NACHTRAGEN
+
+   >>> Warum das eine eigene Funktion braucht <<<
+   ui/sharedDocs.js zieht den Merkzettel nach, sobald eine fremde
+   Änderung eingearbeitet ist (noteRemoteApplied) – sonst hielte die
+   nächste Sicherung das Empfangene für etwas Eigenes und schriebe es
+   zurück. Dafür rief es fingerprintNotebook() und nahm daraus EINEN
+   Eintrag.
+
+   Das ist die ganze Rechnung für einen Bruchteil des Ergebnisses: jede
+   Seite wird unterschrieben, und dazu gehört, die vollständige
+   Strichliste in eine Zeichenkette zu verwandeln. Ein Heft mit zwanzig
+   handgeschriebenen Seiten sind schnell einige Megabyte – und das bei
+   JEDER eingehenden Struktur-Änderung, also bis zu viermal in der
+   Sekunde, solange der andere arbeitet. Genau daher kommt das Stocken,
+   das sich beim Arbeiten zu zweit einstellt und beim Arbeiten allein
+   nicht.
+
+   Der Rahmen (Reihenfolge und Kopfangaben) bleibt dabei, er kostet
+   nichts – dort steht keine Handschrift drin.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Der Eintrag EINER Seite im Merkzettel. */
+function fingerprintSeite(notebook, page) {
+  const strokes = page.inkStrokes || [];
   return {
-    pages,
+    sig: signatureOf(page, commentsForPage(notebook, page.id)),
+    strokes: strokes.length,
+    inkSig: inkSignatureOf(strokes)
+  };
+}
+
+/** Reihenfolge und Kopfangaben – alles ausser den Seiten selbst. */
+function fingerprintRahmen(notebook) {
+  return {
     order: (notebook.pages || []).map(p => String(p.id)),
     headSig: JSON.stringify({
       name: notebook.name, color: notebook.color, defaultBg: notebook.defaultBg,
@@ -1581,6 +1614,63 @@ function inkPlan(strokes, merk, jetzt) {
   return { was: 'neu', ab: 0 };
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER KOPF WIRD FORTGESCHRIEBEN — UND ZWAR GEGEN DIE JETZIGE NUMMER
+
+   editorUpdate() in website/firestore.rules verlangt
+   `revision > head().revision`. Die Nummer wird hier aber aus dem Kopf
+   gerechnet, der GANZ AM ANFANG des Sicherns gelesen wurde – und
+   dazwischen liegt die ganze Arbeit: Seiten, Handschrift, Bilder,
+   gelöschte Seiten. Das dauert bei einem vollen Heft Sekunden.
+
+   >>> Was in dieser Zeit passiert, und was es angerichtet hat <<<
+   Sichert der andere in genau dieser Zeit, steht seine Nummer schon im
+   Kopf. Unsere ist dann nicht mehr grösser, sondern gleich – die Regel
+   weist ab, und zwar mit „permission-denied".
+
+   Für ui/sharedDocs.js sah das aus wie ein entzogenes Schreibrecht:
+   rechtFehlt() traf zu, keinSchreibrecht wurde gesetzt, der Takt
+   abgestellt. Ab da sicherte dieser Mensch für den REST DER SITZUNG
+   nicht mehr nach Firestore. Seine Arbeit lebte nur noch im Live-Kanal
+   und war beim Schliessen weg.
+
+   Und das ist kein Ausnahmefall: zwei Bearbeitende sichern beide im
+   Vier-Sekunden-Takt. Sie treffen sich zwangsläufig, meist innerhalb
+   der ersten Minuten. Genau das ist „zu zweit wird alles buggy".
+
+   Deshalb: bei einer Abweisung den Kopf noch einmal lesen und mit der
+   jetzigen Nummer weitermachen. Fehlt das Recht wirklich, ist der Kopf
+   entweder gar nicht mehr lesbar oder seine Nummer kleiner als unsere –
+   dann bleibt es bei der Absage, und die Auskunft stimmt wieder.
+   ══════════════════════════════════════════════════════════════════════ */
+const KOPF_VERSUCHE = 4;
+
+/**
+ * @param {string} docId
+ * @param {object} patch    alles ausser revision und updatedAt
+ * @param {number} revision die Nummer, mit der es zuerst versucht wird
+ * @returns {Promise<number>} die Nummer, die wirklich im Kopf steht
+ */
+async function schreibeKopfFort(docId, patch, revision) {
+  for (let versuch = 1; ; versuch++) {
+    try {
+      const nummer = revision;
+      await step('Stand fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
+        ...patch, revision: nummer, updatedAt: serverTimestamp()
+      }));
+      return nummer;
+    } catch (err) {
+      if (err?.code !== 'permission-denied' || versuch >= KOPF_VERSUCHE) throw err;
+
+      const frisch = await loadDocumentHead(docId).catch(() => null);
+      // Nicht lesbar, oder unsere Nummer war ohnehin schon die grössere:
+      // dann lag es nicht am Wettlauf, und die Absage bleibt bestehen.
+      if (!frisch || frisch.revision < revision) throw err;
+      revision = frisch.revision + 1;
+    }
+  }
+}
+
 /**
  * Schreibt Änderungen an einem geteilten Dokument zurück.
  *
@@ -1640,16 +1730,13 @@ async function saveDocumentContent(docId, notebook, options = {}) {
   if (!base) {
     await step('Alten Inhalt entfernen', () => clearDocContent(docId));
     await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid));
-    const rev = head.revision + 1;
-    await step('Stand fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
+    const rev = await schreibeKopfFort(docId, {
       pageOrder: parts.head.pageOrder,
       pageCount: parts.head.pageCount,
       sections: parts.head.sections,
-      revision: rev,
-      updatedAt: serverTimestamp(),
       // Die Entscheidung des Besitzers reist mit – siehe describeDoc
       ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
-    }));
+    }, head.revision + 1);
     return { revision: rev, fingerprint, written: parts.pages.length };
   }
 
@@ -1684,9 +1771,12 @@ async function saveDocumentContent(docId, notebook, options = {}) {
     if (plan.was === 'anhaengen') {
       await appendStrokes(docId, pageId, strokes.slice(plan.ab), me.uid);
     } else {
-      // Radiert oder mittendrin geändert: die Bögen dieser Seite neu
-      // schreiben. Nur hier wird überschrieben.
-      await rewritePageInk(docId, pageId, strokes, me.uid);
+      /* Radiert oder mittendrin geändert: die Bögen dieser Seite neu
+         schreiben. Nur hier wird überschrieben – und deshalb bekommt es
+         die zuletzt bekannte Strichzahl mit, damit fremde Striche, die
+         hier nie ankamen, nicht mit weggeschrieben werden. */
+      await rewritePageInk(docId, pageId, strokes, me.uid,
+        base.pages[pageId] ? base.pages[pageId].strokes : undefined);
     }
     written++;
   }
@@ -1698,16 +1788,13 @@ async function saveDocumentContent(docId, notebook, options = {}) {
   /* Der Kopf trägt nur noch Reihenfolge, Abschnitte und den Zeitstempel.
      Er wird auch geschrieben, wenn sich am Inhalt nichts getan hat – daran
      erkennen die anderen Clients, dass es etwas Neues gibt. */
-  const revision = head.revision + 1;
-  await step('Stand fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
+  const revision = await schreibeKopfFort(docId, {
     pageOrder: parts.head.pageOrder,
     pageCount: parts.head.pageCount,
     sections: parts.head.sections,
-    revision,
-    updatedAt: serverTimestamp(),
     // Die Entscheidung des Besitzers reist mit – siehe describeDoc
     ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {})
-  }));
+  }, head.revision + 1);
 
   return { revision, fingerprint, written };
 }
@@ -1757,9 +1844,29 @@ async function appendStrokes(docId, pageId, strokes, byUid) {
 
     if (!last || bytes + size > INK_SHEET_LIMIT) {
       const id = `${pageId}__${nextNo}`;
+      /* ══════════════════════════════════════════════════════════════
+         ANLEGEN IST HIER AUCH EIN ANHÄNGEN
+
+         Hier stand ein setDoc OHNE merge, mit `strokes: [stroke]`. Die
+         Bogennummer wird aber aus dem gerechnet, was einen Augenblick
+         vorher in der Datenbank stand – und zwei Leute, die gleichzeitig
+         auf DERSELBEN Seite zeichnen, rechnen dabei dieselbe Nummer aus.
+         Wer als Zweiter schrieb, ersetzte den Bogen des Ersten
+         vollständig: dessen Striche waren weg, ohne dass es jemand
+         merkte.
+
+         Der häufigste Fall ist die noch leere Seite. Dort gibt es
+         überhaupt keinen Bogen, beide fangen mit `pageId__0` an, und
+         einer von beiden verliert alles, was er gerade gezeichnet hat.
+
+         Mit merge und arrayUnion ist das Anlegen dasselbe wie das
+         Anhängen weiter unten: Firestore führt zwei arrayUnion auf
+         demselben Feld zusammen, und beide Striche stehen darin. Genau
+         das ist beim Zeichnen auch das richtige Ergebnis.
+         ══════════════════════════════════════════════════════════════ */
       await step('Handschrift anlegen', () => setDoc(doc(db, DOCS, docId, INK, id), {
-        pageId, no: nextNo, strokes: [stroke], by: byUid
-      }));
+        pageId, no: nextNo, strokes: arrayUnion(stroke), by: byUid
+      }, { merge: true }));
       last = { id, no: nextNo, strokes: [stroke] };
       bytes = size;
       nextNo++;
@@ -1773,11 +1880,83 @@ async function appendStrokes(docId, pageId, strokes, byUid) {
   }
 }
 
-/** Alle Bögen einer Seite neu schreiben – nach dem Radieren. */
-async function rewritePageInk(docId, pageId, strokes, byUid) {
+/* ══════════════════════════════════════════════════════════════════════
+   RADIEREN DARF NUR DAS EIGENE RADIEREN
+
+   >>> Der Datenverlust, den das schliesst <<<
+   rewritePageInk loescht ALLE Boegen einer Seite und schreibt die eigene
+   Liste hin. Was in Firestore stand und hier nicht in der Liste ist, gilt
+   damit als wegradiert – auch ein Strich, den der andere gerade erst
+   gezeichnet hat und der ueber den Live-Kanal nie ankam.
+
+   Unterscheiden lassen sich die beiden Faelle an der ANZAHL. Der
+   Merkzettel weiss, wie viele Striche beim letzten Abgleich auf der Seite
+   lagen (`bekannt`). Liegen in Firestore mehr, ist die Differenz
+   dazugekommen, ohne dass wir davon wussten – und weil arrayUnion anhaengt
+   und die Boegen nach `no` geordnet sind, steht das Neueste HINTEN.
+
+   Gerettet werden deshalb hoechstens so viele fehlende Striche, wie
+   Firestore mehr hat als der Merkzettel, und zwar die letzten. Ein
+   Beispiel fuer jede Richtung:
+
+     · Ich radiere Strich 3 von 10, sonst passiert nichts.
+       remote 10, bekannt 10 → 0 zu retten. Der Strich bleibt weg. Richtig.
+     · Der andere zeichnet Strich 11 (kommt hier nie an), ich radiere 3.
+       remote 11, bekannt 10 → 1 zu retten. Fehlend sind 3 und 11, der
+       letzte davon ist 11. Strich 3 bleibt weg, Strich 11 bleibt da.
+
+   Ohne Merkzettel wird nichts gerettet – lieber das bisherige Verhalten
+   als ein geratenes.
+
+   Reine Funktion, damit sie sich mit node pruefen laesst
+   (scripts/test-ink-diff.js).
+
+   @param {object[]} remote  was in Firestore steht, in Bogenreihenfolge
+   @param {object[]} lokal   was geschrieben werden soll
+   @param {number} bekannt   Strichzahl aus dem Merkzettel
+   @returns {object[]} die Striche, die hinten angehaengt werden muessen
+   ══════════════════════════════════════════════════════════════════════ */
+function fremdeStricheRetten(remote, lokal, bekannt) {
+  const drin = Array.isArray(remote) ? remote : [];
+  const hier = Array.isArray(lokal) ? lokal : [];
+
+  const wieviel = Number.isFinite(bekannt)
+    ? Math.max(0, drin.length - bekannt)
+    : 0;
+  if (!wieviel) return [];
+
+  const bekannteFormen = new Set(hier.map(s => JSON.stringify(s)));
+  const gerettet = [];
+  for (let i = drin.length - 1; i >= 0 && gerettet.length < wieviel; i--) {
+    const form = JSON.stringify(drin[i]);
+    if (bekannteFormen.has(form)) continue;
+    // Zweimal derselbe Strich waere zweimal derselbe Strich
+    bekannteFormen.add(form);
+    gerettet.push(drin[i]);
+  }
+  return gerettet.reverse();
+}
+
+/**
+ * Alle Bögen einer Seite neu schreiben – nach dem Radieren.
+ *
+ * @param {number} [bekannt] Strichzahl aus dem Merkzettel. Ohne sie wird
+ *   nichts gerettet – siehe fremdeStricheRetten().
+ */
+async function rewritePageInk(docId, pageId, strokes, byUid, bekannt) {
   const sheets = await getDocs(
     query(collection(db, DOCS, docId, INK), where('pageId', '==', pageId))
   );
+
+  const rows = sheets.docs
+    .map(d => ({ id: d.id, ...(d.data() || {}) }))
+    .sort((a, b) => (a.no || 0) - (b.no || 0));
+
+  const remote = [];
+  for (const row of rows) remote.push(...(row.strokes || []));
+
+  // Was der andere gezeichnet hat, ohne dass es hier ankam – siehe oben
+  const strokesOut = strokes.concat(fremdeStricheRetten(remote, strokes, bekannt));
 
   let batch = writeBatch(db);
   let count = 0;
@@ -1800,7 +1979,7 @@ async function rewritePageInk(docId, pageId, strokes, byUid) {
     bytes = 0;
   };
 
-  for (const stroke of strokes) {
+  for (const stroke of strokesOut) {
     const size = JSON.stringify(stroke).length;
     if (bytes + size > INK_SHEET_LIMIT && sheet.length) put();
     sheet.push(stroke);
@@ -1811,19 +1990,45 @@ async function rewritePageInk(docId, pageId, strokes, byUid) {
   await step('Handschrift neu schreiben', () => batch.commit());
 }
 
-/** Seite samt Handschrift und Bildern entfernen. */
+/**
+ * Seite samt Handschrift und Bildern entfernen.
+ *
+ * Stapelweise wie überall sonst: eine Seite mit mehreren Bildern zerfällt
+ * in viele Stücke (CHUNK_SIZE), und ein Stapel fasst nur MAX_BATCH
+ * Änderungen. Ohne die Grenze scheiterte das Löschen einer bilderreichen
+ * Seite ganz – und zwar erst beim Festschreiben, also nachdem sie hier
+ * schon verschwunden war.
+ */
 async function deletePageContent(docId, pageId) {
-  const batch = writeBatch(db);
-  batch.delete(doc(db, DOCS, docId, PAGES, pageId));
+  let batch = writeBatch(db);
+  let count = 0;
+  const merke = (ref) => {
+    batch.delete(ref);
+    if (++count < MAX_BATCH) return null;
+    const voll = batch;
+    batch = writeBatch(db);
+    count = 0;
+    return voll.commit();
+  };
+
+  const laeufe = [];
+  const warten = merke(doc(db, DOCS, docId, PAGES, pageId));
+  if (warten) laeufe.push(warten);
 
   for (const sub of [INK, BLOBS]) {
     const rows = await getDocs(
       query(collection(db, DOCS, docId, sub), where('pageId', '==', pageId))
     );
-    for (const snap of rows.docs) batch.delete(snap.ref);
+    for (const snap of rows.docs) {
+      const p = merke(snap.ref);
+      if (p) laeufe.push(p);
+    }
   }
 
-  await step('Seite entfernen', () => batch.commit());
+  await step('Seite entfernen', async () => {
+    await Promise.all(laeufe);
+    if (count > 0) await batch.commit();
+  });
 }
 
 /** Nachschlage-Eintrag Link -> Dokument. Öffentlich lesbar, das ist der Zweck. */
@@ -1846,6 +2051,51 @@ async function loadDocumentHead(docId) {
 async function updateDocHead(docId, patch) {
   requireIdentity();
   await updateDoc(doc(db, DOCS, docId), { ...patch, updatedAt: serverTimestamp() });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AN DEN MITGLIEDERLISTEN WIRD NUR NOCH EINZELN GEDREHT
+
+   Die drei Listen – memberEmails, members, memberVia – wurden bei jeder
+   Änderung als GANZES zurückgeschrieben, gebildet aus dem Kopf von einem
+   Augenblick vorher. Das ist ein Lesen-Ändern-Schreiben, und zwei davon
+   gleichzeitig löschen einander aus.
+
+   Wie das im Alltag aussieht: der Besitzer lädt jemanden ein, während
+   gerade jemand anders den Link öffnet. joinViaLink hängt seit Kurzem nur
+   noch an (arrayUnion) – der Besitzer dagegen schrieb die Liste von
+   vorhin zurück und warf den Neuen damit wieder hinaus. Er merkte nichts
+   davon: er konnte über den Link weiter lesen, stand aber in keiner Liste
+   und bekam nie Live-Betrieb.
+
+   Deshalb hier dieselben Werkzeuge: arrayUnion und arrayRemove hängen an
+   und nehmen weg, FieldPath fasst in den Tabellen genau einen Schlüssel
+   an. Ein Punkt in der Adresse macht dabei KEINEN Unterordner daraus –
+   deshalb FieldPath und nicht die Schreibweise mit Punkt.
+
+   @param {Array} felder  abwechselnd Feld und Wert, wie updateDoc sie nimmt
+   ══════════════════════════════════════════════════════════════════════ */
+async function updateDocFelder(docId, felder) {
+  requireIdentity();
+  await updateDoc(doc(db, DOCS, docId), ...felder, 'updatedAt', serverTimestamp());
+}
+
+/** Die drei Einträge einer Adresse setzen – ohne die der anderen anzufassen. */
+function eintragSetzen(email, role, via) {
+  return [
+    'memberEmails', arrayUnion(email),
+    new FieldPath('members', email), role,
+    new FieldPath('memberVia', email), via
+  ];
+}
+
+/** Die drei Einträge einer Adresse entfernen – ohne die der anderen. */
+function eintragLoeschen(email) {
+  return [
+    'memberEmails', arrayRemove(email),
+    new FieldPath('members', email), deleteField(),
+    new FieldPath('memberVia', email), deleteField()
+  ];
 }
 
 /**
@@ -1881,28 +2131,23 @@ async function setLinkMode(docId, mode) {
   // Alle, die über den Link hereingekommen sind
   const ueberLink = head.memberEmails.filter(e => head.memberVia[e] === 'link');
 
-  const members = { ...head.members };
-  const memberVia = { ...head.memberVia };
-  let memberEmails = head.memberEmails.slice();
-
+  /* Auch hier einzeln und nicht als ganze Liste (siehe updateDocFelder):
+     wer in DIESEM Augenblick über den Link hereinkommt, ist im Kopf von
+     vorhin noch nicht enthalten und würde sonst wieder verschwinden. */
   if (wanted === 'off') {
-    for (const e of ueberLink) {
-      delete members[e];
-      delete memberVia[e];
-    }
-    memberEmails = memberEmails.filter(e => !ueberLink.includes(e));
+    const felder = ['linkMode', 'off', 'linkId', ''];
+    for (const e of ueberLink) felder.push(...eintragLoeschen(e));
 
     if (head.linkId) await deleteDoc(doc(db, DOC_LINKS, head.linkId)).catch(() => {});
-    await updateDocHead(docId, {
-      linkMode: 'off', linkId: '', memberEmails, members, memberVia
-    });
+    await updateDocFelder(docId, felder);
     return { linkMode: 'off', linkId: '', url: '' };
   }
 
-  for (const e of ueberLink) members[e] = wanted;
-
   const linkId = head.linkId || makeShareId();
-  await updateDocHead(docId, { linkMode: wanted, linkId, members });
+  const felder = ['linkMode', wanted, 'linkId', linkId];
+  for (const e of ueberLink) felder.push(new FieldPath('members', e), wanted);
+
+  await updateDocFelder(docId, felder);
   await writeLinkEntry(linkId, docId, me.uid);
   return { linkMode: wanted, linkId, url: docUrlFor(linkId) };
 }
@@ -1937,17 +2182,12 @@ async function setMember(docId, email, role) {
   const head = await loadDocumentHead(docId);
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
 
-  const memberEmails = head.memberEmails.includes(key)
-    ? head.memberEmails.slice()
-    : head.memberEmails.concat(key);
-
-  await updateDocHead(docId, {
-    memberEmails,
-    members: { ...head.members, [key]: normalizeRole(role) },
-    memberVia: { ...head.memberVia, [key]: head.memberVia[key] || 'invite' },
+  // Einzeln, nicht als ganze Liste – siehe updateDocFelder()
+  await updateDocFelder(docId, [
+    ...eintragSetzen(key, normalizeRole(role), head.memberVia[key] || 'invite'),
     // Wer wieder eingeladen wird, ist nicht mehr gesperrt
-    blockedEmails: head.blockedEmails.filter(e => e !== key)
-  });
+    'blockedEmails', arrayRemove(key)
+  ]);
 }
 
 /**
@@ -1962,31 +2202,18 @@ async function removeMember(docId, email) {
   const head = await loadDocumentHead(docId);
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
 
-  const members = { ...head.members };
-  const memberVia = { ...head.memberVia };
-
   /* Wer er war, bevor er hinausfliegt – damit das Entbannen ihn
      zurückholen kann, statt nur die Sperre zu lösen (entbannPlan). */
-  const blockedInfo = { ...head.blockedInfo };
+  const felder = eintragLoeschen(key);
   if (head.memberEmails.includes(key)) {
-    blockedInfo[key] = {
-      role: normalizeRole(members[key]),
-      via: memberVia[key] === 'link' ? 'link' : 'invite'
-    };
+    felder.push(new FieldPath('blockedInfo', key), {
+      role: normalizeRole(head.members[key]),
+      via: head.memberVia[key] === 'link' ? 'link' : 'invite'
+    });
   }
+  felder.push('blockedEmails', arrayUnion(key));
 
-  delete members[key];
-  delete memberVia[key];
-
-  await updateDocHead(docId, {
-    memberEmails: head.memberEmails.filter(e => e !== key),
-    members,
-    memberVia,
-    blockedInfo,
-    blockedEmails: head.blockedEmails.includes(key)
-      ? head.blockedEmails
-      : head.blockedEmails.concat(key)
-  });
+  await updateDocFelder(docId, felder);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2004,6 +2231,14 @@ async function removeMember(docId, email) {
    Reine Funktion, damit sie sich mit node prüfen lässt
    (scripts/test-entbannen.js). Sie schreibt nichts – sie sagt nur, was
    geschrieben werden soll.
+
+   >>> `patch` ist eine BESCHREIBUNG, keine Nutzlast <<<
+   Er zeigt den ganzen Zustand danach, und daran lässt sich prüfen, ob
+   die Regel stimmt. Als Schreibvorgang taugt er nicht mehr: die
+   Mitgliederlisten am Stück zurückzuschreiben nimmt jeden mit, der in
+   diesem Augenblick über den Link hereinkommt. unblockMember baut sich
+   aus `wieder`, `role` und `via` deshalb einen Schreibvorgang, der nur
+   die eine Adresse anfasst (siehe updateDocFelder).
 
    @returns {{patch: object, wieder: 'mitglied'|'nurFrei', role?: string, via?: string}}
    ══════════════════════════════════════════════════════════════════════ */
@@ -2050,16 +2285,8 @@ async function leaveDocument(docId) {
   if (head.owner === me.uid) throw new Error('OWNER_CANNOT_LEAVE');
   if (!head.memberEmails.includes(me.email)) return true;
 
-  const members = { ...head.members };
-  const memberVia = { ...head.memberVia };
-  delete members[me.email];
-  delete memberVia[me.email];
-
-  await updateDoc(doc(db, DOCS, docId), {
-    memberEmails: head.memberEmails.filter(e => e !== me.email),
-    members,
-    memberVia
-  });
+  // Nur den eigenen Eintrag, und den einzeln – siehe updateDocFelder()
+  await updateDoc(doc(db, DOCS, docId), ...eintragLoeschen(me.email));
   return true;
 }
 
@@ -2070,7 +2297,20 @@ async function unblockMember(docId, email) {
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
 
   const plan = entbannPlan(head, email);
-  await updateDocHead(docId, plan.patch);
+
+  /* Was zu geschehen hat, sagt weiterhin entbannPlan – eine reine
+     Funktion, mit node prüfbar (scripts/test-entbannen.js). Geschrieben
+     wird es aber einzeln und nicht als ganze Liste: sonst nähme dieser
+     Schreibvorgang jeden mit, der in diesem Augenblick über den Link
+     hereinkommt (siehe updateDocFelder). */
+  const key = normalizeEmail(email);
+  const felder = [
+    'blockedEmails', arrayRemove(key),
+    new FieldPath('blockedInfo', key), deleteField()
+  ];
+  if (plan.wieder === 'mitglied') felder.push(...eintragSetzen(key, plan.role, plan.via));
+
+  await updateDocFelder(docId, felder);
   // Der Aufrufer sagt damit, WAS geschehen ist (ui/share.js)
   return plan;
 }
@@ -2228,17 +2468,32 @@ async function joinViaLink(docId) {
     return 'already';
   }
 
-  const memberEmails = head.memberEmails.includes(me.email)
-    ? head.memberEmails.slice()
-    : head.memberEmails.concat(me.email);
+  /* ══════════════════════════════════════════════════════════════════
+     NUR DEN EIGENEN EINTRAG ANFASSEN, NICHT DIE GANZE LISTE
 
-  // Nur die eigene Adresse und nur mit der Rolle, die der Link hergibt –
-  // die Regel prüft beides noch einmal.
-  await updateDoc(doc(db, DOCS, docId), {
-    memberEmails,
-    members: { ...head.members, [me.email]: role },
-    memberVia: { ...head.memberVia, [me.email]: head.memberVia[me.email] || 'link' }
-  });
+     Hier wurden `memberEmails`, `members` und `memberVia` als GANZES neu
+     geschrieben, gebildet aus dem Kopf, der einen Augenblick vorher
+     gelesen wurde. Zwei Leute, die denselben Link im selben Moment
+     öffnen – der Normalfall, wenn ein Link an eine Gruppe geht –,
+     löschten einander damit wieder heraus: der Zweite schrieb die Liste
+     von vorhin zurück, in der der Erste noch nicht stand.
+
+     Wer dabei verlor, merkte nichts. Das Dokument liess sich über den
+     Link weiter lesen, aber er stand in keiner Liste: der Besitzer
+     bekam ihn nie in die Rollenliste des Raums, und die Live-Sitzung
+     endete bei ihm mit ROOM_NOT_ADMITTED – „ich sehe nichts von den
+     anderen, und niemand sieht mich."
+
+     arrayUnion hängt an, statt zu ersetzen; FieldPath fasst in den
+     Tabellen genau einen Schlüssel an. Ein Punkt in der Adresse macht
+     dabei KEINEN Unterordner daraus – deshalb FieldPath und nicht die
+     Schreibweise mit Punkt wie bei memberUids (dort sind es Kennungen
+     ohne Punkt). Die Regel selfJoin() prüft beides noch einmal. */
+  await updateDoc(doc(db, DOCS, docId),
+    'memberEmails', arrayUnion(me.email),
+    new FieldPath('members', me.email), role,
+    new FieldPath('memberVia', me.email), head.memberVia[me.email] || 'link'
+  );
 
   return 'joined';
 }
@@ -2506,6 +2761,13 @@ const CHAT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
    ══════════════════════════════════════════════════════════════════════ */
 const CHAT_PRUNE_EVERY_MS = 60 * 60 * 1000;
 
+/* So oft schreibt der Besitzer die Rollenliste des Raums neu. Sie ändert
+   sich dabei nicht – es geht allein darum, einen verspäteten
+   onDisconnect-Auftrag der vorigen Verbindung zu überschreiben
+   (joinDocRoom). Kurz genug, dass niemand lange aussperrt bleibt, lang
+   genug, dass es in der Abrechnung nicht auffällt. */
+const ROLES_REFRESH_MS = 20 * 1000;
+
 /* Länger als das gilt niemand mehr als „schreibt gerade". Die Anzeige
    wird bei jedem Anschlag aufgefrischt (CHAT_TYPING_REFRESH_MS in
    ui/chat.js) – wer aufhört, verschwindet also nach dieser Zeit von
@@ -2647,6 +2909,13 @@ async function joinDocRoom(docId, options = {}) {
      describeDoc() und die Übernahme weiter unten. */
   let raum = options.roomKey || docId;
 
+  /* Die zuletzt geschriebene Rollenliste. Nur der Besitzer führt sie –
+     der Takt weiter unten schreibt sie regelmäßig neu, damit ein
+     verspäteter onDisconnect-Auftrag der VORIGEN Verbindung das
+     Schreibrecht nicht dauerhaft wegnimmt. */
+  let letzteRollen = null;
+  let rollenTakt = null;
+
   let meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
   let opsRef = ref(rtdb, `ops/${raum}`);
   let rolesRef = ref(rtdb, `roles/${raum}`);
@@ -2734,6 +3003,35 @@ async function joinDocRoom(docId, options = {}) {
        damit nicht verloren - die Datenbank reicht ihn nach, sobald sie
        wieder kann. */
     await mitZeitgrenze(set(rolesRef, rollen), 8000);
+
+    /* ══════════════════════════════════════════════════════════════
+       UND WENN DEM BESITZER DIE LEITUNG ABREISST
+
+       leave() nimmt beim ordentlichen Verlassen das Schreibrecht mit
+       (siehe dort). Beim Absturz lief leave() nie – das Schreibrecht
+       blieb offen stehen, bis der Besitzer das nächste Mal kam.
+
+       Der Auftrag hier holt es auch dann zurück: er wird JETZT
+       hinterlegt und vom Server ausgeführt, sobald die Verbindung
+       wegfällt. Genau wie beim Anwesenheitseintrag.
+
+       Zurückgesetzt wird nur `w`; `r` bleibt stehen, sonst verlören
+       alle anderen in dem Augenblick auch das Mitlesen – der Fehler,
+       der in leave() ausführlich beschrieben ist.
+
+       >>> Warum es danach noch einen Takt braucht <<<
+       Macht der Besitzer zu und gleich wieder auf, führt der Server den
+       ALTEN Auftrag womöglich erst NACH dem neuen set() oben aus. Dann
+       stünde das Schreibrecht wieder auf „nur ich", obwohl er längst da
+       ist, und die Eingeladenen kämen nicht mehr in den Raum. Der Takt
+       weiter unten (rollenTakt) schreibt es deshalb regelmäßig neu –
+       dieselbe Sorge wie beim Lebenszeichen der Anwesenheit. */
+    try { await onDisconnect(child(rolesRef, 'w')).set({ [me.uid]: true }); }
+    catch (err) {
+      console.warn('[Share] Auftrag für das Schreibrecht nicht hinterlegt:',
+        err?.message || err);
+    }
+    letzteRollen = rollen;
   } else {
     /* >>> Gehört dieser Raum wirklich dem, dem das Dokument gehört? <<<
        roles/{docId} darf anlegen, wer sich selbst als owner einträgt.
@@ -2910,11 +3208,22 @@ async function joinDocRoom(docId, options = {}) {
    *
    * @param {string} pageId
    * @param {string|number} objId  leer/null = wieder freigeben
+   * @param {boolean} [erzwingen] Auch melden, wenn sich nichts geändert
+   *   hat – zum Auffrischen eines Anspruchs, den man weiter hält.
+   *
+   *   >>> Wozu das gebraucht wird <<<
+   *   ui/collab.js hat bisher über den Umweg „erst leer, dann wieder
+   *   voll" aufgefrischt, weil diese Funktion sonst schwieg. Zwischen
+   *   den beiden Meldungen stand bei allen anderen für einen Augenblick
+   *   „das Bild ist frei": der Rahmen flackerte im Zwei-Sekunden-Takt,
+   *   und wer in genau diesem Augenblick zugriff, bekam es mit – beide
+   *   hielten dann dasselbe Objekt. Mit einer einzigen Meldung gibt es
+   *   diesen Augenblick nicht mehr.
    */
-  function setObjLock(pageId, objId) {
+  function setObjLock(pageId, objId, erzwingen) {
     if (left || !lockFieldsOk) return;
     const wert = (pageId && objId) ? (String(pageId) + '#' + String(objId)) : '';
-    if (wert === card.objLock) return;
+    if (wert === card.objLock && !erzwingen) return;
 
     card.objLock = wert;
     card.objLockAt = wert ? Date.now() : 0;
@@ -3489,6 +3798,11 @@ const CHAT_QUOTE_LEN = 140;
        Baum ändert – und das kann bei einem abgerissenen Gerät nie sein. */
     uhr = setInterval(melde, 1500);
 
+    /* Auch in die Aufräumliste des Raums: wird er verlassen, ohne dass
+       der Aufrufer seinen Rückgabewert benutzt (ui/chat.js tut es, andere
+       womöglich nicht), lief dieser Takt sonst für immer weiter. */
+    stops.push(() => clearInterval(uhr));
+
     return () => { clearInterval(uhr); stop(); };
   }
 
@@ -3526,6 +3840,7 @@ const CHAT_QUOTE_LEN = 140;
     left = true;
     clearTimeout(pageTimer);
     clearInterval(chatPruneTimer);
+    clearInterval(rollenTakt);
     for (const stop of stops) { try { stop(); } catch (e) {} }
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
@@ -3561,6 +3876,10 @@ const CHAT_QUOTE_LEN = 140;
        heran, und die Freigabe ist dort sofort weg.
        ══════════════════════════════════════════════════════════════════ */
     if (options.isOwner) {
+      /* Den Auftrag zuerst aufheben: er würde gleich darauf dasselbe tun,
+         aber beim NÄCHSTEN Betreten womöglich zu spät kommen und dort das
+         frisch geschriebene Schreibrecht wieder wegnehmen. */
+      try { await onDisconnect(child(rolesRef, 'w')).cancel(); } catch (e) {}
       try { await set(child(rolesRef, 'w'), { [me.uid]: true }); }
       catch (e) { /* dann beim nächsten Mal */ }
     }
@@ -3575,6 +3894,20 @@ const CHAT_QUOTE_LEN = 140;
      weiter in einer Datenbank herum, in der er nichts mehr zu suchen
      hat. */
   chatPruneTimer = setInterval(pruneChat, CHAT_PRUNE_EVERY_MS);
+
+  /* ── Und die Rollenliste bleibt, wie sie gemeint ist ──────────────
+     Nur beim Besitzer, nur er darf sie schreiben. Warum es diesen Takt
+     braucht, steht oben beim onDisconnect-Auftrag: ein verspäteter
+     Auftrag der VORIGEN Verbindung würde den Eingeladenen sonst
+     dauerhaft das Schreibrecht nehmen. Kostet fast nichts – es sind ein
+     paar Kennungen. */
+  if (options.isOwner) {
+    rollenTakt = setInterval(() => {
+      if (left || !letzteRollen) return;
+      set(child(rolesRef, 'w'), letzteRollen.w).catch(() => {});
+      onDisconnect(child(rolesRef, 'w')).set({ [me.uid]: true }).catch(() => {});
+    }, ROLES_REFRESH_MS);
+  }
 
   /**
    * Die Rollenliste des Raums neu schreiben. Nur der Besitzer darf das,
@@ -3591,7 +3924,8 @@ const CHAT_QUOTE_LEN = 140;
       r[uid] = true;
       if (rolle === 'edit') w[uid] = true;
     }
-    try { await set(rolesRef, { owner: me.uid, r, w }); }
+    letzteRollen = { owner: me.uid, r, w };
+    try { await set(rolesRef, letzteRollen); }
     catch (err) { console.warn('[Share] Rollenliste nicht geschrieben:', err?.message || err); }
   }
 
@@ -3608,9 +3942,12 @@ const CHAT_QUOTE_LEN = 140;
    * solange er anhaelt, und ihn von selbst wieder wegnehmen.
    */
   function onConnection(cb) {
-    return onValue(ref(rtdb, '.info/connected'), (snap) => {
+    const aus = onValue(ref(rtdb, '.info/connected'), (snap) => {
       try { cb(snap.val() === true); } catch (e) { /* Anzeige darf nichts kosten */ }
     });
+    // Mit in die Aufräumliste – sonst horcht der Raum nach leave() weiter
+    stops.push(aus);
+    return aus;
   }
 
   return {
@@ -4029,6 +4366,9 @@ const InkwellsShare = {
   splitNotebook,
   assembleNotebook,
   fingerprintNotebook,
+  // Einzelne Seite nachtragen, ohne das ganze Heft zu rechnen
+  fingerprintSeite,
+  fingerprintRahmen,
 
   // Postfach
   ladeNachrichten,

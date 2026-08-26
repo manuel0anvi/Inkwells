@@ -559,29 +559,12 @@ async function ladeMeldungen() {
       /* Was der Besitzer entschieden hat: 'verbannt' oder 'nichts'.
          Leer heisst: noch offen, oder aus der Zeit vor dem Feld. */
       massnahme: String(x.massnahme || ''),
-      /* ══════════════════════════════════════════════════════════════
-         ZWEI HAKEN, WEIL ES ZWEI SIND, DIE ETWAS ZU TUN HABEN
-
-         `erledigt` setzt der BESITZER: er hat entschieden, ob er
-         jemanden aus seinem Dokument wirft. `adminErledigt` setzt die
-         VERWALTUNG: sie hat entschieden, ob darueber hinaus etwas
-         geschehen muss – eine Nachricht, eine Sperre, nichts.
-
-         Vorher war es ein Haken fuer beide. Sobald der Besitzer
-         entschieden hatte, verschwand die Meldung aus der offenen Liste
-         der Verwaltung – die sah sie also nie, obwohl gerade DANN
-         interessant ist, ob jemand wiederholt auffaellt. Genau so wurde
-         es gemeldet.
-         ══════════════════════════════════════════════════════════════ */
-      erledigt: x.erledigt === true,
-      adminErledigt: x.adminErledigt === true
+      /* Der BESITZER hat entschieden. Fuer die Verwaltung bleibt die
+         Meldung trotzdem stehen – erledigt ist sie hier erst, wenn sie
+         geloescht wird (admin/index.html). */
+      erledigt: x.erledigt === true
     };
   });
-}
-
-/** Abgehakt — die VERWALTUNG hat sich darum gekümmert (siehe oben). */
-async function hakeMeldungAb(id, erledigt = true) {
-  await updateDoc(doc(db, MELDUNGEN, String(id)), { adminErledigt: erledigt === true });
 }
 
 async function loescheMeldung(id) {
@@ -762,7 +745,6 @@ window.InkwellsForum = {
   ladeNachrichten,
   // Melden und Sperren
   ladeMeldungen,
-  hakeMeldungAb,
   loescheMeldung,
   ladeSperren,
   setzeSperre,

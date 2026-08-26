@@ -701,10 +701,6 @@ body[data-admin="yes"] .admin-gate { display: none; }
       <p class="admin-hint" data-i18n="admin_meldungen_hint"></p>
 
       <div class="nachricht-kopfzeile">
-        <label class="admin-check">
-          <input type="checkbox" id="meldungen-auch-erledigte">
-          <span data-i18n="admin_meldungen_auch_erledigte">Auch erledigte zeigen</span>
-        </label>
         <button type="button" class="btn-m" id="meldungen-neu-laden" data-i18n="admin_meldungen_neu_laden">Neu laden</button>
       </div>
 
@@ -1280,14 +1276,23 @@ async function meldungenZeichnen() {
     return;
   }
 
-  /* Massgeblich ist der EIGENE Haken, nicht der des Besitzers: dass er
-     jemanden verbannt hat, heisst nicht, dass hier nichts mehr zu tun ist
-     – im Gegenteil (siehe js/firebase.js, adminErledigt). */
-  const auchErledigte = document.getElementById('meldungen-auch-erledigte').checked;
-  const zeigen = meldungen.filter(m => auchErledigte || !m.adminErledigt);
+  /* ══════════════════════════════════════════════════════════════════
+     HIER WIRD NICHTS ABGEHAKT, HIER WIRD GELOESCHT
 
-  // Die Zahl am Reiter zaehlt nur das Offene – das ist es, was Arbeit macht
-  const offen = meldungen.filter(m => !m.adminErledigt).length;
+     Es gab einen Abhaken-Knopf und einen Filter dazu. Beides ist weg,
+     und zwar aus einem einfachen Grund: eine Meldung, um die sich jemand
+     gekuemmert hat, hat hier nichts mehr zu suchen – sie gehoert weg.
+     Ein zweiter Zustand zwischen „offen" und „geloescht" war nur eine
+     Stelle mehr, an der etwas liegen bleiben kann. So steht es auch in
+     der Datenschutzerklaerung: geloescht, sobald erledigt.
+
+     Gezeigt wird deshalb ALLES, was da ist. Dass der Besitzer schon
+     entschieden hat, steht als Vermerk an der Karte – es nimmt die
+     Meldung aber nicht aus der Liste, denn gerade dann ist interessant,
+     ob jemand wiederholt auffaellt.
+     ══════════════════════════════════════════════════════════════════ */
+  const zeigen = meldungen;
+  const offen = meldungen.length;
   const zahl = document.getElementById('meldungen-zahl');
   if (zahl) {
     zahl.textContent = String(offen);
@@ -1302,7 +1307,7 @@ async function meldungenZeichnen() {
 
   for (const m of zeigen) {
     const karte = document.createElement('div');
-    karte.className = 'meldung-karte' + (m.adminErledigt ? ' erledigt' : '');
+    karte.className = 'meldung-karte';
 
     /* Wie oft ist diese Adresse schon aufgefallen? Eine einzelne Meldung
        sagt wenig; fuenf gegen dieselbe Person sagen viel. Und andersherum
@@ -1319,7 +1324,6 @@ async function meldungenZeichnen() {
              m.massnahme === 'verbannt' ? t('admin_meldung_verbannt')
              : m.massnahme === 'nichts' ? t('admin_meldung_geprueft')
              : t('admin_meldung_erledigt')) + '</span>' : '')
-        + (m.adminErledigt ? ' <span class="meldung-fertig">' + escapeHtml(t('admin_meldung_abgehakt')) + '</span>' : '')
         + (sperreLaeuft(sp) ? ' <span class="meldung-gesperrt">' + escapeHtml(t('admin_meldung_gesperrt')) + '</span>' : '')
         /* Der Besitzer wurde nicht benachrichtigt – hier liegt die Sache
            allein. Das muss dranstehen, sonst wartet man auf einen, der
@@ -1347,23 +1351,6 @@ async function meldungenZeichnen() {
     massnahme.textContent = t('admin_meldung_massnahme');
     massnahme.addEventListener('click', () => oeffneMassnahme(m.gemeldetEmail, m.gemeldetName));
     knoepfe.appendChild(massnahme);
-
-    const haken = document.createElement('button');
-    haken.type = 'button';
-    haken.className = 'btn-m';
-    haken.textContent = m.adminErledigt ? t('admin_meldung_wieder_offen') : t('admin_meldung_abhaken');
-    haken.addEventListener('click', async () => {
-      haken.disabled = true;
-      try {
-        const api = adminApi;
-        await api.hakeMeldungAb(m.id, !m.adminErledigt);
-        await meldungenZeichnen();
-      } catch (err) {
-        showStatus('meldung-status', describeAdminError(err), 'err');
-        haken.disabled = false;
-      }
-    });
-    knoepfe.appendChild(haken);
 
     const weg = document.createElement('button');
     weg.type = 'button';
@@ -1536,7 +1523,6 @@ document.getElementById('massnahme-sperren')?.addEventListener('click', async ()
 });
 
 document.getElementById('meldungen-neu-laden')?.addEventListener('click', () => meldungenZeichnen());
-document.getElementById('meldungen-auch-erledigte')?.addEventListener('change', () => meldungenZeichnen());
 
 /* ══════════════════════════════════════════════════════════════════════
    COMMUNITY
