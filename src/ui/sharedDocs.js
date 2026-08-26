@@ -651,6 +651,7 @@
     dirty = false;
     // Ein neues Dokument, ein neuer Versuch – siehe keinSchreibrecht
     keinSchreibrecht = false;
+    abweisungen = 0;
 
     // Als geteiltes Dokument kennzeichnen, BEVOR es in S.notebooks landet:
     // sonst greifen die Bremsen in fileManager/registry/cloudSync nicht.
@@ -1069,17 +1070,26 @@
     const nb = getNb(live.nbId);
     if (!nb) return;
 
-    const fresh = api.fingerprintNotebook(nb);
-    baseline.order = fresh.order;
-    baseline.headSig = fresh.headSig;
+    /* Der Rahmen kostet nichts und wird immer nachgezogen. Die SEITEN
+       dagegen einzeln, wo es geht: fingerprintNotebook() unterschreibt
+       jede Strichliste des ganzen Hefts, und das lief hier bei jeder
+       eingehenden Änderung – bis zu viermal in der Sekunde. Siehe den
+       Kasten bei fingerprintSeite() in core/share.js. */
+    const rahmen = api.fingerprintRahmen
+      ? api.fingerprintRahmen(nb)
+      : api.fingerprintNotebook(nb);
+    baseline.order = rahmen.order;
+    baseline.headSig = rahmen.headSig;
 
     if (pageId === null || pageId === undefined) {
-      baseline.pages = fresh.pages;
+      baseline.pages = api.fingerprintNotebook(nb).pages;
       return;
     }
 
     const key = String(pageId);
-    if (fresh.pages[key]) baseline.pages[key] = fresh.pages[key];
+    const seite = (nb.pages || []).find(p => String(p.id) === key);
+    if (seite && api.fingerprintSeite) baseline.pages[key] = api.fingerprintSeite(nb, seite);
+    else if (seite) baseline.pages[key] = api.fingerprintNotebook(nb).pages[key];
     else delete baseline.pages[key];
   };
 
@@ -1361,6 +1371,34 @@
     return /permission[-_ ]denied/i.test(msg) || err?.code === 'permission-denied';
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     „KEIN SCHREIBRECHT" IST EINE SCHWERE AUSKUNFT — SIE MUSS STIMMEN
+
+     Sie stellt das Sichern für die ganze Sitzung ab. Wer sie zu Unrecht
+     bekommt, arbeitet weiter, sieht seine Änderungen bei den anderen
+     ankommen – und verliert sie beim Schliessen, weil nichts davon je in
+     Firestore stand.
+
+     Genau das ist passiert. Eine Abweisung durch die Regeln hiess bisher
+     sofort „das Recht ist weg". Sie hat aber auch harmlose Gründe, und
+     der häufigste war ein Wettlauf um die Fassungsnummer im Kopf – der
+     ist jetzt in core/share.js abgefangen (schreibeKopfFort). Übrig
+     bleiben kurze Augenblicke, in denen die Regeln vorübergehend nein
+     sagen: während der Besitzer den Raum wechselt, während ein
+     Rechtewechsel durchläuft, oder wenn die Sperre der Verwaltung gerade
+     gesetzt und gleich wieder aufgehoben wird.
+
+     Deshalb zwei verschiedene Antworten:
+
+       · NOT_ALLOWED kommt aus saveDocumentContent SELBST. Dort ist der
+         Kopf frisch gelesen und die Rolle nachgesehen – das ist eine
+         geprüfte Auskunft und gilt sofort.
+       · Eine rohe Abweisung der Regeln wird gezählt. Erst wenn sie sich
+         wiederholt, ist sie mehr als ein Augenblick.
+     ══════════════════════════════════════════════════════════════════ */
+  const ABWEISUNGEN_BIS_AUFGABE = 3;
+  let abweisungen = 0;
+
   /** @returns {boolean} ob wirklich geschrieben wurde */
   async function saveOpenDocument() {
     if (saving || !live || S.readOnly || !dirty || keinSchreibrecht) return false;
@@ -1447,18 +1485,38 @@
       }
       open.revision = result.revision;
       outdatedWarned = false;
+      abweisungen = 0;
       if (result.written) console.log('[SharedDocs]', result.written, 'Teil(e) geschrieben');
       return true;
     } catch (err) {
-      /* Nicht angekommen heißt: es steht weiterhin etwas aus – ausser
-         das Recht fehlt, dann bringt kein weiterer Versuch etwas. */
-      if (live === session && !rechtFehlt(err)) dirty = true;
+      /* Geprüft oder bloss abgewiesen? Siehe der Kasten bei
+         ABWEISUNGEN_BIS_AUFGABE. */
+      const geprueft = String(err?.message || '') === 'NOT_ALLOWED';
+      const abgewiesen = rechtFehlt(err);
+      // Gezählt wird nur, was HINTEREINANDER abweist
+      abweisungen = abgewiesen ? abweisungen + 1 : 0;
+      const endgueltig = geprueft || abweisungen >= ABWEISUNGEN_BIS_AUFGABE;
 
-      if (rechtFehlt(err)) {
+      /* Nicht angekommen heißt: es steht weiterhin etwas aus – ausser
+         das Recht fehlt wirklich, dann bringt kein weiterer Versuch
+         etwas. */
+      if (live === session && !endgueltig) dirty = true;
+
+      if (endgueltig) {
         keinSchreibrecht = true;
         clearTimeout(saveTimer);
         console.warn('[SharedDocs] Kein Schreibrecht – es wird nicht weiter versucht');
         toast(t('sharedNoRight'), true);
+      } else if (abgewiesen) {
+        console.warn('[SharedDocs] Schreibversuch abgewiesen (' + abweisungen + '. Mal) –'
+          + ' es wird noch einmal versucht:', err?.message || err);
+        /* Und zwar von selbst. Ohne eigenen Anstoss läge die Änderung
+           bis zum nächsten Tastendruck herum – wer nach dem letzten Wort
+           aufhört und zumacht, verlöre sie. */
+        if (live === session) {
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(() => { startSave().catch(() => {}); }, SAVE_DELAY_MS);
+        }
       } else if (err?.message === 'DOC_OUTDATED') {
         // Nur noch bei Freigaben aus der Zeit vor dem zerlegten Modell.
         if (!outdatedWarned) {
@@ -1572,6 +1630,7 @@
     crdtState = {};
     dirty = false;
     keinSchreibrecht = false;
+    abweisungen = 0;
   }
 
   /**

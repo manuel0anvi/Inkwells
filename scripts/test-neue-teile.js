@@ -718,7 +718,41 @@ console.log('\nEin fremdes Dokument wird nicht auf die Platte geschrieben\n');
     /function rechtFehlt/.test(geteiltQuelle)
     && /keinSchreibrecht = true/.test(geteiltQuelle), true);
   check('Ein Netzfehler bleibt dagegen ein Wiederholungsfall',
-    /if \(live === session && !rechtFehlt\(err\)\) dirty = true;/.test(geteiltQuelle), true);
+    /if \(live === session && !endgueltig\) dirty = true;/.test(geteiltQuelle), true);
+
+  /* ══════════════════════════════════════════════════════════════════
+     UND EINE EINZELNE ABWEISUNG IST NOCH KEIN VERLORENES RECHT
+
+     „Kein Schreibrecht" stellt das Sichern fuer die ganze Sitzung ab.
+     Wer es zu Unrecht bekommt, arbeitet weiter, sieht seine Aenderungen
+     bei den anderen ankommen – und verliert sie beim Schliessen, weil
+     nichts davon je in Firestore stand.
+
+     Genau so lief es: eine Abweisung durch die Regeln hiess sofort „das
+     Recht ist weg". Der haeufigste Grund dafuer war aber ein Wettlauf um
+     die Fassungsnummer im Kopf, und der trifft zwei Bearbeitende, die
+     beide im Vier-Sekunden-Takt sichern, zwangslaeufig.
+
+     Zwei Wachen dagegen, und beide muessen stehen bleiben:
+       · NOT_ALLOWED kommt aus saveDocumentContent mit frisch gelesenem
+         Kopf – das ist geprueft und gilt sofort.
+       · Eine rohe Abweisung wird gezaehlt und muss sich wiederholen.
+     ══════════════════════════════════════════════════════════════════ */
+  check('Eine geprüfte Absage gilt sofort',
+    /const geprueft = String\(err\?\.message \|\| ''\) === 'NOT_ALLOWED';/.test(geteiltQuelle), true);
+  check('Eine rohe Abweisung wird gezählt',
+    /abweisungen = abgewiesen \? abweisungen \+ 1 : 0;/.test(geteiltQuelle)
+    && /abweisungen >= ABWEISUNGEN_BIS_AUFGABE/.test(geteiltQuelle), true);
+  check('Und ein Erfolg setzt den Zähler zurück',
+    /outdatedWarned = false;\s*\n\s*abweisungen = 0;/.test(geteiltQuelle), true);
+
+  /* Der Wettlauf selbst gehoert dorthin, wo die Nummer entsteht. */
+  const shareQuelle = lies('src', 'core', 'share.js');
+  check('Der Kopf wird gegen die JETZIGE Fassungsnummer fortgeschrieben',
+    /async function schreibeKopfFort/.test(shareQuelle)
+    && /revision = frisch\.revision \+ 1;/.test(shareQuelle), true);
+  check('Und kein Aufruf rechnet die Nummer noch selbst aus',
+    /revision,\s*\n\s*updatedAt: serverTimestamp\(\),/.test(shareQuelle), false);
 }
 
 console.log('\nDer eine Weg vom Editor ins Heft\n');
