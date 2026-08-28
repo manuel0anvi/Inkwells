@@ -451,27 +451,17 @@
 
     drawHeader(ctx, w, entry.headerLeft, entry.headerRight);
 
-    for (const obj of (page.objects || [])) {
-      if (!obj || !obj.src) continue;
-      const img = await loadImage(obj.src);
-      if (!img) continue;
+    /* ══ HIER WURDEN EINMAL DIE BILDER MITGEMALT ═══════════════════
+       Und damit war die ganze Seite ein einziges Bild: Papier,
+       Hintergrund, jedes Foto und jede Zeichnung in einer Datei. In Word
+       liess sich davon nichts mehr anfassen, verschieben oder
+       austauschen – genau so wurde es gemeldet.
 
-      hasPhoto = true;
-      const ow = obj.w || 200;
-      const oh = obj.h || 200;
-      const box = containBox(img.naturalWidth, img.naturalHeight, ow, oh);
-
-      ctx.save();
-      if (obj.rot) {
-        ctx.translate((obj.x || 0) + ow / 2, (obj.y || 0) + oh / 2);
-        ctx.rotate(obj.rot * Math.PI / 180);
-        ctx.translate(-ow / 2, -oh / 2);
-        ctx.drawImage(img, box.x, box.y, box.w, box.h);
-      } else {
-        ctx.drawImage(img, (obj.x || 0) + box.x, (obj.y || 0) + box.y, box.w, box.h);
-      }
-      ctx.restore();
-    }
+       Jedes Objekt geht jetzt als eigenes Ding hinaus (build): ein Bild
+       als Bild, eine Form als Word-Form. In diesem Seitenbild bleibt nur
+       das, was wirklich Hintergrund ist – das Papier, eine eingefuegte
+       Bildseite und die Handschrift. Die laesst sich nicht in Objekte
+       zerlegen: sie ist ein Weg aus tausend Punkten, kein Ding. */
 
     drawInk(ctx, page.inkStrokes, w, h, scale);
 
@@ -657,6 +647,61 @@
     const ensureParagraph = () => current || openParagraph('body');
 
     /**
+     * Die Absätze, die in einer Zelle stehen.
+     *
+     * walk() hängt an dieselbe Liste an wie alles andere – die neu
+     * entstandenen Absätze werden deshalb hinten wieder abgeschnitten.
+     * Ein eigener Sammler dafür wäre eine zweite Fassung derselben
+     * Schleife, und die liefe beim nächsten Zusatz auseinander.
+     */
+    const zelleAbsaetze = (zelle, format) => {
+      const bisher = paragraphs.length;
+      const vorher = current;
+      current = null;
+      walk(zelle, format, null);
+      const neue = paragraphs.splice(bisher);
+      current = vorher;
+
+      /* Eine Tabelle in einer Tabelle geht nicht – Word kann es, dieser
+         Weg nicht. Ihr Inhalt bleibt als Absätze erhalten, statt still
+         zu verschwinden. */
+      const flach = [];
+      for (const e of neue) {
+        if (!e.tabelle) { flach.push(e); continue; }
+        for (const zeile of e.tabelle.zeilen) {
+          for (const z of zeile) flach.push(...z.absaetze);
+        }
+      }
+      // Word verlangt in jeder Zelle mindestens einen Absatz
+      return flach.length ? flach : [{ style: 'body', runs: [] }];
+    };
+
+    /** Die Zeilen einer Tabelle, ohne die einer verschachtelten. */
+    const tabellenZeilen = (tabelle, format) => {
+      const zeilen = [];
+      const reihen = [];
+      for (const teil of tabelle.children) {
+        if (teil.tagName === 'TR') reihen.push(teil);
+        else if (/^(THEAD|TBODY|TFOOT)$/.test(teil.tagName)) {
+          for (const tr of teil.children) if (tr.tagName === 'TR') reihen.push(tr);
+        }
+      }
+      for (const tr of reihen) {
+        const zellen = [];
+        for (const td of tr.children) {
+          if (td.tagName !== 'TD' && td.tagName !== 'TH') continue;
+          zellen.push({
+            kopf: td.tagName === 'TH',
+            spannt: Math.max(1, parseInt(td.getAttribute('colspan'), 10) || 1),
+            absaetze: zelleAbsaetze(td, format)
+          });
+        }
+        if (zellen.length) zeilen.push(zellen);
+      }
+      return zeilen;
+    };
+
+    /**
      * @param {object} [liste] die Liste, in der wir gerade stecken:
      *        { depth, styleId, n } – n zählt die Punkte DIESER Liste
      */
@@ -692,6 +737,23 @@
 
         const color = inlineColorOf(child);
         if (color) next.color = color;
+
+        /* ══ EINE TABELLE IST IN WORD EINE TABELLE ══════════════════
+           Bisher lief walk() einfach durch sie hindurch. Herauskam eine
+           Reihe von Textstücken in einem Absatz: "MeilensteinSollIst" –
+           die Tabelle war weg, und im Word-Dokument stand ihr Inhalt als
+           Fließtext ohne jede Trennung. Genau so wurde es gemeldet.
+
+           Sie wird deshalb als eigener Eintrag gesammelt und später zu
+           einem echten w:tbl (tabelleXml). */
+        if (tag === 'TABLE') {
+          const zeilen = tabellenZeilen(child, next);
+          if (zeilen.length) {
+            current = null;
+            paragraphs.push({ tabelle: { zeilen } });
+          }
+          continue;
+        }
 
         /* Eine Liste ist selbst kein Absatz, sondern die Hülle um ihre
            Punkte. Sie merkt sich nur, auf welcher Ebene wir sind und
@@ -766,7 +828,9 @@
 
     // Reine Hüllen ohne Inhalt (verschachtelte divs) fallen weg; ein
     // <div><br></div> hat einen Umbruch-Lauf und bleibt als Leerzeile stehen.
-    return paragraphs.filter(p => p.runs.length > 0);
+    /* Eine Tabelle hat keine Laeufe – sie faellt sonst genau hier
+       heraus, und zwar still. */
+    return paragraphs.filter(p => p.tabelle || p.runs.length > 0);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -777,7 +841,8 @@
     + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
     + 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
     + 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
-    + 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+    + 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" '
+    + 'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"';
 
   const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 
@@ -940,6 +1005,173 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════
+     EIN OBJEKT AN SEINER STELLE AUF DER SEITE
+
+     Bild wie Form hängen frei auf dem Blatt (wp:anchor, relativ zur
+     Seite) – genau dort, wo sie im Heft liegen. Sie nehmen keinen Platz
+     im Text ein; der Text steht darunter weiter, so wie im Heft auch.
+
+     >>> Warum vor und nicht hinter dem Text <<<
+     Im Heft liegen Objekte über dem Textfeld (canvas/objects.js,
+     z-index 2000), und ein Bild deckt dort zu, was darunter steht.
+     behindDoc="0" hält das ein. Nur ein Objekt der hinteren Ebene
+     (layer 'back') geht nach hinten – dafür ist die Ebene da.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /** Die gemeinsame Hülle: Lage, Grösse, Ebene. */
+  function objektAnkerXml(id, obj, inhaltXml, name) {
+    const x = Math.max(0, Math.round((obj.x || 0) * EMU_PER_PX));
+    const y = Math.max(0, Math.round((obj.y || 0) * EMU_PER_PX));
+    const cx = Math.max(1, Math.round((obj.w || 100) * EMU_PER_PX));
+    const cy = Math.max(1, Math.round((obj.h || 100) * EMU_PER_PX));
+    const hinten = obj.layer === 'back' ? '1' : '0';
+
+    return '<w:r><w:rPr><w:noProof/></w:rPr><w:drawing>'
+      + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" '
+      + `relativeHeight="${id}" behindDoc="${hinten}" locked="0" layoutInCell="0" allowOverlap="1">`
+      + '<wp:simplePos x="0" y="0"/>'
+      + `<wp:positionH relativeFrom="page"><wp:posOffset>${x}</wp:posOffset></wp:positionH>`
+      + `<wp:positionV relativeFrom="page"><wp:posOffset>${y}</wp:posOffset></wp:positionV>`
+      + `<wp:extent cx="${cx}" cy="${cy}"/>`
+      + '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:wrapNone/>'
+      + `<wp:docPr id="${id}" name="${esc(name)}"/>`
+      + inhaltXml(cx, cy)
+      + '</wp:anchor></w:drawing></w:r>';
+  }
+
+  /** Ein Bild aus dem Heft. */
+  function bildAnkerXml(id, obj, relationshipId) {
+    /* Die Drehung steht in Sechzigsteln eines Grades; im Heft sind es
+       Grad (canvas/objects.js). */
+    const dreh = obj.rot ? ` rot="${Math.round(obj.rot * 60000)}"` : '';
+    return objektAnkerXml(id, obj, (cx, cy) =>
+      '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="0"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic>'
+      + `<pic:nvPicPr><pic:cNvPr id="${id}" name="${esc(obj.name || 'Bild')}"/><pic:cNvPicPr/></pic:nvPicPr>`
+      + `<pic:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`
+      + `<pic:spPr><a:xfrm${dreh}><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic>',
+      obj.name || 'Bild');
+  }
+
+  /* Die fünf Formen des Hefts (canvas/shapes.js) in Words Sprache. */
+  const FORM_NACH_WORD = {
+    rect: 'rect', ellipse: 'ellipse', triangle: 'triangle',
+    line: 'line', arrow: 'line'
+  };
+
+  /** Eine Form aus dem Heft – als Form, nicht als Bild davon. */
+  function formAnkerXml(id, obj) {
+    const prst = FORM_NACH_WORD[obj.shapeType] || 'rect';
+    const fuellung = toHexColor(obj.fill);
+    const strich = toHexColor(obj.stroke);
+    const breite = Math.max(1, Math.round((obj.strokeWidth || 2) * EMU_PER_PX));
+
+    /* Eine Linie zeigt in Word von links oben nach rechts unten; die
+       Enden des Hefts liegen als Anteile im Rechteck (shapeEnden). Aus
+       ihrer Richtung werden die beiden Spiegelungen. */
+    const p1 = obj.p1 || { x: 0, y: 1 };
+    const p2 = obj.p2 || { x: 1, y: 0 };
+    const gerade = prst === 'line';
+    const spiegel = gerade
+      ? ((p2.x - p1.x) < 0 ? ' flipH="1"' : '') + ((p2.y - p1.y) < 0 ? ' flipV="1"' : '')
+      : '';
+    const dreh = obj.rot ? ` rot="${Math.round(obj.rot * 60000)}"` : '';
+
+    // Ein Pfeil ist eine Linie mit Spitze – Word setzt sie an den Strich
+    const spitze = obj.shapeType === 'arrow'
+      ? '<a:tailEnd type="triangle" w="med" len="med"/>' : '';
+
+    return objektAnkerXml(id, obj, (cx, cy) =>
+      '<wp:cNvGraphicFramePr/>'
+      + '<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+      + '<wps:wsp>'
+      + `<wps:cNvSpPr/>`
+      + `<wps:spPr><a:xfrm${dreh}${spiegel}><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+      + `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>`
+      + (fuellung ? `<a:solidFill><a:srgbClr val="${fuellung}"/></a:solidFill>` : '<a:noFill/>')
+      + (strich
+        ? `<a:ln w="${breite}"><a:solidFill><a:srgbClr val="${strich}"/></a:solidFill>${spitze}</a:ln>`
+        : '<a:ln><a:noFill/></a:ln>')
+      + '</wps:spPr>'
+      + '<wps:bodyPr rot="0" anchor="ctr"/>'
+      + '</wps:wsp></a:graphicData></a:graphic>',
+      'Form');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     EINE TABELLE ALS w:tbl
+
+     Die Spalten teilen sich die Textbreite zu gleichen Teilen. Word
+     rechnet sie beim Öffnen selbst nach dem Inhalt um (tblLayout
+     autofit) – eine genaue Breite je Spalte müsste hier gemessen
+     werden, und gemessen wird an dieser Stelle nichts.
+
+     Die Kopfzeile wird als solche gekennzeichnet (w:tblHeader): läuft
+     die Tabelle über die Seite hinaus, wiederholt Word sie oben. Genau
+     das macht der Seitenumbruch im Heft auch (core/docxPaginate.js).
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Die nutzbare Textbreite einer Heftseite – wie in css/pages.css. */
+  const TEXT_BREITE_PX = DEFAULT_PAGE_W - 72 - 32;
+  const TABELLE_RAHMEN = 'D9D2C4';
+
+  function tabelleXml(tabelle, lh) {
+    let spalten = 1;
+    for (const zeile of tabelle.zeilen) {
+      const n = zeile.reduce((s, z) => s + z.spannt, 0);
+      if (n > spalten) spalten = n;
+    }
+    const spaltenBreite = Math.round(TEXT_BREITE_PX * TWIPS_PER_PX / spalten);
+
+    const kante = (name) =>
+      `<w:${name} w:val="single" w:sz="4" w:space="0" w:color="${TABELLE_RAHMEN}"/>`;
+
+    const rahmen = '<w:tblBorders>'
+      + kante('top') + kante('left') + kante('bottom') + kante('right')
+      + kante('insideH') + kante('insideV')
+      + '</w:tblBorders>';
+
+    const kopf = '<w:tblPr>'
+      + '<w:tblW w:w="0" w:type="auto"/>'
+      + '<w:tblLayout w:type="autofit"/>'
+      + rahmen
+      + '<w:tblCellMar>'
+      + '<w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/>'
+      + '<w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/>'
+      + '</w:tblCellMar></w:tblPr>'
+      + '<w:tblGrid>' + `<w:gridCol w:w="${spaltenBreite}"/>`.repeat(spalten) + '</w:tblGrid>';
+
+    const zeilen = tabelle.zeilen.map((zeile, nr) => {
+      const istKopfzeile = zeile.every(z => z.kopf);
+      const zellen = zeile.map(z => {
+        const breite = spaltenBreite * z.spannt;
+        const eigenschaften = '<w:tcPr>'
+          + `<w:tcW w:w="${breite}" w:type="dxa"/>`
+          + (z.spannt > 1 ? `<w:gridSpan w:val="${z.spannt}"/>` : '')
+          + (z.kopf ? '<w:shd w:val="clear" w:color="auto" w:fill="F4F0E6"/>' : '')
+          + '<w:vAlign w:val="center"/>'
+          + '</w:tcPr>';
+        /* Eine Kopfzelle steht fett – im Heft macht das die Papierregel
+           (css/pages.css, th), in Word muss es am Text stehen. */
+        const inhalt = z.absaetze
+          .map(a => paragraphXml(z.kopf ? { ...a, runs: a.runs.map(r => ({ ...r, bold: true })) } : a, lh))
+          .join('');
+        return `<w:tc>${eigenschaften}${inhalt}</w:tc>`;
+      }).join('');
+
+      const zeilenkopf = (istKopfzeile && nr === 0)
+        ? '<w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>' : '';
+      return `<w:tr>${zeilenkopf}${zellen}</w:tr>`;
+    }).join('');
+
+    return `<w:tbl>${kopf}${zeilen}</w:tbl>`;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
      ZUSAMMENBAU
      ══════════════════════════════════════════════════════════════════ */
 
@@ -962,12 +1194,19 @@
     const relationships = [];
     const body = [];
 
+    /* Kennungen laufen jetzt über das ganze Dokument: neben den Seiten
+       hängt an jedem Bild eine eigene Datei, und zwei Objekte mit
+       derselben Kennung öffnet Word gar nicht erst. */
+    let relZaehler = 0;
+    let ankerZaehler = 0;
+    const naechsteRel = () => `rId${++relZaehler}`;
+
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
       const lh = lhForBg(entry.bg);
 
       const image = await renderPageImage(entry, scale);
-      const relationshipId = `rId${i + 1}`;
+      const relationshipId = naechsteRel();
       const fileName = `seite${i + 1}.${image.extension}`;
 
       media.push({ name: `word/media/${fileName}`, data: dataUrlToBytes(image.dataUrl) });
@@ -979,7 +1218,37 @@
 
       const width = entry.page.w || DEFAULT_PAGE_W;
       const height = entry.page.h || DEFAULT_PAGE_H;
-      const anchor = anchorXml(i + 1, relationshipId, width, height);
+      let anchor = anchorXml(++ankerZaehler, relationshipId, width, height);
+
+      /* Jedes Objekt der Seite als eigenes Ding: ein Bild bekommt seine
+         eigene Datei im Archiv, eine Form braucht gar keine. Beide
+         hängen anschliessend am selben Absatz wie das Seitenbild – sie
+         sitzen ohnehin frei auf der Seite. */
+      for (const obj of (entry.page.objects || [])) {
+        if (!obj) continue;
+        const kennung = ++ankerZaehler;
+
+        if (obj.kind === 'shape') {
+          anchor += formAnkerXml(kennung, obj);
+          continue;
+        }
+
+        if (!obj.src) continue;          // Formeln haben kein Bild
+        const bytes = dataUrlToBytes(obj.src);
+        if (!bytes || !bytes.length) continue;
+
+        const endung = /^data:image\/(png|jpe?g|gif|webp|bmp)/i.exec(obj.src);
+        const dateiname = `bild${kennung}.${(endung ? endung[1] : 'png').replace('jpg', 'jpeg')}`;
+        const bildRel = naechsteRel();
+
+        media.push({ name: `word/media/${dateiname}`, data: bytes });
+        relationships.push(
+          `<Relationship Id="${bildRel}" `
+          + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+          + `Target="media/${dateiname}"/>`
+        );
+        anchor += bildAnkerXml(kennung, obj, bildRel);
+      }
 
       const paragraphs = htmlToParagraphs(entry.page.textContent);
       // Das Seitenbild hängt am ersten Absatz. Ein frei positioniertes Bild
@@ -987,13 +1256,27 @@
       // dagegen jede Seite um eine Leerzeile nach unten schieben.
       if (!paragraphs.length) paragraphs.push({ style: 'body', runs: [] });
 
+      /* Eine Tabelle kann weder das Seitenbild noch die Abschnittsangabe
+         tragen – beide gehören in einen Absatz. Und nach der letzten
+         Tabelle muss ohnehin einer stehen, sonst öffnet Word die Datei
+         gar nicht erst. */
+      if (paragraphs[paragraphs.length - 1].tabelle) {
+        paragraphs.push({ style: 'body', runs: [] });
+      }
+      let ankerBei = paragraphs.findIndex(p => !p.tabelle);
+      if (ankerBei < 0) ankerBei = paragraphs.length - 1;
+
       // Die Abschnittsangaben stehen beim letzten Absatz der Seite; dadurch
       // beginnt die nächste Seite automatisch neu, ganz ohne Seitenumbruch.
       const isLast = i === list.length - 1;
 
       paragraphs.forEach((paragraph, index) => {
+        if (paragraph.tabelle) {
+          body.push(tabelleXml(paragraph.tabelle, lh));
+          return;
+        }
         body.push(paragraphXml(paragraph, lh, {
-          leadingXml: index === 0 ? anchor : '',
+          leadingXml: index === ankerBei ? anchor : '',
           sectPr: (!isLast && index === paragraphs.length - 1) ? sectionXml(entry) : ''
         }));
       });

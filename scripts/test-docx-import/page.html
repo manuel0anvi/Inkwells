@@ -652,10 +652,25 @@ window.__fertig = (async function () {
        ═══════════════════════════════════════════════════════════════ */
     abschnitt('Rundlauf gegen den eigenen Export');
 
+    /* Ein Punkt in Rot, als Bild von einem Pixel – gross genug, um im
+       Archiv wiedergefunden zu werden, klein genug fuer den Test. */
+    const EIN_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+      + 'AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
     const heft = {
       name: 'Rundlauf',
       pages: [{
-        id: 'p1', bg: 'ruled', w: 794, h: 1123, inkStrokes: [], objects: [],
+        id: 'p1', bg: 'ruled', w: 794, h: 1123, inkStrokes: [],
+        objects: [
+          { id: 'o1', kind: 'image', src: EIN_PIXEL, name: 'Foto',
+            x: 100, y: 300, w: 200, h: 150, rot: 0 },
+          { id: 'o2', kind: 'shape', shapeType: 'ellipse', x: 400, y: 300,
+            w: 180, h: 120, rot: 0, fill: '#4472C4', stroke: '#203864',
+            strokeWidth: 3, layer: 'front' },
+          { id: 'o3', kind: 'shape', shapeType: 'arrow', x: 120, y: 600,
+            w: 200, h: 90, rot: 0, fill: 'none', stroke: '#c04040',
+            strokeWidth: 2, layer: 'front', p1: { x: 0, y: 0 }, p2: { x: 1, y: 1 } }
+        ],
         textContent:
           '<h1>Erste Ueberschrift</h1>'
           + '<p>Ein gewoehnlicher Absatz.</p>'
@@ -664,6 +679,12 @@ window.__fertig = (async function () {
           + '<p class="j-align-center">zentriert</p>'
           + '<ul class="j-list-disc"><li>eins</li><li>zwei</li></ul>'
           + '<ol class="j-list-decimal"><li>erstens</li><li>zweitens</li></ol>'
+          + '<table class="j-table"><tbody>'
+          + '<tr><th>Kopf A</th><th>Kopf B</th></tr>'
+          + '<tr><td>Zelle eins</td><td>Zelle zwei</td></tr>'
+          + '<tr><td>Zelle drei</td><td><b>fett in der Zelle</b></td></tr>'
+          + '</tbody></table>'
+          + '<p>Nach der Tabelle.</p>'
       }]
     };
 
@@ -707,6 +728,59 @@ window.__fertig = (async function () {
       rundHtml.slice(0, 300));
 
     // Und auch der Rundlauf muss den Sanitizer unveraendert ueberstehen
+    /* ══ WAS FRUEHER IM SEITENBILD VERSCHWAND ══════════════════════
+       Der Export malte Papier, Hintergrund, jedes Bild und jede
+       Zeichnung in EIN Bild je Seite. In Word liess sich davon nichts
+       mehr anfassen; Tabellen kamen als Fliesstext heraus und Formen
+       gar nicht. Der Rundlauf prueft beides von der anderen Seite: was
+       der eigene Leser zurueckholt, hat der Export auch geschrieben. */
+    pruefe('Rundlauf behaelt die Tabelle als Tabelle',
+      rundHtml.includes('<table class="j-table"'), rundHtml.slice(0, 200));
+    pruefe('Mit ihrer Kopfzeile',
+      nurText(rundHtml).includes('Kopf A') && nurText(rundHtml).includes('Kopf B'),
+      nurText(rundHtml).slice(0, 200));
+    pruefe('Und mit jeder Zelle',
+      ['Zelle eins', 'Zelle zwei', 'Zelle drei', 'fett in der Zelle']
+        .every(t => nurText(rundHtml).includes(t)),
+      nurText(rundHtml).slice(0, 300));
+    pruefe('Die Zellen stehen getrennt und nicht als ein Wort',
+      !nurText(rundHtml).includes('Kopf AKopf B'), nurText(rundHtml).slice(0, 200));
+    pruefe('Der Text nach der Tabelle kommt mit',
+      nurText(rundHtml).includes('Nach der Tabelle.'), nurText(rundHtml).slice(-120));
+
+    /* Zwei Bilder: das Seitenbild mit Papier und Handschrift, und das
+       Foto als eigenes. Frueher war beides eine einzige Datei. */
+    const rundBilder = zurueck.bloecke.filter(b => b.bild);
+    pruefe('Seitenbild und Foto kommen getrennt zurueck', rundBilder.length === 2,
+      'gezaehlt: ' + rundBilder.length);
+    const foto = rundBilder.find(b => b.bild.w === 200 && b.bild.h === 150);
+    pruefe('Das Foto behaelt sein eigenes Mass', !!foto,
+      rundBilder.map(b => b.bild.w + 'x' + b.bild.h).join(', '));
+
+    const rundFormen = zurueck.bloecke.filter(b => b.form);
+    pruefe('Beide Formen kommen als Formen zurueck', rundFormen.length === 2,
+      'gezaehlt: ' + rundFormen.length + ' (' + rundFormen.map(f => f.form.shapeType).join(', ') + ')');
+    const ellipse = rundFormen.find(f => f.form.shapeType === 'ellipse');
+    pruefe('Die Ellipse bleibt eine Ellipse', !!ellipse, 'nicht gefunden');
+    pruefe('Mit Fuellung und Strich',
+      ellipse && ellipse.form.fill === '#4472C4' && ellipse.form.stroke === '#203864',
+      ellipse ? ellipse.form.fill + ' / ' + ellipse.form.stroke : '-');
+    pruefe('Und mit ihrem Mass',
+      ellipse && ellipse.form.w === 180 && ellipse.form.h === 120,
+      ellipse ? ellipse.form.w + 'x' + ellipse.form.h : '-');
+    /* Ein Pfeil ist in Word eine Linie mit Spitze – zurueck kommt er
+       deshalb als Pfeil und nicht als Linie. */
+    pruefe('Der Pfeil bleibt ein Pfeil',
+      rundFormen.some(f => f.form.shapeType === 'arrow'),
+      rundFormen.map(f => f.form.shapeType).join(', '));
+
+    /* Im Archiv liegt jetzt mehr als eine Datei je Seite: das Seitenbild
+       UND jedes Bild darauf. Frueher war alles eine einzige. */
+    const archiv = await InkwellsDocxImport.__intern.entpacke(datei);
+    const bilddateien = [...archiv.keys()].filter(n => /^word\/media\//.test(n));
+    pruefe('Seitenbild und Bild liegen getrennt im Archiv', bilddateien.length === 2,
+      bilddateien.join(', '));
+
     pruefe('Rundlauf ueberlebt den Sanitizer',
       zurueck.bloecke.every(b => sanitizePageHtml(b.html) === b.html),
       zurueck.bloecke.map(b => b.html).find(h => sanitizePageHtml(h) !== h) || '');
