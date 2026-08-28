@@ -1,0 +1,224 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+</head>
+<body>
+
+<script>
+/* Was importExport.js aus der App erwartet. */
+const CFG = { PAGE_W: 794, PAGE_H: 1123, HDR: 58 };
+const S = { readOnly: false };
+const BG_TYPES = [{ id: 'ruled' }, { id: 'grid' }, { id: 'dots' }, { id: 'blank' }, { id: 'craft' }];
+const SCHEMA_VERSION = 2;
+function uid() { return 'x' + Math.random().toString(36).slice(2, 10); }
+function makePage(bg) {
+  return { id: uid(), date: new Date().toISOString(), bg: bg,
+           textContent: '', inkStrokes: [], objects: [] };
+}
+function E() { return null; }
+function t() { return ''; }
+function toast() {}
+function getNb() { return null; }
+function getPage() { return null; }
+</script>
+
+<script src="../../src/lib/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '../../src/lib/pdf.worker.min.js';
+</script>
+<script src="../../src/core/sanitize.js"></script>
+<script src="../../src/core/docxPaginate.js"></script>
+<script src="../../src/core/importExport.js"></script>
+
+<script>
+const zeilen = [];
+function abschnitt(name) { zeilen.push(''); zeilen.push(name); }
+function pruefe(was, bedingung, hinweis) {
+  zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
+}
+
+const EIN_BILD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/* Ein Heft, wie es in einer .jrnl steht – mit allem Guten und allem,
+   was ein Angreifer hineinschreiben könnte. */
+function baueDatei() {
+  return JSON.stringify({
+    notebooks: [{
+      id: 'fremd-heft',
+      name: 'Zugeschicktes Heft',
+      color: '#2a5fa8',
+      defaultBg: 'grid',
+      schemaVersion: 2,
+      sections: [
+        { id: 'sec-a', name: 'Erster Teil', pgIds: ['s1', 's2'] },
+        { id: 'sec-b', name: 'Zweiter Teil', pgIds: ['s3'] },
+        { id: 'sec-leer', name: 'Ohne Seiten', pgIds: [] }
+      ],
+      comments: [
+        { id: 'k1', pageId: 's2', text: 'Hier fehlt eine Quelle', zitat: 'zweite Seite',
+          author: 'T. Reiser', created: 1750000000000, resolved: false,
+          replies: [{ id: 'r1', text: 'Kommt noch', author: 'M. Anvi', created: 1750000100000 }] },
+        { id: 'k2', pageId: 'gibt-es-nicht', text: 'Verwaist', zitat: '', author: '', created: 0, replies: [] }
+      ],
+      pages: [
+        {
+          id: 's1', bg: 'ruled', secId: 'sec-a',
+          date: '2026-03-04T10:00:00.000Z',
+          textContent: '<p class="j-title-2">Erste Seite</p><p>Ein <b>fetter</b> Satz.</p>'
+            + '<script>window.__boese = 1;<\/script>'
+            + '<p onclick="alert(1)">Mit einem Handgriff, den niemand bestellt hat.</p>',
+          objects: [
+            { id: 'o1', kind: 'image', src: EIN_BILD, name: 'Bild', x: 100, y: 200, w: 300, h: 150, rot: 0 },
+            { id: 'o2', kind: 'image', src: 'javascript:alert(1)', x: 0, y: 0, w: 10, h: 10 },
+            { id: 'o3', kind: 'image', src: 'https://example.invalid/bild.png', x: 0, y: 0, w: 10, h: 10 },
+            { id: 'o4', kind: 'shape', shapeType: 'rect', x: 50, y: 400, w: 200, h: 100,
+              fill: 'none', stroke: '#c04040', strokeWidth: 2, layer: 'front' },
+            { id: 'o5', kind: 'shape', shapeType: 'wolke', x: 10, y: 10, w: 50, h: 50,
+              fill: 'url(https://example.invalid/x)', stroke: 'expression(evil)' },
+            { id: 'o6', kind: 'formula', latex: 'E = mc^2', display: true,
+              x: 300, y: 600, w: 120, h: 40, natW: 120, natH: 40 },
+            { id: 'o7', kind: 'trojaner', x: 0, y: 0, w: 10, h: 10 }
+          ],
+          inkStrokes: [
+            { id: 'i1', path: [{ x: 10, y: 10, p: 0.5 }, { x: 90, y: 40, p: 0.7 }],
+              color: '#2e8a46', width: 3, isHL: false },
+            { id: 'i2', path: [], color: '#000', width: 2 },
+            { id: 'i3', path: [{ x: 'weg', y: null }], color: '#000', width: 2 }
+          ]
+        },
+        {
+          id: 's2', bg: 'dots', secId: 'sec-a',
+          textContent: '<p>Die zweite Seite mit einer <span class="j-comment-mark">Marke</span>.</p>',
+          objects: [], inkStrokes: []
+        },
+        {
+          id: 's3', bg: 'erfundenes-papier', secId: 'sec-b',
+          textContent: '<p>Eine Bildseite.</p>',
+          bgImg: EIN_BILD, w: 794, h: 500,
+          objects: [], inkStrokes: []
+        }
+      ]
+    }]
+  });
+}
+
+function laufe() {
+  const datei = baueDatei();
+
+  const nb = { id: 'neu', name: 'Meine Kopie', color: '#2e8a46', defaultBg: 'ruled',
+               pages: [], sections: [] };
+  const bericht = fillNotebookFromJrnl(nb, datei);
+
+  abschnitt('Was ankommt');
+  pruefe('drei Seiten', nb.pages.length === 3, 'gezählt: ' + nb.pages.length);
+  pruefe('zwei Abschnitte – der leere fällt weg', nb.sections.length === 2,
+    'gezählt: ' + nb.sections.length);
+  pruefe('der Bericht zählt mit', bericht.seiten === 3 && bericht.abschnitte === 2,
+    JSON.stringify(bericht));
+  pruefe('das Papier je Seite bleibt',
+    nb.pages[0].bg === 'ruled' && nb.pages[1].bg === 'dots', nb.pages.map(p => p.bg).join(', '));
+  pruefe('ein erfundenes Papier wird zum Papier des Hefts', nb.pages[2].bg === 'ruled',
+    nb.pages[2].bg);
+  pruefe('das Datum bleibt', nb.pages[0].date === '2026-03-04T10:00:00.000Z', nb.pages[0].date);
+  pruefe('die Bildseite behält Bild und Maß',
+    nb.pages[2].bgImg === EIN_BILD && nb.pages[2].h === 500,
+    'bgImg: ' + !!nb.pages[2].bgImg + ', h: ' + nb.pages[2].h);
+
+  abschnitt('Jede Kennung ist neu');
+  const alt = ['s1', 's2', 's3'];
+  pruefe('keine Seite trägt ihre alte Kennung',
+    nb.pages.every(p => !alt.includes(p.id)), nb.pages.map(p => p.id).join(', '));
+  pruefe('die Abschnitte auch nicht',
+    nb.sections.every(s => s.id !== 'sec-a' && s.id !== 'sec-b'),
+    nb.sections.map(s => s.id).join(', '));
+  pruefe('jede Seite hängt an ihrem Abschnitt',
+    nb.pages.every(p => nb.sections.some(s => s.id === p.secId)), 'eine hängt frei');
+  pruefe('die erste und die zweite Seite im selben Abschnitt',
+    nb.pages[0].secId === nb.pages[1].secId && nb.pages[1].secId !== nb.pages[2].secId,
+    nb.pages.map(p => p.secId).join(', '));
+  pruefe('pgIds zeigt auf die neuen Seiten',
+    nb.sections[0].pgIds.length === 2 && nb.sections[0].pgIds[0] === nb.pages[0].id,
+    JSON.stringify(nb.sections.map(s => s.pgIds)));
+  pruefe('die Objekte bekommen neue Kennungen',
+    nb.pages[0].objects.every(o => !/^o\d$/.test(o.id)),
+    nb.pages[0].objects.map(o => o.id).join(', '));
+
+  abschnitt('Der Filter');
+  const text0 = nb.pages[0].textContent;
+  pruefe('kein <script> im Text', !/<script/i.test(text0), text0.slice(0, 120));
+  pruefe('kein onclick im Text', !/onclick/i.test(text0), text0.slice(0, 160));
+  pruefe('der gute Text bleibt',
+    text0.includes('Erste Seite') && text0.includes('<b>fetter</b>'), text0.slice(0, 160));
+  pruefe('der Text übersteht den Sanitizer unverändert',
+    nb.pages.every(p => sanitizePageHtml(p.textContent) === p.textContent), 'er ändert noch etwas');
+
+  const objekte = nb.pages[0].objects;
+  pruefe('vier Objekte bleiben übrig', objekte.length === 4,
+    'gezählt: ' + objekte.length + ' (' + objekte.map(o => o.kind).join(', ') + ')');
+  pruefe('das Bild mit Daten bleibt',
+    objekte.some(o => o.kind === 'image' && o.src === EIN_BILD), 'weg');
+  pruefe('javascript: als Bildquelle fällt weg',
+    !objekte.some(o => /javascript:/i.test(o.src || '')), 'noch da');
+  pruefe('ein Bild aus dem Netz fällt weg',
+    !objekte.some(o => /^https?:/i.test(o.src || '')), 'noch da');
+  pruefe('die erfundene Objektart fällt weg',
+    !objekte.some(o => o.kind === 'trojaner'), 'noch da');
+
+  const wolke = objekte.find(o => o.kind === 'shape' && o.shapeType === 'rect' && o.w === 50);
+  pruefe('eine erfundene Form wird zum Rechteck', !!wolke, 'nicht gefunden');
+  pruefe('url() und expression() als Farbe fallen weg',
+    !!wolke && wolke.fill === 'none' && wolke.stroke === '#1a1510',
+    wolke ? wolke.fill + ' / ' + wolke.stroke : '-');
+
+  const formel = objekte.find(o => o.kind === 'formula');
+  pruefe('die Formel kommt mit', !!formel && formel.latex === 'E = mc^2',
+    formel ? formel.latex : 'keine');
+
+  const striche = nb.pages[0].inkStrokes;
+  pruefe('nur der eine brauchbare Strich bleibt', striche.length === 1,
+    'gezählt: ' + striche.length);
+  pruefe('sein Weg ist vollständig',
+    striche.length === 1 && striche[0].path.length === 2 && striche[0].color === '#2e8a46',
+    JSON.stringify(striche[0] || {}));
+
+  abschnitt('Kommentare');
+  pruefe('ein Kommentar kommt mit', (nb.comments || []).length === 1,
+    'gezählt: ' + (nb.comments || []).length);
+  pruefe('er zeigt auf die neue Seite',
+    (nb.comments || [])[0] && nb.comments[0].pageId === nb.pages[1].id,
+    nb.comments && nb.comments[0] ? nb.comments[0].pageId : '-');
+  pruefe('seine eigene Kennung bleibt – die Marke im Text zeigt darauf',
+    (nb.comments || [])[0] && nb.comments[0].id === 'k1',
+    nb.comments && nb.comments[0] ? nb.comments[0].id : '-');
+  pruefe('die Antwort ist dabei',
+    (nb.comments || [])[0] && nb.comments[0].replies.length === 1, 'keine');
+  pruefe('der verwaiste Kommentar fällt weg',
+    !(nb.comments || []).some(c => c.id === 'k2'), 'noch da');
+
+  abschnitt('Kaputte Dateien');
+  let meldung = '';
+  try { fillNotebookFromJrnl({ pages: [], sections: [] }, 'kein json'); }
+  catch (err) { meldung = err.message; }
+  pruefe('kaputtes JSON gibt eine Meldung', !!meldung, 'keine Meldung');
+
+  meldung = '';
+  try { fillNotebookFromJrnl({ pages: [], sections: [] }, '{"notebooks":[]}'); }
+  catch (err) { meldung = err.message; }
+  pruefe('eine Datei ohne Heft gibt eine Meldung', !!meldung, 'keine Meldung');
+
+  pruefe('nichts Fremdes ist ausgeführt worden', typeof window.__boese === 'undefined',
+    'window.__boese ist gesetzt');
+}
+
+try {
+  laufe();
+} catch (err) {
+  zeilen.push('ABBRUCH ' + (err && err.stack || err));
+}
+window.__ergebnis = zeilen.join('\n');
+</script>
+</body>
+</html>

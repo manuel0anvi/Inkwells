@@ -174,6 +174,16 @@ E('btn-open-doc').addEventListener('click', async () => {
       toast(t('openDocReading') || 'Dokument wird gelesen …');
 
       try {
+        /* Ein Heft aus einer Datei: es ist schon eines, wird aber
+           abgeschrieben statt uebernommen – die Begruendung steht bei
+           fillNotebookFromJrnl() in core/importExport.js. */
+        if (datei.kind === 'jrnl') {
+          const bericht = fillNotebookFromJrnl(nb, datei.text);
+          toast((t('openDocDoneJrnl') || '{n} Seiten aus dem Heft übernommen.')
+            .replace('{n}', bericht.seiten));
+          return;
+        }
+
         if (datei.kind === 'pdf' && pdfArt === 'text') {
           const bericht = await fillNotebookFromPdfText(nb, datei.dataUrl, (getan, gesamt) => {
             toast((t('openDocProgress') || 'Seite {n} von {m} …')

@@ -1444,14 +1444,20 @@ ipcMain.handle('pick-files', async () => {
    .doc fehlt mit Absicht: das alte Binärformat ist etwas ganz anderes
    als .docx und lässt sich nicht nebenbei lesen. Es hier anzubieten
    hiesse, ein Versprechen zu geben, das erst beim Öffnen bricht.
+
+   .jrnl ist dagegen ein eigenes Heft – und steht hier aus einem
+   anderen Grund als bei „Laden": dort wird die Datei an ihrem Platz
+   weiterbenutzt, hier entsteht eine KOPIE im eigenen Ordner. Wer ein
+   Heft geschickt bekommt, will meistens das zweite.
    ══════════════════════════════════════════════════════════════════════ */
 ipcMain.handle('pick-document', async () => {
   const r = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
     filters: [
-      { name: 'Word & PDF', extensions: ['docx', 'pdf'] },
+      { name: 'Word, PDF & Inkwells', extensions: ['docx', 'pdf', 'jrnl'] },
       { name: 'Word-Dokument', extensions: ['docx'] },
-      { name: 'PDF', extensions: ['pdf'] }
+      { name: 'PDF', extensions: ['pdf'] },
+      { name: 'Inkwells-Heft', extensions: ['jrnl'] }
     ]
   });
   if (r.canceled || !r.filePaths.length) return null;
@@ -1459,6 +1465,24 @@ ipcMain.handle('pick-document', async () => {
   const p = r.filePaths[0];
   const ext = path.extname(p).toLowerCase();
   const name = path.basename(p, path.extname(p));   // ohne Endung: der Heftname
+
+  /* Ein Heft bringt seinen Namen selbst mit. Der Dateiname ist nur der
+     Rückfall – er kann umbenannt worden sein und sagt dann etwas
+     anderes als das Heft darin. */
+  if (ext === '.jrnl') {
+    const text = fs.readFileSync(p, 'utf-8');
+    let heftName = name;
+    try {
+      const d = JSON.parse(text);
+      const q = Array.isArray(d && d.notebooks) ? d.notebooks[0] : d;
+      if (q && typeof q.name === 'string' && q.name.trim()) heftName = q.name.trim();
+    } catch (err) {
+      /* Kaputtes JSON faellt erst drueben auf – dort gibt es eine
+         Meldung dafuer, hier nur den Namen. */
+    }
+    return { kind: 'jrnl', name: heftName, text };
+  }
+
   const mime = ext === '.pdf'
     ? 'application/pdf'
     : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';

@@ -22,6 +22,7 @@
     "test:lists": "electron scripts/test-lists",
     "test:docx": "electron scripts/test-docx-import",
     "test:pdf": "electron scripts/test-pdf-bilder",
+    "test:jrnl": "electron scripts/test-jrnl-import",
     "test:touch": "electron scripts/test-touch",
     "test:caret": "electron scripts/test-caret-geometry",
     "test:klick": "electron scripts/test-klick",

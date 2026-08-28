@@ -927,6 +927,235 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
 window.fillNotebookFromPdfText = fillNotebookFromPdfText;
 
 /* ══════════════════════════════════════════════════════════════════════
+   EIN INKWELLS-HEFT ALS NEUES HEFT
+
+   Der dritte Weg neben Word und PDF, und der einzige, bei dem die Datei
+   schon ein Heft IST. Trotzdem wird sie nicht einfach übernommen,
+   sondern abgeschrieben:
+
+   >>> Warum eine Kopie und nicht die Datei selbst <<<
+   Dafür gibt es „Laden" (doLoad). Dort bleibt die Datei, wo sie liegt,
+   und das Heft merkt sich ihren Pfad. Das ist richtig für ein eigenes
+   Heft, das nur gerade woanders liegt – und falsch für eines, das man
+   geschickt bekommen hat: es läge dann weiter im Download-Ordner, und
+   jede Änderung ginge dorthin. Hier entsteht deshalb ein neues Heft im
+   eigenen Speicherort, mit eigenem Namen und eigener Farbe.
+
+   >>> Warum jede Kennung neu vergeben wird <<<
+   getPage() sucht eine Seite über ALLE offenen Hefte (core/data.js).
+   Zwei Hefte mit derselben Seitenkennung – und genau das entsteht beim
+   Öffnen derselben Datei zweimal – lieferten dann einmal die eine und
+   einmal die andere Seite. Das ist kein Anzeigefehler, sondern
+   geschriebener Text, der in der falschen Datei landet.
+
+   >>> Warum alles durch einen Filter geht <<<
+   Die Datei kommt von ausserhalb. Sie ist zwar in unserem Format, aber
+   niemand hat sie geprüft: ein <script> im Seitentext, ein
+   javascript:-Verweis in einem Bild, eine Farbe, die in Wahrheit ein
+   url() ist. Übernommen wird deshalb nur, was auf der Liste steht –
+   ausdrücklich die Liste des ERLAUBTEN, wie im Sanitizer.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Eine Zahl, die auch wirklich eine ist. */
+function jrnlZahl(wert, ersatz) {
+  const n = Number(wert);
+  return Number.isFinite(n) ? n : ersatz;
+}
+
+/** Eine Farbe und sonst nichts – kein url(), kein Ausdruck. */
+function jrnlFarbe(wert, ersatz) {
+  return (typeof wert === 'string'
+    && wert.length <= 64
+    && /^(none|transparent|#[0-9a-f]{3,8}|rgba?\([\d\s.,%/]+\)|hsla?\([\d\s.,%/]+\)|[a-z]{3,20})$/i.test(wert.trim()))
+    ? wert.trim() : ersatz;
+}
+
+/** Ein Bild, das im Heft liegt – und nicht irgendwo im Netz. */
+function jrnlBildDaten(wert) {
+  return (typeof wert === 'string' && /^data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,/i.test(wert))
+    ? wert : null;
+}
+
+/** Eine der bekannten Papierarten. */
+function jrnlPapier(wert, ersatz) {
+  const liste = (typeof BG_TYPES !== 'undefined' && Array.isArray(BG_TYPES))
+    ? BG_TYPES.map(b => b.id) : ['ruled', 'grid', 'dots', 'blank', 'craft'];
+  return liste.includes(wert) ? wert : ersatz;
+}
+
+/** Ein Objekt der Seite – nur die Arten, die es wirklich gibt. */
+function jrnlObjekt(o) {
+  if (!o || typeof o !== 'object') return null;
+
+  const lage = {
+    id: uid(),
+    x: jrnlZahl(o.x, 0), y: jrnlZahl(o.y, 0),
+    w: Math.max(1, jrnlZahl(o.w, 100)), h: Math.max(1, jrnlZahl(o.h, 100)),
+    rot: jrnlZahl(o.rot, 0)
+  };
+  if (o.layer === 'back') lage.layer = 'back';
+
+  if (o.kind === 'image') {
+    const src = jrnlBildDaten(o.src);
+    if (!src) return null;
+    return { ...lage, kind: 'image', src, name: String(o.name || '').slice(0, 120) };
+  }
+
+  if (o.kind === 'shape') {
+    const arten = ['rect', 'ellipse', 'triangle', 'line', 'arrow'];
+    const form = {
+      ...lage, kind: 'shape',
+      shapeType: arten.includes(o.shapeType) ? o.shapeType : 'rect',
+      fill: jrnlFarbe(o.fill, 'none'),
+      stroke: jrnlFarbe(o.stroke, '#1a1510'),
+      strokeWidth: Math.max(0.5, jrnlZahl(o.strokeWidth, 2))
+    };
+    /* Die Enden einer Linie liegen als Anteile 0…1 im Rechteck
+       (canvas/shapes.js). Fehlen sie, gilt dort die alte Diagonale. */
+    if (o.p1 && o.p2) {
+      form.p1 = { x: jrnlZahl(o.p1.x, 0), y: jrnlZahl(o.p1.y, 1) };
+      form.p2 = { x: jrnlZahl(o.p2.x, 1), y: jrnlZahl(o.p2.y, 0) };
+    }
+    return form;
+  }
+
+  if (o.kind === 'formula') {
+    return {
+      ...lage, kind: 'formula',
+      latex: String(o.latex || '').slice(0, 4000),
+      display: !!o.display,
+      natW: Math.max(1, jrnlZahl(o.natW, lage.w)),
+      natH: Math.max(1, jrnlZahl(o.natH, lage.h))
+    };
+  }
+
+  return null;
+}
+
+/** Ein Stiftstrich mit seinem Weg über das Blatt. */
+function jrnlStrich(s) {
+  if (!s || !Array.isArray(s.path) || !s.path.length) return null;
+  const path = s.path
+    .filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+    .map(p => ({ x: Number(p.x), y: Number(p.y), p: jrnlZahl(p.p, 0.6) }));
+  if (!path.length) return null;
+  return {
+    id: uid(),
+    path,
+    color: jrnlFarbe(s.color, '#1a1510'),
+    width: Math.max(0.5, jrnlZahl(s.width, 3)),
+    isHL: !!s.isHL,
+    isGeometric: !!s.isGeometric
+  };
+}
+
+/**
+ * Liest eine .jrnl-Datei und füllt damit ein frisches Heft.
+ *
+ * @param {object} nb    das frische Heft aus dem Anlegen-Fenster
+ * @param {string} text  der Dateiinhalt
+ * @returns {{seiten:number, abschnitte:number, kommentare:number}}
+ */
+function fillNotebookFromJrnl(nb, text) {
+  let daten;
+  try {
+    daten = JSON.parse(String(text || ''));
+  } catch (err) {
+    throw new Error(t('jrnlBroken') || 'Die Datei lässt sich nicht lesen.');
+  }
+
+  /* Zwei Schreibweisen: { notebooks: [ … ] } schreibt der Speicherweg
+     (core/fileManager.js), ein blosses Heft kommt aus älteren Ständen. */
+  const quelle = Array.isArray(daten && daten.notebooks)
+    ? daten.notebooks[0]
+    : daten;
+
+  if (!quelle || !Array.isArray(quelle.pages) || !quelle.pages.length) {
+    throw new Error(t('jrnlEmpty') || 'In der Datei steht kein Heft.');
+  }
+
+  // Abschnitte zuerst: die Seiten verweisen darauf
+  const secKennung = new Map();
+  nb.sections = (Array.isArray(quelle.sections) ? quelle.sections : []).map(s => {
+    const id = uid();
+    secKennung.set(String(s && s.id), id);
+    return { id, name: String((s && s.name) || '').slice(0, 120), pgIds: [] };
+  });
+
+  const seitenKennung = new Map();
+  nb.pages = quelle.pages.map(p => {
+    const pg = makePage(jrnlPapier(p && p.bg, nb.defaultBg || 'ruled'));
+    seitenKennung.set(String(p && p.id), pg.id);
+
+    if (typeof p.date === 'string' && p.date) pg.date = p.date;
+
+    /* Durch den Sanitizer, wie bei jedem Text aus fremder Hand – das ist
+       derselbe Riegel wie bei geteilten Heften. */
+    pg.textContent = typeof sanitizePageHtml === 'function'
+      ? sanitizePageHtml(String(p.textContent || ''))
+      : String(p.textContent || '');
+
+    const bgImg = jrnlBildDaten(p.bgImg);
+    if (bgImg) pg.bgImg = bgImg;
+
+    // Bildseiten haben ein eigenes Mass (makeImagePage)
+    if (p.w) pg.w = Math.max(100, jrnlZahl(p.w, CFG.PAGE_W));
+    if (p.h) pg.h = Math.max(100, jrnlZahl(p.h, CFG.PAGE_H));
+
+    pg.objects = (Array.isArray(p.objects) ? p.objects : []).map(jrnlObjekt).filter(Boolean);
+    pg.inkStrokes = (Array.isArray(p.inkStrokes) ? p.inkStrokes : []).map(jrnlStrich).filter(Boolean);
+
+    const sec = secKennung.get(String(p.secId));
+    if (sec) pg.secId = sec;
+
+    return pg;
+  });
+
+  /* pgIds wird abgeleitet mitgeschrieben – ein Stand ohne die Umstellung
+     auf page.secId hielte einen Abschnitt ohne pgIds sonst für leer und
+     legte ungefragt Füllseiten an (core/data.js). */
+  for (const pg of nb.pages) {
+    const sec = nb.sections.find(s => s.id === pg.secId);
+    if (sec) sec.pgIds.push(pg.id);
+  }
+  nb.sections = nb.sections.filter(s => s.pgIds.length);
+  nb.schemaVersion = typeof SCHEMA_VERSION !== 'undefined' ? SCHEMA_VERSION : 2;
+
+  /* Kommentare hängen an einer Marke im Seitentext, und die trägt die
+     Kennung des Kommentars – die bleibt deshalb, wie sie ist. Nur die
+     Seite, auf die sie zeigt, ist eine neue. */
+  const kommentare = (Array.isArray(quelle.comments) ? quelle.comments : [])
+    .map(c => {
+      const seite = seitenKennung.get(String(c && c.pageId));
+      if (!seite) return null;
+      return {
+        id: String(c.id || uid()),
+        pageId: seite,
+        text: String(c.text || '').slice(0, 4000),
+        zitat: String(c.zitat || '').slice(0, 160),
+        author: String(c.author || '').slice(0, 120),
+        created: jrnlZahl(c.created, Date.now()),
+        resolved: !!c.resolved,
+        replies: (Array.isArray(c.replies) ? c.replies : []).map(r => ({
+          id: String((r && r.id) || uid()),
+          text: String((r && r.text) || '').slice(0, 4000),
+          author: String((r && r.author) || '').slice(0, 120),
+          created: jrnlZahl(r && r.created, Date.now())
+        }))
+      };
+    })
+    .filter(Boolean);
+  if (kommentare.length) nb.comments = kommentare;
+
+  return {
+    seiten: nb.pages.length,
+    abschnitte: nb.sections.length,
+    kommentare: kommentare.length
+  };
+}
+window.fillNotebookFromJrnl = fillNotebookFromJrnl;
+
+/* ══════════════════════════════════════════════════════════════════════
    EIN WORD-DOKUMENT ALS NEUES HEFT
 
    Drei Schritte, jeder in seiner eigenen Datei:
