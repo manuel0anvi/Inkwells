@@ -191,11 +191,11 @@ E('btn-open-doc').addEventListener('click', async () => {
             return;
           }
 
-          /* Die Bilder gehoeren in die Meldung: sie sind der Teil, von dem
-             der Nutzer nach dem Hinweis im Fenster („Bilder kommen mit")
-             nicht sicher weiss, ob er wirklich angekommen ist. */
+          /* Die Bilder gehoeren in die Meldung: sie erklaeren, warum das
+             Heft mehr Seiten hat als das PDF – jedes Bild bekommt eine
+             eigene (core/importExport.js). */
           const fertig = bericht.bilder
-            ? (t('pdfTextDoneBilder') || '{n} Seiten aus {m} PDF-Seiten, dazu {b} Bilder.')
+            ? (t('pdfTextDoneBilder') || '{n} Seiten aus {m} PDF-Seiten, darunter {b} Bildseiten.')
                 .replace('{b}', bericht.bilder)
             : (t('pdfTextDone') || '{n} Seiten aus {m} PDF-Seiten.');
           toast(fertig.replace('{n}', bericht.seiten).replace('{m}', bericht.quellseiten));

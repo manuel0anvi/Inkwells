@@ -21,7 +21,6 @@ function makePage(bg) {
   return { id: uid(), date: new Date().toISOString(), bg: bg,
            textContent: '', inkStrokes: [], objects: [] };
 }
-function makeImagePage() { return makePage('blank'); }
 function E() { return null; }
 function t() { return ''; }
 function toast() {}
@@ -174,55 +173,59 @@ async function laufe() {
   pruefe('das Heft ist nicht leer', bericht.leer === false, 'leer gemeldet');
   pruefe('drei Bilder übernommen', bericht.bilder === 3, 'gemeldet: ' + bericht.bilder);
 
-  const objekte = nb.pages.flatMap(p => p.objects || []);
-  pruefe('drei Bild-Objekte im Heft', objekte.length === 3, 'gezählt: ' + objekte.length);
-  pruefe('jedes trägt ein Bild', objekte.every(o => o.kind === 'image' && /^data:image\//.test(o.src)),
-    'eines ohne src');
-  pruefe('keines ist breiter als die Textbreite', objekte.every(o => o.w <= CFG.PAGE_W - 104),
-    'zu breit: ' + objekte.map(o => o.w).join(', '));
-  pruefe('keines ist höher als die Seite', objekte.every(o => o.h < CFG.PAGE_H),
-    'zu hoch: ' + objekte.map(o => o.h).join(', '));
+  const bildSeiten = nb.pages.filter(p => !!p.bgImg);
+  pruefe('drei Bildseiten im Heft', bildSeiten.length === 3, 'gezählt: ' + bildSeiten.length);
+  pruefe('jede trägt ihr Bild',
+    bildSeiten.every(p => /^data:image\/(png|jpeg);base64,/.test(p.bgImg)), 'eine ohne Daten');
 
-  /* 200 pt breit auf einem 612 pt breiten Blatt sind knapp ein Drittel.
-     Genauso soll es im Heft aussehen – 690 Punkte Textbreite mal 200/612. */
-  const sollBreite = Math.round(690 * (200 / 612));
-  const kleine = objekte.filter(o => Math.abs(o.w - sollBreite) <= 2);
-  pruefe('das Schaubild behält sein Verhältnis zum Blatt', kleine.length === 2,
-    `erwartet 2 Bilder mit ${sollBreite} px, gefunden: ` + objekte.map(o => o.w).join(', '));
-  pruefe('und sein Seitenverhältnis', kleine.every(o => Math.abs(o.h - o.w / 2) <= 2),
-    'Höhen: ' + kleine.map(o => o.h).join(', '));
+  /* Der Kern der Sache: ein Bild ist eine SEITE und kein Ding auf einer
+     Seite. Als Objekt lag es über dem Text und ließ sich verschieben. */
+  const objekte = nb.pages.flatMap(p => p.objects || []);
+  pruefe('kein Bild liegt als Objekt auf einer Seite', objekte.length === 0,
+    objekte.length + ' Objekt(e)');
+  pruefe('auf einer Bildseite steht kein Text',
+    bildSeiten.every(p => !(p.textContent || '').replace(/<[^>]+>/g, '').trim()),
+    'eine Bildseite trägt Text');
+
+  /* 200 pt breit und 100 pt hoch: die Seite ist so breit wie jede andere,
+     ihre Höhe folgt dem Verhältnis (makeImagePage, plus Seitenkopf). */
+  const flach = bildSeiten.find(p => Math.abs((p.h - BILD_KOPF_PX) - CFG.PAGE_W / 2) <= 2);
+  pruefe('die Bildseite behält das Seitenverhältnis', !!flach,
+    'Höhen: ' + bildSeiten.map(p => p.h).join(', '));
+  pruefe('und ist so breit wie eine gewöhnliche Seite',
+    bildSeiten.every(p => p.w === CFG.PAGE_W), 'Breiten: ' + bildSeiten.map(p => p.w).join(', '));
 
   /* ── Die Reihenfolge ───────────────────────────────────────────── */
   abschnitt('Text und Bild in der Reihenfolge des Blatts');
 
-  const text = nb.pages.map(p => p.textContent).join('\n');
+  const text = nb.pages.map(p => p.textContent || '').join('\n');
   pruefe('der Text über dem Bild ist da', text.includes('Erste Zeile ueber dem Bild'), text.slice(0, 120));
   pruefe('der Text unter dem Bild ist da', text.includes('Zeile unter dem Bild'), text.slice(0, 120));
-  pruefe('und steht auch dahinter',
-    text.indexOf('Erste Zeile ueber dem Bild') < text.indexOf('Zeile unter dem Bild'),
-    'die Reihenfolge stimmt nicht');
 
-  const heft1 = nb.pages[0];
-  const objekt1 = (heft1.objects || [])[0];
-  pruefe('das Bild sitzt auf der ersten Heftseite', !!objekt1, 'keines da');
-  if (objekt1) {
-    /* Zwischen den beiden Absätzen, nicht am Seitenanfang und nicht am
-       Rand: die erste Zeile steht oben, das Bild kommt darunter. */
-    pruefe('es steht unterhalb der ersten Zeile', objekt1.y > 80, 'y = ' + objekt1.y);
-    pruefe('es bleibt auf der Seite', objekt1.y + objekt1.h < CFG.PAGE_H, 'y+h = ' + (objekt1.y + objekt1.h));
-  }
+  const wo = (was) => nb.pages.findIndex(p => (p.textContent || '').includes(was));
+  const ersteBild = nb.pages.findIndex(p => !!p.bgImg);
+  pruefe('der Text über dem Bild steht auf einer Seite davor',
+    wo('Erste Zeile ueber dem Bild') >= 0 && wo('Erste Zeile ueber dem Bild') < ersteBild,
+    'Text auf ' + wo('Erste Zeile ueber dem Bild') + ', Bild auf ' + ersteBild);
+  pruefe('der Text unter dem Bild steht auf einer Seite danach',
+    wo('Zeile unter dem Bild') > ersteBild,
+    'Text auf ' + wo('Zeile unter dem Bild') + ', Bild auf ' + ersteBild);
+
+  /* Die ganze Folge, wie sie im PDF steht: Text, Bild, Text, dann die
+     eingescannte Seite, dann das Schaubild von Seite 3 mit seinem Text. */
+  const folge = nb.pages.map(p => p.bgImg ? 'B' : 'T').join('');
+  pruefe('die Folge der Seiten ist T B T B B T', folge === 'TBTBBT', 'bekommen: ' + folge);
 
   /* ── Das eingescannte Blatt ────────────────────────────────────── */
   abschnitt('Eine Seite ohne Textebene');
 
   const seite2 = await pdf.getPage(2);
   const lage2 = await pdfBildbereiche(seite2);
-  const masse = { faktor: 690 / 612, maxBreite: 690, maxHoehe: 1000 };
-  const ergebnis2 = await pdfSeitenBilder(seite2, [], lage2, masse);
+  const ergebnis2 = await pdfSeitenBilder(seite2, [], lage2);
   pruefe('sie wird ganz zum Bild', ergebnis2.bilder.length === 1,
     'Bilder: ' + ergebnis2.bilder.length);
-  pruefe('das Bild füllt die Textbreite', ergebnis2.bilder.length > 0 && ergebnis2.bilder[0].bild.w > 600,
-    'Breite: ' + (ergebnis2.bilder[0] && ergebnis2.bilder[0].bild.w));
+  pruefe('es ist so breit wie das Blatt', ergebnis2.bilder.length > 0 && ergebnis2.bilder[0].bild.w > 500,
+    'Breite in Punkten: ' + (ergebnis2.bilder[0] && ergebnis2.bilder[0].bild.w));
 
   /* ── Die Beschriftung im Schaubild ─────────────────────────────── */
   abschnitt('Beschriftung innerhalb eines Bildes');
@@ -233,7 +236,7 @@ async function laufe() {
     'gefunden: ' + zeilen3.length);
 
   const lage3 = await pdfBildbereiche(seite3);
-  const ergebnis3 = await pdfSeitenBilder(seite3, zeilen3, lage3, masse);
+  const ergebnis3 = await pdfSeitenBilder(seite3, zeilen3, lage3);
   const uebrig = ergebnis3.zeilen.map(z => z.text).join(' | ');
   pruefe('die Beschriftung im Bild fällt weg', !uebrig.includes('Achse'), 'übrig: ' + uebrig);
   pruefe('der Text daneben bleibt', uebrig.includes('Fliesstext daneben'), 'übrig: ' + uebrig);
@@ -242,7 +245,7 @@ async function laufe() {
 
   /* ── Der Sanitizer ─────────────────────────────────────────────── */
   abschnitt('Was aus dem Umwandler kommt, muss den Sanitizer überstehen');
-  const durch = nb.pages.every(p => sanitizePageHtml(p.textContent) === p.textContent);
+  const durch = nb.pages.every(p => sanitizePageHtml(p.textContent || '') === (p.textContent || ''));
   pruefe('der Text bleibt unverändert', durch, 'der Sanitizer greift ein');
 }
 

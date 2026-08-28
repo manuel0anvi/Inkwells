@@ -13,8 +13,10 @@
      · DIE LAGE. Ein Bild wird über die Matrix des Zeichenbefehls
        gefunden. Sitzt sie falsch, sitzt jedes Bild falsch – und das
        fiele sonst erst am fertigen Heft auf.
-     · DIE REIHENFOLGE. Ein Bild steht zwischen dem Text, der auf dem
-       Blatt darüber und darunter steht, nicht am Ende der Seite.
+     · DIE EIGENE SEITE. Ein Bild wird eine Heftseite und kein Objekt
+       auf einer Seite – als Objekt lag es über dem Text.
+     · DIE REIHENFOLGE. Diese Seite steht zwischen dem Text, der auf dem
+       Blatt darüber und darunter stand.
      · DAS EINGESCANNTE BLATT. Eine Seite ohne Textebene wird ganz zum
        Bild, statt leer zu bleiben.
      · DIE BESCHRIFTUNG IM BILD. Was innerhalb eines Schaubilds steht,

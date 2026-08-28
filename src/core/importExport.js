@@ -364,10 +364,20 @@ window.fillNotebookFromPdf = fillNotebookFromPdf;
    ── Was aber sehr wohl mitkommt ─────────────────────────────────────
    Alles, was auf dem Blatt kein Text ist: Schaubilder, Fotos, Formeln
    als Grafik, eingescannte Ausschnitte. Sie werden aus der gemalten
-   Seite geschnitten und an ihrer Stelle in den Text gesetzt
-   (pdfBildbereiche, pdfSeitenBilder). Vorher fiel bei einem bebilderten
-   Dokument der größere Teil des Inhalts weg, und niemand sah, dass er
-   je da war – „als Text" hieß in Wahrheit „nur die Buchstaben".
+   Seite geschnitten (pdfBildbereiche, pdfSeitenBilder). Vorher fiel bei
+   einem bebilderten Dokument der größere Teil des Inhalts weg, und
+   niemand sah, dass er je da war – „als Text" hieß in Wahrheit „nur
+   die Buchstaben".
+
+   >>> Jedes Bild bekommt eine eigene Seite <<<
+   Und nicht einen Platz im Textfluss. Als Objekt zwischen den Absätzen
+   lag es ÜBER dem Text (canvas/objects.js, z-index 2000), ließ sich
+   verschieben und verrutschte beim nächsten Umbruch – ein Bild, das
+   niemand dorthin gelegt hat, aber jeder wieder wegräumen muss. Als
+   eigene Seite steht es dort, wo es im PDF stand, in voller Breite und
+   ohne etwas zu verdecken. Das Heft wird dadurch länger als das PDF;
+   das ist der Preis und er ist sichtbar, was besser ist als ein Bild,
+   das heimlich einen Absatz zudeckt.
 
    Ein PDF ohne Textebene (ein eingescanntes Blatt) hat für diesen Weg
    gar nichts zu holen. Das wird erkannt und gesagt – der Nutzer bekommt
@@ -565,11 +575,12 @@ function pdfZeileImBereich(z, b) {
  * @param {object} seite   die PDF-Seite
  * @param {Array}  zeilen  ihre Textzeilen (aus pdfZeilen)
  * @param {object} lage    das Ergebnis von pdfBildbereiche
- * @param {object} masse   {faktor, maxBreite, maxHoehe} der Heftseite
  * @returns {Promise<{bilder:Array<{y:number, bild:{src,w,h}}>, zeilen:Array}>}
- *   zeilen = die übrigen; was im Bild steht, fällt heraus
+ *   w und h sind das Maß auf dem Blatt in PDF-Punkten – daraus wird
+ *   später das Seitenverhältnis der Bildseite. zeilen = die übrigen;
+ *   was im Bild steht, fällt heraus
  */
-async function pdfSeitenBilder(seite, zeilen, lage, masse) {
+async function pdfSeitenBilder(seite, zeilen, lage) {
   const blatt = seite.view || [0, 0, 612, 792];
   const blattBreite = Math.max(1, blatt[2] - blatt[0]);
   const blattFlaeche = Math.max(1, blattBreite * (blatt[3] - blatt[1]));
@@ -644,13 +655,11 @@ async function pdfSeitenBilder(seite, zeilen, lage, masse) {
     tctx.fillRect(0, 0, sw, sh);
     tctx.drawImage(blattCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
 
-    /* Vom PDF-Maß ins Heft-Maß: die Breite des Blatts wird zur Textbreite
-       der Heftseite, alles andere folgt im selben Verhältnis. So bleibt
-       ein halbseitiges Schaubild auch im Heft halbseitig. */
-    let w = Math.round((sw / PDF_MAL_STUFE) * masse.faktor);
-    let h = Math.round((sh / PDF_MAL_STUFE) * masse.faktor);
-    if (w > masse.maxBreite) { h = Math.round(h * (masse.maxBreite / w)); w = masse.maxBreite; }
-    if (h > masse.maxHoehe) { w = Math.round(w * (masse.maxHoehe / h)); h = masse.maxHoehe; }
+    /* Das Maß auf dem Blatt, in PDF-Punkten. Gebraucht wird davon nur
+       das Verhältnis: die Bildseite ist so breit wie jede Heftseite,
+       ihre Höhe folgt daraus (makeImagePage). */
+    const w = Math.round(sw / PDF_MAL_STUFE);
+    const h = Math.round(sh / PDF_MAL_STUFE);
     if (w < 8 || h < 8) continue;
 
     bilder.push({ y: b.y1, bild: { src: teil.toDataURL('image/jpeg', 0.72), w, h } });
@@ -728,9 +737,10 @@ function pdfZeilen(inhalt) {
  *
  * @param {Array} eintraege   Textzeilen und Bilder, von oben nach unten
  * @param {number} normal     die übliche Schriftgröße des Dokuments
- * @param {number} zeilenhoehe  eine Textzeile im Heft, in Pixeln
+ * @returns {Array} Blöcke; ein Bild steht als { bildSeite } darin und
+ *   trennt den Text davor von dem danach
  */
-function pdfBloeckeAusZeilen(eintraege, normal, zeilenhoehe) {
+function pdfBloeckeAusZeilen(eintraege, normal) {
   const bloecke = [];
   let absatz = [];
   let letztesY = null;
@@ -743,14 +753,13 @@ function pdfBloeckeAusZeilen(eintraege, normal, zeilenhoehe) {
   };
 
   for (const z of eintraege) {
-    /* Ein Bild steht für sich. Es bekommt so viele leere Absätze, wie es
-       hoch ist – derselbe Platzhalter wie beim Word-Import, und aus dem
-       gleichen Grund: eine Höhenangabe überlebt den Sanitizer nicht,
-       leere Absätze sind gewöhnlicher Text und kommen durch. */
+    /* Ein Bild steht für sich – und zwar auf einer eigenen Seite. Hier
+       wird nur die Stelle vermerkt; die Seite entsteht in
+       fillNotebookFromPdfText, das den Text davor und danach getrennt
+       umbricht. */
     if (z.bild) {
       schliesse();
-      const platz = Math.max(1, Math.ceil(z.bild.h / (zeilenhoehe || 24)));
-      bloecke.push({ html: '<p><br></p>'.repeat(platz), bild: z.bild });
+      bloecke.push({ bildSeite: z.bild });
       letztesY = null;
       letzteGroesse = null;
       continue;
@@ -803,10 +812,6 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
   const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
 
   const bg = nb.defaultBg || 'ruled';
-  const zeilenhoehe = InkwellsDocxPaginate.zeilenhoeheFuer(bg);
-  const nutz = InkwellsDocxPaginate.nutzhoehe(CFG.PAGE_H);
-  // Die nutzbare Textbreite einer Heftseite – .j-text links und rechts
-  const textBreite = CFG.PAGE_W - 72 - 32;
 
   /* Erst den Text aller Seiten und die Lage ihrer Bilder sammeln. Die
      übliche Schriftgroesse laesst sich erst danach bestimmen: ohne sie
@@ -843,14 +848,8 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
   let bilderZahl = 0;
   for (let i = 0; i < proSeite.length; i++) {
     const s = proSeite[i];
-    const blatt = s.seite.view || [0, 0, 612, 792];
-    const masse = {
-      faktor: textBreite / Math.max(1, blatt[2] - blatt[0]),
-      maxBreite: textBreite,
-      maxHoehe: nutz
-    };
     try {
-      const ausbeute = await pdfSeitenBilder(s.seite, s.zeilen, s.lage, masse);
+      const ausbeute = await pdfSeitenBilder(s.seite, s.zeilen, s.lage);
       s.zeilen = ausbeute.zeilen;
       s.bilder = ausbeute.bilder;
       bilderZahl += ausbeute.bilder.length;
@@ -868,7 +867,7 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
        Blatt stehen. Der Nullpunkt eines PDF liegt UNTEN links, ein
        groesseres y heisst also weiter oben. */
     const eintraege = s.zeilen.concat(s.bilder).sort((a, b) => b.y - a.y);
-    const teil = pdfBloeckeAusZeilen(eintraege, normal, zeilenhoehe);
+    const teil = pdfBloeckeAusZeilen(eintraege, normal);
     // Jede PDF-Seite faengt eine neue Heftseite an. Alles andere waere
     // eine Vermutung darueber, ob der Text weiterlaeuft.
     if (idx > 0 && teil.length) teil[0].umbruchDavor = true;
@@ -877,24 +876,45 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
 
   if (!bloecke.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
 
-  const seiten = InkwellsDocxPaginate.verteile(bloecke, {
-    breite: CFG.PAGE_W, hoehe: CFG.PAGE_H, bg
-  });
+  /* Der Text wird abschnittsweise umbrochen: alles bis zum nächsten Bild,
+     dann die Bildseite, dann weiter. Ein Umbruch über das Bild hinweg
+     wäre falsch – was danach kommt, stand im PDF unter dem Bild und darf
+     nicht davor rutschen. */
+  const heftSeiten = [];
+  let puffer = [];
 
-  nb.pages = seiten.map(s => {
-    const pg = makePage(bg);
-    // Durch den Sanitizer, obwohl der Text aus dem eigenen Umwandler
-    // kommt: gebaut ist er aus einer FREMDEN Datei.
-    pg.textContent = typeof sanitizePageHtml === 'function'
-      ? sanitizePageHtml(s.html) : s.html;
-    /* Die Bilder sind Objekte und kein Text – wie beim Word-Import. Wo
-       genau sie sitzen, hat der Umbruch beim Messen bestimmt. */
-    pg.objects = (s.bilder || []).map(b => ({
-      id: uid(), kind: 'image', src: b.src, name: '',
-      x: b.x, y: b.y, w: b.w, h: b.h, rot: 0
-    }));
-    return pg;
-  });
+  const textAbladen = () => {
+    if (!puffer.length) return;
+    const teile = InkwellsDocxPaginate.verteile(puffer, {
+      breite: CFG.PAGE_W, hoehe: CFG.PAGE_H, bg
+    });
+    for (const t of teile) {
+      const pg = makePage(bg);
+      // Durch den Sanitizer, obwohl der Text aus dem eigenen Umwandler
+      // kommt: gebaut ist er aus einer FREMDEN Datei.
+      pg.textContent = typeof sanitizePageHtml === 'function'
+        ? sanitizePageHtml(t.html) : t.html;
+      heftSeiten.push(pg);
+    }
+    puffer = [];
+  };
+
+  for (const block of bloecke) {
+    if (block.bildSeite) {
+      textAbladen();
+      /* Dieselbe Seite wie beim Weg „als Bild": das Bild IST die Seite,
+         nicht ein Ding darauf. Es lässt sich damit nicht versehentlich
+         verschieben, und der Stift schreibt darauf. */
+      heftSeiten.push(makeImagePage(block.bildSeite.src, block.bildSeite.w, block.bildSeite.h));
+      continue;
+    }
+    puffer.push(block);
+  }
+  textAbladen();
+
+  if (!heftSeiten.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
+
+  nb.pages = heftSeiten;
   nb.sections = [];
 
   return {
