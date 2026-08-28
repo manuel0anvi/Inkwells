@@ -85,6 +85,7 @@ function zeigeImportBericht(bericht) {
   const teile = [];
   teile.push((t('importPages') || '{n} Seiten').replace('{n}', bericht.seiten));
   if (bericht.bilder) teile.push((t('importImages') || '{n} Bilder').replace('{n}', bericht.bilder));
+  if (bericht.formen) teile.push((t('importShapes') || '{n} Formen').replace('{n}', bericht.formen));
   if (bericht.tabellen) teile.push((t('importTables') || '{n} Tabellen').replace('{n}', bericht.tabellen));
   /* Der Hintergrund gehoert genannt: er ist das einzige Stueck, das auf
      JEDER Seite landet, und wer ihn nicht wollte, sucht sonst lange. */

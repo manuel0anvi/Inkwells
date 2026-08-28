@@ -1221,10 +1221,21 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
        hat niemand geprueft. Derselbe Riegel wie bei geteilten Heften. */
     pg.textContent = typeof sanitizePageHtml === 'function'
       ? sanitizePageHtml(s.html) : s.html;
-    pg.objects = (s.bilder || []).map(b => ({
-      id: uid(), kind: 'image', src: b.src, name: '',
-      x: b.x, y: b.y, w: b.w, h: b.h, rot: 0
-    }));
+    /* Aus dem Umbruch kommen Bilder und Formen in einer Liste – beide
+       sind Objekte auf der Seite, nur eben verschiedene. */
+    pg.objects = (s.bilder || []).map(b => {
+      const lage = { id: uid(), x: b.x, y: b.y, w: b.w, h: b.h, rot: 0 };
+      if (b.shapeType) {
+        return {
+          ...lage, kind: 'shape', shapeType: b.shapeType,
+          fill: b.fill || 'none',
+          stroke: b.stroke || '#1a1510',
+          strokeWidth: b.strokeWidth || 2,
+          layer: b.layer === 'back' ? 'back' : 'front'
+        };
+      }
+      return { ...lage, kind: 'image', src: b.src, name: '' };
+    });
     /* Der Hintergrund des Dokuments wiederholt sich auf jeder Seite –
        so hält Word ihn, und so sieht man ihn dort. Als bgImg liegt er
        unter dem Text (app.js) und nicht als Bild darüber. */
@@ -1236,6 +1247,7 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
   return {
     seiten: nb.pages.length,
     bilder: bericht.bilder,
+    formen: bericht.formen,
     tabellen: bericht.tabellen,
     hintergrund: bericht.hintergrund,
     verloren: bericht.verloren

@@ -171,7 +171,9 @@ window.__fertig = (async function () {
       + ' xmlns:a="' + I.A + '" xmlns:wp="' + I.WP + '"'
       + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
       + ' xmlns:v="urn:schemas-microsoft-com:vml"'
-      + ' xmlns:o="urn:schemas-microsoft-com:office:office"';
+      + ' xmlns:o="urn:schemas-microsoft-com:office:office"'
+      + ' xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"'
+      + ' xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"';
 
     async function lies(bodyXml, extra) {
       const teile = [
@@ -511,6 +513,133 @@ window.__fertig = (async function () {
     pruefe('Ein Dokument ohne Hintergrund bekommt keinen',
       erg.hintergrund === null && erg.bericht.hintergrund === false,
       JSON.stringify(erg.hintergrund));
+
+
+    /* ══ 4c. WAS BISHER STILL WEGFIEL ══════════════════════════════════
+       Drei Dinge, die ein Word-Dokument aus einer Vorlage ausmachen und
+       die der Leser gar nicht kannte: das Inhaltssteuerelement, in das
+       Word ganze Deckblätter packt, der Text in Formen, und die Formen
+       selbst. Ohne sie blieb von so einem Dokument ein Bild und sonst
+       nichts – genau so wurde es gemeldet. */
+    abschnitt('Steuerelemente, Textrahmen und Formen');
+
+    // Ein Inhaltssteuerelement ist nur eine Hülle
+    erg = await liesRoh('',
+      '<w:sdt><w:sdtContent>'
+      + '<w:p><w:r><w:t>Text im Steuerelement</w:t></w:r></w:p>'
+      + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Zelle</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+      + '</w:sdtContent></w:sdt>', {});
+    let htmlAlles = erg.bloecke.map(b => b.html || '').join('');
+    pruefe('Text aus einem Inhaltssteuerelement kommt an',
+      htmlAlles.includes('Text im Steuerelement'), htmlAlles.slice(0, 120));
+    pruefe('Eine Tabelle darin auch',
+      htmlAlles.includes('<table class="j-table"') && htmlAlles.includes('Zelle'), htmlAlles.slice(0, 200));
+
+    // Text in einem Textrahmen
+    const rahmen = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2857500" cy="952500"/>'
+      + '<wps:wsp><wps:spPr><a:xfrm><a:ext cx="2857500" cy="952500"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"/><a:noFill/></wps:spPr>'
+      + '<wps:txbx><w:txbxContent><w:p><w:r><w:t>Titel im Rahmen</w:t></w:r></w:p></w:txbxContent></wps:txbx>'
+      + '</wps:wsp></wp:inline></w:drawing></w:r></w:p>';
+    erg = await liesRoh('', rahmen, {});
+    htmlAlles = erg.bloecke.map(b => b.html || '').join('');
+    pruefe('Text aus einem Textrahmen kommt an',
+      htmlAlles.includes('Titel im Rahmen'), htmlAlles.slice(0, 160));
+    pruefe('Er kommt nur EINMAL', (htmlAlles.match(/Titel im Rahmen/g) || []).length === 1,
+      (htmlAlles.match(/Titel im Rahmen/g) || []).length + 'x');
+
+    let formen = erg.bloecke.filter(b => b.form);
+    pruefe('Der Rahmen selbst wird eine Form', formen.length === 1, 'gezaehlt: ' + formen.length);
+    /* Eine Form mit Text legt sich HINTER ihn – sonst deckte sie zu, was
+       in ihr steht (canvas/objects.js, z-index 2000). */
+    pruefe('Sie liegt hinter ihrem Text',
+      formen[0] && formen[0].form.layer === 'back', formen[0] && formen[0].form.layer);
+    pruefe('Und sie nimmt die Hoehe ihres Textes an',
+      formen[0] && formen[0].form.passtSichAn === true, 'feste Hoehe');
+
+    // Eine Form ohne Text: Farbe, Strich, Art
+    const kreis = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2857500" cy="1428750"/>'
+      + '<wps:wsp><wps:spPr><a:xfrm><a:ext cx="2857500" cy="1428750"/></a:xfrm>'
+      + '<a:prstGeom prst="ellipse"/>'
+      + '<a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>'
+      + '<a:ln w="19050"><a:solidFill><a:srgbClr val="203864"/></a:solidFill></a:ln>'
+      + '</wps:spPr></wps:wsp></wp:inline></w:drawing></w:r></w:p>';
+    erg = await liesRoh('', kreis, {});
+    formen = erg.bloecke.filter(b => b.form);
+    pruefe('Ein Kreis aus Word wird eine Ellipse',
+      formen.length === 1 && formen[0].form.shapeType === 'ellipse',
+      formen.map(f => f.form.shapeType).join(', '));
+    pruefe('Mit seinem Mass', formen[0] && formen[0].form.w === 300 && formen[0].form.h === 150,
+      formen[0] ? formen[0].form.w + 'x' + formen[0].form.h : '-');
+    pruefe('Mit Fuellung und Strich',
+      formen[0] && formen[0].form.fill === '#4472C4' && formen[0].form.stroke === '#203864',
+      formen[0] ? formen[0].form.fill + ' / ' + formen[0].form.stroke : '-');
+    pruefe('Und mit der Strichbreite', formen[0] && formen[0].form.strokeWidth === 2,
+      formen[0] && formen[0].form.strokeWidth);
+    pruefe('Ohne Text haelt sie ihren Platz frei',
+      formen[0] && !formen[0].form.passtSichAn && /^(<p><br><\/p>)+$/.test(formen[0].html),
+      formen[0] && formen[0].html.slice(0, 40));
+
+    // Die Designfarben aus dem Thema
+    const thema = '<?xml version="1.0"?><a:theme xmlns:a="' + I.A + '"><a:themeElements>'
+      + '<a:clrScheme name="Test">'
+      + '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>'
+      + '<a:accent1><a:srgbClr val="FF6600"/></a:accent1>'
+      + '</a:clrScheme></a:themeElements></a:theme>';
+    const mitDesign = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/>'
+      + '<wps:wsp><wps:spPr><a:xfrm><a:ext cx="952500" cy="952500"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"/>'
+      + '<a:solidFill><a:schemeClr val="accent1"/></a:solidFill>'
+      + '</wps:spPr></wps:wsp></wp:inline></w:drawing></w:r></w:p>';
+    erg = await liesRoh('', mitDesign, { 'word/theme/theme1.xml': thema });
+    formen = erg.bloecke.filter(b => b.form);
+    pruefe('Eine Designfarbe wird aufgeloest',
+      formen[0] && formen[0].form.fill === '#FF6600',
+      formen[0] ? formen[0].form.fill : 'keine Form');
+
+    // Die alte Form
+    const vmlKasten = '<w:p><w:r><w:pict>'
+      + '<v:rect style="width:150pt;height:75pt" fillcolor="#eeeeee" strokecolor="#333333" strokeweight="1.5pt">'
+      + '<v:textbox><w:txbxContent><w:p><w:r><w:t>Alter Kasten</w:t></w:r></w:p></w:txbxContent></v:textbox>'
+      + '</v:rect></w:pict></w:r></w:p>';
+    erg = await liesRoh('', vmlKasten, {});
+    formen = erg.bloecke.filter(b => b.form);
+    htmlAlles = erg.bloecke.map(b => b.html || '').join('');
+    pruefe('Ein Kasten in der alten VML-Form kommt an', formen.length === 1,
+      'gezaehlt: ' + formen.length);
+    pruefe('Mit Farbe und Mass',
+      formen[0] && formen[0].form.fill === '#eeeeee' && formen[0].form.w === 200,
+      formen[0] ? formen[0].form.fill + ' ' + formen[0].form.w : '-');
+    pruefe('Und sein Text steht darin',
+      htmlAlles.includes('Alter Kasten') && (htmlAlles.match(/Alter Kasten/g) || []).length === 1,
+      htmlAlles.slice(0, 120));
+
+    /* Word schreibt eine Zeichnung oft zweimal – heutige Form und
+       Ersatzfassung. Wer beide liest, bekommt htmlAlles doppelt. */
+    const doppelt = '<w:p><w:r><mc:AlternateContent>'
+      + '<mc:Choice Requires="wps"><w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/>'
+      + '<pic:pic><pic:blipFill><a:blip r:embed="rId1"/></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:ext cx="952500" cy="952500"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"/></pic:spPr></pic:pic>'
+      + '</wp:inline></w:drawing></mc:Choice>'
+      + '<mc:Fallback><w:pict><v:shape style="width:100pt;height:100pt">'
+      + '<v:imagedata r:id="rId1"/></v:shape></w:pict></mc:Fallback>'
+      + '</mc:AlternateContent></w:r></w:p>';
+    erg = await liesRoh('', doppelt, {
+      'word/_rels/document.xml.rels': relsXml([['rId1', 'media/a.png']]),
+      'word/media/a.png': bildBytes
+    });
+    pruefe('Eine doppelt geschriebene Zeichnung kommt einmal an',
+      erg.bloecke.filter(b => b.bild).length === 1,
+      'gezaehlt: ' + erg.bloecke.filter(b => b.bild).length);
+    /* Jedes Bild bringt seine eigene Geometrie mit (prstGeom im pic:spPr).
+       Wer die als Form nimmt, setzt hinter jedes Bild ein Rechteck. */
+    pruefe('Die Geometrie eines Bildes wird keine Form',
+      erg.bloecke.filter(b => b.form).length === 0,
+      'gezaehlt: ' + erg.bloecke.filter(b => b.form).length);
+
+    pruefe('Der Bericht zaehlt die Formen', typeof erg.bericht.formen === 'number',
+      JSON.stringify(erg.bericht));
 
     /* ══ 5. DER RUNDLAUF ════════════════════════════════════════════
        Ein Heft durch den eigenen Word-Export und wieder zurück. Das ist

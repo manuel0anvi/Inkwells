@@ -50,6 +50,7 @@
      schreibt sie bis heute für Wasserzeichen und Dokumenthintergründe. */
   const V = 'urn:schemas-microsoft-com:vml';
   const O = 'urn:schemas-microsoft-com:office:office';
+  const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
   const EMU_PER_PX = 9525;          // wie in core/docx.js
 
@@ -439,6 +440,34 @@
    * Maße aus wp:extent (EMU). Fehlen sie, wird die natürliche Größe
    * später beim Einsetzen ermittelt – deshalb hier 0 statt geraten.
    */
+  /* ══════════════════════════════════════════════════════════════════
+     DASSELBE ZWEIMAL
+
+     Word schreibt eine Zeichnung oft doppelt: einmal in der heutigen
+     Form (mc:Choice) und einmal als VML für Word 2007 (mc:Fallback).
+     Wer beide liest, bekommt jedes Bild und jeden Textrahmen doppelt –
+     und das fiel erst auf, seit die alte Form überhaupt gelesen wird.
+
+     Genommen wird deshalb nur die Wahl; die Ersatzfassung wird
+     übergangen, sobald es eine gibt.
+     ══════════════════════════════════════════════════════════════════ */
+  function istErsatzfassung(el) {
+    let k = el;
+    while (k && k.nodeType === 1) {
+      if (k.namespaceURI === MC && k.localName === 'Fallback') {
+        const eltern = k.parentNode;
+        if (eltern && eltern.nodeType === 1) {
+          for (const geschwister of eltern.children) {
+            if (geschwister.namespaceURI === MC && geschwister.localName === 'Choice') return true;
+          }
+        }
+        return false;
+      }
+      k = k.parentNode;
+    }
+    return false;
+  }
+
   /**
    * Die Datei hinter einer Beziehungskennung, als data:-Adresse.
    *
@@ -501,12 +530,42 @@
   function vmlBilder(pict, beziehungen, dateien) {
     const aus = [];
     for (const daten of pict.getElementsByTagNameNS(V, 'imagedata')) {
+      if (istErsatzfassung(daten)) continue;
       const rId = daten.getAttributeNS(R, 'id') || daten.getAttributeNS(R, 'href');
       if (!rId) continue;
       const src = bildDatenZu(rId, beziehungen, dateien);
       if (!src) continue;
       const mass = vmlMass(daten.parentNode);
       aus.push({ src, w: mass.w, h: mass.h });
+    }
+    return aus;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     TEXT, DER IN EINER FORM STEHT
+
+     Ein Textrahmen ist in Word keine Kiste um einen Absatz, sondern eine
+     FORM mit Text darin (w:txbxContent). Auf Deckblättern und in
+     Vorlagen steht so ziemlich alles darin: Titel, Untertitel, das Feld
+     mit dem Datum.
+
+     Gelesen wurde davon nichts. Der Absatz drumherum war leer, das Bild
+     daneben kam an – und im Heft sah es aus, als bestünde die Seite nur
+     aus diesem einen Bild. Genau so wurde es gemeldet.
+
+     Der Inhalt wird deshalb wie gewöhnlicher Text übernommen, mit
+     derselben Schleife wie der Rest des Dokuments. Was er NICHT behält,
+     ist seine Stelle auf dem Blatt: er steht danach dort, wo die Form
+     stand, und nicht daneben. Das Layout nachzubauen versucht dieser
+     Import nirgends.
+     ══════════════════════════════════════════════════════════════════ */
+  function textrahmenIn(p, ctx) {
+    const aus = [];
+    for (const rahmen of p.getElementsByTagNameNS(W, 'txbxContent')) {
+      if (istErsatzfassung(rahmen)) continue;
+      // Was in einer erkannten Form steht, ist dort schon herausgeholt
+      if (ctx.rahmenErledigt && ctx.rahmenErledigt.has(rahmen)) continue;
+      for (const block of bloeckeIn(rahmen, ctx)) aus.push(block);
     }
     return aus;
   }
@@ -533,6 +592,7 @@
       } : { w: 0, h: 0 };
 
       for (const blip of zeichnung.getElementsByTagNameNS(A, 'blip')) {
+        if (istErsatzfassung(blip)) continue;
         const rId = blip.getAttributeNS(R, 'embed') || blip.getAttributeNS(R, 'link');
         if (!rId) continue;
         const src = bildDatenZu(rId, beziehungen, dateien);
@@ -821,6 +881,21 @@
     for (const el of wurzel.children) {
       if (el.namespaceURI !== W) continue;
 
+      /* Ein Inhaltssteuerelement ist nur eine Hülle – Word packt damit
+         Deckblätter, Formularfelder und ganze Kapitel ein. Sie wurde
+         übersprungen, und mit ihr ALLES darin: Absätze, Tabellen,
+         Bilder. Bei einem Dokument aus einer Word-Vorlage blieb davon
+         fast nichts übrig. */
+      if (el.localName === 'sdt') {
+        listeSchliessen();
+        for (const inhalt of el.children) {
+          if (inhalt.namespaceURI === W && inhalt.localName === 'sdtContent') {
+            bloecke.push(...bloeckeIn(inhalt, ctx));
+          }
+        }
+        continue;
+      }
+
       if (el.localName === 'p') {
         const lage = listenLage(el, ctx);
 
@@ -861,6 +936,18 @@
           if (nurBild && block.umbruchDavor) platz.umbruchDavor = true;
           bloecke.push(platz);
         }
+
+        /* Formen VOR den übrigen Textrahmen: eine Form nimmt den Text,
+           der in ihr steht, selbst mit. Was danach noch an Rahmen
+           übrig ist, gehört zu keiner erkannten Form. */
+        for (const eintrag of formenIn(el, ctx)) {
+          bloecke.push(blockFuerForm(eintrag, ctx));
+        }
+
+        /* Nach dem Bild, weil ein Textrahmen in Word über oder neben
+           dem Bild liegt – ohne Stelle im Blatt ist „danach" die
+           ehrlichere Reihenfolge als „mittendrin". */
+        bloecke.push(...textrahmenIn(el, ctx));
         continue;
       }
 
@@ -910,6 +997,227 @@
     };
   }
 
+
+  /* ══════════════════════════════════════════════════════════════════
+     FORMEN
+
+     Ein Rechteck, ein Kreis, ein Pfeil, ein Textrahmen: in Word sind das
+     Formen, und gelesen wurde davon bisher keine einzige. Sie fielen
+     stillschweigend weg – auf einem Deckblatt, das aus einem farbigen
+     Balken und zwei Textrahmen besteht, blieb danach ein leeres Blatt.
+
+     Word hält sie auf zwei Wegen, und beide werden gelesen:
+
+       DrawingML   <a:prstGeom prst="rect"> in einem wps:wsp
+       VML         <v:rect>, <v:oval>, <v:line>, <v:roundrect>
+
+     >>> Was übersetzt wird und was nicht <<<
+     Inkwells kennt fünf Formen (canvas/shapes.js). Word kennt über
+     hundert. Jede wird auf die nächstliegende abgebildet, alles Übrige
+     auf das Rechteck – ein Kasten an der richtigen Stelle sagt mehr als
+     gar nichts, und eine halbe Nachbildung von „gewellter Pfeil nach
+     links" wäre schlechter als ein ehrliches Rechteck.
+
+     >>> Warum eine Form mit Text nach HINTEN kommt <<<
+     Objekte liegen über dem Textfeld (canvas/objects.js). Ein gefüllter
+     Kasten über seinem eigenen Text machte ihn unlesbar. Formen mit Text
+     bekommen deshalb layer:'back' und passen sich in der Höhe an das an,
+     was in ihnen steht.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /** prst-Name aus Word → eine der fünf Formen des Hefts. */
+  function formArt(prst, mitSpitze) {
+    const n = String(prst || '').toLowerCase();
+    if (mitSpitze) return 'arrow';
+    if (/arrow/.test(n)) return 'arrow';
+    if (/^(line|straightconnector|bentconnector|curvedconnector)/.test(n)) return 'line';
+    if (/^(ellipse|circle|flowchartconnector|donut|pie|teardrop|moon|sun)/.test(n)) return 'ellipse';
+    if (/triangle|flowchartextract|flowchartmerge/.test(n)) return 'triangle';
+    return 'rect';
+  }
+
+  /* Die Designfarben aus theme1.xml. Ohne sie bekäme jede Form aus einer
+     Word-Vorlage dieselbe Ersatzfarbe – und die meisten Formen benutzen
+     genau diese Namen (accent1, tx1, …) statt eines festen Wertes. */
+  function leseDesignfarben(dateien) {
+    const map = new Map();
+    const doc = alsXml(dateien.get('word/theme/theme1.xml'));
+    if (!doc) return map;
+    const schema = doc.getElementsByTagNameNS(A, 'clrScheme')[0];
+    if (!schema) return map;
+
+    for (const eintrag of schema.children) {
+      const wert = eintrag.getElementsByTagNameNS(A, 'srgbClr')[0];
+      const system = eintrag.getElementsByTagNameNS(A, 'sysClr')[0];
+      const hex = (wert && wert.getAttribute('val'))
+        || (system && system.getAttribute('lastClr'));
+      if (hex) map.set(eintrag.localName, '#' + hex);
+    }
+    /* Word schreibt in den Formen dk1/lt1, im Design heissen dieselben
+       Farben tx1/bg1. Beide Namen zeigen auf denselben Wert. */
+    if (map.has('dk1') && !map.has('tx1')) map.set('tx1', map.get('dk1'));
+    if (map.has('lt1') && !map.has('bg1')) map.set('bg1', map.get('lt1'));
+    if (map.has('dk2') && !map.has('tx2')) map.set('tx2', map.get('dk2'));
+    if (map.has('lt2') && !map.has('bg2')) map.set('bg2', map.get('lt2'));
+    return map;
+  }
+
+  /** Eine Farbangabe aus DrawingML – fester Wert oder Designfarbe. */
+  function farbeAusFill(halter, ctx, ersatz) {
+    if (!halter) return ersatz;
+    if (halter.getElementsByTagNameNS(A, 'noFill').length) return 'none';
+
+    const fest = halter.getElementsByTagNameNS(A, 'srgbClr')[0];
+    if (fest && fest.getAttribute('val')) return '#' + fest.getAttribute('val');
+
+    const design = halter.getElementsByTagNameNS(A, 'schemeClr')[0];
+    if (design) {
+      const name = design.getAttribute('val');
+      if (ctx.designfarben && ctx.designfarben.has(name)) return ctx.designfarben.get(name);
+    }
+    return ersatz;
+  }
+
+  /** Steckt dieses Element in einem Bild? Dessen Geometrie ist keine Form. */
+  function inBild(el) {
+    let k = el.parentNode;
+    while (k && k.nodeType === 1) {
+      if (k.localName === 'pic') return true;
+      k = k.parentNode;
+    }
+    return false;
+  }
+
+  /** Die Form, zu der diese Geometrie gehört (wps:wsp oder a:sp). */
+  function formVorfahr(el) {
+    let k = el.parentNode;
+    while (k && k.nodeType === 1) {
+      if (k.localName === 'wsp' || k.localName === 'sp') return k;
+      k = k.parentNode;
+    }
+    return null;
+  }
+
+  /** Formen in DrawingML. */
+  function drawingFormen(p, ctx) {
+    const aus = [];
+    for (const geom of p.getElementsByTagNameNS(A, 'prstGeom')) {
+      if (istErsatzfassung(geom) || inBild(geom)) continue;
+
+      const sp = formVorfahr(geom);
+      if (!sp) continue;
+
+      const spPr = geom.parentNode;
+      const ext = spPr && spPr.getElementsByTagNameNS(A, 'ext')[0];
+      const w = ext ? Math.round(parseInt(ext.getAttribute('cx'), 10) / EMU_PER_PX) : 0;
+      const h = ext ? Math.round(parseInt(ext.getAttribute('cy'), 10) / EMU_PER_PX) : 0;
+      if (w < 4 || h < 4) continue;        // Zierrat, kein Inhalt
+
+      const ln = spPr.getElementsByTagNameNS(A, 'ln')[0];
+      const spitze = !!(ln && (ln.getElementsByTagNameNS(A, 'tailEnd').length
+        || ln.getElementsByTagNameNS(A, 'headEnd').length));
+      const strichBreite = ln && ln.getAttribute('w')
+        ? Math.max(1, Math.round(parseInt(ln.getAttribute('w'), 10) / EMU_PER_PX))
+        : 2;
+
+      /* Die Füllung steht direkt im spPr, der Strich in dessen a:ln –
+         wer im ganzen spPr nach einer Farbe sucht, findet für beide
+         dieselbe. Deshalb wird die Füllung ohne den Strichteil gesucht. */
+      const fuellung = [...spPr.children].find(k => /Fill$/.test(k.localName));
+
+      const html = [];
+      for (const rahmen of sp.getElementsByTagNameNS(W, 'txbxContent')) {
+        if (istErsatzfassung(rahmen)) continue;
+        ctx.rahmenErledigt.add(rahmen);
+        for (const block of bloeckeIn(rahmen, ctx)) html.push(block.html || '');
+      }
+
+      aus.push({
+        form: {
+          shapeType: formArt(geom.getAttribute('prst'), spitze),
+          w, h,
+          fill: farbeAusFill(fuellung, ctx, 'none'),
+          stroke: farbeAusFill(ln, ctx, '#1a1510'),
+          strokeWidth: strichBreite
+        },
+        html: html.join('')
+      });
+    }
+    return aus;
+  }
+
+  /** Formen in der alten VML-Form. */
+  function vmlFormen(p, ctx) {
+    const aus = [];
+    const arten = { rect: 'rect', roundrect: 'rect', oval: 'ellipse', line: 'line', shape: 'rect' };
+
+    for (const el of p.getElementsByTagNameNS(V, '*')) {
+      const art = arten[el.localName];
+      if (!art) continue;
+      if (istErsatzfassung(el)) continue;
+      // Ein v:shape mit Bild ist ein Bild und wurde schon genommen
+      if (el.getElementsByTagNameNS(V, 'imagedata').length) continue;
+
+      const mass = vmlMass(el);
+      if (mass.w < 4 || mass.h < 4) continue;
+
+      const gefuellt = el.getAttribute('filled') !== 'f';
+      const gestrichen = el.getAttribute('stroked') !== 'f';
+      const strich = parseFloat(el.getAttribute('strokeweight') || '1');
+
+      const html = [];
+      for (const rahmen of el.getElementsByTagNameNS(W, 'txbxContent')) {
+        ctx.rahmenErledigt.add(rahmen);
+        for (const block of bloeckeIn(rahmen, ctx)) html.push(block.html || '');
+      }
+
+      aus.push({
+        form: {
+          shapeType: art,
+          w: mass.w, h: mass.h,
+          fill: gefuellt ? (el.getAttribute('fillcolor') || '#ffffff') : 'none',
+          stroke: gestrichen ? (el.getAttribute('strokecolor') || '#1a1510') : 'none',
+          strokeWidth: Number.isFinite(strich) ? Math.max(1, Math.round(strich * 96 / 72)) : 2
+        },
+        html: html.join('')
+      });
+    }
+    return aus;
+  }
+
+  /** Alle Formen eines Absatzes, mit dem Text, der in ihnen steht. */
+  function formenIn(p, ctx) {
+    return drawingFormen(p, ctx).concat(vmlFormen(p, ctx));
+  }
+
+  /**
+   * Ein Block für eine Form.
+   *
+   * Steht Text darin, bildet dieser den Block und die Form legt sich
+   * dahinter – sie bekommt beim Umbruch die Höhe, die der Text wirklich
+   * einnimmt (core/docxPaginate.js, passtSichAn). Ohne Text hält sie
+   * ihre eigene Höhe frei, wie ein Bild.
+   */
+  function blockFuerForm(eintrag, ctx) {
+    let { w, h } = eintrag.form;
+    if (w > TEXT_BREITE) {
+      h = Math.round(h * (TEXT_BREITE / w));
+      w = TEXT_BREITE;
+    }
+    if (ctx.maxBildHoehe && h > ctx.maxBildHoehe) {
+      w = Math.round(w * (ctx.maxBildHoehe / h));
+      h = ctx.maxBildHoehe;
+    }
+    ctx.formen++;
+
+    const form = { ...eintrag.form, w, h };
+
+    if (eintrag.html && eintrag.html.replace(/<[^>]+>/g, '').trim()) {
+      return { html: eintrag.html, form: { ...form, layer: 'back', passtSichAn: true } };
+    }
+    const zeilen = Math.max(1, Math.ceil(h / ctx.zeilenhoehe));
+    return { html: '<p><br></p>'.repeat(zeilen), form };
+  }
 
   /* ══════════════════════════════════════════════════════════════════
      DER HINTERGRUND EINES WORD-DOKUMENTS
@@ -1005,10 +1313,15 @@
       beziehungen: leseBeziehungen(dateien),
       nummerierung: leseNummerierung(dateien),
       vorlagen: leseVorlagen(dateien),
+      designfarben: leseDesignfarben(dateien),
       zeilenhoehe: optionen.zeilenhoehe || 32,
       maxBildHoehe: optionen.maxBildHoehe || 0,
       verloren: new Set(),
+      /* Welche Textrahmen eine Form schon mitgenommen hat – sonst käme
+         ihr Inhalt zweimal, einmal in der Form und einmal daneben. */
+      rahmenErledigt: new Set(),
       bilder: 0,
+      formen: 0,
       tabellen: 0
     };
 
@@ -1021,6 +1334,7 @@
       bericht: {
         bloecke: bloecke.length,
         bilder: ctx.bilder,
+        formen: ctx.formen,
         tabellen: ctx.tabellen,
         hintergrund: !!hintergrund,
         verloren: [...ctx.verloren]
@@ -1036,6 +1350,7 @@
       kind, kinder, anAus, farbeVon, ausrichtungsKlasse, laufZuHtml,
       hatSeitenumbruch, escapeHtml, LISTEN_FORM, istAufzaehlung,
       bloeckeIn, absatzZuHtml, tabelleZuHtml, alsDataUrl, platzhalterFuer,
+      formenIn, blockFuerForm, formArt, leseDesignfarben, textrahmenIn,
       W, R, A, WP, EMU_PER_PX, TEXT_BREITE
     }
   };

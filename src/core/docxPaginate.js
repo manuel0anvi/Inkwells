@@ -193,7 +193,7 @@
   /**
    * Verteilt Blöcke auf Seiten.
    *
-   * @param {Array<{html:string, bild?:object, umbruchDavor?:boolean}>} bloecke
+   * @param {Array<{html:string, bild?:object, form?:object, umbruchDavor?:boolean}>} bloecke
    * @param {object} optionen
    * @param {number} [optionen.breite]   Seitenbreite
    * @param {number} [optionen.hoehe]    Seitenhöhe
@@ -263,7 +263,7 @@
           const rest = teileZuHohen(neue, feld, feldOben() + grenze, block);
           // Was gemessen auf die Seite passt, bleibt stehen
           aktuell.teile = [...feld.children];
-          if (block.bild) aktuell.bilder.push(bildLage(feld, block, feldOben()));
+          if (block.bild || block.form) aktuell.bilder.push(objektLage(feld, block, feldOben()));
           seiteSchliessen();
 
           if (rest && rest.length) {
@@ -275,7 +275,7 @@
         }
 
         aktuell.teile = [...feld.children];
-        if (block.bild) aktuell.bilder.push(bildLage(feld, block, feldOben()));
+        if (block.bild || block.form) aktuell.bilder.push(objektLage(feld, block, feldOben()));
 
         if (optionen.onFortschritt && (i % 25 === 0)) optionen.onFortschritt(i, bloecke.length);
       }
@@ -289,24 +289,45 @@
   }
 
   /**
-   * Wo genau liegt das Bild zu diesem Platzhalter?
+   * Wo genau liegt das Objekt zu diesem Platzhalter?
    *
    * Der Platzhalter besteht aus leeren Absätzen; sein oberster Rand ist
-   * die Stelle, an der das Bild anfangen soll. Gerechnet wird relativ
+   * die Stelle, an der das Objekt anfangen soll. Gerechnet wird relativ
    * zum Textfeld und dann um dessen Lage auf der Seite verschoben –
    * Objekte sitzen in Seitenkoordinaten (canvas/objects.js).
+   *
+   * Eine Form mit Text hält keinen Platz frei, sondern legt sich um den
+   * Text, der ohnehin dort steht (passtSichAn). Ihre Höhe steht deshalb
+   * erst hier fest – vorher weiss niemand, wie viele Zeilen es werden.
    */
-  function bildLage(feld, block, feldObenY) {
-    const anzahl = (block.html.match(/<p>/g) || []).length;
+  function objektLage(feld, block, feldObenY) {
+    const q = block.bild || block.form;
     const kinder = [...feld.children];
+
+    if (q.passtSichAn) {
+      const halter = document.createElement('div');
+      halter.innerHTML = block.html;
+      const anzahl = Math.max(1, halter.children.length);
+      const erste = kinder[kinder.length - anzahl] || kinder[kinder.length - 1];
+      const letzte = kinder[kinder.length - 1];
+      if (!erste || !letzte) return { ...q, x: TEXT_LEFT, y: TEXT_TOP };
+      const oben = erste.getBoundingClientRect().top - feldObenY;
+      const unten = letzte.getBoundingClientRect().bottom - feldObenY;
+      return {
+        ...q,
+        h: Math.max(8, Math.round(unten - oben)),
+        x: TEXT_LEFT,
+        y: Math.round(TEXT_TOP + TEXT_PADDING_TOP + oben)
+      };
+    }
+
+    const anzahl = (block.html.match(/<p>/g) || []).length;
     const erste = kinder[kinder.length - anzahl] || kinder[kinder.length - 1];
-    if (!erste) return { ...block.bild, x: TEXT_LEFT, y: TEXT_TOP };
+    if (!erste) return { ...q, x: TEXT_LEFT, y: TEXT_TOP };
 
     const oben = erste.getBoundingClientRect().top - feldObenY;
     return {
-      src: block.bild.src,
-      w: block.bild.w,
-      h: block.bild.h,
+      ...q,
       x: TEXT_LEFT,
       y: Math.round(TEXT_TOP + TEXT_PADDING_TOP + oben)
     };
@@ -320,8 +341,9 @@
    */
   function teileZuHohen(neue, feld, grenzeY, block) {
     /* Ein Bild-Platzhalter wird nicht geteilt – ein halbes Bild auf zwei
-       Seiten wäre schlimmer als eine kurze Seite davor. */
-    if (block.bild) return null;
+       Seiten wäre schlimmer als eine kurze Seite davor. Für eine Form
+       gilt dasselbe: ihr Rahmen liefe sonst über den Seitenrand. */
+    if (block.bild || block.form) return null;
 
     const rest = [];
 
