@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Die echte Darstellung: der Seitenumbruch misst gerenderten Text, und
+     ohne pages.css bekäme er die Abstände des Browsers statt die des
+     Hefts. base.css muss mit, dort steht `* { margin: 0 }`. -->
+<link rel="stylesheet" href="../../src/css/base.css">
+<link rel="stylesheet" href="../../src/css/pages.css">
+</head>
+<body>
+
+<script>
+/* Was importExport.js aus der App erwartet. Der Weg „PDF als Text"
+   selbst greift auf nichts davon zu – gebraucht wird es nur, damit die
+   Datei sich überhaupt laden lässt. */
+const CFG = { PAGE_W: 794, PAGE_H: 1123, HDR: 58 };
+const S = { readOnly: false };
+function uid() { return 'x' + Math.random().toString(36).slice(2, 10); }
+function makePage(bg) {
+  return { id: uid(), date: new Date().toISOString(), bg: bg,
+           textContent: '', inkStrokes: [], objects: [] };
+}
+function makeImagePage() { return makePage('blank'); }
+function E() { return null; }
+function t() { return ''; }
+function toast() {}
+function getNb() { return null; }
+function getPage() { return null; }
+</script>
+
+<script src="../../src/lib/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '../../src/lib/pdf.worker.min.js';
+</script>
+<script src="../../src/core/sanitize.js"></script>
+<script src="../../src/core/docxPaginate.js"></script>
+<script src="../../src/core/importExport.js"></script>
+
+<script>
+const zeilen = [];
+function abschnitt(name) { zeilen.push(''); zeilen.push(name); }
+function pruefe(was, bedingung, hinweis) {
+  zeilen.push((bedingung ? 'ok   ' : 'FEHL ') + was + (bedingung ? '' : '  -> ' + hinweis));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EIN PDF VON HAND
+
+   Von Hand, weil nur so vorher feststeht, wo jedes Bild sitzt: der
+   Befehl `q 200 0 0 100 100 500 cm /Im0 Do Q` malt es genau von
+   (100|500) bis (300|600), gemessen vom UNTEREN linken Blattrand. Was
+   der Umwandler daraus macht, lässt sich damit auf den Punkt vergleichen.
+
+   Drei Seiten, drei Fälle:
+     1  Text – Bild – Text, in dieser Reihenfolge auf dem Blatt
+     2  nur ein blattfüllendes Bild, kein Zeichen Text (ein Scan)
+     3  ein Schaubild mit einer Beschriftung mittendrin
+   ══════════════════════════════════════════════════════════════════════ */
+function baueTestPdf() {
+  const enc = new TextEncoder();
+  const teile = [];
+  let laenge = 0;
+
+  function schreibe(x) {
+    const b = typeof x === 'string' ? enc.encode(x) : x;
+    teile.push(b);
+    laenge += b.length;
+  }
+
+  // 2×2 Pixel in Rot, Grün, Blau, Gelb – der Inhalt ist gleichgültig
+  const bild = new Uint8Array([255,0,0, 0,255,0, 0,0,255, 255,255,0]);
+
+  const inhalt1 =
+    'BT /F1 12 Tf 72 720 Td (Erste Zeile ueber dem Bild) Tj ET\n' +
+    'BT /F1 12 Tf 72 300 Td (Zeile unter dem Bild) Tj ET\n' +
+    'q 200 0 0 100 100 500 cm /Im0 Do Q\n';
+  const inhalt2 =
+    'q 580 0 0 750 16 21 cm /Im0 Do Q\n';
+  const inhalt3 =
+    'BT /F1 8 Tf 150 560 Td (Achse) Tj ET\n' +
+    'q 200 0 0 100 100 500 cm /Im0 Do Q\n' +
+    'BT /F1 12 Tf 72 300 Td (Fliesstext daneben und darunter) Tj ET\n';
+
+  const seite = (nr, inhaltNr) =>
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources ` +
+    `<< /Font << /F1 9 0 R >> /XObject << /Im0 10 0 R >> >> /Contents ${inhaltNr} 0 R >>`;
+
+  const stromObj = (s) =>
+    `<< /Length ${enc.encode(s).length} >>\nstream\n${s}endstream`;
+
+  const objekte = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>',
+    seite(1, 4),
+    stromObj(inhalt1),
+    seite(2, 6),
+    stromObj(inhalt2),
+    seite(3, 8),
+    stromObj(inhalt3),
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    { kopf: `<< /Type /XObject /Subtype /Image /Width 2 /Height 2 ` +
+            `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${bild.length} >>`,
+      daten: bild }
+  ];
+
+  schreibe('%PDF-1.4\n');
+
+  const versatz = [];
+  objekte.forEach((o, i) => {
+    versatz[i + 1] = laenge;
+    schreibe(`${i + 1} 0 obj\n`);
+    if (typeof o === 'string') {
+      schreibe(o + '\n');
+    } else {
+      schreibe(o.kopf + '\nstream\n');
+      schreibe(o.daten);
+      schreibe('\nendstream\n');
+    }
+    schreibe('endobj\n');
+  });
+
+  const xrefBei = laenge;
+  const fuenf = (n) => String(n).padStart(5, '0');
+  const zehn = (n) => String(n).padStart(10, '0');
+  let xref = `xref\n0 ${objekte.length + 1}\n${zehn(0)} ${fuenf(65535)} f \n`;
+  for (let i = 1; i <= objekte.length; i++) xref += `${zehn(versatz[i])} ${fuenf(0)} n \n`;
+  schreibe(xref);
+  schreibe(`trailer\n<< /Size ${objekte.length + 1} /Root 1 0 R >>\nstartxref\n${xrefBei}\n%%EOF\n`);
+
+  const alles = new Uint8Array(laenge);
+  let bei = 0;
+  for (const b of teile) { alles.set(b, bei); bei += b.length; }
+  return alles;
+}
+
+/** Bytes → data:-Adresse, wie sie sonst aus dem Dateiwähler kommt. */
+function alsDataUrl(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return 'data:application/pdf;base64,' + btoa(s);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE PRÜFUNGEN
+   ══════════════════════════════════════════════════════════════════════ */
+async function laufe() {
+  const bytes = baueTestPdf();
+  const dataUrl = alsDataUrl(bytes);
+
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+  pruefe('das gebaute PDF hat drei Seiten', pdf.numPages === 3, 'gelesen: ' + pdf.numPages);
+
+  /* ── Die Lage ──────────────────────────────────────────────────── */
+  abschnitt('Wo das Bild auf dem Blatt sitzt');
+
+  const seite1 = await pdf.getPage(1);
+  const lage1 = await pdfBildbereiche(seite1);
+  pruefe('genau eine Bildstelle gefunden', lage1.bereiche.length === 1,
+    'gefunden: ' + lage1.bereiche.length);
+
+  const b = lage1.bereiche[0] || { x0: 0, y0: 0, x1: 0, y1: 0 };
+  const nah = (a, soll) => Math.abs(a - soll) < 0.5;
+  pruefe('sie steht bei (100|500) bis (300|600)',
+    nah(b.x0, 100) && nah(b.y0, 500) && nah(b.x1, 300) && nah(b.y1, 600),
+    `bekommen: (${b.x0}|${b.y0}) bis (${b.x1}|${b.y1})`);
+
+  /* ── Der ganze Weg ─────────────────────────────────────────────── */
+  abschnitt('Das fertige Heft');
+
+  const nb = { defaultBg: 'ruled', pages: [], sections: [] };
+  const bericht = await fillNotebookFromPdfText(nb, dataUrl);
+
+  pruefe('das Heft ist nicht leer', bericht.leer === false, 'leer gemeldet');
+  pruefe('drei Bilder übernommen', bericht.bilder === 3, 'gemeldet: ' + bericht.bilder);
+
+  const objekte = nb.pages.flatMap(p => p.objects || []);
+  pruefe('drei Bild-Objekte im Heft', objekte.length === 3, 'gezählt: ' + objekte.length);
+  pruefe('jedes trägt ein Bild', objekte.every(o => o.kind === 'image' && /^data:image\//.test(o.src)),
+    'eines ohne src');
+  pruefe('keines ist breiter als die Textbreite', objekte.every(o => o.w <= CFG.PAGE_W - 104),
+    'zu breit: ' + objekte.map(o => o.w).join(', '));
+  pruefe('keines ist höher als die Seite', objekte.every(o => o.h < CFG.PAGE_H),
+    'zu hoch: ' + objekte.map(o => o.h).join(', '));
+
+  /* 200 pt breit auf einem 612 pt breiten Blatt sind knapp ein Drittel.
+     Genauso soll es im Heft aussehen – 690 Punkte Textbreite mal 200/612. */
+  const sollBreite = Math.round(690 * (200 / 612));
+  const kleine = objekte.filter(o => Math.abs(o.w - sollBreite) <= 2);
+  pruefe('das Schaubild behält sein Verhältnis zum Blatt', kleine.length === 2,
+    `erwartet 2 Bilder mit ${sollBreite} px, gefunden: ` + objekte.map(o => o.w).join(', '));
+  pruefe('und sein Seitenverhältnis', kleine.every(o => Math.abs(o.h - o.w / 2) <= 2),
+    'Höhen: ' + kleine.map(o => o.h).join(', '));
+
+  /* ── Die Reihenfolge ───────────────────────────────────────────── */
+  abschnitt('Text und Bild in der Reihenfolge des Blatts');
+
+  const text = nb.pages.map(p => p.textContent).join('\n');
+  pruefe('der Text über dem Bild ist da', text.includes('Erste Zeile ueber dem Bild'), text.slice(0, 120));
+  pruefe('der Text unter dem Bild ist da', text.includes('Zeile unter dem Bild'), text.slice(0, 120));
+  pruefe('und steht auch dahinter',
+    text.indexOf('Erste Zeile ueber dem Bild') < text.indexOf('Zeile unter dem Bild'),
+    'die Reihenfolge stimmt nicht');
+
+  const heft1 = nb.pages[0];
+  const objekt1 = (heft1.objects || [])[0];
+  pruefe('das Bild sitzt auf der ersten Heftseite', !!objekt1, 'keines da');
+  if (objekt1) {
+    /* Zwischen den beiden Absätzen, nicht am Seitenanfang und nicht am
+       Rand: die erste Zeile steht oben, das Bild kommt darunter. */
+    pruefe('es steht unterhalb der ersten Zeile', objekt1.y > 80, 'y = ' + objekt1.y);
+    pruefe('es bleibt auf der Seite', objekt1.y + objekt1.h < CFG.PAGE_H, 'y+h = ' + (objekt1.y + objekt1.h));
+  }
+
+  /* ── Das eingescannte Blatt ────────────────────────────────────── */
+  abschnitt('Eine Seite ohne Textebene');
+
+  const seite2 = await pdf.getPage(2);
+  const lage2 = await pdfBildbereiche(seite2);
+  const masse = { faktor: 690 / 612, maxBreite: 690, maxHoehe: 1000 };
+  const ergebnis2 = await pdfSeitenBilder(seite2, [], lage2, masse);
+  pruefe('sie wird ganz zum Bild', ergebnis2.bilder.length === 1,
+    'Bilder: ' + ergebnis2.bilder.length);
+  pruefe('das Bild füllt die Textbreite', ergebnis2.bilder.length > 0 && ergebnis2.bilder[0].bild.w > 600,
+    'Breite: ' + (ergebnis2.bilder[0] && ergebnis2.bilder[0].bild.w));
+
+  /* ── Die Beschriftung im Schaubild ─────────────────────────────── */
+  abschnitt('Beschriftung innerhalb eines Bildes');
+
+  const seite3 = await pdf.getPage(3);
+  const zeilen3 = pdfZeilen(await seite3.getTextContent());
+  pruefe('ungefiltert stehen beide Zeilen auf der Seite', zeilen3.length === 2,
+    'gefunden: ' + zeilen3.length);
+
+  const lage3 = await pdfBildbereiche(seite3);
+  const ergebnis3 = await pdfSeitenBilder(seite3, zeilen3, lage3, masse);
+  const uebrig = ergebnis3.zeilen.map(z => z.text).join(' | ');
+  pruefe('die Beschriftung im Bild fällt weg', !uebrig.includes('Achse'), 'übrig: ' + uebrig);
+  pruefe('der Text daneben bleibt', uebrig.includes('Fliesstext daneben'), 'übrig: ' + uebrig);
+  pruefe('das Schaubild kommt trotzdem mit', ergebnis3.bilder.length === 1,
+    'Bilder: ' + ergebnis3.bilder.length);
+
+  /* ── Der Sanitizer ─────────────────────────────────────────────── */
+  abschnitt('Was aus dem Umwandler kommt, muss den Sanitizer überstehen');
+  const durch = nb.pages.every(p => sanitizePageHtml(p.textContent) === p.textContent);
+  pruefe('der Text bleibt unverändert', durch, 'der Sanitizer greift ein');
+}
+
+window.__ergebnis = '';
+window.__fertig = laufe()
+  .catch(err => { zeilen.push('ABBRUCH ' + (err && err.stack || err)); })
+  .then(() => { window.__ergebnis = zeilen.join('\n'); });
+</script>
+</body>
+</html>

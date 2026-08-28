@@ -361,15 +361,312 @@ window.fillNotebookFromPdf = fillNotebookFromPdf;
    als eine ehrliche Übersetzung: Text in Absätzen, Überschriften an der
    Schriftgröße erkannt, Seitenumbruch beim Seitenumbruch.
 
-   Ein PDF ohne Textebene (ein eingescanntes Blatt) hat gar nichts zu
-   holen. Das wird erkannt und gesagt – sonst entstünde ein leeres Heft
-   ohne jeden Hinweis, warum.
+   ── Was aber sehr wohl mitkommt ─────────────────────────────────────
+   Alles, was auf dem Blatt kein Text ist: Schaubilder, Fotos, Formeln
+   als Grafik, eingescannte Ausschnitte. Sie werden aus der gemalten
+   Seite geschnitten und an ihrer Stelle in den Text gesetzt
+   (pdfBildbereiche, pdfSeitenBilder). Vorher fiel bei einem bebilderten
+   Dokument der größere Teil des Inhalts weg, und niemand sah, dass er
+   je da war – „als Text" hieß in Wahrheit „nur die Buchstaben".
+
+   Ein PDF ohne Textebene (ein eingescanntes Blatt) hat für diesen Weg
+   gar nichts zu holen. Das wird erkannt und gesagt – der Nutzer bekommt
+   dann das Heft aus Seitenbildern, das er eigentlich wollte, statt eines
+   Hefts voller Bild-Objekte ohne ein Wort dazwischen.
    ══════════════════════════════════════════════════════════════════════ */
 
 /** Text in etwas verwandeln, das gefahrlos in HTML stehen darf. */
 function alsHtmlText(text) {
   return String(text)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE BILDSTELLEN EINER PDF-SEITE
+
+   Ein PDF besteht nicht nur aus Text. Schaubilder, Fotos, Formeln als
+   Grafik, eingescannte Ausschnitte – die waren beim Weg „als Text"
+   bisher alle weg, und bei einem bebilderten Dokument ist das der
+   größere Teil des Inhalts.
+
+   >>> Warum aus dem gemalten Blatt geschnitten und nicht ausgepackt <<<
+   pdf.js kann die eingebetteten Bilddaten herausgeben. Sie sind dann
+   aber roh – mit Farbraum, Maske und Beschnitt, die erst wieder
+   angewandt werden müssten, und eine Vektorzeichnung ist überhaupt kein
+   Bild und bliebe weiterhin verloren. Die Seite einmal zu malen und die
+   Stelle herauszuschneiden gibt genau das, was der Leser sieht.
+
+   Gefunden werden die Stellen über die Zeichenbefehle der Seite: jeder
+   Bildbefehl malt in das Einheitsquadrat, seine Lage steckt in der
+   gerade gültigen Matrix.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** So fein wird zum Ausschneiden gemalt – wie beim Weg „als Bild". */
+const PDF_MAL_STUFE = 1.5;
+
+/** Zwei Matrizen hintereinander – wie ctx.transform() sie verkettet. */
+function pdfMatMal(a, b) {
+  return [
+    a[0] * b[0] + a[2] * b[1],
+    a[1] * b[0] + a[3] * b[1],
+    a[0] * b[2] + a[2] * b[3],
+    a[1] * b[2] + a[3] * b[3],
+    a[0] * b[4] + a[2] * b[5] + a[4],
+    a[1] * b[4] + a[3] * b[5] + a[5]
+  ];
+}
+
+/** Das Einheitsquadrat durch eine Matrix – dort liegt das Bild. */
+function pdfQuadratLage(m) {
+  const xs = [];
+  const ys = [];
+  for (const [x, y] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    xs.push(m[0] * x + m[2] * y + m[4]);
+    ys.push(m[1] * x + m[3] * y + m[5]);
+  }
+  return {
+    x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs),
+    y0: Math.min.apply(null, ys), y1: Math.max.apply(null, ys)
+  };
+}
+
+/**
+ * Rechtecke zusammenfassen, die aneinanderstoßen.
+ *
+ * Ein eingescanntes Blatt steckt oft nicht als ein Bild im PDF, sondern
+ * als Dutzende waagerechter Streifen. Einzeln eingefügt gäben sie
+ * Dutzende Bildchen mit Fugen dazwischen; zusammengefasst sind sie
+ * wieder das eine Blatt.
+ */
+function pdfBereicheVereinen(bereiche) {
+  const rand = 2;                 // Fugen unter 2 pt zählen als „stößt an"
+  const offen = bereiche.slice();
+  let wieder = true;
+
+  while (wieder) {
+    wieder = false;
+    for (let i = 0; i < offen.length && !wieder; i++) {
+      for (let j = i + 1; j < offen.length; j++) {
+        const a = offen[i];
+        const b = offen[j];
+        const trennt = a.x1 + rand < b.x0 || b.x1 + rand < a.x0 ||
+                       a.y1 + rand < b.y0 || b.y1 + rand < a.y0;
+        if (trennt) continue;
+        offen[i] = {
+          x0: Math.min(a.x0, b.x0), x1: Math.max(a.x1, b.x1),
+          y0: Math.min(a.y0, b.y0), y1: Math.max(a.y1, b.y1)
+        };
+        offen.splice(j, 1);
+        wieder = true;
+        break;
+      }
+    }
+  }
+  return offen;
+}
+
+/**
+ * Wo auf der Seite steht ein Bild, und steht überhaupt etwas darauf?
+ *
+ * @returns {Promise<{bereiche:Array<{x0,y0,x1,y1}>, gezeichnet:boolean}>}
+ *   in PDF-Koordinaten (Nullpunkt unten links), noch ungemalt
+ */
+async function pdfBildbereiche(seite) {
+  const OPS = (typeof pdfjsLib !== 'undefined' && pdfjsLib.OPS) || null;
+  if (!OPS) return { bereiche: [], gezeichnet: false };
+
+  let befehle;
+  try {
+    befehle = await seite.getOperatorList();
+  } catch (err) {
+    /* Eine Seite, deren Befehle sich nicht lesen lassen, kostet nur ihre
+       Bilder – der Text ist davon unberührt und längst geholt. */
+    console.warn('[PDF] Bildstellen einer Seite nicht lesbar:', err && err.message || err);
+    return { bereiche: [], gezeichnet: false };
+  }
+
+  let m = [1, 0, 0, 1, 0, 0];
+  const stapel = [];
+  const roh = [];
+  let gezeichnet = false;
+
+  const fn = befehle.fnArray || [];
+  const args = befehle.argsArray || [];
+
+  for (let i = 0; i < fn.length; i++) {
+    switch (fn[i]) {
+      case OPS.save:
+        stapel.push(m.slice());
+        break;
+      case OPS.restore:
+        if (stapel.length) m = stapel.pop();
+        break;
+      case OPS.transform:
+        if (args[i]) m = pdfMatMal(m, args[i]);
+        break;
+
+      /* Ein Form-XObject ist eine eingebettete Teilzeichnung. Sie bringt
+         ihre eigene Matrix mit, und die gilt nur bis zu ihrem Ende –
+         sonst säßen alle folgenden Bilder verschoben. */
+      case OPS.paintFormXObjectBegin:
+        stapel.push(m.slice());
+        if (args[i] && args[i][0]) m = pdfMatMal(m, args[i][0]);
+        break;
+      case OPS.paintFormXObjectEnd:
+        if (stapel.length) m = stapel.pop();
+        break;
+
+      case OPS.paintImageXObject:
+      case OPS.paintInlineImageXObject:
+      case OPS.paintImageMaskXObject:
+        roh.push(pdfQuadratLage(m));
+        gezeichnet = true;
+        break;
+
+      /* Gekachelte und gruppierte Bilder werden nicht einzeln verfolgt –
+         das sind Muster und Symbole, keine Schaubilder. Sie zählen aber
+         als „hier steht etwas", damit eine Seite ohne Textebene nicht
+         fälschlich als leer durchgeht. */
+      case OPS.paintImageXObjectRepeat:
+      case OPS.paintImageMaskXObjectRepeat:
+      case OPS.paintImageMaskXObjectGroup:
+      case OPS.paintInlineImageXObjectGroup:
+      case OPS.constructPath:
+      case OPS.shadingFill:
+        gezeichnet = true;
+        break;
+    }
+  }
+
+  if (!roh.length) return { bereiche: [], gezeichnet };
+
+  /* Bei einem Wald aus winzigen Masken – manche PDF setzen so ihre
+     Schrift – wäre das paarweise Zusammenfassen teuer und das Ergebnis
+     wertlos. Dann zählen nur die größten Stellen. */
+  roh.sort((a, b) => ((b.x1 - b.x0) * (b.y1 - b.y0)) - ((a.x1 - a.x0) * (a.y1 - a.y0)));
+  const bereiche = pdfBereicheVereinen(roh.slice(0, 200));
+
+  return { bereiche, gezeichnet };
+}
+
+/** Steht diese Zeile innerhalb des Bildes? */
+function pdfZeileImBereich(z, b) {
+  if (z.y < b.y0 || z.y > b.y1) return false;
+  const breite = Math.max(1, z.x1 - z.x0);
+  const gemeinsam = Math.min(z.x1, b.x1) - Math.max(z.x0, b.x0);
+  /* Nur was fast ganz drinsteht – eine Zeile, die daneben weiterläuft,
+     gehört zum Fließtext und nicht zum Bild. */
+  return gemeinsam / breite >= 0.7;
+}
+
+/**
+ * Malt die Bildstellen einer Seite aus und schneidet sie heraus.
+ *
+ * @param {object} seite   die PDF-Seite
+ * @param {Array}  zeilen  ihre Textzeilen (aus pdfZeilen)
+ * @param {object} lage    das Ergebnis von pdfBildbereiche
+ * @param {object} masse   {faktor, maxBreite, maxHoehe} der Heftseite
+ * @returns {Promise<{bilder:Array<{y:number, bild:{src,w,h}}>, zeilen:Array}>}
+ *   zeilen = die übrigen; was im Bild steht, fällt heraus
+ */
+async function pdfSeitenBilder(seite, zeilen, lage, masse) {
+  const blatt = seite.view || [0, 0, 612, 792];
+  const blattBreite = Math.max(1, blatt[2] - blatt[0]);
+  const blattFlaeche = Math.max(1, blattBreite * (blatt[3] - blatt[1]));
+  const flaecheVon = b => Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
+
+  /* Zu klein, um Inhalt zu sein: Trennstriche, Aufzählungspunkte, das
+     Logo in der Kopfzeile. Sie einzufügen ergäbe eine Seite voller
+     Schnipsel. Gemessen wird erst NACH dem Zusammenfassen – ein Streifen
+     eines gescannten Blatts ist für sich genommen auch nur ein Strich. */
+  let bereiche = lage.bereiche
+    .filter(b => (b.x1 - b.x0) >= 24 && (b.y1 - b.y0) >= 24 && flaecheVon(b) >= 1600)
+    .sort((a, b) => flaecheVon(b) - flaecheVon(a))
+    .slice(0, 12);
+
+  /* Ein Blatt, das fast ganz von einem Bild bedeckt ist, ist ein
+     eingescanntes Blatt – auch wenn oben eine Seitenzahl als echter Text
+     steht. Was daneben an Text gefunden wird, ist im Bild ohnehin zu
+     sehen; ihn zusätzlich zu übernehmen legte Buchstaben unter ein Bild,
+     das sie verdeckt. */
+  const grossesBild = bereiche.length > 0 && flaecheVon(bereiche[0]) >= blattFlaeche * 0.85;
+  const wenigText = zeilen.reduce((n, z) => n + z.text.length, 0) < 300;
+  let seiteIstBild = false;
+
+  if (grossesBild && wenigText) {
+    bereiche = [bereiche[0]];
+    seiteIstBild = true;
+  } else if (grossesBild) {
+    /* Viel Text UND ein blattfüllendes Bild: das ist ein Wasserzeichen
+       oder ein Rahmen. Es läge sonst als Objekt über dem ganzen Text und
+       machte die Seite unlesbar. */
+    bereiche = bereiche.slice(1);
+  }
+
+  /* Keine Textebene, aber es steht etwas auf dem Blatt: dann ist die
+     ganze Seite das Bild. Einzelne Stellen auszuschneiden hilft hier
+     nicht – bei einer reinen Vektorzeichnung gäbe es gar keine. */
+  if (!zeilen.length && lage.gezeichnet && !bereiche.length) {
+    bereiche = [{ x0: blatt[0], y0: blatt[1], x1: blatt[2], y1: blatt[3] }];
+    seiteIstBild = true;
+  }
+
+  if (!bereiche.length) return { bilder: [], zeilen };
+
+  // Einmal malen; aus diesem einen Blatt werden alle Stellen geschnitten
+  const mal = seite.getViewport({ scale: PDF_MAL_STUFE });
+  const blattCanvas = document.createElement('canvas');
+  blattCanvas.width = Math.max(1, Math.round(mal.width));
+  blattCanvas.height = Math.max(1, Math.round(mal.height));
+  await seite.render({
+    canvasContext: blattCanvas.getContext('2d'), viewport: mal
+  }).promise;
+
+  const bilder = [];
+  let uebrig = zeilen;
+
+  for (const b of bereiche) {
+    const e1 = mal.convertToViewportPoint(b.x0, b.y0);
+    const e2 = mal.convertToViewportPoint(b.x1, b.y1);
+    const sx = Math.round(Math.max(0, Math.min(e1[0], e2[0])));
+    const sy = Math.round(Math.max(0, Math.min(e1[1], e2[1])));
+    const sw = Math.round(Math.min(blattCanvas.width, Math.max(e1[0], e2[0]))) - sx;
+    const sh = Math.round(Math.min(blattCanvas.height, Math.max(e1[1], e2[1]))) - sy;
+    if (sw < 8 || sh < 8) continue;
+
+    const teil = document.createElement('canvas');
+    teil.width = sw;
+    teil.height = sh;
+    const tctx = teil.getContext('2d');
+    /* Weiß unterlegen: ein JPEG kennt kein Durchsichtig, und was ein PDF
+       nicht selbst färbt, käme sonst schwarz heraus. */
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, sw, sh);
+    tctx.drawImage(blattCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    /* Vom PDF-Maß ins Heft-Maß: die Breite des Blatts wird zur Textbreite
+       der Heftseite, alles andere folgt im selben Verhältnis. So bleibt
+       ein halbseitiges Schaubild auch im Heft halbseitig. */
+    let w = Math.round((sw / PDF_MAL_STUFE) * masse.faktor);
+    let h = Math.round((sh / PDF_MAL_STUFE) * masse.faktor);
+    if (w > masse.maxBreite) { h = Math.round(h * (masse.maxBreite / w)); w = masse.maxBreite; }
+    if (h > masse.maxHoehe) { w = Math.round(w * (masse.maxHoehe / h)); h = masse.maxHoehe; }
+    if (w < 8 || h < 8) continue;
+
+    bilder.push({ y: b.y1, bild: { src: teil.toDataURL('image/jpeg', 0.72), w, h } });
+
+    /* Die Beschriftung IN einem Schaubild steht jetzt schon im Bild. Sie
+       zusätzlich als Text zu übernehmen, streute zwischen die Absätze
+       eine Reihe zusammenhangloser Wortfetzen – Achsenbeschriftungen
+       ergeben ohne ihr Bild keinen Satz. */
+    if (flaecheVon(b) < blattFlaeche * 0.7) {
+      uebrig = uebrig.filter(z => !pdfZeileImBereich(z, b));
+    }
+  }
+
+  if (seiteIstBild) uebrig = [];
+
+  return { bilder, zeilen: uebrig };
 }
 
 /**
@@ -380,7 +677,7 @@ function alsHtmlText(text) {
  * über die Grundlinie (transform[5]); was auf derselben Höhe steht,
  * gehört in dieselbe Zeile.
  *
- * @returns {Array<{text:string, y:number, groesse:number}>}
+ * @returns {Array<{text:string, y:number, groesse:number, x0:number, x1:number}>}
  */
 function pdfZeilen(inhalt) {
   const stuecke = (inhalt.items || []).filter(it => it && typeof it.str === 'string');
@@ -418,16 +715,22 @@ function pdfZeilen(inhalt) {
       text += s.str;
       letztesEnde = s.x + s.breite;
     }
-    return { text: text.replace(/\s+/g, ' ').trim(), y: z.y, groesse: z.groesse };
+    /* Wo die Zeile anfängt und aufhört: daran erkennt pdfZeileImBereich,
+       ob sie in einem Bild steht und dort schon zu sehen ist. */
+    const x0 = z.stuecke[0].x;
+    const x1 = z.stuecke.reduce((m, s) => Math.max(m, s.x + s.breite), x0);
+    return { text: text.replace(/\s+/g, ' ').trim(), y: z.y, groesse: z.groesse, x0, x1 };
   }).filter(z => z.text);
 }
 
 /**
- * Macht aus den Zeilen einer Seite Absätze und Überschriften.
+ * Macht aus dem Inhalt einer Seite Absätze, Überschriften und Bilder.
  *
- * @param {number} normal  die übliche Schriftgröße des Dokuments
+ * @param {Array} eintraege   Textzeilen und Bilder, von oben nach unten
+ * @param {number} normal     die übliche Schriftgröße des Dokuments
+ * @param {number} zeilenhoehe  eine Textzeile im Heft, in Pixeln
  */
-function pdfBloeckeAusZeilen(zeilen, normal) {
+function pdfBloeckeAusZeilen(eintraege, normal, zeilenhoehe) {
   const bloecke = [];
   let absatz = [];
   let letztesY = null;
@@ -439,7 +742,20 @@ function pdfBloeckeAusZeilen(zeilen, normal) {
     absatz = [];
   };
 
-  for (const z of zeilen) {
+  for (const z of eintraege) {
+    /* Ein Bild steht für sich. Es bekommt so viele leere Absätze, wie es
+       hoch ist – derselbe Platzhalter wie beim Word-Import, und aus dem
+       gleichen Grund: eine Höhenangabe überlebt den Sanitizer nicht,
+       leere Absätze sind gewöhnlicher Text und kommen durch. */
+    if (z.bild) {
+      schliesse();
+      const platz = Math.max(1, Math.ceil(z.bild.h / (zeilenhoehe || 24)));
+      bloecke.push({ html: '<p><br></p>'.repeat(platz), bild: z.bild });
+      letztesY = null;
+      letzteGroesse = null;
+      continue;
+    }
+
     /* Deutlich größer als der Rest? Dann ist es eine Überschrift. Der
        Schwellwert ist grob, und das ist Absicht: feiner geraten hieße,
        oft daneben zu liegen, und eine falsche Überschrift stört mehr
@@ -486,16 +802,26 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
 
   const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
 
-  // Erst alle Zeilen sammeln, dann die uebliche Schriftgroesse bestimmen:
-  // ohne sie waere „gross" ein Wert aus der Luft.
+  const bg = nb.defaultBg || 'ruled';
+  const zeilenhoehe = InkwellsDocxPaginate.zeilenhoeheFuer(bg);
+  const nutz = InkwellsDocxPaginate.nutzhoehe(CFG.PAGE_H);
+  // Die nutzbare Textbreite einer Heftseite – .j-text links und rechts
+  const textBreite = CFG.PAGE_W - 72 - 32;
+
+  /* Erst den Text aller Seiten und die Lage ihrer Bilder sammeln. Die
+     übliche Schriftgroesse laesst sich erst danach bestimmen: ohne sie
+     waere „gross" ein Wert aus der Luft. Gemalt wird in diesem Durchgang
+     noch nicht – hat das PDF gar keine Textebene, endet die Sache gleich
+     darauf, und die Arbeit waere umsonst gewesen. */
   const proSeite = [];
   for (let nr = 1; nr <= pdf.numPages; nr++) {
     const seite = await pdf.getPage(nr);
-    proSeite.push(pdfZeilen(await seite.getTextContent()));
+    const zeilen = pdfZeilen(await seite.getTextContent());
+    proSeite.push({ seite, zeilen, lage: await pdfBildbereiche(seite), bilder: [] });
     if (onFortschritt) onFortschritt(nr, pdf.numPages);
   }
 
-  const alleZeilen = proSeite.flat();
+  const alleZeilen = proSeite.flatMap(s => s.zeilen);
   if (!alleZeilen.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
 
   /* Die haeufigste Groesse ist der Fliesstext. Der Mittelwert waere
@@ -512,9 +838,37 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
     if (gewicht > beste) { beste = gewicht; normal = groesse; }
   }
 
+  /* Zweiter Durchgang: die Bildstellen ausschneiden. Erst jetzt, weil
+     jede Seite dafuer gemalt werden muss – der teure Schritt. */
+  let bilderZahl = 0;
+  for (let i = 0; i < proSeite.length; i++) {
+    const s = proSeite[i];
+    const blatt = s.seite.view || [0, 0, 612, 792];
+    const masse = {
+      faktor: textBreite / Math.max(1, blatt[2] - blatt[0]),
+      maxBreite: textBreite,
+      maxHoehe: nutz
+    };
+    try {
+      const ausbeute = await pdfSeitenBilder(s.seite, s.zeilen, s.lage, masse);
+      s.zeilen = ausbeute.zeilen;
+      s.bilder = ausbeute.bilder;
+      bilderZahl += ausbeute.bilder.length;
+    } catch (err) {
+      /* Ein Bild weniger ist kein Grund, den ganzen Import hinzuwerfen –
+         der Text der Seite steht laengst und bleibt. */
+      console.warn('[PDF] Bilder einer Seite uebersprungen:', err && err.message || err);
+    }
+    if (onFortschritt) onFortschritt(i + 1, pdf.numPages);
+  }
+
   const bloecke = [];
-  proSeite.forEach((zeilen, idx) => {
-    const teil = pdfBloeckeAusZeilen(zeilen, normal);
+  proSeite.forEach((s, idx) => {
+    /* Text und Bilder in die Reihenfolge bringen, in der sie auf dem
+       Blatt stehen. Der Nullpunkt eines PDF liegt UNTEN links, ein
+       groesseres y heisst also weiter oben. */
+    const eintraege = s.zeilen.concat(s.bilder).sort((a, b) => b.y - a.y);
+    const teil = pdfBloeckeAusZeilen(eintraege, normal, zeilenhoehe);
     // Jede PDF-Seite faengt eine neue Heftseite an. Alles andere waere
     // eine Vermutung darueber, ob der Text weiterlaeuft.
     if (idx > 0 && teil.length) teil[0].umbruchDavor = true;
@@ -523,7 +877,6 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
 
   if (!bloecke.length) return { seiten: 0, quellseiten: pdf.numPages, leer: true };
 
-  const bg = nb.defaultBg || 'ruled';
   const seiten = InkwellsDocxPaginate.verteile(bloecke, {
     breite: CFG.PAGE_W, hoehe: CFG.PAGE_H, bg
   });
@@ -534,11 +887,22 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
     // kommt: gebaut ist er aus einer FREMDEN Datei.
     pg.textContent = typeof sanitizePageHtml === 'function'
       ? sanitizePageHtml(s.html) : s.html;
+    /* Die Bilder sind Objekte und kein Text – wie beim Word-Import. Wo
+       genau sie sitzen, hat der Umbruch beim Messen bestimmt. */
+    pg.objects = (s.bilder || []).map(b => ({
+      id: uid(), kind: 'image', src: b.src, name: '',
+      x: b.x, y: b.y, w: b.w, h: b.h, rot: 0
+    }));
     return pg;
   });
   nb.sections = [];
 
-  return { seiten: nb.pages.length, quellseiten: pdf.numPages, leer: false };
+  return {
+    seiten: nb.pages.length,
+    quellseiten: pdf.numPages,
+    bilder: bilderZahl,
+    leer: false
+  };
 }
 window.fillNotebookFromPdfText = fillNotebookFromPdfText;
 

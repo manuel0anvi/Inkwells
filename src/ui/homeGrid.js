@@ -191,8 +191,14 @@ E('btn-open-doc').addEventListener('click', async () => {
             return;
           }
 
-          toast((t('pdfTextDone') || '{n} Seiten aus {m} PDF-Seiten.')
-            .replace('{n}', bericht.seiten).replace('{m}', bericht.quellseiten));
+          /* Die Bilder gehoeren in die Meldung: sie sind der Teil, von dem
+             der Nutzer nach dem Hinweis im Fenster („Bilder kommen mit")
+             nicht sicher weiss, ob er wirklich angekommen ist. */
+          const fertig = bericht.bilder
+            ? (t('pdfTextDoneBilder') || '{n} Seiten aus {m} PDF-Seiten, dazu {b} Bilder.')
+                .replace('{b}', bericht.bilder)
+            : (t('pdfTextDone') || '{n} Seiten aus {m} PDF-Seiten.');
+          toast(fertig.replace('{n}', bericht.seiten).replace('{m}', bericht.quellseiten));
           return;
         }
 
