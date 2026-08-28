@@ -277,8 +277,22 @@
     };
   }
 
+  /**
+   * Die Farbe des Blattes.
+   *
+   * >>> Warum ein leeres Blatt hier NICHT weiss ist <<<
+   * Im Heft ist es das (css/pages.css, .bg-blank) – zwischen zwei warmen
+   * Seiten fällt das kaum auf, weil man immer nur eine ansieht. In einem
+   * Word-Dokument stehen sie untereinander, und dann steht ein weisses
+   * Blatt als heller Bruch zwischen den anderen. Es bekommt deshalb
+   * denselben Ton wie sie.
+   */
+  function papierFarbe(bg) {
+    return bg === 'craft' ? '#f0e8d5' : PAPER;
+  }
+
   function drawPaper(ctx, bg, w, h) {
-    ctx.fillStyle = bg === 'blank' ? '#ffffff' : bg === 'craft' ? '#f0e8d5' : PAPER;
+    ctx.fillStyle = papierFarbe(bg);
     ctx.fillRect(0, 0, w, h);
 
     if (bg === 'ruled') {
@@ -413,12 +427,13 @@
    * freie Kurve, eine eingefügte Bildseite ein Foto. Beide verlieren
    * sichtbar, wenn man sie grob rastert.
    *
-   * >>> Und warum eine weisse Seite gar keines bekommt <<<
-   * Auf ihr steht nichts. Das Papier ist weiss, das Word-Blatt auch –
-   * ein Bild davon wären 66 KB für ein leeres Blatt.
+   * >>> Und warum ein Blatt ohne Muster gar keines bekommt <<<
+   * Auf ihm steht nichts als eine einzige Farbe. Ein Bild davon wären
+   * 66 KB für eine Fläche – die malt build stattdessen als Form, und
+   * die kostet nichts (papierFarbe).
    *
    * @returns {Promise<{dataUrl: string, extension: string}|null>}
-   *   null = diese Seite braucht kein Hintergrundbild
+   *   null = diese Seite braucht kein Bild, nur ihre Farbe
    */
   async function renderPageImage(entry, scale) {
     const page = entry.page;
@@ -426,7 +441,8 @@
     const h = page.h || DEFAULT_PAGE_H;
 
     const hatHandschrift = !!(page.inkStrokes && page.inkStrokes.length);
-    if (!page.bgImg && !hatHandschrift && entry.bg === 'blank') return null;
+    const ohneMuster = entry.bg === 'blank' || entry.bg === 'craft';
+    if (!page.bgImg && !hatHandschrift && ohneMuster) return null;
 
     const feinheit = (hatHandschrift || page.bgImg) ? scale : 1;
 
@@ -1214,6 +1230,16 @@
       const height = entry.page.h || DEFAULT_PAGE_H;
 
       let anchor = '';
+      if (!image) {
+        /* Kein Muster, nichts drauf – aber die Farbe des Papiers gehört
+           trotzdem hin. Als Form statt als Bild: sie kostet keine
+           einzige Datei im Archiv und lässt sich in Word anklicken und
+           wegnehmen, wenn jemand doch ein weisses Blatt will. */
+        anchor = formAnkerXml(++ankerZaehler, {
+          shapeType: 'rect', x: 0, y: 0, w: width, h: height,
+          fill: papierFarbe(entry.bg), stroke: 'none', strokeWidth: 0, layer: 'back'
+        });
+      }
       if (image) {
         const relationshipId = naechsteRel();
         const fileName = `seite${i + 1}.${image.extension}`;

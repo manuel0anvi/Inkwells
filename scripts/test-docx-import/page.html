@@ -795,11 +795,35 @@ window.__fertig = (async function () {
       [{ page: weisseSeite, bg: 'blank' }], { scale: 2 });
     const archivWeiss = await InkwellsDocxImport.__intern.entpacke(ohnePapier);
     const medienWeiss = [...archivWeiss.keys()].filter(n => /^word\/media\//.test(n));
-    pruefe('Eine weisse Seite bekommt gar kein Bild', medienWeiss.length === 0,
+    pruefe('Ein Blatt ohne Muster bekommt gar kein Bild', medienWeiss.length === 0,
       medienWeiss.join(', '));
     pruefe('Ihr Text ist trotzdem da',
       nurText((await InkwellsDocxImport.lese(ohnePapier)).bloecke.map(b => b.html).join(''))
         .includes('Nur Text auf weissem Papier.'), 'fehlt');
+
+    /* Statt eines Bildes eine Form in der Papierfarbe: sonst staende ein
+       weisses Blatt als heller Bruch zwischen den warmen. */
+    const xmlWeiss = I.alsText(archivWeiss.get('word/document.xml'));
+    pruefe('Sie bekommt die Papierfarbe als Form',
+      xmlWeiss.includes('<wps:wsp>') && /srgbClr val="FAF7F0"/i.test(xmlWeiss),
+      xmlWeiss.includes('<wps:wsp>') ? 'Form da, Farbe fehlt' : 'keine Form');
+    pruefe('Und sie liegt hinter dem Text',
+      /behindDoc="1"/.test(xmlWeiss), 'liegt davor');
+
+    /* Craft ist beige und ebenfalls ohne Muster – dieselbe Behandlung,
+       nur mit seiner eigenen Farbe. */
+    const craftSeite = {
+      id: 'p5', bg: 'craft', w: 794, h: 1123, inkStrokes: [], objects: [],
+      textContent: '<p>Auf braunem Papier.</p>'
+    };
+    const mitCraft = await InkwellsDocx.build([{ page: craftSeite, bg: 'craft' }], { scale: 2 });
+    const archivCraft = await InkwellsDocxImport.__intern.entpacke(mitCraft);
+    const xmlCraft = I.alsText(archivCraft.get('word/document.xml'));
+    pruefe('Braunes Papier behaelt seinen eigenen Ton',
+      /srgbClr val="F0E8D5"/i.test(xmlCraft), 'Ton fehlt');
+    pruefe('Auch dafuer liegt kein Bild im Archiv',
+      [...archivCraft.keys()].filter(n => /^word\/media\//.test(n)).length === 0,
+      'eines ist da');
 
     /* Kariert braucht ein Bild – aber eines in einfacher Auflösung.
        Doppelt gerastert war dieselbe Seite mehr als viermal so gross. */
