@@ -86,6 +86,9 @@ function zeigeImportBericht(bericht) {
   teile.push((t('importPages') || '{n} Seiten').replace('{n}', bericht.seiten));
   if (bericht.bilder) teile.push((t('importImages') || '{n} Bilder').replace('{n}', bericht.bilder));
   if (bericht.tabellen) teile.push((t('importTables') || '{n} Tabellen').replace('{n}', bericht.tabellen));
+  /* Der Hintergrund gehoert genannt: er ist das einzige Stueck, das auf
+     JEDER Seite landet, und wer ihn nicht wollte, sucht sonst lange. */
+  if (bericht.hintergrund) teile.push(t('importBackground') || 'der Seitenhintergrund');
 
   /* Immer genannt, auch wenn das Dokument sie gar nicht benutzt hat:
      man kann von außen nicht sehen, ob eine fehlende Schriftgröße

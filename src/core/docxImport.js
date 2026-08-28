@@ -46,6 +46,11 @@
   const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
   const PKG_REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
+  /* VML und die Office-Zusätze – die Form von vor DrawingML. Word
+     schreibt sie bis heute für Wasserzeichen und Dokumenthintergründe. */
+  const V = 'urn:schemas-microsoft-com:vml';
+  const O = 'urn:schemas-microsoft-com:office:office';
+
   const EMU_PER_PX = 9525;          // wie in core/docx.js
 
   /* ══════════════════════════════════════════════════════════════════
@@ -197,14 +202,20 @@
      ══════════════════════════════════════════════════════════════════ */
 
   /** rId → Zielpfad, z. B. "rId7" → "media/bild1.png". */
-  function leseBeziehungen(dateien) {
+  function leseBeziehungenVon(dateien, pfad) {
     const map = new Map();
-    const doc = alsXml(dateien.get('word/_rels/document.xml.rels'));
+    const doc = alsXml(dateien.get(pfad));
     if (!doc) return map;
     for (const rel of doc.getElementsByTagNameNS(PKG_REL, 'Relationship')) {
       map.set(rel.getAttribute('Id'), rel.getAttribute('Target'));
     }
     return map;
+  }
+
+  /* Jede Kopfzeile hat ihre eigene Liste – ein Wasserzeichen steht dort
+     und nicht in der des Dokuments. */
+  function leseBeziehungen(dateien) {
+    return leseBeziehungenVon(dateien, 'word/_rels/document.xml.rels');
   }
 
   /**
@@ -428,36 +439,113 @@
    * Maße aus wp:extent (EMU). Fehlen sie, wird die natürliche Größe
    * später beim Einsetzen ermittelt – deshalb hier 0 statt geraten.
    */
+  /**
+   * Die Datei hinter einer Beziehungskennung, als data:-Adresse.
+   *
+   * Die Ziele stehen relativ zu word/. Ein führendes ../ kommt vor, wenn
+   * das Bild außerhalb liegt – dann ist der Pfad schon vom
+   * Wurzelverzeichnis aus gemeint.
+   */
+  function bildDatenZu(rId, beziehungen, dateien) {
+    const ziel = beziehungen.get(rId);
+    if (!ziel) return null;
+    const pfad = ziel.startsWith('/') ? ziel.slice(1)
+      : ziel.startsWith('../') ? ziel.slice(3)
+        : 'word/' + ziel;
+    const daten = dateien.get(pfad);
+    if (!daten) return null;
+    return alsDataUrl(daten, pfad);
+  }
+
+  /**
+   * Das Maß eines einzelnen Bildes in einer Zeichnung.
+   *
+   * >>> Warum nicht einfach wp:extent <<<
+   * Das gilt für die GANZE Zeichnung. Steckt darin eine Gruppe aus drei
+   * Bildern, wäre nach wp:extent jedes einzelne so groß wie alle
+   * zusammen. Am Bild selbst steht sein eigenes Maß (a:ext im spPr).
+   */
+  function bildMassAus(blip) {
+    let el = blip.parentNode;
+    while (el && el.nodeType === 1 && el.localName !== 'pic') el = el.parentNode;
+    if (!el || el.nodeType !== 1) return null;
+
+    const ext = el.getElementsByTagNameNS(A, 'ext')[0];
+    if (!ext) return null;
+    const w = Math.round(parseInt(ext.getAttribute('cx'), 10) / EMU_PER_PX);
+    const h = Math.round(parseInt(ext.getAttribute('cy'), 10) / EMU_PER_PX);
+    return (w > 0 && h > 0) ? { w, h } : null;
+  }
+
+  /** Ein Maß aus einem VML-Stil: "width:468pt;height:351pt". */
+  function vmlMass(shape) {
+    const stil = (shape && shape.getAttribute && shape.getAttribute('style')) || '';
+    const nachPx = { pt: 96 / 72, px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4, pc: 16 };
+    const zahl = (name) => {
+      const m = new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*(-?[0-9.]+)\\s*([a-z%]*)', 'i').exec(stil);
+      if (!m) return 0;
+      const wert = parseFloat(m[1]);
+      if (!Number.isFinite(wert)) return 0;
+      return Math.round(Math.abs(wert) * (nachPx[(m[2] || 'pt').toLowerCase()] || 1));
+    };
+    return { w: zahl('width'), h: zahl('height') };
+  }
+
+  /**
+   * Bilder aus einem w:pict – der alten Form (VML).
+   *
+   * Word schreibt sie bis heute: für Wasserzeichen, für Formen mit
+   * Bildfüllung und für alles, was aus einem alten .doc stammt. Ohne
+   * diesen Weg fehlte dort jedes Bild, ohne dass es jemandem auffiel.
+   */
+  function vmlBilder(pict, beziehungen, dateien) {
+    const aus = [];
+    for (const daten of pict.getElementsByTagNameNS(V, 'imagedata')) {
+      const rId = daten.getAttributeNS(R, 'id') || daten.getAttributeNS(R, 'href');
+      if (!rId) continue;
+      const src = bildDatenZu(rId, beziehungen, dateien);
+      if (!src) continue;
+      const mass = vmlMass(daten.parentNode);
+      aus.push({ src, w: mass.w, h: mass.h });
+    }
+    return aus;
+  }
+
+  /**
+   * Alle Bilder eines Absatzes – jedes als eigenes.
+   *
+   * >>> Hier stand einmal `blip[0]`, und das war der Fehler <<<
+   * Ein w:drawing kann MEHRERE Bilder halten: als Gruppe oder auf einer
+   * Zeichenfläche. Genommen wurde davon nur das erste. Bei einer
+   * Titelseite, auf der ein Hintergrundbild, ein Logo und ein Foto
+   * gruppiert sind, kam also genau ein Bild an – das unterste, meist
+   * das grosse – und der Rest fiel weg. Im Heft sah es dann aus, als
+   * wäre die ganze Seite ein einziges Bild.
+   */
   function bilderIn(p, beziehungen, dateien) {
     const aus = [];
+
     for (const zeichnung of p.getElementsByTagNameNS(W, 'drawing')) {
-      const blip = zeichnung.getElementsByTagNameNS(A, 'blip')[0];
-      if (!blip) continue;
-      const rId = blip.getAttributeNS(R, 'embed') || blip.getAttributeNS(R, 'link');
-      if (!rId) continue;
-
-      const ziel = beziehungen.get(rId);
-      if (!ziel) continue;
-
-      /* Die Ziele stehen relativ zu word/. Ein führendes ../ kommt vor,
-         wenn das Bild außerhalb liegt – dann ist der Pfad schon vom
-         Wurzelverzeichnis aus gemeint. */
-      const pfad = ziel.startsWith('/') ? ziel.slice(1)
-        : ziel.startsWith('../') ? ziel.slice(3)
-          : 'word/' + ziel;
-      const daten = dateien.get(pfad);
-      if (!daten) continue;
-
-      const src = alsDataUrl(daten, pfad);
-      if (!src) continue;
-
       const extent = zeichnung.getElementsByTagNameNS(WP, 'extent')[0];
-      aus.push({
-        src,
-        w: extent ? Math.round(parseInt(extent.getAttribute('cx'), 10) / EMU_PER_PX) : 0,
-        h: extent ? Math.round(parseInt(extent.getAttribute('cy'), 10) / EMU_PER_PX) : 0
-      });
+      const ganzes = extent ? {
+        w: Math.round(parseInt(extent.getAttribute('cx'), 10) / EMU_PER_PX),
+        h: Math.round(parseInt(extent.getAttribute('cy'), 10) / EMU_PER_PX)
+      } : { w: 0, h: 0 };
+
+      for (const blip of zeichnung.getElementsByTagNameNS(A, 'blip')) {
+        const rId = blip.getAttributeNS(R, 'embed') || blip.getAttributeNS(R, 'link');
+        if (!rId) continue;
+        const src = bildDatenZu(rId, beziehungen, dateien);
+        if (!src) continue;
+        const mass = bildMassAus(blip) || ganzes;
+        aus.push({ src, w: mass.w, h: mass.h });
+      }
     }
+
+    for (const pict of p.getElementsByTagNameNS(W, 'pict')) {
+      for (const bild of vmlBilder(pict, beziehungen, dateien)) aus.push(bild);
+    }
+
     return aus;
   }
 
@@ -822,6 +910,76 @@
     };
   }
 
+
+  /* ══════════════════════════════════════════════════════════════════
+     DER HINTERGRUND EINES WORD-DOKUMENTS
+
+     Word kennt zwei davon, und beide sind etwas anderes als ein Bild im
+     Text: sie liegen HINTER allem und wiederholen sich auf jeder Seite.
+
+       w:background   der Dokumenthintergrund (Menü „Seitenfarbe")
+       Wasserzeichen  ein VML-Bild in der Kopfzeile, das Word beim
+                      Einfügen eines Wasserzeichens dorthin schreibt
+
+     Beide werden zum Seitenhintergrund des Hefts (page.bgImg, app.js) –
+     dort liegen sie unter dem Text, so wie in Word auch. Als
+     gewöhnliches Bild übernommen lägen sie ÜBER dem Text und deckten
+     die Seite zu.
+
+     >>> Warum nicht jedes Bild aus der Kopfzeile <<<
+     Dort steht auch das Firmenlogo, und das ist kein Hintergrund. Als
+     solcher gilt nur, was Word selbst als Wasserzeichen benannt hat
+     oder was mindestens die halbe Seite bedeckt.
+     ══════════════════════════════════════════════════════════════════ */
+
+  const WASSERZEICHEN_NAME = /watermark|wasserzeichen|powerplus/i;
+  const SEITE_FLAECHE = 794 * 1123;      // eine Heftseite in Punkten
+
+  function wasserzeichenIn(dateien) {
+    const kopfzeilen = [...dateien.keys()]
+      .filter(p => /^word\/header\d*\.xml$/i.test(p))
+      .sort();
+
+    for (const pfad of kopfzeilen) {
+      const hdoc = alsXml(dateien.get(pfad));
+      if (!hdoc) continue;
+      const rels = leseBeziehungenVon(dateien, 'word/_rels/' + pfad.slice(5) + '.rels');
+
+      for (const shape of hdoc.getElementsByTagNameNS(V, 'shape')) {
+        const daten = shape.getElementsByTagNameNS(V, 'imagedata')[0];
+        if (!daten) continue;
+        const rId = daten.getAttributeNS(R, 'id') || daten.getAttributeNS(R, 'href');
+        if (!rId) continue;
+
+        const kennung = (shape.getAttribute('id') || '') + ' '
+          + (daten.getAttributeNS(O, 'title') || '');
+        const mass = vmlMass(shape);
+        const gross = mass.w * mass.h >= SEITE_FLAECHE * 0.5;
+        if (!WASSERZEICHEN_NAME.test(kennung) && !gross) continue;
+
+        const src = bildDatenZu(rId, rels, dateien);
+        if (src) return src;
+      }
+    }
+    return null;
+  }
+
+  /** @returns {{src:string}|null} */
+  function leseHintergrund(dateien, beziehungen, doc) {
+    const bg = doc.getElementsByTagNameNS(W, 'background')[0];
+    if (bg) {
+      const fill = bg.getElementsByTagNameNS(V, 'fill')[0];
+      const rId = fill && (fill.getAttributeNS(R, 'id') || fill.getAttributeNS(R, 'href'));
+      if (rId) {
+        const src = bildDatenZu(rId, beziehungen, dateien);
+        if (src) return { src };
+      }
+    }
+
+    const wz = wasserzeichenIn(dateien);
+    return wz ? { src: wz } : null;
+  }
+
   /* ══════════════════════════════════════════════════════════════════
      8. DER EINSTIEG
      ══════════════════════════════════════════════════════════════════ */
@@ -855,13 +1013,16 @@
     };
 
     const bloecke = bloeckeIn(body, ctx);
+    const hintergrund = leseHintergrund(dateien, ctx.beziehungen, doc);
 
     return {
       bloecke,
+      hintergrund,
       bericht: {
         bloecke: bloecke.length,
         bilder: ctx.bilder,
         tabellen: ctx.tabellen,
+        hintergrund: !!hintergrund,
         verloren: [...ctx.verloren]
       }
     };
@@ -870,7 +1031,8 @@
   global.InkwellsDocxImport = {
     lese,
     __intern: {
-      entpacke, alsText, alsXml, leseBeziehungen, leseNummerierung, leseVorlagen,
+      entpacke, alsText, alsXml, leseBeziehungen, leseBeziehungenVon,
+      leseNummerierung, leseVorlagen, leseHintergrund, vmlMass, bildDatenZu,
       kind, kinder, anAus, farbeVon, ausrichtungsKlasse, laufZuHtml,
       hatSeitenumbruch, escapeHtml, LISTEN_FORM, istAufzaehlung,
       bloeckeIn, absatzZuHtml, tabelleZuHtml, alsDataUrl, platzhalterFuer,

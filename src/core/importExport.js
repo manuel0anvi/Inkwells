@@ -1203,7 +1203,7 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
     }
     throw err;
   }
-  const { bloecke, bericht } = gelesen;
+  const { bloecke, bericht, hintergrund } = gelesen;
 
   if (!bloecke.length) throw new Error(t('docxEmpty') || 'Das Dokument ist leer.');
 
@@ -1225,6 +1225,10 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
       id: uid(), kind: 'image', src: b.src, name: '',
       x: b.x, y: b.y, w: b.w, h: b.h, rot: 0
     }));
+    /* Der Hintergrund des Dokuments wiederholt sich auf jeder Seite –
+       so hält Word ihn, und so sieht man ihn dort. Als bgImg liegt er
+       unter dem Text (app.js) und nicht als Bild darüber. */
+    if (hintergrund && hintergrund.src) pg.bgImg = hintergrund.src;
     return pg;
   });
   nb.sections = [];
@@ -1233,6 +1237,7 @@ async function fillNotebookFromDocx(nb, dataUrl, onFortschritt) {
     seiten: nb.pages.length,
     bilder: bericht.bilder,
     tabellen: bericht.tabellen,
+    hintergrund: bericht.hintergrund,
     verloren: bericht.verloren
   };
 }
