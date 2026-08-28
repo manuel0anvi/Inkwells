@@ -76,6 +76,15 @@ const TRANSLATIONS = {
     openDocFailed: 'Das Dokument ließ sich nicht öffnen: {msg}',
     openDocNoWordYet: 'Word-Dokumente kommen noch.',
     pdfNoPages: 'Das PDF hat keine Seiten.',
+    // Was aus einem Heft wird, wenn Word es bekommt (ui/export.js)
+    docxNoteTitle: 'Das Word-Dokument ist eine Übersetzung, keine Kopie.',
+    docxNoteKept: 'Text, Bilder, Formen und Tabellen sind echte Word-Elemente – anfassbar und änderbar. Das Papier ist ein Bild dahinter.',
+    docxNoteChanges: 'Was sich ändern kann:',
+    docxNoteReflow: 'Wer in Word weiterschreibt, verschiebt den Text. Das Papier bleibt, wo es ist – die Zeilen sitzen dann nicht mehr auf den Linien.',
+    docxNoteLists: 'Aufzählungszeichen sind Text und keine Word-Nummerierung: ein neuer Punkt bekommt keine eigene Nummer.',
+    docxNoteInk: 'Handschrift gehört zum Seitenbild und lässt sich nicht mehr ändern.',
+    docxNoteFormulas: 'Formeln und Kommentare kommen nicht mit.',
+    docxNoteFonts: 'Schriftarten ersetzt Word, wenn es sie nicht hat.',
     // Wie ein PDF hereinkommt (ui/homeGrid.js)
     pdfModeTitle: 'PDF öffnen',
     pdfModeImage: 'Als Bild',
@@ -961,6 +970,15 @@ const TRANSLATIONS = {
     openDocFailed: 'The document could not be opened: {msg}',
     openDocNoWordYet: 'Word documents are still to come.',
     pdfNoPages: 'The PDF has no pages.',
+    // What a notebook becomes once Word has it (ui/export.js)
+    docxNoteTitle: 'The Word document is a translation, not a copy.',
+    docxNoteKept: 'Text, pictures, shapes and tables are real Word elements – selectable and editable. The paper is an image behind them.',
+    docxNoteChanges: 'What may change:',
+    docxNoteReflow: 'Writing on in Word moves the text. The paper stays where it is – the lines will no longer sit on the ruling.',
+    docxNoteLists: 'Bullets are text, not Word numbering: a new item gets no number of its own.',
+    docxNoteInk: 'Handwriting belongs to the page image and can no longer be edited.',
+    docxNoteFormulas: 'Formulas and comments do not come along.',
+    docxNoteFonts: 'Word substitutes fonts it does not have.',
     // How a PDF comes in (ui/homeGrid.js)
     pdfModeTitle: 'Open PDF',
     pdfModeImage: 'As image',
@@ -1827,6 +1845,15 @@ const TRANSLATIONS = {
     openDocFailed: 'Non è stato possibile aprire il documento: {msg}',
     openDocNoWordYet: 'I documenti Word arriveranno.',
     pdfNoPages: 'Il PDF non ha pagine.',
+    // Cosa diventa un quaderno quando lo apre Word (ui/export.js)
+    docxNoteTitle: 'Il documento Word è una traduzione, non una copia.',
+    docxNoteKept: 'Testo, immagini, forme e tabelle sono veri elementi di Word – selezionabili e modificabili. La carta è un\'immagine dietro di essi.',
+    docxNoteChanges: 'Cosa può cambiare:',
+    docxNoteReflow: 'Continuando a scrivere in Word il testo si sposta. La carta resta dov\'è – le righe non staranno più sulle righe stampate.',
+    docxNoteLists: 'I punti elenco sono testo, non numerazione di Word: un nuovo punto non riceve un numero proprio.',
+    docxNoteInk: 'La scrittura a mano fa parte dell\'immagine della pagina e non è più modificabile.',
+    docxNoteFormulas: 'Formule e commenti non vengono esportati.',
+    docxNoteFonts: 'Word sostituisce i caratteri che non possiede.',
     // Come entra un PDF (ui/homeGrid.js)
     pdfModeTitle: 'Apri PDF',
     pdfModeImage: 'Come immagine',

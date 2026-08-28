@@ -238,6 +238,40 @@
     statusEl.textContent = String(err.message || err);
   }); });
 
+  /* ══════════════════════════════════════════════════════════════════
+     WAS AUS EINEM HEFT WIRD, WENN WORD ES BEKOMMT
+
+     Das Gegenstück zum Bericht nach dem Öffnen (ui/homeGrid.js,
+     zeigeImportBericht). Dort steht, was beim Hereinkommen verloren
+     ging; hier, was beim Hinausgehen anders wird.
+
+     >>> Warum das gesagt gehört <<<
+     Eine .docx sieht aus wie das Heft und ist es nicht. Wer sie
+     weitergibt oder in Word weiterschreibt, merkt die Unterschiede erst
+     dann – und dann steht der Text schon neben den Linien. Der Hinweis
+     kommt deshalb ungefragt und jedes Mal, wie beim Öffnen auch.
+
+     Gesagt wird nur, was WIRKLICH anders ist. Eine Liste, die zur
+     Sicherheit alles aufzählt, liest niemand zweimal.
+     ══════════════════════════════════════════════════════════════════ */
+  function zeigeExportHinweis() {
+    const punkte = [
+      t('docxNoteReflow') || 'Wer in Word weiterschreibt, verschiebt den Text. Das Papier bleibt, wo es ist – die Zeilen sitzen dann nicht mehr auf den Linien.',
+      t('docxNoteLists') || 'Aufzählungszeichen sind Text und keine Word-Nummerierung: ein neuer Punkt bekommt keine eigene Nummer.',
+      t('docxNoteInk') || 'Handschrift gehört zum Seitenbild und lässt sich nicht mehr ändern.',
+      t('docxNoteFormulas') || 'Formeln und Kommentare kommen nicht mit.',
+      t('docxNoteFonts') || 'Schriftarten ersetzt Word, wenn es sie nicht hat.'
+    ];
+
+    const text = (t('docxNoteTitle') || 'Das Word-Dokument ist eine Übersetzung, keine Kopie.')
+      + '\n\n' + (t('docxNoteKept') || 'Text, Bilder, Formen und Tabellen sind echte Word-Elemente – anfassbar und änderbar. Das Papier ist ein Bild dahinter.')
+      + '\n\n' + (t('docxNoteChanges') || 'Was sich ändern kann:') + '\n'
+      + punkte.map(p => '· ' + p).join('\n');
+
+    if (typeof showAlert === 'function') showAlert(text);
+    else toast(text.replace(/\n+/g, ' '));
+  }
+
   /* ── Word ─────────────────────────────────────────────────────────── */
 
   async function exportAsDocx(nb, chosen) {
@@ -247,11 +281,11 @@
     toast(t('docxBuilding'));
     statusEl.textContent = t('docxBuilding');
 
-    // core/docx.js kennt weder Abschnitte noch Übersetzungen – die
-    // Kopfzeile wird deshalb hier zusammengesetzt, genau wie im PDF.
+    /* Das Papier steht am Abschnitt, nicht am Heft – core/docx.js kennt
+       keine Abschnitte und bekommt es deshalb hier mitgegeben. */
     const docxEntries = chosen.map(entry => ({
       page: entry.page,
-      bg: entry.page.bg || entry.sec?.defaultBg || nb.defaultBg || 'ruled',
+      bg: entry.page.bg || entry.sec?.defaultBg || nb.defaultBg || 'ruled'
     }));
 
     try {
@@ -273,6 +307,7 @@
       if (result.error) throw new Error(result.error);
 
       toast(t('docxSaved').replace('{path}', result));
+      zeigeExportHinweis();
     } catch (err) {
       console.error('[Export] Word-Export fehlgeschlagen:', err);
       toast(t('docxFailed').replace('{msg}', err.message || err), true);
