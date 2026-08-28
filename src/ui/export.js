@@ -252,8 +252,6 @@
     const docxEntries = chosen.map(entry => ({
       page: entry.page,
       bg: entry.page.bg || entry.sec?.defaultBg || nb.defaultBg || 'ruled',
-      headerLeft: `${t('page')} ${entry.pageNo}`,
-      headerRight: fmt(entry.page.date)
     }));
 
     try {

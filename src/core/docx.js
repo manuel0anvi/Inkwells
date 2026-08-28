@@ -321,23 +321,6 @@
     }
   }
 
-  function drawHeader(ctx, w, leftText, rightText) {
-    ctx.fillStyle = PAPER_LINE;
-    ctx.fillRect(0, HEADER_H - 2, w, 2);
-
-    ctx.save();
-    ctx.font = '9px "DM Mono", Consolas, "Courier New", monospace';
-    ctx.fillStyle = HDR_COLOR;
-    ctx.textBaseline = 'middle';
-    try { ctx.letterSpacing = '0.5px'; } catch (e) { /* ältere Engines */ }
-
-    ctx.textAlign = 'left';
-    if (leftText) ctx.fillText(leftText, TEXT_LEFT, HEADER_H / 2);
-
-    ctx.textAlign = 'right';
-    if (rightText) ctx.fillText(rightText, w - TEXT_LEFT, HEADER_H / 2);
-    ctx.restore();
-  }
 
   // object-fit: contain
   function containBox(imgW, imgH, boxW, boxH) {
@@ -416,20 +399,43 @@
   }
 
   /**
-   * Zeichnet eine ganze Heftseite ohne den getippten Text.
-   * @returns {Promise<{dataUrl: string, extension: string}>}
+   * Zeichnet den Hintergrund einer Heftseite: das Papier, eine
+   * eingefügte Bildseite und die Handschrift. Der getippte Text und die
+   * Objekte kommen als eigene Dinge dazu (build).
+   *
+   * >>> Warum nicht immer in voller Auflösung <<<
+   * Das Papiermuster besteht aus Linien von genau EINEM Pixel. Bei
+   * doppelter Auflösung werden daraus zwei, das Bild vervierfacht sich –
+   * und zu sehen ist davon nichts. Ein kariertes Blatt kostete so 172 KB
+   * statt 37 KB, auf zehn Seiten über ein Megabyte für Linien.
+   *
+   * Feiner gerechnet wird nur, wo es etwas bringt: Handschrift ist eine
+   * freie Kurve, eine eingefügte Bildseite ein Foto. Beide verlieren
+   * sichtbar, wenn man sie grob rastert.
+   *
+   * >>> Und warum eine weisse Seite gar keines bekommt <<<
+   * Auf ihr steht nichts. Das Papier ist weiss, das Word-Blatt auch –
+   * ein Bild davon wären 66 KB für ein leeres Blatt.
+   *
+   * @returns {Promise<{dataUrl: string, extension: string}|null>}
+   *   null = diese Seite braucht kein Hintergrundbild
    */
   async function renderPageImage(entry, scale) {
     const page = entry.page;
     const w = page.w || DEFAULT_PAGE_W;
     const h = page.h || DEFAULT_PAGE_H;
 
+    const hatHandschrift = !!(page.inkStrokes && page.inkStrokes.length);
+    if (!page.bgImg && !hatHandschrift && entry.bg === 'blank') return null;
+
+    const feinheit = (hatHandschrift || page.bgImg) ? scale : 1;
+
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(w * scale);
-    canvas.height = Math.round(h * scale);
+    canvas.width = Math.round(w * feinheit);
+    canvas.height = Math.round(h * feinheit);
 
     const ctx = canvas.getContext('2d');
-    ctx.scale(scale, scale);
+    ctx.scale(feinheit, feinheit);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
@@ -449,8 +455,6 @@
       drawPaper(ctx, entry.bg, w, h);
     }
 
-    drawHeader(ctx, w, entry.headerLeft, entry.headerRight);
-
     /* ══ HIER WURDEN EINMAL DIE BILDER MITGEMALT ═══════════════════
        Und damit war die ganze Seite ein einziges Bild: Papier,
        Hintergrund, jedes Foto und jede Zeichnung in einer Datei. In Word
@@ -463,7 +467,7 @@
        Bildseite und die Handschrift. Die laesst sich nicht in Objekte
        zerlegen: sie ist ein Weg aus tausend Punkten, kein Ding. */
 
-    drawInk(ctx, page.inkStrokes, w, h, scale);
+    drawInk(ctx, page.inkStrokes, w, h, feinheit);
 
     // Papier und Handschrift sind große Flächen und dünne Linien – dafür ist
     // PNG klein und scharf. Sobald Fotos im Spiel sind, wird PNG schnell
@@ -1177,7 +1181,7 @@
 
   /**
    * @param {Array} entries  je Seite ein Eintrag:
-   *   { page, bg, headerLeft, headerRight }
+   *   { page, bg }
    * @param {object} [options]
    * @param {string} [options.title] Titel in den Dokumenteigenschaften
    * @param {number} [options.scale=2] Auflösung der Seitenbilder
@@ -1206,19 +1210,22 @@
       const lh = lhForBg(entry.bg);
 
       const image = await renderPageImage(entry, scale);
-      const relationshipId = naechsteRel();
-      const fileName = `seite${i + 1}.${image.extension}`;
-
-      media.push({ name: `word/media/${fileName}`, data: dataUrlToBytes(image.dataUrl) });
-      relationships.push(
-        `<Relationship Id="${relationshipId}" `
-        + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
-        + `Target="media/${fileName}"/>`
-      );
-
       const width = entry.page.w || DEFAULT_PAGE_W;
       const height = entry.page.h || DEFAULT_PAGE_H;
-      let anchor = anchorXml(++ankerZaehler, relationshipId, width, height);
+
+      let anchor = '';
+      if (image) {
+        const relationshipId = naechsteRel();
+        const fileName = `seite${i + 1}.${image.extension}`;
+
+        media.push({ name: `word/media/${fileName}`, data: dataUrlToBytes(image.dataUrl) });
+        relationships.push(
+          `<Relationship Id="${relationshipId}" `
+          + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+          + `Target="media/${fileName}"/>`
+        );
+        anchor = anchorXml(++ankerZaehler, relationshipId, width, height);
+      }
 
       /* Jedes Objekt der Seite als eigenes Ding: ein Bild bekommt seine
          eigene Datei im Archiv, eine Form braucht gar keine. Beide

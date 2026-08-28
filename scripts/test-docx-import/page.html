@@ -781,6 +781,54 @@ window.__fertig = (async function () {
     pruefe('Seitenbild und Bild liegen getrennt im Archiv', bilddateien.length === 2,
       bilddateien.join(', '));
 
+    /* ══ WAS NICHT MEHR IN DIE DATEI KOMMT ═════════════════════════
+       Das Papier lag als Bild in doppelter Auflösung bei – Linien von
+       einem Pixel, gerastert auf zwei. Ein weisses Blatt kostete so
+       66 KB für nichts. */
+    abschnitt('Das Papier kostet nur noch, was es zeigt');
+
+    const weisseSeite = {
+      id: 'p2', bg: 'blank', w: 794, h: 1123, inkStrokes: [], objects: [],
+      textContent: '<p>Nur Text auf weissem Papier.</p>'
+    };
+    const ohnePapier = await InkwellsDocx.build(
+      [{ page: weisseSeite, bg: 'blank' }], { scale: 2 });
+    const archivWeiss = await InkwellsDocxImport.__intern.entpacke(ohnePapier);
+    const medienWeiss = [...archivWeiss.keys()].filter(n => /^word\/media\//.test(n));
+    pruefe('Eine weisse Seite bekommt gar kein Bild', medienWeiss.length === 0,
+      medienWeiss.join(', '));
+    pruefe('Ihr Text ist trotzdem da',
+      nurText((await InkwellsDocxImport.lese(ohnePapier)).bloecke.map(b => b.html).join(''))
+        .includes('Nur Text auf weissem Papier.'), 'fehlt');
+
+    /* Kariert braucht ein Bild – aber eines in einfacher Auflösung.
+       Doppelt gerastert war dieselbe Seite mehr als viermal so gross. */
+    const kariert = {
+      id: 'p3', bg: 'grid', w: 794, h: 1123, inkStrokes: [], objects: [],
+      textContent: '<p>Auf kariertem Papier.</p>'
+    };
+    const mitKaro = await InkwellsDocx.build([{ page: kariert, bg: 'grid' }], { scale: 2 });
+    const archivKaro = await InkwellsDocxImport.__intern.entpacke(mitKaro);
+    const papierBild = [...archivKaro.entries()].find(([n]) => /^word\/media\/seite/.test(n));
+    pruefe('Kariertes Papier bekommt sein Bild', !!papierBild, 'keines');
+    const kb = papierBild ? Math.round(papierBild[1].length / 1024) : 0;
+    pruefe('Und zwar in einfacher Aufloesung (unter 60 KB)', kb > 0 && kb < 60, kb + ' KB');
+
+    /* Handschrift ist eine freie Kurve – sie bekommt weiter die feine
+       Rechnung, sonst franst sie aus. */
+    const mitStrich = {
+      id: 'p4', bg: 'grid', w: 794, h: 1123, objects: [],
+      inkStrokes: [{ id: 's1', color: '#1a1510', width: 3, isHL: false,
+        path: [{ x: 100, y: 200, p: 0.6 }, { x: 300, y: 260, p: 0.8 }, { x: 500, y: 210, p: 0.5 }] }],
+      textContent: '<p>Mit Handschrift.</p>'
+    };
+    const feiner = await InkwellsDocx.build([{ page: mitStrich, bg: 'grid' }], { scale: 2 });
+    const archivFein = await InkwellsDocxImport.__intern.entpacke(feiner);
+    const feinBild = [...archivFein.entries()].find(([n]) => /^word\/media\/seite/.test(n));
+    pruefe('Eine Seite mit Handschrift wird feiner gerechnet',
+      !!feinBild && feinBild[1].length > (papierBild ? papierBild[1].length : 0),
+      'nicht groesser als das leere Karopapier');
+
     pruefe('Rundlauf ueberlebt den Sanitizer',
       zurueck.bloecke.every(b => sanitizePageHtml(b.html) === b.html),
       zurueck.bloecke.map(b => b.html).find(h => sanitizePageHtml(h) !== h) || '');
