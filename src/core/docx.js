@@ -412,10 +412,83 @@
     ctx.restore();
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DIE HANDSCHRIFT ALS EIGENES DING
+
+     Sie steckte im Seitenbild, zusammen mit dem Papier. In Word liess
+     sich damit nichts davon anfassen, und das Papier musste ihretwegen
+     fein gerastert werden – ein kariertes Blatt mit drei Strichen
+     kostete 96 KB statt 36.
+
+     Jetzt ist sie ein Bild fuer sich, und zwar nur so gross wie das,
+     was darauf steht: gemalt wird in den Kasten um alle Striche, nicht
+     auf ein ganzes Blatt. Eine Notiz in der Ecke kostet damit so viel
+     wie eine Notiz in der Ecke.
+
+     >>> Warum ein Bild und keine Freihandform <<<
+     Word kennt Freiformen (a:custGeom), und ein Strich liesse sich als
+     Pfad schreiben. Nur besteht ein Strich aus Hunderten von Punkten mit
+     wechselndem Druck – die Breite gehoert zum Weg, nicht zur Linie.
+     Als Pfad waere jeder Strich entweder gleichmaessig dick oder ein
+     Umriss aus tausend Punkten. Ein Bild sagt die Wahrheit darueber,
+     was es ist: ein Abbild der Handschrift.
+
+     >>> Warum hinter dem Text <<<
+     Im Heft liegt sie unter dem Textfeld (css/pages.css). Ein Textmarker
+     ueber einem Wort ist dort durchsichtig; als Objekt VOR dem Text
+     laege er darauf und deckte es zu.
+     ══════════════════════════════════════════════════════════════════ */
+  async function renderInkImage(page, scale) {
+    const strokes = (page.inkStrokes || []).map(normalizeStroke);
+    if (!strokes.length) return null;
+
+    const w = page.w || DEFAULT_PAGE_W;
+    const h = page.h || DEFAULT_PAGE_H;
+
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const s of strokes) {
+      const rand = (s.width || 2) / 2 + 1;
+      for (const p of (s.path || [])) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        if (p.x - rand < x0) x0 = p.x - rand;
+        if (p.x + rand > x1) x1 = p.x + rand;
+        if (p.y - rand < y0) y0 = p.y - rand;
+        if (p.y + rand > y1) y1 = p.y + rand;
+      }
+    }
+    if (!Number.isFinite(x0) || !Number.isFinite(y1)) return null;
+
+    // Im Seitenkopf steht nie ein Strich – derselbe Beschnitt wie drawInk
+    x0 = Math.max(0, Math.floor(x0));
+    y0 = Math.max(KOPF_H, Math.floor(y0));
+    x1 = Math.min(w, Math.ceil(x1));
+    y1 = Math.min(h, Math.ceil(y1));
+    const bw = x1 - x0;
+    const bh = y1 - y0;
+    if (bw < 2 || bh < 2) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bw * scale);
+    canvas.height = Math.round(bh * scale);
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    /* Der Ursprung wandert in die Ecke des Kastens; drinnen wird weiter
+       in Seitenmassen gerechnet, so wie drawInk es erwartet. */
+    ctx.translate(-x0, -y0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    drawInk(ctx, page.inkStrokes, w, h, scale);
+
+    // PNG, denn was zwischen den Strichen liegt, muss durchsichtig bleiben
+    return { dataUrl: canvas.toDataURL('image/png'), x: x0, y: y0, w: bw, h: bh };
+  }
+
   /**
-   * Zeichnet den Hintergrund einer Heftseite: das Papier, eine
-   * eingefügte Bildseite und die Handschrift. Der getippte Text und die
-   * Objekte kommen als eigene Dinge dazu (build).
+   * Zeichnet den Hintergrund einer Heftseite: das Papier und eine
+   * eingefügte Bildseite. Text, Objekte und Handschrift kommen als
+   * eigene Dinge dazu (build).
    *
    * >>> Warum nicht immer in voller Auflösung <<<
    * Das Papiermuster besteht aus Linien von genau EINEM Pixel. Bei
@@ -423,9 +496,9 @@
    * und zu sehen ist davon nichts. Ein kariertes Blatt kostete so 172 KB
    * statt 37 KB, auf zehn Seiten über ein Megabyte für Linien.
    *
-   * Feiner gerechnet wird nur, wo es etwas bringt: Handschrift ist eine
-   * freie Kurve, eine eingefügte Bildseite ein Foto. Beide verlieren
-   * sichtbar, wenn man sie grob rastert.
+   * Feiner gerechnet wird nur, wo es etwas bringt: bei einer
+   * eingefügten Bildseite, die ein Foto ist und grob gerastert sichtbar
+   * verliert.
    *
    * >>> Und warum ein Blatt ohne Muster gar keines bekommt <<<
    * Auf ihm steht nichts als eine einzige Farbe. Ein Bild davon wären
@@ -440,11 +513,10 @@
     const w = page.w || DEFAULT_PAGE_W;
     const h = page.h || DEFAULT_PAGE_H;
 
-    const hatHandschrift = !!(page.inkStrokes && page.inkStrokes.length);
     const ohneMuster = entry.bg === 'blank' || entry.bg === 'craft';
-    if (!page.bgImg && !hatHandschrift && ohneMuster) return null;
+    if (!page.bgImg && ohneMuster) return null;
 
-    const feinheit = (hatHandschrift || page.bgImg) ? scale : 1;
+    const feinheit = page.bgImg ? scale : 1;
 
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(w * feinheit);
@@ -471,19 +543,14 @@
       drawPaper(ctx, entry.bg, w, h);
     }
 
-    /* ══ HIER WURDEN EINMAL DIE BILDER MITGEMALT ═══════════════════
-       Und damit war die ganze Seite ein einziges Bild: Papier,
-       Hintergrund, jedes Foto und jede Zeichnung in einer Datei. In Word
-       liess sich davon nichts mehr anfassen, verschieben oder
-       austauschen – genau so wurde es gemeldet.
+    /* ══ HIER WURDE EINMAL ALLES MITGEMALT ═════════════════════════
+       Papier, Hintergrund, jedes Foto, jede Zeichnung und die
+       Handschrift in einer Datei – die ganze Seite war ein einziges
+       Bild, und in Word liess sich davon nichts anfassen.
 
-       Jedes Objekt geht jetzt als eigenes Ding hinaus (build): ein Bild
-       als Bild, eine Form als Word-Form. In diesem Seitenbild bleibt nur
-       das, was wirklich Hintergrund ist – das Papier, eine eingefuegte
-       Bildseite und die Handschrift. Die laesst sich nicht in Objekte
-       zerlegen: sie ist ein Weg aus tausend Punkten, kein Ding. */
-
-    drawInk(ctx, page.inkStrokes, w, h, feinheit);
+       Alles geht jetzt als eigenes Ding hinaus (build): ein Bild als
+       Bild, eine Form als Word-Form, die Handschrift als eigenes Bild in
+       ihrem eigenen Kasten. Hier bleibt nur, was das Blatt selbst ist. */
 
     // Papier und Handschrift sind große Flächen und dünne Linien – dafür ist
     // PNG klein und scharf. Sobald Fotos im Spiel sind, wird PNG schnell
@@ -1251,6 +1318,25 @@
           + `Target="media/${fileName}"/>`
         );
         anchor = anchorXml(++ankerZaehler, relationshipId, width, height);
+      }
+
+      /* Die Handschrift kommt gleich nach dem Papier und vor allem
+         anderen: im Heft liegt sie unter dem Text und unter den
+         Objekten, und diese Reihenfolge soll bleiben. */
+      const schrift = await renderInkImage(entry.page, scale);
+      if (schrift) {
+        const kennung = ++ankerZaehler;
+        const schriftRel = naechsteRel();
+        const schriftDatei = `schrift${kennung}.png`;
+
+        media.push({ name: `word/media/${schriftDatei}`, data: dataUrlToBytes(schrift.dataUrl) });
+        relationships.push(
+          `<Relationship Id="${schriftRel}" `
+          + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+          + `Target="media/${schriftDatei}"/>`
+        );
+        anchor += bildAnkerXml(kennung,
+          { ...schrift, layer: 'back', name: 'Handschrift' }, schriftRel);
       }
 
       /* Jedes Objekt der Seite als eigenes Ding: ein Bild bekommt seine
