@@ -107,7 +107,24 @@ function zeigeImportBericht(bericht) {
     if (nach[schluessel]) verloren.push(nach[schluessel]);
   }
 
-  const text = (t('importSummary') || 'Übernommen: {was}.').replace('{was}', teile.join(', '))
+  /* ── Was ANDERS wird, nicht nur was fehlt ─────────────────────────
+     Die Liste darunter sagt, was gar nicht mitkommt. Das Ärgerliche
+     ist aber das, was mitkommt und trotzdem anders aussieht: das Heft
+     bricht den Text nach seinen eigenen Seiten um, und ein Bild, das
+     in Word neben einem Absatz stand, steht hier darunter. Wer das
+     erst beim Durchblättern merkt, sucht den Fehler bei sich.
+
+     Dasselbe steht nach dem Word-Export (ui/export.js,
+     zeigeExportHinweis) – aus der anderen Richtung. */
+  const geaendert = [
+    t('importChangeFlow') || 'Der Text wird neu umbrochen: die Seiten des Hefts stimmen nicht mit denen des Dokuments überein.',
+    t('importChangePlace') || 'Bilder und Formen stehen untereinander im Text – nicht an der Stelle, an der sie in Word lagen.'
+  ];
+
+  const text = (t('importNoteTitle') || 'Das Heft ist eine Übersetzung, keine Kopie.')
+    + '\n\n' + (t('importSummary') || 'Übernommen: {was}.').replace('{was}', teile.join(', '))
+    + '\n\n' + (t('importNoteChanges') || 'Was sich ändert:') + '\n'
+    + geaendert.map(g => '· ' + g).join('\n')
     + '\n\n' + (t('importLostTitle') || 'Nicht übernommen:') + '\n'
     + verloren.map(v => '· ' + v).join('\n');
 
