@@ -987,13 +987,29 @@
   }
 
   /** Das Vollseiten-Bild, frei positioniert und hinter dem Text. */
-  function anchorXml(id, relationshipId, widthPx, heightPx) {
+  /* ══════════════════════════════════════════════════════════════════
+     WER LIEGT VOR WEM
+
+     Word stapelt frei hängende Objekte nach relativeHeight: höher heisst
+     weiter vorn. Hier stand für das Seitenbild eine feste 0 – und eine 0
+     liest Word wie "nicht gesetzt". Das Papier landete damit je nach
+     Fassung irgendwo im Stapel, im schlimmsten Fall VOR der Handschrift,
+     und die war dann unter einem deckenden Blatt nicht mehr zu sehen.
+     Genau so wurde es gemeldet.
+
+     Jede Stelle bekommt deshalb eine eigene, aufsteigende Zahl aus einem
+     Zähler, und der beginnt bei derselben Basis, die Word selbst
+     benutzt. Das Papier zieht als Erstes und liegt damit ganz hinten.
+     ══════════════════════════════════════════════════════════════════ */
+  const Z_BASIS = 251658240;      // 0x0F000000, wie Word es schreibt
+
+  function anchorXml(id, relationshipId, widthPx, heightPx, hoehe) {
     const cx = Math.round(widthPx * EMU_PER_PX);
     const cy = Math.round(heightPx * EMU_PER_PX);
 
     return '<w:r><w:rPr><w:noProof/></w:rPr><w:drawing>'
-      + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" '
-      + 'behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1">'
+      + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" '
+      + `relativeHeight="${hoehe}" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1">`
       + '<wp:simplePos x="0" y="0"/>'
       + '<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>'
       + '<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>'
@@ -1106,7 +1122,7 @@
      ══════════════════════════════════════════════════════════════════ */
 
   /** Die gemeinsame Hülle: Lage, Grösse, Ebene. */
-  function objektAnkerXml(id, obj, inhaltXml, name) {
+  function objektAnkerXml(id, obj, inhaltXml, name, hoehe) {
     const x = Math.max(0, Math.round((obj.x || 0) * EMU_PER_PX));
     const y = Math.max(0, Math.round((obj.y || 0) * EMU_PER_PX));
     const cx = Math.max(1, Math.round((obj.w || 100) * EMU_PER_PX));
@@ -1115,7 +1131,7 @@
 
     return '<w:r><w:rPr><w:noProof/></w:rPr><w:drawing>'
       + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" '
-      + `relativeHeight="${id}" behindDoc="${hinten}" locked="0" layoutInCell="0" allowOverlap="1">`
+      + `relativeHeight="${hoehe}" behindDoc="${hinten}" locked="0" layoutInCell="0" allowOverlap="1">`
       + '<wp:simplePos x="0" y="0"/>'
       + `<wp:positionH relativeFrom="page"><wp:posOffset>${x}</wp:posOffset></wp:positionH>`
       + `<wp:positionV relativeFrom="page"><wp:posOffset>${y}</wp:posOffset></wp:positionV>`
@@ -1128,7 +1144,7 @@
   }
 
   /** Ein Bild aus dem Heft. */
-  function bildAnkerXml(id, obj, relationshipId) {
+  function bildAnkerXml(id, obj, relationshipId, hoehe) {
     /* Die Drehung steht in Sechzigsteln eines Grades; im Heft sind es
        Grad (canvas/objects.js). */
     const dreh = obj.rot ? ` rot="${Math.round(obj.rot * 60000)}"` : '';
@@ -1141,7 +1157,7 @@
       + `<pic:spPr><a:xfrm${dreh}><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
       + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
       + '</pic:pic></a:graphicData></a:graphic>',
-      obj.name || 'Bild');
+      obj.name || 'Bild', hoehe);
   }
 
   /* Die fünf Formen des Hefts (canvas/shapes.js) in Words Sprache. */
@@ -1151,7 +1167,7 @@
   };
 
   /** Eine Form aus dem Heft – als Form, nicht als Bild davon. */
-  function formAnkerXml(id, obj) {
+  function formAnkerXml(id, obj, hoehe) {
     const prst = FORM_NACH_WORD[obj.shapeType] || 'rect';
     const fuellung = toHexColor(obj.fill);
     const strich = toHexColor(obj.stroke);
@@ -1186,7 +1202,7 @@
       + '</wps:spPr>'
       + '<wps:bodyPr rot="0" anchor="ctr"/>'
       + '</wps:wsp></a:graphicData></a:graphic>',
-      'Form');
+      'Form', hoehe);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -1286,7 +1302,10 @@
        derselben Kennung öffnet Word gar nicht erst. */
     let relZaehler = 0;
     let ankerZaehler = 0;
+    let zZaehler = 0;
     const naechsteRel = () => `rId${++relZaehler}`;
+    // Wer später zieht, liegt weiter vorn – das Papier zieht als Erstes
+    const naechsteHoehe = () => Z_BASIS + (++zZaehler);
 
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
@@ -1305,7 +1324,7 @@
         anchor = formAnkerXml(++ankerZaehler, {
           shapeType: 'rect', x: 0, y: 0, w: width, h: height,
           fill: papierFarbe(entry.bg), stroke: 'none', strokeWidth: 0, layer: 'back'
-        });
+        }, naechsteHoehe());
       }
       if (image) {
         const relationshipId = naechsteRel();
@@ -1317,12 +1336,20 @@
           + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
           + `Target="media/${fileName}"/>`
         );
-        anchor = anchorXml(++ankerZaehler, relationshipId, width, height);
+        anchor = anchorXml(++ankerZaehler, relationshipId, width, height, naechsteHoehe());
       }
 
-      /* Die Handschrift kommt gleich nach dem Papier und vor allem
-         anderen: im Heft liegt sie unter dem Text und unter den
-         Objekten, und diese Reihenfolge soll bleiben. */
+      /* Die Handschrift kommt gleich nach dem Papier – und VOR den
+         Text.
+
+         >>> Warum nicht dahinter, wie im Heft <<<
+         Dahinter teilt sie sich die Ebene mit dem Papier, und das ist
+         ein deckendes Blatt. Stimmt die Stapelreihenfolge dort auch nur
+         einmal nicht, ist die Handschrift verschwunden – und niemand
+         sucht sie unter dem Papier. Vor dem Text ist sie immer zu sehen.
+         Ihr Preis ist gering: ein Textmarker ist ohnehin durchsichtig
+         gemalt (drawInk, Alpha 0.38), und ein Stift, mit dem jemand
+         ueber ein Wort gestrichen hat, soll darauf liegen. */
       const schrift = await renderInkImage(entry.page, scale);
       if (schrift) {
         const kennung = ++ankerZaehler;
@@ -1336,7 +1363,7 @@
           + `Target="media/${schriftDatei}"/>`
         );
         anchor += bildAnkerXml(kennung,
-          { ...schrift, layer: 'back', name: 'Handschrift' }, schriftRel);
+          { ...schrift, name: 'Handschrift' }, schriftRel, naechsteHoehe());
       }
 
       /* Jedes Objekt der Seite als eigenes Ding: ein Bild bekommt seine
@@ -1348,7 +1375,7 @@
         const kennung = ++ankerZaehler;
 
         if (obj.kind === 'shape') {
-          anchor += formAnkerXml(kennung, obj);
+          anchor += formAnkerXml(kennung, obj, naechsteHoehe());
           continue;
         }
 
@@ -1366,7 +1393,7 @@
           + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
           + `Target="media/${dateiname}"/>`
         );
-        anchor += bildAnkerXml(kennung, obj, bildRel);
+        anchor += bildAnkerXml(kennung, obj, bildRel, naechsteHoehe());
       }
 
       const paragraphs = htmlToParagraphs(entry.page.textContent);

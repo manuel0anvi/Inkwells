@@ -867,13 +867,32 @@ window.__fertig = (async function () {
     const xmlInk = I.alsText(archivInk.get('word/document.xml'));
     pruefe('Sie haengt als eigenes Ding auf der Seite',
       xmlInk.includes('name="Handschrift"'), 'kein Anker mit Namen');
-    /* Im Heft liegt sie unter dem Textfeld. Ein Textmarker ueber einem
-       Wort ist dort durchsichtig; davor laege er darauf. */
-    pruefe('Und liegt hinter dem Text',
-      /name="Handschrift"/.test(xmlInk)
-      && xmlInk.slice(0, xmlInk.indexOf('name="Handschrift"')).lastIndexOf('behindDoc="1"')
-         > xmlInk.slice(0, xmlInk.indexOf('name="Handschrift"')).lastIndexOf('behindDoc="0"'),
-      'liegt davor');
+    /* ══ DAS PAPIER LIEGT GANZ HINTEN ══════════════════════════════
+       Word stapelt nach relativeHeight, und dort stand fuer das
+       Seitenbild eine feste 0 – die Word wie "nicht gesetzt" liest. Das
+       Papier landete damit im schlimmsten Fall VOR der Handschrift, und
+       die war unter einem deckenden Blatt nicht mehr zu sehen. */
+    const hoehen = [...xmlInk.matchAll(/relativeHeight="(\d+)"/g)].map(m => Number(m[1]));
+    pruefe('Jede Stelle hat eine eigene Stapelhoehe',
+      hoehen.length >= 2 && new Set(hoehen).size === hoehen.length, hoehen.join(', '));
+    pruefe('Keine davon ist die missverstaendliche Null',
+      hoehen.every(h => h > 0), hoehen.join(', '));
+
+    const bisSchrift = xmlInk.slice(0, xmlInk.indexOf('name="Handschrift"'));
+    const hoeheSchrift = Number((bisSchrift.match(/relativeHeight="(\d+)"[^>]*$/)
+      || bisSchrift.match(/relativeHeight="(\d+)"(?![\s\S]*relativeHeight)/) || [0, 0])[1]);
+    const hoehePapier = hoehen[0];
+    pruefe('Das Papier liegt hinter der Handschrift',
+      hoehePapier === Math.min(...hoehen) && hoeheSchrift > hoehePapier,
+      'Papier ' + hoehePapier + ', Schrift ' + hoeheSchrift);
+
+    /* Und sie liegt vor dem Text: hinter ihm teilte sie sich die Ebene
+       mit dem Papier, und ein einziges Missverstaendnis dort macht sie
+       unsichtbar. Ein Textmarker bleibt trotzdem durchsichtig – er ist
+       so gemalt (drawInk, Alpha 0.38). */
+    pruefe('Und sie liegt vor dem Text',
+      /behindDoc="0"/.test(bisSchrift.slice(bisSchrift.lastIndexOf('<wp:anchor'))),
+      'liegt dahinter');
 
     /* Gemalt wird der Kasten um die Striche, nicht das ganze Blatt: die
        Zeichnung geht von (100|200) bis (500|260), macht rund 400 x 65. */
