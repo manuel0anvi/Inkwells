@@ -206,6 +206,46 @@ app.on('ready', async () => {
       const bild = { url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', w: 100, h: 80 };
       setzeBildObjekt(pg, bild, 200);`);
     await schritt('Eine Tabelle', `typeof insertTable === 'function' ? insertTable(2, 2) : 'ok'`);
+
+    /* ── Zeilen und Spalten ───────────────────────────────────────────
+       Die feste Breite einer Spalte steht in <colgroup>, die Zellen
+       stehen in den <tr>. Beides muss beim Anlegen UND beim Löschen
+       zusammenbleiben, sonst sitzt die Tabelle danach schief. */
+    await schritt('Spalten und Zeilen kommen und gehen', `
+      const t = document.createElement('table');
+      t.className = 'j-table';
+      t.innerHTML = '<colgroup><col width="100"><col width="200"><col width="300"></colgroup>'
+        + '<tbody><tr><td>a</td><td>b</td><td>c</td></tr><tr><td>d</td><td>e</td><td>f</td></tr></tbody>';
+      document.body.appendChild(t);
+      try {
+        const spalten = () => [...t.querySelectorAll('tr')][0].children.length;
+        const cols = () => [...t.querySelectorAll('colgroup > col')].map(c => c.getAttribute('width'));
+
+        if (spalten() !== 3) throw new Error('Aufbau falsch');
+        if (cols().join() !== '100,200,300') throw new Error('colgroup falsch aufgebaut');
+
+        // Die MITTLERE Spalte weg: die Breiten der anderen müssen bleiben
+        if (!removeColumn(t, 1)) throw new Error('removeColumn hat abgelehnt');
+        if (spalten() !== 2) throw new Error('Spalte nicht entfernt');
+        if (cols().length !== 2)
+          throw new Error('colgroup hat noch ' + cols().length + ' Eintraege fuer ' + spalten() + ' Spalten');
+        if (cols().join() !== '100,300')
+          throw new Error('die Breiten sind verrutscht: ' + cols().join() + ' statt 100,300');
+
+        // Eine Spalte dazu: auch dann muss beides zusammenpassen
+        if (!addColumn(t, 0)) throw new Error('addColumn hat abgelehnt');
+        if (cols().length !== spalten())
+          throw new Error('nach dem Anlegen: ' + cols().length + ' Breiten fuer ' + spalten() + ' Spalten');
+
+        // Die letzte Spalte bleibt stehen
+        removeColumn(t, 0); removeColumn(t, 0);
+        if (removeColumn(t, 0) !== false) throw new Error('die letzte Spalte wurde entfernt');
+
+        // Und die letzte Zeile ebenso
+        const zeile = t.querySelector('tr');
+        removeRow(t, zeile);
+        if (removeRow(t, t.querySelector('tr')) !== false) throw new Error('die letzte Zeile wurde entfernt');
+      } finally { t.remove(); }`);
     await schritt('Eine Formel wird vermessen', `
       typeof measureFormula === 'function' ? JSON.stringify(measureFormula('x^2 + y^2')) : 'ok'`);
 

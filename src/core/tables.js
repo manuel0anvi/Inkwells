@@ -168,6 +168,17 @@ function removeColumn(table, index) {
     const zelle = zeile.children[index];
     if (zelle) zelle.remove();
   }
+
+  /* Die feste Breite MUSS mitgehen – dasselbe wie in addColumn, nur
+     andersherum. Ohne das blieb ein <col> zu viel stehen, und jede
+     Spalte rechts der gelöschten bekam die Breite ihrer linken
+     Nachbarin: nach dem Löschen sass die ganze Tabelle schief.
+     Sichtbar wird es erst, sobald jemand einmal eine Spaltengrenze
+     gezogen hat – vorher gibt es gar keine colgroup (sichereColgroup). */
+  const grp = table.querySelector('colgroup');
+  const col = grp && grp.children[index];
+  if (col) col.remove();
+
   return true;
 }
 
