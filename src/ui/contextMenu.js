@@ -170,10 +170,30 @@ E('pg-bg-cancel').addEventListener('click', () => E('ov-pg-bg').style.display = 
 E('pg-bg-ok').addEventListener('click', () => {
   E('ov-pg-bg').style.display = 'none';
   if (!_pgCtxPage || !_pgCtxEl) return;
+  if (_pgCtxPage.bg === _pgCtxBg) return;   // nichts gewählt, nichts zu tun
+
   _pgCtxPage.bg = _pgCtxBg;
-  _pgCtxEl.className = 'j-page bg-' + _pgCtxBg;
+
+  /* Nur die bg-Klasse tauschen, nicht das ganze class-Attribut neu
+     setzen: das Element traegt auch andere (obj-dragging), und die waeren
+     danach weg. Dieselbe Vorsicht wie in refreshPageSectionMarks. */
+  for (const cls of [..._pgCtxEl.classList]) {
+    if (cls.startsWith('bg-')) _pgCtxEl.classList.remove(cls);
+  }
+  _pgCtxEl.classList.add('bg-' + _pgCtxBg);
+
   const t = _pgCtxEl.querySelector('.j-text');
   if (t) applyTextLayoutForBg(t, _pgCtxBg);
+
+  /* ── Und das Heft gilt jetzt als geaendert ─────────────────────────
+     Ohne diese Zeile war die neue Papierart nach dem Zumachen wieder
+     weg. Gespeichert wird NUR, was AutoSave als schmutzig kennt: der
+     Takt, der Heimknopf (core/dialogs.js) und die Titelleiste
+     (ui/titlebar.js) fragen alle vorher isDirty(). Hier meldete es
+     niemand, also schrieb auch niemand — und im geteilten Heft sah der
+     andere die Aenderung nie, denn markDirty ist zugleich der Anstoss
+     fuer Collab.noteChange. */
+  if (window.markCurrentNotebookDirty) markCurrentNotebookDirty();
 });
 
 E('pgctx-clear').addEventListener('click', async () => {
