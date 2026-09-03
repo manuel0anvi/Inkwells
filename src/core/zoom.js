@@ -19,11 +19,48 @@ const VERTICAL_MAX_ZOOM = 0.99;
 let _verticalAutoFit = true;
 let _lastVerticalMode = window.innerHeight > window.innerWidth;
 
-function getZoom() { return _zoom; }
+/* ══════════════════════════════════════════════════════════════════════
+   DER GEWÜNSCHTE ZOOM UND DER, DER WIRKLICH GILT
+
+   `_zoom` ist, was der Nutzer eingestellt hat. `_wirksam` ist, was davon
+   auf dem Blatt ankommt – und das ist im schmalen Fenster weniger.
+
+   >>> Warum es diesen Unterschied braucht <<<
+   Im Querformat blieb es bei den 1,2, wie breit das Fenster auch war.
+   Bei der kleinsten erlaubten Breite (820 px, siehe minWidth in main.js)
+   ist die Seite damit 953 px breit und der Rahmen 757 – sie ragt links
+   und rechts hinaus. Herankommen konnte man an das Abgeschnittene
+   NICHT: #pg-scroll hat overflow-x: hidden, und das Schieben mit dem
+   Finger fängt erst über panThreshold() an, also über 1,21. Der Anfang
+   jeder Zeile war damit unerreichbar – aus „Kapitel 1" wurde „apitel 1".
+   Ein halb auf den Schirm geschobenes Fenster auf einem 1366er Laptop
+   reicht schon dafür.
+
+   Begrenzt wird deshalb genau dort, wo man sich nicht behelfen kann:
+   solange der Wunsch nicht über panThreshold() liegt. Wer ausdrücklich
+   weiter hineinzoomt, bekommt sein Übermass – dort darf er schieben.
+
+   Und `_zoom` bleibt dabei unangetastet. Sonst stünde nach dem
+   Breiterziehen des Fensters immer noch der kleine Wert da, ohne dass
+   jemand ihn eingestellt hätte – derselbe Fall, der weiter unten beim
+   Umklappen ins Hochformat beschrieben ist.
+   ══════════════════════════════════════════════════════════════════════ */
+let _wirksam = _zoom;
+
+/** Der grösste Zoom, bei dem die Seite noch ganz in den Rahmen passt. */
+function getFitZoom() {
+  const sc = E('pg-scroll');
+  if (!sc || !sc.clientWidth) return null;
+  return sc.clientWidth / CFG.PAGE_W;
+}
+
+function getZoom() { return _wirksam; }
 
 function setZoom(z) {
   const sc = E('pg-scroll');
-  let oldZ = _zoom;
+  // Gerechnet wird mit dem Zoom, der WIRKLICH gilt – sonst springt die
+  // Ansicht im schmalen Fenster, wo Wunsch und Wirkung auseinandergehen.
+  let oldZ = _wirksam;
   let unscaledY = 0;
   if (sc) {
     const paddingTop = 28;
@@ -31,13 +68,13 @@ function setZoom(z) {
     const absoluteCenterY = sc.scrollTop + (sc.clientHeight / 2) - paddingTop;
     unscaledY = absoluteCenterY / oldZ;
   }
-  
+
   _zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
   _applyZoom();
-  
+
   if (sc) {
     const paddingTop = 28;
-    const actualNewCenterY = unscaledY * _zoom + paddingTop;
+    const actualNewCenterY = unscaledY * _wirksam + paddingTop;
     sc.scrollTop = actualNewCenterY - (sc.clientHeight / 2);
   }
 }
@@ -75,7 +112,16 @@ function _applyZoom() {
     const fitZoom = getVerticalFitZoom();
     if (fitZoom) _zoom = fitZoom;
   }
-  const z = _zoom, pw = E('pages-wrap');
+
+  /* Im Querformat nie breiter als der Rahmen – aber nur, solange man
+     ohnehin nicht schieben könnte (siehe oben bei _wirksam). */
+  _wirksam = _zoom;
+  if (!isVerticalMode() && _zoom <= panThreshold()) {
+    const passt = getFitZoom();
+    if (passt && passt < _zoom) _wirksam = Math.max(ZOOM_MIN, passt);
+  }
+
+  const z = _wirksam, pw = E('pages-wrap');
   if (!pw) return;
   pw.style.transform = 'scale(' + z + ')';
   pw.style.transformOrigin = 'top center';
@@ -186,7 +232,7 @@ function panThreshold() { return 1.21; }
 function refreshSizer() {
   requestAnimationFrame(() => {
     const pw = E('pages-wrap'); const sizer = E('pg-sizer'); if (!pw || !sizer) return;
-    sizer.style.height = Math.round(pw.offsetHeight * _zoom) + 'px';
+    sizer.style.height = Math.round(pw.offsetHeight * _wirksam) + 'px';
     updateAddPageBtnVisibility();
   });
 }

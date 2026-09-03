@@ -1358,8 +1358,12 @@ E('btn-add-page-end').addEventListener('click', async () => {
   function setPan(x, y) {
     const pw = E('pages-wrap'); if (!pw) return;
     const sc = E('pg-scroll');
-    const viewW = sc ? sc.clientWidth / _zoom : CFG.PAGE_W;
-    const viewH = sc ? sc.clientHeight / _zoom : CFG.PAGE_H;
+    /* getZoom() und nicht _zoom: im schmalen Fenster gilt weniger, als
+       eingestellt ist (core/zoom.js). Mit dem eingestellten Wert stünde
+       hier ein zu grosser Massstab und das Blatt spränge beim Schieben. */
+    const z = getZoom();
+    const viewW = sc ? sc.clientWidth / z : CFG.PAGE_W;
+    const viewH = sc ? sc.clientHeight / z : CFG.PAGE_H;
     const halfW = CFG.PAGE_W / 2;
     const pageH = (pw.offsetHeight || CFG.PAGE_H);
     const maxX = halfW;
@@ -1368,13 +1372,17 @@ E('btn-add-page-end').addEventListener('click', async () => {
     const minY = -pageH + viewH / 2;
     x = Math.max(minX, Math.min(maxX, x));
     y = Math.max(minY, Math.min(maxY, y));
-    pw.style.transform = 'scale(' + _zoom + ') translate(' + x + 'px,' + y + 'px)';
+    pw.style.transform = 'scale(' + z + ') translate(' + x + 'px,' + y + 'px)';
     pw.style.transformOrigin = 'top center';
   }
   // Make resetPan globally accessible for zoom.js
   window.resetPan = function resetPan() {
     const pw = E('pages-wrap'); if (!pw) return;
-    pw.style.transform = 'scale(' + _zoom + ')';
+    /* Ebenfalls getZoom(): resetPan() laeuft am Ende von _applyZoom() und
+       hat dessen gerade gesetzten Massstab damit ueberschrieben – im
+       schmalen Fenster stand danach wieder der zu grosse Wert auf dem
+       Blatt, obwohl der Zoom laengst kleiner war. */
+    pw.style.transform = 'scale(' + getZoom() + ')';
     pw.style.transformOrigin = 'top center';
   }
 
