@@ -596,6 +596,44 @@ app.on('ready', async () => {
     pruefe('Das Ende auch', /Endenach/.test(aA), JSON.stringify(aA));
     pruefe('Und beide sehen dasselbe', aA === aB, JSON.stringify({ A: aA, B: aB }));
 
+    /* ══════════════════════════════════════════════════════════════════
+       9. RÜCKGÄNGIG, WÄHREND DER ANDERE SCHREIBT
+
+       Der Verlauf hält je Schritt ein vollständiges Abbild der Seite.
+       Ein Schritt zurück setzt damit auch das zurück, was in der
+       Zwischenzeit vom anderen hereingekommen ist – wenn niemand
+       aufpasst. Bei der Handschrift hält behalteFremdeStriche dagegen;
+       für den Text muss es der Weg über Yjs tun.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Rückgängig, während der andere schreibt');
+
+    pruefe('Ausgangstext steht bei beiden',
+      await setzeBeide('<p>Meins</p><p>Deins</p>'), '');
+
+    await markeAuf(A, 5);      // hinter "Meins"
+    await warte(300);
+    await tippe(dbgA, 'XX');   // As eigener Schritt, den er gleich zurücknimmt
+    await warte(900);
+
+    await markeAuf(B, 13);     // hinter "Deins"
+    await warte(300);
+    await tippe(dbgB, 'BB');   // Bs Arbeit – die muss bleiben
+    await warte(1200);
+
+    const vorUndo = await flach(A);
+    notiz('vor dem Rückgängig: ' + JSON.stringify(vorUndo));
+
+    await A(`undoPage(); true`);
+    await warte(1800);
+
+    const uA = await flach(A), uB = await flach(B);
+    notiz('A: ' + JSON.stringify(uA));
+    notiz('B: ' + JSON.stringify(uB));
+
+    pruefe('Bs Arbeit hat das Rückgängig von A überlebt', /DeinsBB/.test(uA),
+      'A hat mit Strg+Z auch weggenommen, was B geschrieben hat: ' + JSON.stringify(uA));
+    pruefe('Und beide sehen dasselbe', uA === uB, JSON.stringify({ A: uA, B: uB }));
+
     /* ── Fehler in der Konsole ────────────────────────────────────── */
     abschnitt('Die Konsole');
     const egal = /net::ERR_|Failed to load|Firebase|firestore|SHARE_OFFLINE|Kein Live-Betrieb|Realtime Database|InkwellsShare/i;

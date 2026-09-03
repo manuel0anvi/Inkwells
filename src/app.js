@@ -54,7 +54,12 @@ function _snapshotPageState(page) {
     strokes: JSON.stringify(strokes),
     objects: JSON.stringify(page.objects || []),
     bg: page.bg ?? null,
-    bgImg: page.bgImg ?? null
+    bgImg: page.bgImg ?? null,
+    /* Wie oft ein anderer bis hierher an dieser Seite geschrieben hat.
+       Stimmt die Zahl beim Zurücknehmen nicht mehr, gehört der Text
+       nicht mehr uns allein – siehe _applyPageSnapshot. */
+    fremdStand: (window.Collab && typeof Collab.fremderTextStand === 'function')
+      ? Collab.fremderTextStand(page.id) : 0
   };
 }
 
@@ -82,7 +87,37 @@ function _trimHistory(entry) {
 function _applyPageSnapshot(page, snap) {
   if (!page || !snap) return;
 
-  page.textContent = snap.text || '';
+  /* ══════════════════════════════════════════════════════════════════
+     WAS EIN ANDERER SEITHER GESCHRIEBEN HAT, BLEIBT STEHEN
+
+     Der Verlauf hält je Schritt ein VOLLSTÄNDIGES Abbild der Seite. Ihn
+     zurückzuspielen setzt deshalb auch das zurück, was in der
+     Zwischenzeit von aussen hereingekommen ist: A tippt etwas, B tippt
+     daneben etwas, A drückt Strg+Z – und Bs Arbeit war bei beiden weg.
+     Nachgestellt in scripts/test-collab-tasten.
+
+     Bei der Handschrift hält behalteFremdeStriche dagegen, Strich für
+     Strich. Beim Text geht das nicht: zwei Fassungen ergeben einen
+     einzigen Unterschied, und welcher Teil davon von wem ist, steht
+     nirgends. Also wird der Text in diesem Fall gar nicht angefasst –
+     lieber ein Rückgängig, das weniger tut, als eines, das fremde
+     Arbeit wegnimmt. Handschrift, Bilder und Papier gehen weiterhin
+     zurück.
+
+     Die richtige Lösung wäre Y.UndoManager: Yjs weiss, welche Änderung
+     von wem kam. Der Kasten bei fremderTextStand in ui/collab.js sagt,
+     warum das hier noch nicht steht. */
+  const fremdJetzt = (window.Collab && typeof Collab.fremderTextStand === 'function')
+    ? Collab.fremderTextStand(page.id) : 0;
+  const textGehoertUnsAllein = fremdJetzt === (snap.fremdStand ?? fremdJetzt);
+
+  if (textGehoertUnsAllein) {
+    page.textContent = snap.text || '';
+  } else if (typeof toast === 'function') {
+    /* Sagen, warum am Text nichts geschieht. Ohne das drückt man Strg+Z
+       ein zweites und drittes Mal und hält die App für kaputt. */
+    toast(t('undoTextShared') || 'Am Text ändert sich nichts – jemand anderes hat hier seither geschrieben.');
+  }
   page.objects = JSON.parse(snap.objects || '[]');
   if (snap.bg !== null) page.bg = snap.bg;
   if (snap.bgImg !== null) page.bgImg = snap.bgImg; else delete page.bgImg;
@@ -151,7 +186,10 @@ function _applyPageSnapshot(page, snap) {
     pgEl.style.backgroundColor = '';
   }
 
-  const textDiv = pgEl.querySelector('.j-text');
+  /* Der Text wird nur angefasst, wenn er uns allein gehört (siehe oben).
+     Sonst stünde hier gleich wieder der alte Stand auf dem Blatt und
+     ginge über noteTextChange auch noch hinaus. */
+  const textDiv = textGehoertUnsAllein ? pgEl.querySelector('.j-text') : null;
   if (textDiv) {
     textDiv.innerHTML = sanitizePageHtml(page.textContent);
     // Die Spaltenbreite der freien Absätze gehört nicht ins Heft, sie

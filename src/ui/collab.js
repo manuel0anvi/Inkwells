@@ -2500,6 +2500,11 @@
     if (info.page.textContent === nextText) return;
     info.page.textContent = nextText;
 
+    /* Ein fremder Anschlag mehr auf dieser Seite. app.js merkt sich den
+       Stand beim Sichern eines Rückgängig-Schritts und vergleicht ihn
+       beim Zurücknehmen – siehe fremderTextStand weiter unten. */
+    fremderText.set(String(pageId), (fremderText.get(String(pageId)) || 0) + 1);
+
     const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
     const textDiv = pgEl ? pgEl.querySelector('.j-text') : null;
     if (!textDiv) return;
@@ -2686,6 +2691,44 @@
      Striche – die alle für unantastbar zu erklären hiesse, Rückgängig
      auf dieser Seite abzuschaffen.
      ══════════════════════════════════════════════════════════════════ */
+  /* ══════════════════════════════════════════════════════════════════
+     WIE OFT EIN ANDERER AN DIESER SEITE GESCHRIEBEN HAT
+
+     Gegenstück zu fremdeStriche, für den Text. Der Rückgängig-Verlauf in
+     app.js hält je Schritt ein VOLLSTÄNDIGES Abbild der Seite; ihn
+     zurückzuspielen setzt deshalb auch das zurück, was in der
+     Zwischenzeit von aussen hereingekommen ist.
+
+     >>> Was das anrichtete <<<
+     A tippt etwas, B tippt daneben etwas, A drückt Strg+Z – und Bs
+     Arbeit war bei beiden weg. Nachgestellt in
+     scripts/test-collab-tasten: aus "MeinsXX\nDeinsBB" wurde
+     "Meins\nDeins".
+
+     Bei der Handschrift hält behalteFremdeStriche dagegen: dort lässt
+     sich Strich für Strich sagen, wem er gehört. Beim Text geht das
+     nicht – zwei Fassungen ergeben einen einzigen Unterschied, und
+     welcher Teil davon von wem ist, steht nirgends.
+
+     Deshalb hier nur ein Zähler. app.js merkt sich seinen Stand beim
+     Sichern eines Schrittes; ist er beim Zurücknehmen ein anderer, hat
+     jemand anderes seither geschrieben, und der Text bleibt stehen.
+     Lieber ein Rückgängig, das den Text nicht anfasst, als eines, das
+     fremde Arbeit wegnimmt.
+
+     >>> Was hier eigentlich hingehört <<<
+     Y.UndoManager. Yjs weiss, welche Änderung von wem kam, und kann
+     genau die eigene zurücknehmen – das ist die richtige Lösung und
+     macht diesen Zähler überflüssig. Sie greift aber in den Verlauf
+     ein, der Text, Handschrift und Bilder gemeinsam führt, und das ist
+     mehr Umbau, als kurz vor einer Auslieferung zu verantworten ist.
+     ══════════════════════════════════════════════════════════════════ */
+  const fremderText = new Map();     // pageId -> Zahl der fremden Anschläge
+
+  function fremderTextStand(pageId) {
+    return fremderText.get(String(pageId)) || 0;
+  }
+
   const fremdeStriche = new Map();   // pageId -> Set der Abdrücke
 
   /**
@@ -4389,6 +4432,9 @@
     /* Rückgängig darf die Striche der anderen nicht mitnehmen – app.js
        fragt vor jedem Zurücksetzen hier nach. */
     behalteFremdeStriche,
+    // Wie oft ein anderer an dieser Seite geschrieben hat – app.js fragt
+    // beim Rückgängigmachen danach
+    fremderTextStand,
     stateFor, isLive, renderMarkers, renderCarets, renderLocks, status, checkCaret,
     /* Wer außer einem selbst gerade da ist – flach kopiert, damit
        niemand von außen in die laufende Liste hineinschreibt. Der Chat
