@@ -267,20 +267,93 @@ app.on('ready', async () => {
       await js(`document.querySelectorAll('.modal-overlay,.overlay').forEach(o => { o.style.display='none'; })`);
     }
 
-    /* ── Ausgabe ──────────────────────────────────────────────────── */
+    /* ── Ausgabe ──────────────────────────────────────────────────────
+       Geprüft wird nicht nur, dass etwas herauskommt, sondern dass der
+       Text der Seite auch WIRKLICH drinsteht. Ein Export, der still eine
+       leere Seite liefert, faellt sonst erst dem Nutzer auf. */
     abschnitt('Ausgeben');
-    await schritt('Ein PDF wird gebaut', `
+    await schritt('Das PDF enthaelt den Text der Seite', `
       const nb = getNb();
+      nb.pages[0].textContent = '<h1>Ueberschrift</h1><p>Ein Kennwort: Zwiebelkuchen.</p>';
       const html = buildPdf(nb, {});
-      if (!html || html.length < 200) throw new Error('PDF-HTML ist leer');`, 700);
-    await schritt('Die Seitenliste stimmt', `
-      const liste = exportPageList(getNb());
-      if (!Array.isArray(liste) || !liste.length) throw new Error('leere Seitenliste');`);
-    await schritt('Ein Word-Dokument entsteht', `
-      if (typeof buildDocx === 'function') {
-        const b = await buildDocx(getNb(), {});
-        if (!b) throw new Error('kein Ergebnis');
-      }`, 900);
+      if (!html || html.length < 200) throw new Error('PDF-HTML ist leer');
+      if (!html.includes('Zwiebelkuchen')) throw new Error('der Text der Seite fehlt im PDF');
+      if (!html.includes('Ueberschrift')) throw new Error('die Ueberschrift fehlt im PDF');`, 700);
+
+    /* exportPageList laesst leere Seiten bewusst weg - ein Ausdruck
+       soll keine leeren Blaetter enthalten. Geprueft wird deshalb, dass
+       genau die BESCHRIEBENEN Seiten drin sind. */
+    await schritt('Die Seitenliste nimmt die beschriebenen Seiten', `
+      const nb = getNb();
+      nb.pages[1].textContent = '<p>Auch hier steht etwas.</p>';
+      const liste = exportPageList(nb);
+      const voll = notebookPages(nb).filter(p => !pageIsEmpty(p)).length;
+      if (liste.length !== voll)
+        throw new Error(liste.length + ' in der Liste, aber ' + voll + ' beschriebene Seiten');
+      if (liste.length < 2) throw new Error('die zweite beschriebene Seite fehlt');
+      // Die Seitenzahl muss die des HEFTS sein, nicht die der Auswahl
+      if (liste[1].pageNo !== 2) throw new Error('Seitenzahl ' + liste[1].pageNo + ' statt 2');
+      nb.pages[1].textContent = '';`);
+
+    await schritt('Nur ein Seitenbereich', `
+      const nb = getNb();
+      const ids = new Set([nb.pages[0].id]);
+      const teil = buildPdf(nb, { pageIds: ids });
+      if (!teil.includes('Zwiebelkuchen')) throw new Error('die gewaehlte Seite fehlt');`, 500);
+
+    await schritt('Das Word-Dokument entsteht als ZIP', `
+      const nb = getNb();
+      const eintraege = exportPageList(nb).map(e => ({ page: e.page, bg: e.page.bg || nb.defaultBg }));
+      const b = await InkwellsDocx.build(eintraege, { title: 'Probe' });
+      if (!b || !b.length) throw new Error('kein Ergebnis');
+      // Ein .docx ist ein ZIP: es faengt mit "PK" an
+      if (b[0] !== 0x50 || b[1] !== 0x4B) throw new Error('das ist kein ZIP');
+      if (b.length < 1000) throw new Error('verdaechtig klein: ' + b.length + ' Bytes');`, 1500);
+
+    await schritt('Ohne Seiten sagt der Export es deutlich', `
+      let gemeldet = '';
+      try { await InkwellsDocx.build([], {}); }
+      catch (e) { gemeldet = e.message; }
+      if (gemeldet !== 'EMPTY_SELECTION')
+        throw new Error('erwartet EMPTY_SELECTION, bekommen: ' + (gemeldet || 'gar keinen Fehler'));`);
+
+    await schritt('Der Text der Seite steht wirklich im Word-Dokument', `
+      const nb = getNb();
+      const eintraege = [{ page: nb.pages[0], bg: 'ruled' }];
+      const b = await InkwellsDocx.build(eintraege, {});
+      /* Im ZIP stehen die Dateinamen unverpackt - der Text selbst ist
+         gepackt. Geprueft wird deshalb, dass document.xml dabei ist. */
+      const roh = new TextDecoder('latin1').decode(b);
+      if (!roh.includes('word/document.xml')) throw new Error('word/document.xml fehlt im Paket');
+      if (!roh.includes('[Content_Types].xml')) throw new Error('[Content_Types].xml fehlt');`, 1500);
+
+    await schritt('Ein unmoeglicher Dateiname wird entschaerft', `
+      const n = InkwellsDocx.safeFileName('a/b:c*d?e"f<g>h|i');
+      if (/[\\\\/:*?"<>|]/.test(n)) throw new Error('verbotene Zeichen blieben: ' + n);`);
+
+    /* ── Zaehlen und Suchen ───────────────────────────────────────── */
+    abschnitt('Zaehlen und Suchen');
+    await schritt('Die Woerter werden richtig gezaehlt', `
+      const nb = getNb();
+      for (const p of nb.pages) p.textContent = '';
+      nb.pages[0].textContent = '<p>eins zwei drei vier fuenf</p>';
+      openSection(null);
+      await new Promise(r => setTimeout(r, 250));
+      const z = zaehleHeft();
+      if (!z) throw new Error('zaehleHeft gab nichts zurueck');
+      if (z.woerter !== 5) throw new Error('5 Woerter erwartet, gezaehlt: ' + z.woerter);`, 600);
+
+    await schritt('Die Suche findet, was dasteht', `
+      const nb = getNb();
+      nb.pages[0].textContent = '<p>Ein Wort: Rhabarberkuchen.</p>';
+      openSection(null);
+      await new Promise(r => setTimeout(r, 250));
+      const treffer = notebookPages(nb).filter(p =>
+        nbSearchPlainText(p).toLowerCase().includes('rhabarberkuchen'));
+      if (treffer.length !== 1) throw new Error(treffer.length + ' Treffer statt 1');
+      const daneben = notebookPages(nb).filter(p =>
+        nbSearchPlainText(p).toLowerCase().includes('gibtesnicht'));
+      if (daneben.length) throw new Error('Treffer fuer ein Wort, das nirgends steht');`, 500);
 
     /* ── Sprachen ─────────────────────────────────────────────────── */
     abschnitt('Die Sprachen');
