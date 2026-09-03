@@ -1214,7 +1214,27 @@ function setSidePanel(offen) {
   if (!p || p.classList.contains('open') === offen) return;
   p.classList.toggle('open', offen);
   E('btn-panel-toggle').classList.toggle('active', offen);
-  setTimeout(() => _applyZoom(), 220);
+
+  /* ── Erst wenn die Leiste wirklich steht, den Zoom nachrechnen ──────
+     Hier stand setTimeout(() => _applyZoom(), 220) – die Leiste braucht
+     200 ms (css/sidebar.css). Gemessen wurde damit aber MITTEN in der
+     Bewegung: 600 px statt der endgueltigen 577. Danach rechnete niemand
+     mehr nach, und die Seite blieb um diesen Unterschied zu breit;
+     abgeschnitten, und bei overflow-x: hidden nicht zu erreichen.
+
+     'transitionend' feuert, wenn die Breite wirklich steht – gemessen
+     statt geraten. Der setTimeout bleibt als Netz fuer den Fall, dass
+     gar keine Bewegung stattfindet (bei prefers-reduced-motion oder wenn
+     die Leiste schon offen war, feuert transitionend nie). */
+  const inhalt = p.querySelector('.side-content');
+  let erledigt = false;
+  const nachrechnen = () => {
+    if (erledigt) return;
+    erledigt = true;
+    _applyZoom();
+  };
+  if (inhalt) inhalt.addEventListener('transitionend', nachrechnen, { once: true });
+  setTimeout(nachrechnen, 400);
 }
 
 E('btn-panel-toggle').addEventListener('click', () => {

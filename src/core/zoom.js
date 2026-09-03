@@ -253,6 +253,55 @@ function refreshSizer() {
    ══════════════════════════════════════════════════════════════════════ */
 let _querZoom = BASE_ZOOM;
 
+/* ══════════════════════════════════════════════════════════════════════
+   WENN DER RAHMEN SCHMALER WIRD, MUSS DER ZOOM NACHRECHNEN
+
+   Nicht nur beim Fenster: die Abschnittsleiste schiebt den Rahmen um
+   230 px zusammen, und das ohne jedes resize-Ereignis.
+
+   >>> Warum hier ein ResizeObserver richtig ist <<<
+   Weiter oben steht, dass einer auf #pages-wrap nichts taugt – der
+   meldet die LAYOUT-Groesse, und die aendert ein transform nicht. Hier
+   ist es genau umgekehrt: gefragt ist die Layout-Breite des Rahmens, und
+   das ist das Einzige, was ein ResizeObserver zuverlaessig liefert.
+
+   setSidePanel() half sich vorher mit setTimeout(220) – die Leiste
+   braucht 200 ms (css/sidebar.css). Gemessen wurde damit aber mitten in
+   der Bewegung: bei 600 statt der endgueltigen 577 px. Danach rechnete
+   niemand mehr nach, und die Seite blieb 53 px zu breit – abgeschnitten,
+   und bei overflow-x: hidden nicht zu erreichen. Ein Beobachter trifft
+   dagegen jeden Zwischenschritt UND den letzten; nebenbei passt sich die
+   Seite dadurch waehrend der Bewegung mit an, statt am Ende zu springen.
+
+   Die Breite wird gemerkt, damit die eigene Aenderung (der Balken zum
+   Rollen kommt oder geht) nicht in eine Schleife laeuft.
+
+   >>> Und warum nur im Querformat <<<
+   Im Hochformat passt sich die Seite ohnehin schon ein
+   (getVerticalFitZoom), und dort ist jede Breitenaenderung eine ANDERE
+   Groesse: die Kommentarleiste macht den Rahmen schmaler, die Seite
+   wuerde mitschrumpfen – und dadurch wuerde der Rand rechts davon
+   BREITER als MIN_RAND. Genau daran entscheidet ui/comments.js, ob die
+   Karten in die Leiste oder an den Rand gehoeren; sie sprangen also beim
+   Antippen sofort wieder aus der Leiste heraus. test:touch hat das
+   gefunden. Im Hochformat bleibt es deshalb beim Bisherigen: dort rechnet
+   das resize-Ereignis nach, und die Abschnittsleiste sagt selbst Bescheid.
+   ══════════════════════════════════════════════════════════════════════ */
+(function beobachteRahmen() {
+  if (typeof ResizeObserver !== 'function') return;
+  const sc = E('pg-scroll');
+  if (!sc) return;
+
+  let zuletzt = sc.clientWidth;
+  new ResizeObserver(() => {
+    const jetzt = sc.clientWidth;
+    if (!jetzt || jetzt === zuletzt) return;
+    zuletzt = jetzt;
+    if (isVerticalMode()) return;
+    _applyZoom();
+  }).observe(sc);
+})();
+
 window.addEventListener('resize', () => {
   const nowVertical = isVerticalMode();
   if (nowVertical && !_lastVerticalMode) {
