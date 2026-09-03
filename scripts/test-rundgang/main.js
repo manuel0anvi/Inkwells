@@ -455,6 +455,65 @@ app.on('ready', async () => {
       const rein = sanitizePageHtml('<a href="https://example.org">hin</a>');
       if (!/href="https:\\/\\/example\\.org"/.test(rein)) throw new Error('Verweis weg: ' + rein);`);
 
+    /* ══════════════════════════════════════════════════════════════════
+       ALLES, WAS DER EDITOR SETZT, MUSS DURCH DIE BEREINIGUNG
+
+       Jeder Text geht durch sanitizePageHtml - beim Speichern, beim
+       Teilen, beim Ausgeben. Was dort nicht auf der Liste steht, ist
+       nach dem ersten Abgleich WEG, und zwar wortlos. Eine Klasse oder
+       ein Attribut, das jemand neu einfuehrt und dort nachzutragen
+       vergisst, faellt sonst erst dem Nutzer auf.
+       ══════════════════════════════════════════════════════════════════ */
+    await schritt('Keine Auszeichnung geht beim Saeubern verloren', `
+      const proben = [
+        ['Ueberschrift',      '<h1>Gross</h1>', 'Gross'],
+        ['Titel-Klasse',      '<p class="j-title-2">Mittel</p>', 'j-title-2'],
+        ['Fett und kursiv',   '<p><b>f</b><i>k</i><u>u</u><s>d</s></p>', '<b>'],
+        ['Farbe',             '<p style="color:#c04040">rot</p>', 'color'],
+        ['Word-Farbe',        '<font color="#2a5fa8">blau</font>', 'color'],
+        ['Ausrichtung',       '<p class="j-align-center">mitte</p>', 'j-align-center'],
+        ['Aufzaehlung',       '<ul class="j-list-disc"><li>eins</li></ul>', 'j-list-disc'],
+        ['Einzug',            '<p style="margin-left:48px">ein</p>', 'margin-left'],
+        ['Freier Absatz',     '<p class="j-frei" style="left:120px;top:64px">frei</p>', 'left'],
+        ['Abstandshalter',    '<span class="j-luecke" contenteditable="false" style="width:40px"></span>', 'width'],
+        ['Tabelle',           '<table class="j-table"><tr><td>z</td></tr></table>', '<td>'],
+        ['Spaltenbreite',     '<table><colgroup><col width="120"></colgroup><tr><td>z</td></tr></table>', 'width="120"'],
+        ['Zeilenhoehe',       '<table><tr height="64"><td>z</td></tr></table>', 'height="64"'],
+        ['Verbundene Zelle',  '<table><tr><td colspan="2">z</td></tr></table>', 'colspan="2"'],
+        ['Tabellenlage',      '<table class="j-table" x="30" y="90"><tr><td>z</td></tr></table>', 'x="30"'],
+        ['Formel',            '<span class="j-formula" data-latex="x^2">x</span>', 'data-latex'],
+        ['Formel als Block',  '<p class="j-formula-block"><span class="j-formula" data-latex="a">a</span></p>', 'j-formula-block'],
+        ['Kommentarstelle',   '<span class="j-comment-mark" data-cid="k1">Stelle</span>', 'data-cid'],
+        ['Erledigt',          '<span class="j-comment-mark j-resolved" data-cid="k2">x</span>', 'j-resolved'],
+        ['Verweis',           '<a href="https://example.org">hin</a>', 'href'],
+        ['Seitenverweis',     '<a href="inkwells://page/7">Seite 7</a>', 'inkwells://page/7']
+      ];
+      const weg = [];
+      for (const [name, roh, muss] of proben) {
+        const rein = sanitizePageHtml(roh);
+        if (!rein.includes(muss)) weg.push(name + ' (fehlt: ' + muss + ')');
+      }
+      if (weg.length) throw new Error('Die Bereinigung verschluckt: ' + weg.join(', '));`);
+
+    await schritt('Und Gefaehrliches faellt weiterhin weg', `
+      const boese = [
+        ['Skript',        '<script>alles()<\\/script>', /<script/i],
+        ['Griff',         '<p onclick="x()">t</p>', /onclick/i],
+        ['Griff am Bild', '<img src=x onerror="x()">', /onerror|<img/i],
+        ['javascript:',   '<a href="javascript:x()">t</a>', /javascript:/i],
+        ['data: im href', '<a href="data:text/html,x">t</a>', /data:text/i],
+        ['Rahmen',        '<iframe src="https://x.de"><\\/iframe>', /<iframe/i],
+        ['Fremdes style', '<p style="position:fixed;background:url(x)">t</p>', /position|url\\(/i],
+        ['Fremde Klasse', '<p class="j-page">t</p>', /j-page/],
+        ['contenteditable','<p contenteditable="true">t</p>', /contenteditable/i]
+      ];
+      const drin = [];
+      for (const [name, roh, muster] of boese) {
+        const rein = sanitizePageHtml(roh);
+        if (muster.test(rein)) drin.push(name + ' -> ' + rein.slice(0, 60));
+      }
+      if (drin.length) throw new Error('Kam durch: ' + drin.join(' | '));`);
+
     /* Ein Mailverweis muss die ganze Kette ueberstehen: aus dem Getippten
        wird ein mailto:, der Sanitizer laesst es durch, und der
        Hauptprozess darf es oeffnen. Faellt eines davon aus, tut der
