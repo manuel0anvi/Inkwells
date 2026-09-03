@@ -892,20 +892,36 @@ ipcMain.on('silent-auth', (_, an) => {
   stilleAnmeldungBis = an ? Date.now() + SILENT_AUTH_MS : 0;
 });
 
-/* Nur das Netz, nichts von der Platte.
+/* Nur das Netz und die Post, nichts von der Platte.
    shell.openExternal reicht ALLES an das Betriebssystem weiter – auch
    file:///…, einen Netzpfad oder ein fremdes Protokoll. Hier kommt zwar
    nur die Anmeldeadresse an (core/cloudSync.js), aber die Bruecke selbst
    nahm bisher jeden Wert. Das ist dieselbe zweite Schicht, die es fuer
    die Dateizugriffe schon gibt: die Oberflaeche soll auch dann nichts
-   anrichten koennen, wenn in ihr einmal fremder Code laeuft. */
+   anrichten koennen, wenn in ihr einmal fremder Code laeuft.
+
+   >>> Warum mailto: dazugehoert <<<
+   Ein Verweis auf eine Mailadresse ist an DREI Stellen ausdruecklich
+   vorgesehen: ui/links.js macht aus "wer@wo.de" von selbst ein
+   mailto:, core/sanitize.js laesst das Schema durch, damit der Verweis
+   das Speichern und das Teilen uebersteht, und zielText() zeigt ihn
+   ohne das mailto: davor an. Nur hier fiel er durch – ein Mailverweis
+   tat in der App also gar nichts, wortlos. Im Browser ging derselbe
+   Verweis (dort gibt es kein window.api, und window.open uebernimmt).
+
+   inkwells: bleibt bewusst DRAUSSEN. Was die App selbst kennt – eine
+   Seite im Heft, ein Freigabe-Link – faengt folge() in ui/links.js
+   vorher ab. Alles andere waere ein Protokoll-Aufruf, den sich ein
+   fremdes Heft ausdenken koennte. */
+const EXTERN_ERLAUBT = new Set(['https:', 'http:', 'mailto:']);
+
 ipcMain.handle('open-external', async (_, url) => {
   let ziel;
   try { ziel = new URL(String(url)); }
   catch (err) { console.error('[Extern] Keine gueltige Adresse:', url); return false; }
 
-  if (ziel.protocol !== 'https:' && ziel.protocol !== 'http:') {
-    console.error('[Sicherheit] Nur http/https – abgelehnt:', ziel.protocol);
+  if (!EXTERN_ERLAUBT.has(ziel.protocol)) {
+    console.error('[Sicherheit] Nur http/https/mailto – abgelehnt:', ziel.protocol);
     return false;
   }
 

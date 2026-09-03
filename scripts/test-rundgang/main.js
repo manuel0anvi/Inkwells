@@ -393,6 +393,54 @@ app.on('ready', async () => {
       if (parsePageRange('Unsinn', 5) !== null) throw new Error('Unsinn wurde angenommen');
       if (parsePageRange('4-2', 5).size !== 3) throw new Error('verdrehter Bereich falsch');`);
 
+    /* ── Abschnitte, Reihenfolge, Kopien ──────────────────────────── */
+    abschnitt('Abschnitte und Reihenfolge');
+    await schritt('Eine Seite wandert an eine andere Stelle', `
+      const nb = getNb();
+      nb.pages = [makePage('ruled'), makePage('ruled'), makePage('ruled'), makePage('ruled')];
+      const [a, b, c, d] = nb.pages.map(p => p.id);
+
+      if (!movePageBefore(nb, a, c)) throw new Error('Verschieben abgelehnt');
+      if (nb.pages.map(p => p.id).join() !== [b, a, c, d].join())
+        throw new Error('nach vorn: ' + nb.pages.map(p => p.id === a ? 'a' : p.id === b ? 'b' : p.id === c ? 'c' : 'd').join());
+
+      if (!movePageBefore(nb, d, b)) throw new Error('Verschieben nach hinten abgelehnt');
+      if (nb.pages[0].id !== d) throw new Error('d steht nicht vorn');
+
+      // Vor die eigene Nachfolgerin heisst: gar nichts tun
+      const vorher = nb.pages.map(p => p.id).join();
+      movePageBefore(nb, nb.pages[0].id, nb.pages[1].id);
+      if (nb.pages.map(p => p.id).join() !== vorher) throw new Error('Schein-Verschiebung hat etwas veraendert');`);
+
+    await schritt('Eine Kopie bekommt neue Kennungen', `
+      const nb = getNb();
+      const quelle = nb.pages[0];
+      quelle.objects = [{ id: 'fest', kind: 'image', src: 'x', x: 1, y: 1, w: 2, h: 2 }];
+      const kopie = clonePage(quelle);
+      if (kopie.id === quelle.id) throw new Error('die Seite behielt ihre Kennung');
+      if (kopie.objects[0].id === quelle.objects[0].id)
+        throw new Error('das Bild behielt seine Kennung - im Raum ueberschreiben sich beide');
+      if (kopie.objects[0].src !== quelle.objects[0].src) throw new Error('der Inhalt kam nicht mit');
+      quelle.objects = [];`);
+
+    await schritt('Ein Abschnitt nimmt eine Seite auf', `
+      const nb = getNb();
+      nb.sections = [{ id: 's1', name: 'Erster', pgIds: [] }];
+      const pg = nb.pages[0];
+      if (!setSectionOfPage(nb, pg.id, 's1')) throw new Error('Zuordnung abgelehnt');
+      if (findSecForPage(pg.id, nb)?.id !== 's1') throw new Error('Abschnitt nicht wiedergefunden');
+      // Dieselbe Zuordnung noch einmal: nichts zu tun
+      if (setSectionOfPage(nb, pg.id, 's1') !== false) throw new Error('dieselbe Zuordnung galt als Aenderung');
+      // Und wieder ab
+      if (!setSectionOfPage(nb, pg.id, null)) throw new Error('Loesen abgelehnt');
+      if (findSecForPage(pg.id, nb)) throw new Error('Abschnitt klebt noch an der Seite');`);
+
+    await schritt('Die Seitenzahl zaehlt vom Heft, nicht vom Abschnitt', `
+      const nb = getNb();
+      const dritte = nb.pages[2];
+      const nr = pageNumberOf(nb, dritte.id);
+      if (nr !== 3) throw new Error('Seite 3 heisst hier ' + nr);`);
+
     /* ── Kommentare und Verweise ──────────────────────────────────── */
     abschnitt('Kommentare und Verweise');
     await schritt('Ein Kommentar entsteht', `
@@ -407,6 +455,17 @@ app.on('ready', async () => {
       const rein = sanitizePageHtml('<a href="https://example.org">hin</a>');
       if (!/href="https:\\/\\/example\\.org"/.test(rein)) throw new Error('Verweis weg: ' + rein);`);
 
+    /* Ein Mailverweis muss die ganze Kette ueberstehen: aus dem Getippten
+       wird ein mailto:, der Sanitizer laesst es durch, und der
+       Hauptprozess darf es oeffnen. Faellt eines davon aus, tut der
+       Verweis in der App wortlos nichts. */
+    await schritt('Ein Mailverweis ueberlebt das Saeubern', `
+      const rein = sanitizePageHtml('<a href="mailto:wer@wo.de">schreib mir</a>');
+      if (!/href="mailto:wer@wo\\.de"/.test(rein)) throw new Error('mailto verworfen: ' + rein);
+      // Und ein Schema, das niemand erlaubt hat, faellt weiter durch
+      const boese = sanitizePageHtml('<a href="file:///C:/Windows">x</a>');
+      if (/file:/.test(boese)) throw new Error('file: blieb stehen: ' + boese);`);
+
     /* ── Was geändert wurde, muss auch gemerkt werden ─────────────── */
     /* Gespeichert wird NUR, was AutoSave als schmutzig kennt: jeder Weg
        (Takt, Heimknopf, Titelleiste) fragt vorher isDirty(). Wer eine
@@ -415,6 +474,10 @@ app.on('ready', async () => {
     abschnitt('Änderungen werden gemerkt');
     await schritt('Ein anderes Papier merkt sich das Heft', `
       const nb = getNb();
+      // Die Schritte davor haben an nb.pages gedreht - erst neu zeichnen
+      openSection(null);
+      await new Promise(r => setTimeout(r, 400));
+
       AutoSave.markClean(nb.id);
       const pg = nb.pages[0];
       const vorher = pg.bg;
@@ -456,6 +519,27 @@ app.on('ready', async () => {
     abschnitt('Der Rückweg');
     await schritt('Zurück zur Übersicht', 'showHome()', 700);
     await schritt('Und nochmal hinein', `openNotebook('probe')`, 700);
+
+    /* ── Und was der Hauptprozess nach draussen laesst ─────────────────
+       Die Bruecke 'open-external' liegt in main.js und ist von der
+       Oberflaeche aus nicht zu befragen. Geprueft wird deshalb hier, im
+       Hauptprozess: welche Schemata stehen dort auf der Liste. */
+    abschnitt('Was nach draussen darf');
+    {
+      const quelle = require('fs').readFileSync(path.join(ROOT, 'main.js'), 'utf8');
+      const m = quelle.match(/EXTERN_ERLAUBT\s*=\s*new Set\(\[([^\]]*)\]\)/);
+      const liste = m ? m[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean) : [];
+      pruefe('http und https duerfen hinaus',
+        liste.includes('http:') && liste.includes('https:'),
+        'gefunden: ' + liste.join(' '));
+      pruefe('mailto: auch – der Verweis-Dialog macht welche',
+        liste.includes('mailto:'),
+        'ui/links.js baut mailto:-Verweise, core/sanitize.js laesst sie durch, '
+        + 'aber main.js weist sie ab: der Verweis tut dann gar nichts. Gefunden: ' + liste.join(' '));
+      pruefe('file: und inkwells: bleiben draussen',
+        !liste.includes('file:') && !liste.includes('inkwells:'),
+        'gefunden: ' + liste.join(' '));
+    }
 
     /* Was zum Schluss noch in der Konsole steht, gehört zu keinem
        einzelnen Schritt - meist ein verspäteter Netzfehler. */
