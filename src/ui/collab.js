@@ -1174,7 +1174,35 @@
     const person = lockOwner(pageId, stelle, stelle);
     if (!person) return;
 
-    markeWeg(textDiv);
+    /* ══════════════════════════════════════════════════════════════════
+       DIE MARKE BLEIBT STEHEN – DAS FELD WIRD NICHT STILLGELEGT
+
+       Hier stand markeWeg(textDiv): Auswahl weg, Fokus weg. Die Absicht
+       war richtig – an dieser Stelle darf nicht geschrieben werden. Die
+       Wirkung war es nicht, denn den Fokus gab niemand zurück. Das Feld
+       blieb tot, bis der Nutzer von sich aus wieder hineinklickte.
+
+       >>> Der Fall, in dem das niemand versteht <<<
+       Man parkt die Marke in einer Zeile und tut nichts weiter. Der
+       andere fängt in derselben Zeile an zu schreiben. Dieser Takt läuft
+       alle 600 ms mit melden=false, nimmt den Fokus – und sagt dabei
+       ausdrücklich nichts. Von da an tut die Tastatur nichts mehr, ohne
+       den geringsten Hinweis. Genau das gemeldete „die Zusammenarbeit
+       buggt beim Schreiben".
+
+       >>> Warum Stehenlassen sicher ist <<<
+       Weil die Marke gar nichts schreibt. Das tut die Eingabe, und die
+       fragt app.js vor JEDEM Anschlag über lockedHere ab – bei
+       'beforeinput', bei Tab und Enter, beim Einsetzen. Das ist die
+       Wache, die wirklich zählt; im Prüfstand bleibt As Tippen auch ohne
+       jeden Eingriff hier wirkungslos.
+
+       Weggenommen wurde auch ein zweiter Anlauf: die Marke an den Rand
+       des Bandes zu schieben. Dann landete das Getippte in der Zeile
+       DANEBEN – aus „nichts passiert" wurde „es steht an der falschen
+       Stelle", und das ist schlimmer. Wo der Nutzer hingezeigt hat,
+       bleibt die Marke; warum nichts geschieht, sagt warnLocked. */
+
 
     /* Sagen, warum die Marke wegspringt – aber nur dem, der hier auch
        wirklich arbeitet. Wer nur zusieht, soll das Sperrband sehen und
@@ -2182,7 +2210,44 @@
         person = { ...person, ...person.praesenz };
       }
 
-      const stelle = findeStelle(inhalt, person.offset, person.cx);
+      /* ══════════════════════════════════════════════════════════════
+         EINE SPERRE, DEREN STELLE NICHT ZU BEWEISEN IST, GILT NICHT
+
+         findeStelle gibt die rohe Zahl zurück, wenn der Anker hier nicht
+         wiederzufinden ist. Für die MARKE ist das richtig: sie ein paar
+         Zeichen daneben zu zeichnen ist besser, als sie verschwinden zu
+         lassen. Für die SPERRE ist es falsch – dort ist die rohe Zahl
+         eine Zahl aus einem anderen Text.
+
+         >>> Was daraus wurde <<<
+         Tippen beide gleichzeitig, hinkt der gemeldete Stand des anderen
+         um die Zeichen hinterher, die man selbst gerade eingefügt hat.
+         Der Anker war dann kurz nicht auffindbar, der Versatz blieb 0,
+         und das Sperrband stand um genau diese Zeichen zu weit vorn –
+         gemessen 5..11 statt 6..12. Damit lag es auf dem Zeilenende des
+         NACHBARN, also auf der eigenen Schreibmarke.
+
+         Und was dann geschah, war nicht wieder gutzumachen:
+         haltCaretAusSperre nahm der eigenen Seite den Fokus (markeWeg),
+         und niemand gab ihn zurück. Wer weitertippte, sah nichts mehr
+         geschehen – von zehn Anschlägen kam einer an. Genau das gemeldete
+         „die Zusammenarbeit buggt beim Schreiben".
+
+         Dieselbe Haltung wie bei der abgelaufenen Sperre in activeLocks:
+         lieber gar nicht sperren als an der falschen Stelle. Die Marke
+         bleibt davon unberührt, sie wird weiter gezeichnet.
+
+         Ohne Anker (ältere Fassung am anderen Ende) bleibt es beim
+         Bisherigen – da ist nichts zu prüfen, und gar keine Sperre wäre
+         schlechter als eine ungeprüfte. */
+      const hatAnker = !!(person.cx && person.cx.length);
+      const gefunden = hatAnker ? stelleAusAnker(inhalt, person.offset, person.cx) : null;
+
+      if (hatAnker && gefunden === null) {
+        return { ...person, lockFrom: -1, lockTo: -1 };
+      }
+
+      const stelle = gefunden === null ? person.offset : gefunden;
       const versatz = stelle - person.offset;
       if (!versatz) return person;
 

@@ -186,7 +186,7 @@ console.log('\n2. Waehrend der Live-Freigabe gleicht sich nichts ab\n');
     /window\.liveShareNbId = \(\)/.test(sharedQuelle), true);
 }
 
-console.log('\n3. Die Zeilensperre: die Marke verschwindet, statt zu huepfen\n');
+console.log('\n3. Die Zeilensperre: die Marke bleibt stehen, statt zu huepfen\n');
 {
   /* haltCaretAusSperre in einer nachgebauten Umgebung: eine fremde
      Sperre liegt ueber der eigenen Marke. Gezaehlt wird, wie oft ein
@@ -232,12 +232,39 @@ console.log('\n3. Die Zeilensperre: die Marke verschwindet, statt zu huepfen\n')
     ctx.haltCaretAusSperre(false);
     ctx.haltCaretAusSperre(false);
     check('Der Takt meldet nie', ctx.hinweise, 0);
-    check('Nimmt die Marke aber trotzdem weg', ctx.weggenommen, 2);
+    /* ══════════════════════════════════════════════════════════════════
+       DIE MARKE BLEIBT, WO SIE IST
+
+       Hier stand `check('Nimmt die Marke aber trotzdem weg', 2)`. Das
+       war markeWeg: Auswahl weg UND Fokus weg. Den Fokus gab danach
+       niemand zurueck – das Feld war tot, bis der Nutzer von sich aus
+       wieder hineinklickte.
+
+       Der Fall, in dem das niemand versteht: man parkt die Marke in
+       einer Zeile und tut nichts. Der andere faengt darin an zu
+       schreiben. Dieser Takt laeuft mit melden=false, nimmt den Fokus
+       und sagt ausdruecklich nichts dazu. Von da an tut die Tastatur
+       nichts mehr, ohne den geringsten Hinweis.
+
+       Nachgewiesen in scripts/test-collab-tasten: von zehn Anschlaegen
+       kam einer an, danach war bei A "blur" gefallen und der Fokus weg.
+
+       Stehenlassen ist sicher, weil die Marke gar nichts schreibt. Das
+       tut die Eingabe, und die faengt app.js in 'beforeinput' ueber
+       lockedHere ab – bei JEDEM inputType. Diese Wache wird weiter unten
+       ausdruecklich geprueft, und test-collab-live prueft sie am
+       laufenden Text ("Mitten in der gesperrten Zeile geht nichts").
+       ══════════════════════════════════════════════════════════════════ */
+    check('Nimmt ihr aber nicht den Fokus', ctx.weggenommen, 0);
     /* >>> Und schiebt sie NICHT woandershin <<<
        Vorher landete sie auf lockFrom-1, also in einer Zeile, die
        niemand angeklickt hatte – meist ueber dem Band. Wer dort
        weiterschrieb, schrieb an der falschen Stelle, und beim naechsten
-       Takt sprang es erneut. Genau das war „alles wird buggy". */
+       Takt sprang es erneut. Genau das war „alles wird buggy".
+
+       Beim zweiten Anlauf im September 2026 wurde genau das noch einmal
+       versucht (an die Kante des Bandes statt eine Zeile hoeher) – mit
+       demselben Ergebnis: das Getippte landete in der Zeile daneben. */
     check('Und schiebt sie nirgendwohin', ctx.gesetzt, []);
   }
   {
@@ -271,10 +298,13 @@ console.log('\n3. Die Zeilensperre: die Marke verschwindet, statt zu huepfen\n')
     check('Und es kommt auch kein Hinweis', ctx.hinweise, 0);
   }
   {
-    // Wer keinen Anspruch auf DIESE Stelle hat, weicht weiterhin
+    /* Wer keinen Anspruch auf DIESE Stelle hat, bekommt den Hinweis –
+       die Marke bleibt trotzdem stehen (siehe oben). Gezaehlt wird
+       deshalb der Hinweis und nicht mehr das Wegnehmen. */
     const ctx = baueLauf({ getippt: true, eigenerAnspruch: { from: 60, to: 80 } });
-    ctx.haltCaretAusSperre(false);
-    check('Ein Anspruch woanders hilft nicht', ctx.weggenommen, 1);
+    ctx.haltCaretAusSperre(true);
+    check('Ein Anspruch woanders hilft nicht', ctx.hinweise, 1);
+    check('Und die Marke bleibt auch dann stehen', ctx.weggenommen, 0);
   }
 }
 {

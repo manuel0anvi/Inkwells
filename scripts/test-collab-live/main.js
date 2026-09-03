@@ -262,16 +262,35 @@ app.on('ready', async () => {
        Einfügen über das System) ging es manchmal doch. Gemeldet als
        „manchmal buggt es und man kann trotzdem schreiben".
        ══════════════════════════════════════════════════════════════════ */
-    abschnitt('In einer gesperrten Zeile steht keine Marke');
+    /* ══════════════════════════════════════════════════════════════════
+       IN EINER GESPERRTEN ZEILE DARF MAN STEHEN, ABER NICHT SCHREIBEN
+
+       Hier stand „Die Marke wird aus der gesperrten Zeile
+       herausgeschoben": haltCaretAusSperre rief markeWeg, also Auswahl
+       weg UND Fokus weg. Den Fokus gab danach niemand zurueck – das Feld
+       blieb tot, bis der Nutzer von sich aus wieder hineinklickte. Beim
+       gleichzeitigen Tippen traf das auch den, der gar nichts falsch
+       gemacht hatte (scripts/test-collab-tasten weist das nach: von zehn
+       Anschlaegen kam einer an).
+
+       Die Marke bleibt jetzt, wo hingezeigt wurde. Sie schreibt ja
+       nichts – das tut die Eingabe, und die wird gleich darunter
+       abgewiesen. Genau diese Wache ist die, auf die es ankommt.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('In einer gesperrten Zeile steht die Marke, schreiben geht nicht');
 
     // Mitten in die gesperrte Zeile 2 zielen – dort tippt A gerade
     await B('pruefstand.markeAuf(12)');
-    await warte(250);
+    await warte(900);          // laenger als der 600-ms-Takt
     const gelandet = await B('pruefstand.eigeneStelle()');
     notiz('gesetzt auf 12, gelandet auf ' + gelandet);
-    pruefe('Die Marke wird aus der gesperrten Zeile herausgeschoben',
-      gelandet !== 12 && (gelandet === null || gelandet < 12),
-      'sie steht mitten in der Zeile, an der der andere schreibt');
+    pruefe('Die Marke bleibt stehen, wo hingezeigt wurde',
+      gelandet === 12,
+      'sie wurde weggenommen (' + gelandet + ') – dann ist das Feld fuer B tot');
+
+    const fokusB = await B(`document.activeElement === document.querySelector('.j-text')`);
+    pruefe('Und das Feld behaelt den Fokus', fokusB === true,
+      'ohne Fokus geht jeder weitere Anschlag ins Leere, ohne Hinweis');
 
     /* Markieren muss erlaubt bleiben: eine Auswahl ändert nichts und ist
        zum Lesen und Kopieren da. */

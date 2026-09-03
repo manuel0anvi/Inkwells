@@ -29,6 +29,7 @@
     "test:lasso": "electron scripts/test-lasso",
     "test:stift": "electron scripts/test-stift",
     "test:live": "electron scripts/test-collab-live",
+    "test:tasten": "electron scripts/test-collab-tasten",
     "test:rundgang": "electron scripts/test-rundgang",
     "test:web": "electron scripts/test-website",
     "werbebilder": "electron scripts/werbebilder",
