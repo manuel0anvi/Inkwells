@@ -727,20 +727,54 @@ app.on('ready', async () => {
     /* ══════════════════════════════════════════════════════════════════
        KEIN PLATZ FÜR DEN NAMEN? DANN BEIM DARÜBERFAHREN
 
-       Das Fenster ist 1240 px breit – unter der Schwelle von 1300, ab der
-       die Beschriftungen der Werkzeuge weichen (css/responsive.css).
-       Genau dann muss der Name im Hinweis stehen.
+       >>> Diese Prüfung mass lange ins Leere <<<
+       Hier stand: „das Fenster ist 1240 px breit, also unter der Schwelle
+       von 1300, ab der die Beschriftungen weichen (css/responsive.css)".
+       Diese Schwelle gibt es nicht mehr. Die Leiste klappt seither in
+       gemessenen Stufen zusammen, erst wenn sie wirklich zu eng wird
+       (setzeStufe in ui/toolbar.js) – bei 1240 px passt sie noch, und die
+       Namen stehen zu Recht da. Die beiden Prüfungen schlugen deshalb
+       jedes Mal fehl, ohne dass irgendetwas kaputt gewesen wäre.
+
+       Geprüft wird jetzt, worauf es ankommt, und zwar an beiden Enden:
+       solange der Name im Knopf steht, braucht er KEINEN Hinweis (sonst
+       stünde neben „Cursor" nach einer Sekunde noch einmal „Cursor");
+       sobald die Leiste ihn wegklappt, MUSS er im Hinweis stehen, sonst
+       bliebe ein Bildzeichen ohne Namen zurück.
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Die Namen der Knöpfe beim Darüberfahren');
-    const namen = await js(`(() => {
+
+    const offen = await js(`(() => {
       const b = document.querySelector('.tb-mode[data-mode="cursor"]');
       const s = b.querySelector('span');
       return { verdeckt: getComputedStyle(s).display === 'none',
-               name: (s.textContent || '').trim(), titel: b.title }; })()`);
-    pruefe('Der Name ist im schmalen Fenster wirklich verdeckt', namen.verdeckt === true,
-      'die Beschriftung steht noch da – die Prüfung misst ins Leere');
-    pruefe('Dafür steht er im Hinweis („' + namen.titel + '")',
-      namen.titel === namen.name, 'der Knopf hat keinen Namen mehr, nirgends');
+               name: (s.textContent || '').trim(),
+               titel: b.getAttribute('title') || '' }; })()`);
+    pruefe('Steht der Name im Knopf (' + (offen.name || '?') + '), fehlt der Hinweis',
+      offen.verdeckt === true || !offen.titel,
+      'der Name stünde sonst zweimal da: im Knopf und im Schild');
+
+    /* Und jetzt so eng, dass die Namen weichen müssen. Gefahren wird über
+       das Fenster, nicht über die Klasse von Hand – gemessen wird ja die
+       wirkliche Breite. */
+    await win.setBounds({ width: 700, height: 940 });
+    await warte(700);
+    const eng = await js(`(() => {
+      const b = document.querySelector('.tb-mode[data-mode="cursor"]');
+      const s = b.querySelector('span');
+      return { stufe: document.querySelector('.toolbar').classList.contains('tb-ohne-namen'),
+               verdeckt: getComputedStyle(s).display === 'none',
+               name: (s.textContent || '').trim(),
+               titel: b.getAttribute('title') || '' }; })()`);
+    pruefe('Im engen Fenster klappt die Leiste die Namen weg',
+      eng.stufe === true && eng.verdeckt === true,
+      'die Beschriftungen stehen noch da, obwohl kein Platz ist');
+    pruefe('Dafür steht der Name jetzt im Hinweis („' + eng.titel + '")',
+      eng.titel === eng.name && !!eng.titel,
+      'ein Bildzeichen ohne Namen – man sieht dem Knopf nicht mehr an, was er tut');
+
+    await win.setBounds({ width: 1240, height: 940 });
+    await warte(700);
 
     /* ══════════════════════════════════════════════════════════════════
        DAS FORMEL-FENSTER ZIEHT KEINE TASTATUR HOCH
