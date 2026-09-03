@@ -476,6 +476,126 @@ app.on('ready', async () => {
     pruefe('Alles von B ist da', /Unten0123456789/.test(dA), JSON.stringify(dA));
     pruefe('Und beide sehen dasselbe', dA === dB, JSON.stringify({ A: dA, B: dB }));
 
+    /* Ein gemeinsamer Ausgangstext für die folgenden Läufe. */
+    async function setzeBeide(html) {
+      await A(`(() => { const td = document.querySelector('.j-text');
+        td.innerHTML = ${JSON.stringify(html)};
+        uebernimmText(getPage('seite1').page, td); return true; })()`);
+      await warte(1500);
+      return (await flach(A)) === (await flach(B));
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       5. BEIDE IN DERSELBEN ZEILE
+
+       Der härteste Fall: A und B schreiben in dieselbe Zeile. Einer von
+       beiden muss zurückstehen – aber es darf nichts VERSCHWINDEN, was
+       schon dastand.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Beide in derselben Zeile');
+
+    pruefe('Ausgangstext steht bei beiden', await setzeBeide('<p>Zusammen</p><p>Unten</p>'), '');
+    await markeAuf(A, 8);      // hinter "Zusammen"
+    await warte(400);
+    await tippe(dbgA, 'A');
+    await warte(800);          // A hat die Zeile jetzt beansprucht
+    await markeAuf(B, 4);      // mitten in derselben Zeile
+    await warte(300);
+    await tippe(dbgB, 'B');
+    await warte(1500);
+
+    const sA = await flach(A), sB = await flach(B);
+    notiz('A: ' + JSON.stringify(sA));
+    notiz('B: ' + JSON.stringify(sB));
+    pruefe('Der Ausgangstext ist unversehrt', /Zusammen/.test(sA) && /Unten/.test(sA),
+      JSON.stringify(sA));
+    pruefe('Wer zuerst da war, behält seine Eingabe', /ZusammenA/.test(sA),
+      'As Eingabe ist verschwunden: ' + JSON.stringify(sA));
+    pruefe('Und beide sehen dasselbe', sA === sB, JSON.stringify({ A: sA, B: sB }));
+
+    /* ══════════════════════════════════════════════════════════════════
+       6. DER EINE LÖSCHT, DER ANDERE SCHREIBT
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Der eine löscht, der andere schreibt');
+
+    pruefe('Ausgangstext steht bei beiden',
+      await setzeBeide('<p>Loeschen</p><p>Behalten</p>'), '');
+    await markeAuf(A, 8);      // Ende von "Loeschen"
+    await markeAuf(B, 17);     // Ende von "Behalten"
+    await warte(400);
+
+    const rueckwaerts = async (dbg, n) => {
+      for (let i = 0; i < n; i++) {
+        await dbg.sendCommand('Input.dispatchKeyEvent',
+          { type: 'rawKeyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+        await dbg.sendCommand('Input.dispatchKeyEvent',
+          { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+        await warte(40);
+      }
+    };
+
+    await Promise.all([rueckwaerts(dbgA, 3), tippe(dbgB, '!!')]);
+    await warte(1800);
+
+    const lA = await flach(A), lB = await flach(B);
+    notiz('A: ' + JSON.stringify(lA));
+    notiz('B: ' + JSON.stringify(lB));
+    // "Loeschen" (8 Zeichen) minus drei Rückschritte = "Loesc"
+    pruefe('Genau drei Zeichen sind weg', /^Loesc\n/.test(lA), JSON.stringify(lA));
+    pruefe('Das Geschriebene ist da', /Behalten!!/.test(lA), JSON.stringify(lA));
+    pruefe('Und beide sehen dasselbe', lA === lB, JSON.stringify({ A: lA, B: lB }));
+
+    /* ══════════════════════════════════════════════════════════════════
+       7. MEHRMALS ENTER HINTEREINANDER
+
+       Ein Umbruch verschiebt alles darunter. Mehrere schnell
+       hintereinander, während der andere unten schreibt, ist der Fall,
+       bei dem sich die Stellen am ehesten verzählen.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Mehrmals Enter, während der andere unten schreibt');
+
+    pruefe('Ausgangstext steht bei beiden',
+      await setzeBeide('<p>Kopf</p><p>Fuss</p>'), '');
+    await markeAuf(A, 4);      // hinter "Kopf"
+    await markeAuf(B, 9);      // hinter "Fuss"
+    await warte(400);
+
+    const enters = (async () => { for (let i = 0; i < 3; i++) await enter(dbgA); })();
+    await tippe(dbgB, 'unten');
+    await enters;
+    await warte(2000);
+
+    const nA = await flach(A), nB = await flach(B);
+    notiz('A: ' + JSON.stringify(nA));
+    notiz('B: ' + JSON.stringify(nB));
+    pruefe('Der Kopf steht noch', /^Kopf/.test(nA), JSON.stringify(nA));
+    pruefe('Bs Eingabe unten ist unversehrt', /Fussunten/.test(nA),
+      'die Umbrüche von A haben Bs Text mitgenommen: ' + JSON.stringify(nA));
+    pruefe('Und beide sehen dasselbe', nA === nB, JSON.stringify({ A: nA, B: nB }));
+
+    /* ══════════════════════════════════════════════════════════════════
+       8. GANZ AM ANFANG SCHREIBEN
+
+       Stelle 0 ist die, auf die Chromium die Marke legt, wenn es sie
+       verloren hat – deshalb ausdrücklich geprüft.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Der eine schreibt ganz am Anfang');
+
+    pruefe('Ausgangstext steht bei beiden',
+      await setzeBeide('<p>Mitte</p><p>Ende</p>'), '');
+    await markeAuf(A, 0);
+    await markeAuf(B, 10);
+    await warte(400);
+    await Promise.all([tippe(dbgA, 'vor'), tippe(dbgB, 'nach')]);
+    await warte(1800);
+
+    const aA = await flach(A), aB = await flach(B);
+    notiz('A: ' + JSON.stringify(aA));
+    notiz('B: ' + JSON.stringify(aB));
+    pruefe('Der Anfang ist da', /^vorMitte/.test(aA), JSON.stringify(aA));
+    pruefe('Das Ende auch', /Endenach/.test(aA), JSON.stringify(aA));
+    pruefe('Und beide sehen dasselbe', aA === aB, JSON.stringify({ A: aA, B: aB }));
+
     /* ── Fehler in der Konsole ────────────────────────────────────── */
     abschnitt('Die Konsole');
     const egal = /net::ERR_|Failed to load|Firebase|firestore|SHARE_OFFLINE|Kein Live-Betrieb|Realtime Database|InkwellsShare/i;
