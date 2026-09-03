@@ -30,6 +30,7 @@
     "test:stift": "electron scripts/test-stift",
     "test:live": "electron scripts/test-collab-live",
     "test:rundgang": "electron scripts/test-rundgang",
+    "test:web": "electron scripts/test-website",
     "werbebilder": "electron scripts/werbebilder",
     "werbefilm": "electron scripts/werbefilm"
   },
