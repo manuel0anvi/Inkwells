@@ -2271,7 +2271,7 @@
       zeilenCache = new Map();
       Promise.resolve().then(zeilenCacheLeeren);
     }
-    const schluessel = offset + ' ' + zeilenDanach + ' ' + text;
+    const schluessel = offset + '\u0000' + zeilenDanach + '\u0000' + text;
     if (zeilenCache.has(schluessel)) return zeilenCache.get(schluessel);
 
     const span = visualLineSpanMessen(textDiv, offset, zeilenDanach, text);
