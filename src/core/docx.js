@@ -825,6 +825,28 @@
         const color = inlineColorOf(child);
         if (color) next.color = color;
 
+        /* ══ EIN VERWEIS BLEIBT EIN VERWEIS ═══════════════════════════
+           Bisher lief walk() durch ein <a> hindurch wie durch ein
+           <span>: der Text kam mit, die Adresse blieb liegen. Im
+           Word-Dokument stand danach ein Wort, das einmal anklickbar
+           war – im PDF-Export dagegen (core/importExport.js schreibt
+           HTML) ist der Verweis erhalten. Zwei Ausgabewege, zwei
+           verschiedene Ergebnisse.
+
+           Die Adresse wandert am Lauf mit; erst paragraphXml macht
+           daraus ein <w:hyperlink> samt Beziehung, denn nur dort gibt
+           es den Zähler dafür.
+
+           Eine Seitenmarke (inkwells://page/7) wird bewusst NICHT
+           mitgenommen: sie zeigt auf eine Seite dieses Hefts, und die
+           gibt es in Word nicht. Sie bliebe ein Verweis, der ins Leere
+           führt oder, schlimmer, die App aufruft. Ihr Text bleibt
+           stehen, wie bisher. */
+        if (tag === 'A') {
+          const ziel = child.getAttribute && child.getAttribute('href');
+          if (ziel && /^(https?:|mailto:)/i.test(ziel.trim())) next.link = ziel.trim();
+        }
+
         /* ══ EINE TABELLE IST IN WORD EINE TABELLE ══════════════════
            Bisher lief walk() einfach durch sie hindurch. Herauskam eine
            Reihe von Textstücken in einem Absatz: "MeilensteinSollIst" –
@@ -968,15 +990,21 @@
   /* Die Reihenfolge in <w:rPr> ist im Schema festgelegt (CT_RPr):
      rFonts, b, i, strike, color, sz, szCs, u. Word verzeiht Abweichungen
      meist, andere Programme (LibreOffice, Google Docs) nicht immer. */
+  /* Wie Word einen Verweis malt, wenn keine Formatvorlage da ist: blau
+     und unterstrichen. Eine Vorlage („Hyperlink") waere der uebliche
+     Weg, hiesse aber styles.xml anzulegen – und ihr Name ist in jeder
+     Word-Sprache ein anderer. Die zwei Angaben sind ueberall dieselben. */
+  const LINK_FARBE = '0563C1';
+
   function runXml(run, spec) {
     const props = [];
     props.push(`<w:rFonts w:ascii="${esc(spec.font)}" w:hAnsi="${esc(spec.font)}" w:cs="${esc(spec.font)}"/>`);
     if (run.bold || spec.bold) props.push('<w:b/>');
     if (run.italic || spec.italic || spec.italicToo) props.push('<w:i/>');
     if (run.strike) props.push('<w:strike/>');
-    props.push(`<w:color w:val="${esc(run.color || spec.color)}"/>`);
+    props.push(`<w:color w:val="${esc(run.link ? LINK_FARBE : (run.color || spec.color))}"/>`);
     props.push(`<w:sz w:val="${spec.size}"/><w:szCs w:val="${spec.size}"/>`);
-    if (run.underline) props.push('<w:u w:val="single"/>');
+    if (run.underline || run.link) props.push('<w:u w:val="single"/>');
 
     const rPr = `<w:rPr>${props.join('')}</w:rPr>`;
 
@@ -1101,8 +1129,32 @@
 
     if (options.sectPr) props.push(options.sectPr);
 
-    const runs = (options.leadingXml || '')
-      + paragraph.runs.map(run => runXml(run, spec)).join('');
+    /* ── Verweise zusammenfassen ───────────────────────────────────────
+       Aufeinanderfolgende Läufe mit derselben Adresse gehören in EIN
+       <w:hyperlink>. Sonst bekäme jedes Wort eines Verweises einen
+       eigenen – Word zeigt das zwar an, aber beim Anklicken springt der
+       Mauszeiger von Stück zu Stück, und beim Zurücklesen entstünden
+       ebenso viele Verweise.
+
+       options.verweis liefert die Beziehungskennung; ohne den Rückruf
+       (Tabellenzellen rufen paragraphXml ohne options) bleibt es beim
+       blossen Text – lieber ein toter Verweis als eine Datei, die Word
+       wegen einer fehlenden Beziehung gar nicht erst öffnet. */
+    let runs = options.leadingXml || '';
+    const laeufe = paragraph.runs || [];
+    for (let i = 0; i < laeufe.length; i++) {
+      const ziel = laeufe[i].link;
+      if (!ziel || typeof options.verweis !== 'function') {
+        runs += runXml(laeufe[i], spec);
+        continue;
+      }
+      let bis = i;
+      while (bis + 1 < laeufe.length && laeufe[bis + 1].link === ziel) bis++;
+      const inhalt = laeufe.slice(i, bis + 1).map(r => runXml(r, spec)).join('');
+      const rId = options.verweis(ziel);
+      runs += rId ? `<w:hyperlink r:id="${rId}">${inhalt}</w:hyperlink>` : inhalt;
+      i = bis;
+    }
 
     return `<w:p><w:pPr>${props.join('')}</w:pPr>${runs}</w:p>`;
   }
@@ -1222,7 +1274,7 @@
   const TEXT_BREITE_PX = DEFAULT_PAGE_W - 72 - 32;
   const TABELLE_RAHMEN = 'D9D2C4';
 
-  function tabelleXml(tabelle, lh) {
+  function tabelleXml(tabelle, lh, verweis) {
     let spalten = 1;
     for (const zeile of tabelle.zeilen) {
       const n = zeile.reduce((s, z) => s + z.spannt, 0);
@@ -1261,7 +1313,7 @@
         /* Eine Kopfzelle steht fett – im Heft macht das die Papierregel
            (css/pages.css, th), in Word muss es am Text stehen. */
         const inhalt = z.absaetze
-          .map(a => paragraphXml(z.kopf ? { ...a, runs: a.runs.map(r => ({ ...r, bold: true })) } : a, lh))
+          .map(a => paragraphXml(z.kopf ? { ...a, runs: a.runs.map(r => ({ ...r, bold: true })) } : a, lh, { verweis }))
           .join('');
         return `<w:tc>${eigenschaften}${inhalt}</w:tc>`;
       }).join('');
@@ -1304,6 +1356,32 @@
     let ankerZaehler = 0;
     let zZaehler = 0;
     const naechsteRel = () => `rId${++relZaehler}`;
+
+    /* ══════════════════════════════════════════════════════════════════
+       EINE BEZIEHUNG JE ADRESSE, NICHT JE VERWEIS
+
+       Ein Verweis nach draussen ist in OOXML eine Beziehung mit
+       TargetMode="External"; im Text steht nur ihre Kennung. Dieselbe
+       Adresse zweimal anzulegen ginge zwar, blaeht die Datei aber auf –
+       und in einem Heft steht derselbe Link oft auf mehreren Seiten.
+
+       Die Adresse wird escaped: sie landet als Attribut im XML, und ein
+       & in einer Suchadresse (?a=1&b=2) macht die Datei sonst
+       unlesbar. Word oeffnet sie dann gar nicht erst. */
+    const verweisRels = new Map();
+    const verweisRel = (adresse) => {
+      const ziel = String(adresse || '').trim();
+      if (!ziel) return '';
+      if (verweisRels.has(ziel)) return verweisRels.get(ziel);
+      const rId = naechsteRel();
+      verweisRels.set(ziel, rId);
+      relationships.push(
+        `<Relationship Id="${rId}" `
+        + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" '
+        + `Target="${esc(ziel)}" TargetMode="External"/>`
+      );
+      return rId;
+    };
     // Wer später zieht, liegt weiter vorn – das Papier zieht als Erstes
     const naechsteHoehe = () => Z_BASIS + (++zZaehler);
 
@@ -1418,12 +1496,13 @@
 
       paragraphs.forEach((paragraph, index) => {
         if (paragraph.tabelle) {
-          body.push(tabelleXml(paragraph.tabelle, lh));
+          body.push(tabelleXml(paragraph.tabelle, lh, verweisRel));
           return;
         }
         body.push(paragraphXml(paragraph, lh, {
           leadingXml: index === ankerBei ? anchor : '',
-          sectPr: (!isLast && index === paragraphs.length - 1) ? sectionXml(entry) : ''
+          sectPr: (!isLast && index === paragraphs.length - 1) ? sectionXml(entry) : '',
+          verweis: verweisRel
         }));
       });
 

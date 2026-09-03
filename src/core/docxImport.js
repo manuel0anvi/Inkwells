@@ -791,13 +791,42 @@
     for (const k of p.children) {
       if (k.namespaceURI !== W) continue;
       if (k.localName === 'r') inhalt += laufZuHtml(k);
-      /* Ein Link ist in Word ein eigener Knoten mit Läufen darin. <a>
-         steht nicht in der Erlaubnisliste des Sanitizers (core/sanitize.js)
-         – der Text bleibt, die Adresse geht verloren. Sie hier zu
-         erzeugen hiesse, sie beim ersten Abgleich wieder zu verlieren. */
+      /* ══════════════════════════════════════════════════════════════
+         EIN LINK IST IN WORD EIN EIGENER KNOTEN MIT LÄUFEN DARIN
+
+         Hier stand: „<a> steht nicht in der Erlaubnisliste des
+         Sanitizers – die Adresse hier zu erzeugen hiesse, sie beim
+         ersten Abgleich wieder zu verlieren." Das stimmte einmal. Seit
+         core/sanitize.js Verweise durchlässt (istAdresse prüft das
+         Schema über den URL-Parser), ist die Voraussetzung weg, die
+         Zeile blieb stehen: ein Word-Dokument voller Verweise kam ohne
+         einen einzigen an, und der eigene Export las sich selbst nicht
+         mehr zurück.
+
+         Die Adresse steht nicht am Knoten, sondern in der
+         Beziehungsliste – r:id zeigt darauf. Ein Sprungziel INNERHALB
+         des Dokuments (w:anchor, „zu Überschrift 3") hat gar keine
+         Adresse; sein Text bleibt, der Verweis nicht, denn im Heft gibt
+         es diese Marke nicht.
+
+         Was der Sanitizer nicht mag, fällt später ohnehin heraus – hier
+         wird deshalb nur geprüft, dass überhaupt etwas dasteht. */
       else if (k.localName === 'hyperlink') {
-        for (const r of kinder(k, 'r')) inhalt += laufZuHtml(r);
-        ctx.verloren.add('links');
+        let innen = '';
+        for (const r of kinder(k, 'r')) innen += laufZuHtml(r);
+
+        const rId = k.getAttributeNS(R, 'id');
+        const ziel = rId ? ctx.beziehungen.get(rId) : null;
+
+        /* escapeHtml deckt nur & < > ab; hier geht es in ein ATTRIBUT,
+           und ein " darin bräche daraus aus. */
+        const alsAttribut = escapeHtml(ziel || '').replace(/"/g, '&quot;');
+
+        if (ziel && innen) inhalt += '<a href="' + alsAttribut + '">' + innen + '</a>';
+        else {
+          inhalt += innen;
+          if (innen) ctx.verloren.add('links');
+        }
       }
     }
 

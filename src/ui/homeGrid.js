@@ -97,7 +97,7 @@ function zeigeImportBericht(bericht) {
      NICHT verlassen darf. */
   const verloren = [t('importLostAlways') || 'Schriftarten, Schriftgrößen und Zeilenabstände'];
   const nach = {
-    links: t('importLostLinks') || 'Verknüpfungen (der Text bleibt)',
+    links: t('importLostLinks') || 'Sprungziele im Dokument (der Text bleibt)',
     tiefeUeberschriften: t('importLostDeepHeadings') || 'Überschriften unterhalb der dritten Ebene',
     bilderInTabellen: t('importLostImagesInTables') || 'Bilder in Tabellenzellen',
     listenInTabellen: t('importLostListsInTables') || 'Aufzählungszeichen in Tabellenzellen',

@@ -781,6 +781,57 @@ window.__fertig = (async function () {
     pruefe('Seitenbild und Bild liegen getrennt im Archiv', bilddateien.length === 2,
       bilddateien.join(', '));
 
+    /* ══════════════════════════════════════════════════════════════════
+       EIN VERWEIS BLEIBT EIN VERWEIS
+
+       Beim Lesen kannte der Weg <w:hyperlink> laengst, beim Schreiben
+       nicht: walk() lief durch ein <a> hindurch wie durch ein <span>,
+       der Text kam mit, die Adresse blieb liegen. Im PDF-Export
+       (core/importExport.js schreibt HTML) blieb der Verweis dagegen
+       erhalten – zwei Ausgabewege, zwei verschiedene Ergebnisse.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein Verweis bleibt ein Verweis');
+
+    const mitVerweis = {
+      id: 'pv', bg: 'blank', w: 794, h: 1123, inkStrokes: [], objects: [],
+      textContent: '<p>Mehr steht auf <a href="https://inkwells.me/hilfe?a=1&amp;b=2">der Seite</a>.</p>'
+        + '<p>Oder schreib an <a href="mailto:wer@wo.de">wer@wo.de</a>.</p>'
+        + '<p>Seite <a href="inkwells://page/7">sieben</a> im Heft.</p>'
+    };
+    const verweisDatei = await InkwellsDocx.build(
+      [{ page: mitVerweis, bg: 'blank' }], { scale: 1 });
+    const verweisArchiv = await InkwellsDocxImport.__intern.entpacke(verweisDatei);
+    const verweisXml = I.alsText(verweisArchiv.get('word/document.xml'));
+    const verweisRels = I.alsText(verweisArchiv.get('word/_rels/document.xml.rels'));
+
+    pruefe('Der Verweis steht als <w:hyperlink> im Text',
+      /<w:hyperlink r:id="rId\d+">/.test(verweisXml), 'nur Text, kein Verweis');
+    pruefe('Und seine Adresse als aeussere Beziehung',
+      /Target="https:\/\/inkwells\.me\/hilfe\?a=1&amp;b=2"[^>]*TargetMode="External"/.test(verweisRels),
+      verweisRels.replace(/></g, '>\n<'));
+    pruefe('Eine Mailadresse ebenso',
+      /Target="mailto:wer@wo\.de"[^>]*TargetMode="External"/.test(verweisRels), 'fehlt');
+    /* Das & in der Suchadresse muss escaped sein – sonst ist die
+       Beziehungsdatei kein gueltiges XML und Word oeffnet gar nichts. */
+    pruefe('Das Und-Zeichen ist escaped', !/Target="[^"]*[^;&]&[^a]/.test(verweisRels),
+      'ein nacktes & macht die Datei unlesbar');
+    /* Eine Seitenmarke zeigt auf eine Seite DIESES Hefts – die gibt es
+       in Word nicht. Ihr Text bleibt, der Verweis nicht. */
+    pruefe('Eine Seitenmarke wird nicht mitgenommen',
+      !/inkwells:\/\/page/.test(verweisRels) && !/inkwells:\/\/page/.test(verweisXml),
+      'der Verweis auf eine Heftseite ist mitgegangen');
+    pruefe('Ihr Text steht trotzdem da', verweisXml.includes('sieben'), 'auch der Text fehlt');
+    pruefe('Der Verweis ist blau und unterstrichen',
+      /<w:color w:val="0563C1"\/>/.test(verweisXml) && /<w:u w:val="single"\/>/.test(verweisXml),
+      'er sieht aus wie gewoehnlicher Text');
+
+    // Und zurueckgelesen ist es wieder ein Verweis
+    const zurueckVerweis = await InkwellsDocxImport.lese(verweisDatei);
+    const htmlVerweis = zurueckVerweis.bloecke.map(b => b.html).join('');
+    pruefe('Zurueckgelesen ist es wieder ein <a href>',
+      /<a[^>]+href="https:\/\/inkwells\.me\/hilfe\?a=1&amp;b=2"/.test(htmlVerweis),
+      htmlVerweis.slice(0, 200));
+
     /* ══ WAS NICHT MEHR IN DIE DATEI KOMMT ═════════════════════════
        Das Papier lag als Bild in doppelter Auflösung bei – Linien von
        einem Pixel, gerastert auf zwei. Ein weisses Blatt kostete so
