@@ -193,6 +193,47 @@ app.on('ready', async () => {
     await schritt('Rückgängig läuft', 'undoPage()', 400);
     await schritt('Wiederholen läuft', 'redoPage()', 400);
 
+    await schritt('Rückgängig stellt den Text wirklich wieder her', `
+      const info = getPage(S.activePgId);
+      const pg = info.page;
+      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
+      const feld = pgEl.querySelector('.j-text');
+
+      pg.textContent = '<p>Erster Stand</p>';
+      feld.innerHTML = pg.textContent;
+      pushPageHistory(pg);
+
+      pg.textContent = '<p>Zweiter Stand</p>';
+      feld.innerHTML = pg.textContent;
+
+      if (!undoPage()) throw new Error('Rückgängig hat abgelehnt');
+      if (!pg.textContent.includes('Erster')) throw new Error('im Heft steht: ' + pg.textContent);
+      if (!feld.innerHTML.includes('Erster')) throw new Error('auf dem Blatt steht: ' + feld.innerHTML);
+
+      if (!redoPage()) throw new Error('Wiederholen hat abgelehnt');
+      if (!pg.textContent.includes('Zweiter')) throw new Error('nach Wiederholen: ' + pg.textContent);`, 500);
+
+    /* Ein Schritt zurueck bringt auch das PAPIER zurueck - und zwar
+       sichtbar. Steht im Heft das eine und auf dem Blatt das andere,
+       merkt es niemand, bis die Seite das naechste Mal neu gezeichnet
+       wird und das Papier ploetzlich wechselt. */
+    await schritt('Rückgängig bringt auch das Papier zurück', `
+      const info = getPage(S.activePgId);
+      const pg = info.page;
+      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
+
+      pg.bg = 'ruled';
+      pushPageHistory(pg);
+      pg.bg = 'grid';
+      pgEl.classList.remove('bg-ruled');
+      pgEl.classList.add('bg-grid');
+
+      undoPage();
+      if (pg.bg !== 'ruled') throw new Error('im Heft steht ' + pg.bg);
+      if (!pgEl.classList.contains('bg-ruled') || pgEl.classList.contains('bg-grid'))
+        throw new Error('im Heft steht "' + pg.bg + '", auf dem Blatt aber "'
+          + [...pgEl.classList].filter(c => c.startsWith('bg-')).join(' ') + '"');`, 500);
+
     /* ── Zoom und Lineal ──────────────────────────────────────────── */
     abschnitt('Zoom und Lineal');
     await schritt('Größer', `typeof setZoom === 'function' ? setZoom(1.4) : zoomIn()`);

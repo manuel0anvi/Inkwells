@@ -30,6 +30,14 @@ const HISTORY_BUDGET_BYTES = 24 * 1024 * 1024;
 
 const _lastTypingSnapshot = {};   // pageId -> Zeitpunkt
 
+/* Das Seitenbild eines Vollbild-Imports (PDF, Word). Es entsteht an zwei
+   Stellen – beim Aufbau der Seite und beim Rückgängigmachen –, und beide
+   müssen dasselbe Mass verwenden: die 56 px oben sind der Seitenkopf,
+   siehe BILD_KOPF_PX in core/importExport.js. */
+const BGIMG_STIL = 'position:absolute;top:56px;left:0;width:100%;'
+  + 'height:calc(100% - 56px);z-index:1;object-fit:contain;'
+  + 'pointer-events:none;display:block';
+
 function _historyEntry(pageId) {
   if (!pageId) return null;
   if (!S.history[pageId]) S.history[pageId] = { undo: [], redo: [] };
@@ -99,6 +107,49 @@ function _applyPageSnapshot(page, snap) {
   // Darstellung nachziehen
   const pgEl = document.querySelector('[data-pgid="' + page.id + '"]');
   if (!pgEl) return;
+
+  /* ── Auch das PAPIER gehört zur Darstellung ────────────────────────
+     Oben werden page.bg und page.bgImg zurückgesetzt, unten der Text,
+     die Handschrift und die Bilder neu gezeichnet – das Papier stand
+     dazwischen nirgends. Nach einem Strg+Z stand im Heft dann das eine
+     und auf dem Blatt das andere, und das fiel erst auf, wenn die Seite
+     das nächste Mal neu gezeichnet wurde: dann wechselte das Papier
+     plötzlich von selbst.
+
+     Nur die bg-Klasse tauschen, nicht das ganze class-Attribut: das
+     Element trägt auch andere (obj-dragging). */
+  const nbHier = getNb();
+  const secHier = nbHier?.sections?.find(s => s.id === nbHier.activeSecId);
+  const bgJetzt = page.bg || secHier?.defaultBg || nbHier?.defaultBg || 'ruled';
+  for (const cls of [...pgEl.classList]) {
+    if (cls.startsWith('bg-')) pgEl.classList.remove(cls);
+  }
+  pgEl.classList.add('bg-' + bgJetzt);
+
+  const textFeld = pgEl.querySelector('.j-text');
+  if (textFeld && typeof applyTextLayoutForBg === 'function') applyTextLayoutForBg(textFeld, bgJetzt);
+
+  /* Und das Seitenbild, das ein Vollbild-Import auf die Seite legt.
+     Es hängt am selben Schritt: _snapshotPageState hält es fest, oben
+     wird es zurückgesetzt – ohne das hier bliebe ein zurückgenommenes
+     Bild sichtbar oder ein wiederhergestelltes unsichtbar. */
+  const altesBild = pgEl.querySelector('img.j-page-bgimg');
+  if (page.bgImg) {
+    if (altesBild) altesBild.src = page.bgImg;
+    else {
+      const bild = document.createElement('img');
+      bild.className = 'j-page-bgimg';
+      bild.src = page.bgImg;
+      bild.style.cssText = BGIMG_STIL;
+      pgEl.style.backgroundImage = 'none';
+      pgEl.style.backgroundColor = '#fff';
+      pgEl.insertBefore(bild, pgEl.querySelector('.j-page-hdr')?.nextSibling || pgEl.firstChild);
+    }
+  } else if (altesBild) {
+    altesBild.remove();
+    pgEl.style.backgroundImage = '';
+    pgEl.style.backgroundColor = '';
+  }
 
   const textDiv = pgEl.querySelector('.j-text');
   if (textDiv) {
@@ -659,8 +710,11 @@ function appendPageDOM(page, index) {
   div.appendChild(hdr);
   if (page.bgImg) {
     const bgImgEl = document.createElement('img');
+    // Die Klasse ist der Griff für _applyPageSnapshot – ohne sie liesse
+    // sich das Bild beim Rückgängigmachen nicht wiederfinden.
+    bgImgEl.className = 'j-page-bgimg';
     bgImgEl.src = page.bgImg;
-    bgImgEl.style.cssText = 'position:absolute;top:56px;left:0;width:100%;height:calc(100% - 56px);z-index:1;object-fit:contain;pointer-events:none;display:block';
+    bgImgEl.style.cssText = BGIMG_STIL;
     // hide default page pattern if we have a full page image
     div.style.backgroundImage = 'none';
     div.style.backgroundColor = '#fff';
