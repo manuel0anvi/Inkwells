@@ -976,6 +976,23 @@ function jrnlBildDaten(wert) {
     ? wert : null;
 }
 
+/**
+ * Ein Datum, das sich auch lesen laesst.
+ *
+ * Hier stand nur `typeof p.date === 'string' && p.date` – jede
+ * Zeichenkette kam durch. Aus einer beschaedigten oder von Hand
+ * bearbeiteten .jrnl wurde damit ein `new Date('Unsinn')`, und im
+ * Seitenkopf stand danach „Invalid Date" – auf dem Blatt UND im PDF
+ * (fmt() in core/state.js, buildPdfPage in dieser Datei). Als einziges
+ * Feld dieser Funktion hatte das Datum keine Pruefung; jetzt hat es
+ * eine wie die anderen auch.
+ */
+function jrnlDatum(wert, ersatz) {
+  if (typeof wert !== 'string' || !wert.trim()) return ersatz;
+  const t = Date.parse(wert);
+  return Number.isFinite(t) ? wert : ersatz;
+}
+
 /** Eine der bekannten Papierarten. */
 function jrnlPapier(wert, ersatz) {
   const liste = (typeof BG_TYPES !== 'undefined' && Array.isArray(BG_TYPES))
@@ -1087,7 +1104,9 @@ function fillNotebookFromJrnl(nb, text) {
     const pg = makePage(jrnlPapier(p && p.bg, nb.defaultBg || 'ruled'));
     seitenKennung.set(String(p && p.id), pg.id);
 
-    if (typeof p.date === 'string' && p.date) pg.date = p.date;
+    // makePage() hat schon ein gueltiges Datum gesetzt – das bleibt,
+    // wenn in der Datei keines oder ein unlesbares steht.
+    pg.date = jrnlDatum(p && p.date, pg.date);
 
     /* Durch den Sanitizer, wie bei jedem Text aus fremder Hand – das ist
        derselbe Riegel wie bei geteilten Heften. */

@@ -615,6 +615,37 @@ app.on('ready', async () => {
       fillNotebookFromJrnl(leer, text);
       if (!leer.pages.length) throw new Error('fillNotebookFromJrnl gab nichts zurück');`, 500);
 
+    /* Eine .jrnl kann beschaedigt oder von Hand bearbeitet sein. Was
+       daraus ins Heft kommt, muss geprueft sein – sonst steht der Unsinn
+       hinterher auf dem Blatt und im PDF. */
+    await schritt('Eine kaputte Datei bringt keinen Unsinn ins Heft', `
+      const kaputt = JSON.stringify({ notebooks: [{
+        id: 'x', name: 'Kaputt', pages: [{
+          id: 'p1', date: 'Unsinn', bg: 'gibtesnicht',
+          textContent: '<p onclick="boese()">Text</p><script>boese()<\\/script>',
+          w: 'viel', h: null,
+          bgImg: 'https://fremder.server/bild.png',
+          objects: [{ kind: 'unbekannt' }, null, 'quatsch'],
+          inkStrokes: ['kein Strich', { points: 'auch nicht' }]
+        }], sections: [{ id: 's', name: 'A' }]
+      }] });
+      const nb = { id: 'kaputt', name: 'Kaputt', pages: [], sections: [], defaultBg: 'ruled' };
+      fillNotebookFromJrnl(nb, kaputt);
+      const pg = nb.pages[0];
+      if (!pg) throw new Error('gar keine Seite entstanden');
+
+      if (!Number.isFinite(Date.parse(pg.date)))
+        throw new Error('das Datum ist unlesbar: ' + pg.date + ' - im Seitenkopf stuende "Invalid Date"');
+      if (!['ruled','grid','dots','blank','craft'].includes(pg.bg))
+        throw new Error('erfundene Papierart uebernommen: ' + pg.bg);
+      if (/onclick|<script/i.test(pg.textContent))
+        throw new Error('der Text kam ungesaeubert durch: ' + pg.textContent);
+      if (pg.bgImg) throw new Error('ein fremdes Bild aus dem Netz wurde uebernommen: ' + pg.bgImg);
+      if (pg.objects.length) throw new Error('unbrauchbare Objekte uebernommen');
+      if (pg.inkStrokes.length) throw new Error('unbrauchbare Striche uebernommen');
+      if (!Number.isFinite(pg.w) || !Number.isFinite(pg.h || CFG.PAGE_H))
+        throw new Error('unsinniges Mass uebernommen: w=' + pg.w + ' h=' + pg.h);`, 500);
+
     /* ── Zurück zur Übersicht ─────────────────────────────────────── */
     abschnitt('Der Rückweg');
     await schritt('Zurück zur Übersicht', 'showHome()', 700);
