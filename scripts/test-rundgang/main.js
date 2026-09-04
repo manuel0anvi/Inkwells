@@ -303,6 +303,68 @@ app.on('ready', async () => {
       if (S.history[pg.id].undo.length < 2)
         throw new Error('das Ausgeschnittene laesst sich nicht fuer sich zuruecknehmen');`);
 
+    /* ══════════════════════════════════════════════════════════════════
+       EIN LANGER TEXT LAEUFT UEBER – UND LAESST SICH TROTZDEM ZURUECK
+
+       Passt das Eingefuegte nicht auf die Seite, schiebt
+       checkPageOverflow den Rest auf eine neue und macht DIESE zur
+       aktiven (setActivePg). undoPage() sieht aber im Verlauf von
+       S.activePgId nach – und der ist auf der frischen Seite leer.
+       Ergebnis: "Nichts zum Rueckgaengigmachen", obwohl gerade eben
+       etwas geschehen ist.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein langer Text laeuft ueber');
+
+    await schritt('Auch danach laesst sich zurueknehmen', `
+      const nb = getNb();
+      nb.pages = [makePage('ruled')];
+      openSection(null);
+      await new Promise(r => setTimeout(r, 500));
+
+      const pg = nb.pages[0];
+      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
+      const td = pgEl.querySelector('.j-text');
+      td.innerHTML = '<p>Kurz</p>';
+      uebernimmText(pg, td);
+      S.history[pg.id] = { undo: [], redo: [] };
+      await new Promise(r => setTimeout(r, 800));
+
+      // Einfuegen: erst der Sicherungspunkt, dann der lange Text
+      td.focus();
+      setFlatCaret(td, 4);
+      td.dispatchEvent(new InputEvent('beforeinput',
+        { inputType: 'insertFromPaste', bubbles: true, cancelable: true }));
+
+      let lang = '';
+      for (let i = 0; i < 80; i++) lang += '<p>Zeile ' + i + ' mit etwas Text darin</p>';
+      td.innerHTML = '<p>Kurz</p>' + lang;
+      td.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Der Umbruch laeuft ueber einen Timer (20 ms) – ihm Zeit lassen
+      await new Promise(r => setTimeout(r, 900));
+
+      const seiten = getNb().pages.length;
+      if (seiten < 2) throw new Error('der Text ist gar nicht uebergelaufen (' + seiten + ' Seite)');
+
+      const aktiv = S.activePgId;
+      if (aktiv === pg.id) throw new Error('die aktive Seite hat nicht gewechselt - Fall trifft nicht zu');
+
+      if (!undoPage())
+        throw new Error('Rueckgaengig sagt, es gaebe nichts: die aktive Seite ist die neue ('
+          + aktiv + '), gesichert wurde auf der alten (' + pg.id + ')');
+
+      await new Promise(r => setTimeout(r, 400));
+
+      /* Und der Text darf danach nicht DOPPELT dastehen. Ein Ueberlauf
+         aendert zwei Seiten; nur die eine zurueckzunehmen liesse den
+         verschobenen Teil auf der neuen Seite liegen. */
+      const alles = getNb().pages.map(p => p.textContent || '').join('\\n');
+      const wieOft = (alles.match(/Zeile 0 mit etwas Text/g) || []).length;
+      if (wieOft > 1)
+        throw new Error('der Text steht nach dem Rueckgaengig ' + wieOft + '-mal da: '
+          + 'der uebergelaufene Teil blieb auf der neuen Seite liegen');
+      if (!/Kurz/.test(alles)) throw new Error('der Ausgangstext ist weg');`, 1200);
+
     /* ── Zoom und Lineal ──────────────────────────────────────────── */
     abschnitt('Zoom und Lineal');
     await schritt('Größer', `typeof setZoom === 'function' ? setZoom(1.4) : zoomIn()`);
@@ -368,6 +430,20 @@ app.on('ready', async () => {
        Farbgeruest durch Yjs.
        ══════════════════════════════════════════════════════════════════ */
     abschnitt('Code im Heft');
+
+    /* Der Knopf muss in der LEISTE stehen, nicht nur im Sammelmenue –
+       das erscheint erst, wenn die Leiste eng wird (Stufe tb-plus in
+       ui/toolbar.js). Zuerst stand er nur dort, und auf einem
+       gewoehnlichen Fenster gab es gar keinen Knopf. */
+    await schritt('Der Knopf steht in der Werkzeugleiste', `
+      const b = E('btn-code');
+      if (!b) throw new Error('#btn-code gibt es nicht');
+      if (!b.closest('#toolbar, .toolbar')) throw new Error('er haengt nicht in der Leiste');
+      if (getComputedStyle(b).display === 'none')
+        throw new Error('er ist unsichtbar, obwohl die Leiste breit ist');
+      // Und im Sammelmenue, fuer den Fall, dass es eng wird
+      if (!document.querySelector('#insert-all-pop [data-einfuegen="code"]'))
+        throw new Error('im Sammelmenue fehlt er');`);
 
     await schritt('Ein Codeblock entsteht', `
       const pg = getNb().pages[0];

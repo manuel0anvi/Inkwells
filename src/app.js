@@ -411,18 +411,66 @@ window.wendeTextFlussAn = function wendeTextFlussAn() {
   }
 };
 
-/** Sichert den aktuellen Zustand einer Seite, bevor sie verändert wird. */
-function pushPageHistory(page) {
+/* ══════════════════════════════════════════════════════════════════════
+   IN WELCHER REIHENFOLGE DIE SCHRITTE GESCHAHEN
+
+   Der Verlauf ist je SEITE geführt, Strg+Z sah aber immer nur im Verlauf
+   der GERADE OFFENEN Seite nach. Solange man auf einer Seite bleibt, ist
+   das dasselbe. Beim Überlaufen nicht:
+
+     Man fügt einen langen Text ein. checkPageOverflow schiebt, was nicht
+     mehr passt, auf eine neue Seite und macht DIESE zur offenen
+     (setActivePg). Gesichert wurde aber auf der alten. Strg+Z sah auf der
+     neuen nach, fand dort nichts und sagte „Nichts zum Rückgängigmachen"
+     – obwohl gerade eben etwas geschehen war. Genau so gemeldet.
+
+   Deshalb merkt sich diese Liste, auf welcher Seite der jeweils letzte
+   Schritt gesichert wurde. Zurückgenommen wird der LETZTE Schritt, egal
+   wo er war – das ist auch das, was man erwartet.
+
+   ── Und was zusammen geschah, geht zusammen zurück ──────────────────
+   Ein Überlauf ändert ZWEI Seiten: auf der einen fehlt der Text, auf der
+   anderen steht er. Nur die eine zurückzunehmen hiesse, ihn danach
+   doppelt zu haben. Beide Sicherungspunkte tragen deshalb dieselbe
+   Gruppennummer, und ein Strg+Z nimmt die ganze Gruppe.
+   ══════════════════════════════════════════════════════════════════════ */
+let _schrittZaehler = 0;
+const _schrittFolge = [];   // pageIds, in der Reihenfolge des Sicherns
+const _redoFolge = [];
+
+/**
+ * Sichert den aktuellen Zustand einer Seite, bevor sie verändert wird.
+ *
+ * @param {object} page
+ * @param {number} [gruppe] Gehört zu einem schon begonnenen Schritt –
+ *   dann geht beides zusammen zurück. Ohne Angabe ein eigener Schritt.
+ * @returns {number|undefined} die Gruppennummer dieses Schrittes
+ */
+function pushPageHistory(page, gruppe) {
   if (!page || S._isUndoingOrRedoing) return;
 
   const entry = _historyEntry(page.id);
   if (!entry) return;
 
-  entry.undo.push(_snapshotPageState(page));
-  entry.redo.length = 0;   // neuer Zweig – Wiederholen ist hinfällig
+  const snap = _snapshotPageState(page);
+  snap.gruppe = (gruppe === undefined) ? ++_schrittZaehler : gruppe;
+  entry.undo.push(snap);
+  _schrittFolge.push(page.id);
+
+  /* Neuer Zweig – Wiederholen ist hinfällig, und zwar auf ALLEN Seiten,
+     die noch etwas darin liegen hatten. Nur die eigene zu leeren liesse
+     bei den anderen Schritte stehen, die es nicht mehr gibt. */
+  entry.redo.length = 0;
+  for (const id of _redoFolge) {
+    const e = S.history[id];
+    if (e) e.redo.length = 0;
+  }
+  _redoFolge.length = 0;
+
   _trimHistory(entry);
 
   updateUndoRedoUI();
+  return snap.gruppe;
 }
 
 /**
@@ -511,30 +559,86 @@ function updateUndoRedoUI() {
   }
 }
 
-function _stepHistory(fromKey, toKey, emptyMsgKey) {
-  const pgId = S.activePgId;
-  const info = pgId ? getPage(pgId) : null;
-  if (!info) return false;
+/**
+ * Die Seite, auf der der nächste Schritt dieser Richtung liegt.
+ *
+ * Veraltete Einträge werden dabei abgeräumt: _trimHistory wirft alte
+ * Stände weg, und eine Seite kann gelöscht worden sein – in der Liste
+ * stünde ihre Kennung dann noch.
+ */
+function _naechsteSchrittSeite(folge, fromKey) {
+  while (folge.length) {
+    const id = folge[folge.length - 1];
+    const entry = S.history[id];
+    if (entry && entry[fromKey].length && getPage(id)) return id;
+    folge.pop();
+  }
+  /* Rückfall auf die offene Seite – für Schritte, die vor dieser
+     Fassung gesichert wurden und deshalb in keiner Liste stehen. */
+  const id = S.activePgId;
+  const entry = id ? S.history[id] : null;
+  return (entry && entry[fromKey].length && getPage(id)) ? id : null;
+}
 
-  const entry = _historyEntry(pgId);
-  if (!entry || !entry[fromKey].length) {
+function _stepHistory(fromKey, toKey, emptyMsgKey) {
+  const vonFolge = (fromKey === 'undo') ? _schrittFolge : _redoFolge;
+  const zuFolge = (fromKey === 'undo') ? _redoFolge : _schrittFolge;
+
+  let pgId = _naechsteSchrittSeite(vonFolge, fromKey);
+  if (!pgId) {
     toast(t(emptyMsgKey) || (fromKey === 'undo' ? 'Nichts zum Rückgängigmachen.' : 'Nichts zum Wiederholen.'));
     return false;
   }
 
   S._isUndoingOrRedoing = true;
+  const angefasst = [];
+  let gruppe = null;
+
   try {
-    // Aktuellen Stand auf die Gegenseite legen, damit der Schritt umkehrbar bleibt
-    entry[toKey].push(_snapshotPageState(info.page));
-    _applyPageSnapshot(info.page, entry[fromKey].pop());
+    /* Die ganze Gruppe: ein Überlauf hat zwei Seiten geändert, und nur
+       eine zurückzunehmen hiesse, den Text danach doppelt zu haben. */
+    do {
+      const info = getPage(pgId);
+      const entry = _historyEntry(pgId);
+      if (!info || !entry || !entry[fromKey].length) break;
+
+      const snap = entry[fromKey].pop();
+      if (vonFolge[vonFolge.length - 1] === pgId) vonFolge.pop();
+      if (gruppe === null) gruppe = snap.gruppe;
+
+      // Aktuellen Stand auf die Gegenseite legen, damit es umkehrbar bleibt
+      const jetzt = _snapshotPageState(info.page);
+      jetzt.gruppe = snap.gruppe;
+      entry[toKey].push(jetzt);
+      zuFolge.push(pgId);
+      angefasst.push(pgId);
+
+      _applyPageSnapshot(info.page, snap);
+
+      // Gehört der nächste Schritt noch zur selben Gruppe?
+      const weiter = _naechsteSchrittSeite(vonFolge, fromKey);
+      const naechster = weiter ? S.history[weiter][fromKey] : null;
+      pgId = (naechster && naechster.length
+        && naechster[naechster.length - 1].gruppe === gruppe) ? weiter : null;
+    } while (pgId);
   } catch (err) {
     console.error('[History] Schritt fehlgeschlagen:', err);
     return false;
   } finally {
     S._isUndoingOrRedoing = false;
-    // Tipp-Zusammenfassung zurücksetzen, sonst verschluckt der nächste
-    // Tastendruck seinen eigenen Sicherungspunkt
-    delete _lastTypingSnapshot[pgId];
+    /* Tipp-Zusammenfassung zurücksetzen, sonst verschluckt der nächste
+       Tastendruck seinen eigenen Sicherungspunkt. */
+    for (const id of angefasst) delete _lastTypingSnapshot[id];
+  }
+
+  /* Auf die Seite sehen, an der wirklich etwas geschehen ist – sonst
+     nimmt Strg+Z etwas zurück, das gar nicht im Bild steht. */
+  if (angefasst.length && S.activePgId !== angefasst[0]) {
+    const pgEl = E('pg-scroll')?.querySelector('[data-pgid="' + angefasst[0] + '"]');
+    if (pgEl) {
+      setActivePg(angefasst[0]);
+      pgEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   updateUndoRedoUI();
@@ -1230,6 +1334,20 @@ function checkPageOverflow(textDiv, page) {
   }
   const uebersteht = nimmUeberlauf(textDiv, availH, lh);
   if (!uebersteht) return;
+
+  /* ── Der Überlauf gehört zum selben Schritt wie das, was ihn ausgelöst
+     hat ────────────────────────────────────────────────────────────────
+     Hier ändern sich ZWEI Seiten: auf dieser fehlt der Text danach, auf
+     der nächsten steht er. Nur die eine zurückzunehmen hiesse, ihn
+     danach doppelt zu haben. Die Folgeseite bekommt deshalb einen
+     Sicherungspunkt mit DERSELBEN Gruppennummer wie der Schritt, der
+     gerade oben auf dem Stapel dieser Seite liegt – ein Strg+Z nimmt
+     beide zusammen. */
+  const oben = (S.history[page.id]?.undo || []).slice(-1)[0];
+  if (oben && typeof pushPageHistory === 'function') {
+    pushPageHistory(nextPage, oben.gruppe);
+  }
+
   uebernimmText(page, textDiv);
   if (isNew) { const pgEl = appendPageDOM(nextPage, pages.length); pgEl.style.opacity = '0'; pgEl.style.transform = 'translateY(12px)'; pgEl.style.transition = 'opacity .25s,transform .25s'; requestAnimationFrame(() => requestAnimationFrame(() => { pgEl.style.opacity = '1'; pgEl.style.transform = 'none'; })); }
   const nextPgEl = E('pg-scroll').querySelector('[data-pgid="' + nextPage.id + '"]'); if (!nextPgEl) return;
