@@ -2483,20 +2483,57 @@ body.hat-konflikt .view {
   padding: 28px 0;
 }
 
+
 /* ══════════════════════════════════════════════════════════════════════
    DER CODE-DIALOG  ―  ui/code.js
+
+   Die Huelle ist `modal modal-nb`, wie beim Formel-Editor: Rand,
+   Innenabstand und Schatten kommen von dort. Hier steht nur, was diesem
+   Fenster eigen ist – die Breite, das Codefeld und die Zeile darunter.
+
+   >>> Warum die Farben aus den Veraenderlichen kommen <<<
+   Zuerst standen hier feste Werte (#1e1e1e, #35354a). Damit sass das
+   Fenster neben dem Rest der Oberflaeche: eigener Grauton, eigener Rand,
+   und beim naechsten Wechsel des Erscheinungsbilds waere es das einzige
+   geblieben, das nicht mitgeht. --sp, --sb2, --hi und --gd sind
+   dieselben, die jedes andere Fenster benutzt.
    ══════════════════════════════════════════════════════════════════════ */
 .code-modal {
-  width: min(760px, 92vw);
+  max-width: 760px;
+  width: min(760px, 92vw)
 }
 
-/* Das Eingabefeld: feste Schrittweite, kein Umbruch, waagerecht rollbar.
-   Umgebrochener Code ist unlesbar - lieber schieben als knicken. */
-.code-quelle {
+/* Ueberschrift und Schliesskreuz in einer Zeile – wie .formula-head */
+.code-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px
+}
+
+.code-head h3 {
+  flex: 1;
+  min-width: 0
+}
+
+.code-head .modal-close-x {
+  margin: -8px -12px 0 0;
+  flex-shrink: 0
+}
+
+/* Das Eingabefeld. Feste Schrittweite, KEIN Umbruch und waagerecht
+   rollbar: umgebrochener Code ist unlesbar, und eine eingerueckte Zeile
+   verliert dabei ihre Stufe. Lieber schieben als knicken. */
+#code-quelle {
   width: 100%;
+  box-sizing: border-box;
   min-height: 260px;
-  resize: vertical;
-  font-family: 'DM Mono', Consolas, 'Courier New', monospace;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--sp);
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  color: var(--hi);
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
   font-size: 13px;
   line-height: 19px;
   tab-size: 4;
@@ -2504,37 +2541,64 @@ body.hat-konflikt .view {
   white-space: pre;
   overflow-wrap: normal;
   overflow-x: auto;
-  background: #1e1e1e;
-  color: #d4d4d4;
-  border: 1px solid var(--sb, #35354a);
-  border-radius: 6px;
-  padding: 10px 12px;
+  resize: vertical
 }
 
-.code-quelle::placeholder { color: #6e7681 }
+#code-quelle:focus {
+  border-color: var(--gd);
+  outline: none
+}
 
+/* Die Zeile mit Sprache und Aussehen */
 .code-leiste {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: 10px
 }
 
-.code-leiste .modal-label { margin: 0 }
-
-.code-leiste select {
-  background: var(--sh2, #23232e);
-  color: var(--text, #e8e6e3);
-  border: 1px solid var(--sb, #35354a);
-  border-radius: 5px;
-  padding: 4px 8px;
-  font-size: 12px;
+/* .modal-label ist ein Block und stuende sonst allein in seiner Zeile */
+.code-leiste .modal-label {
+  margin: 0;
+  flex-shrink: 0
 }
 
-/* Was erkannt wurde. Zurueckhaltend - es ist ein Hinweis, keine Ansage. */
+#code-sprache {
+  background: var(--sp);
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: var(--hi);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer
+}
+
+#code-sprache:focus {
+  border-color: var(--gd)
+}
+
+/* Was erkannt wurde. Zurueckhaltend – es ist ein Hinweis, keine Ansage. */
 .code-erkannt {
-  font-size: 11px;
-  color: var(--muted, #9a94a6);
   flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--md)
+}
+
+/* Der Haken fuer die helle Fassung – wie .formula-simple-row */
+.code-hell-zeile {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--md);
+  cursor: pointer
+}
+
+.code-hell-zeile input[type="checkbox"] {
+  accent-color: var(--gold)
 }

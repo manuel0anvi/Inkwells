@@ -433,18 +433,17 @@
     const nrn = zeilen.map((_, i) => i + 1).join('\n');
     const gefaerbt = faerbe(code.replace(/\n$/, ''), sprache);
 
-    /* Der Kasten wird auf die natürliche Größe gerechnet und dann als
-       Ganzes skaliert – so bleibt die Schrift beim Ziehen im Verhältnis,
-       statt umzubrechen. Dasselbe tut renderFormulaBody. */
-    const natW = obj.natW || obj.w || CODE_MIN_W;
-    const natH = obj.natH || obj.h || 100;
-    const kx = (obj.w || natW) / (natW || 1);
-    const ky = (obj.h || natH) / (natH || 1);
-    const k = Math.max(0.2, Math.min(kx, ky));
+    /* ── Der Kasten wird NICHT skaliert ────────────────────────────────
+       Eine Formel wird beim Ziehen als Ganzes vergrössert – dort ist das
+       richtig, sie ist ein Bild aus Zeichen. Bei Code wäre es falsch:
+       wer den Kasten aufzieht, will MEHR CODE SEHEN und keine grössere
+       Schrift. Der Kasten ist deshalb ein Fenster auf den Code, und was
+       nicht hineinpasst, wird darin geschoben – in beide Richtungen,
+       genau wie in einer Entwicklungsumgebung.
 
-    return '<div class="j-code-obj' + (obj.hell ? ' hell' : '') + '"'
-      + ' style="width:' + natW + 'px;height:' + natH + 'px;'
-      + 'transform:scale(' + k + ')">'
+       Er füllt den Rahmen des Objekts vollständig aus; die Grösse steht
+       am .obj-wrap (canvas/objects.js). */
+    return '<div class="j-code-obj' + (obj.hell ? ' hell' : '') + '">'
       + '<div class="j-code-obj-kopf">' + esc(SPRACHEN[sprache].name) + '</div>'
       + '<div class="j-code-obj-flaeche">'
       + '<div class="j-code-obj-nrn">' + esc(nrn) + '</div>'
@@ -469,11 +468,28 @@
     const pw = info.page.w || CFG.PAGE_W;
     const ph = info.page.h || CFG.PAGE_H;
 
+    /* ── Massvoll einsetzen, nicht so gross wie der Code ist ───────────
+       Gemessen wird die volle Grösse (siehe messeCode) – eingesetzt wird
+       eine handliche. Ein Programm mit achtzig Zeilen ergäbe sonst einen
+       Kasten, der das ganze Blatt einnimmt und alles andere verdeckt;
+       eine einzige lange Zeile machte ihn breiter als die Seite, und an
+       seine Griffe käme man gar nicht mehr heran.
+
+       Was nicht hineinpasst, wird IM Kasten geschoben: die Fläche rollt
+       in beide Richtungen (css/pages.css). Wer ihn grösser haben will,
+       zieht ihn an den Ecken auf – das ist eine Handbewegung und besser,
+       als ihn jedes Mal wieder kleiner ziehen zu müssen. */
+    const HANDLICH_W = 460;
+    const HANDLICH_H = 300;
+
+    mass.w = Math.min(mass.w, HANDLICH_W, Math.max(160, pw - 48));
+    mass.h = Math.min(mass.h, HANDLICH_H, Math.max(80, ph - 120));
+
     /* Dorthin, wo man gerade ist – aber immer ganz auf dem Blatt.
        Dieselbe Rechnung wie beim Bild aus der Zwischenablage. */
     let y = (typeof markeAufSeite === 'function' && markeAufSeite(info.page)) || 96;
     y = Math.min(Math.max(y, 72), Math.max(72, ph - mass.h - 24));
-    const x = Math.max(24, Math.min(72, pw - mass.w - 24));
+    const x = Math.max(24, Math.min(72, Math.max(24, pw - mass.w - 24)));
 
     const obj = {
       id: uid(),
@@ -507,22 +523,187 @@
    */
   function updateCodeObject(obj, code, sprache, hell) {
     if (!obj) return;
-    const alterFaktor = obj.natH ? (obj.h || obj.natH) / obj.natH : 1;
+
+    /* Hat jemand den Kasten selbst gezogen? Dann bleibt seine Grösse,
+       wie er sie eingestellt hat – nur der Inhalt wechselt. Sonst folgt
+       der Kasten dem Code: das ist das „das Schwarze geht weiter oder
+       zurück", wenn Zeilen dazukommen oder wegfallen.
+
+       Von Hand gezogen heisst: die Grösse weicht von der ab, die zuletzt
+       gerechnet wurde. Ein paar Pixel Spiel, damit Rundungen beim
+       Zeichnen nicht als Absicht gelten. */
+    const vonHand = obj.natW && obj.natH
+      && (Math.abs((obj.w || 0) - obj.natW) > 2 || Math.abs((obj.h || 0) - obj.natH) > 2);
 
     obj.code = String(code || '');
     if (sprache !== undefined) obj.lang = SPRACHEN[sprache] ? sprache : 'text';
     if (hell !== undefined) obj.hell = !!hell;
 
     const mass = messeCode(obj.code, obj.lang);
+    /* Dieselbe Obergrenze wie beim Einsetzen: ein Programm mit achtzig
+       Zeilen soll den Kasten nicht über die ganze Seite wachsen lassen.
+       Darüber hinaus wird im Kasten geschoben. */
+    mass.w = Math.min(mass.w, 460);
+    mass.h = Math.min(mass.h, 300);
+
     obj.natW = mass.w;
     obj.natH = mass.h;
-    obj.w = Math.round(mass.w * alterFaktor);
-    obj.h = Math.round(mass.h * alterFaktor);
+    if (!vonHand) { obj.w = mass.w; obj.h = mass.h; }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     IM KASTEN SELBST SCHREIBEN
+
+     Ein Doppelklick macht den Code beschreibbar – an Ort und Stelle,
+     ohne dass ein Fenster aufgeht. Das Fenster bleibt für das ERSTE
+     Einsetzen: dort wird eine ganze Datei hereingebracht, und dafür ist
+     ein grosses Feld das Richtige. Zum Ändern einer Zeile wäre es im
+     Weg.
+
+     >>> Warum das <pre> und nicht der ganze Kasten <<<
+     Die Zeilennummern dürfen nicht mitbeschrieben werden. Sie sind
+     Anzeige und werden bei jedem Anschlag neu gerechnet.
+
+     >>> Warum die Farben beim Schreiben stehen bleiben <<<
+     Neu einzufärben heisst, den Inhalt des <pre> auszutauschen – und
+     damit die Schreibmarke zu verlieren. Sie liesse sich zurückrechnen,
+     aber bei jedem Anschlag den ganzen Baum neu zu bauen ist beim Tippen
+     das Letzte, was man will. Gefärbt wird deshalb, wenn die Finger
+     stillstehen (300 ms) und beim Verlassen.
+     ══════════════════════════════════════════════════════════════════ */
+  const FAERBE_PAUSE_MS = 300;
+
+  /** Wo steht die Marke, gezählt in Zeichen vom Anfang des Elements? */
+  function markeStelle(el) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const r = sel.getRangeAt(0);
+    if (!el.contains(r.startContainer)) return null;
+    const vor = r.cloneRange();
+    vor.selectNodeContents(el);
+    vor.setEnd(r.startContainer, r.startOffset);
+    return vor.toString().length;
+  }
+
+  /** ...und wieder hin. */
+  function setzeMarke(el, stelle) {
+    if (stelle === null || stelle === undefined) return;
+    const lauf = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let gezaehlt = 0;
+    for (let n = lauf.nextNode(); n; n = lauf.nextNode()) {
+      const laenge = n.nodeValue.length;
+      if (gezaehlt + laenge >= stelle) {
+        const r = document.createRange();
+        r.setStart(n, Math.max(0, stelle - gezaehlt));
+        r.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        return;
+      }
+      gezaehlt += laenge;
+    }
+    // Hinter alles, wenn die Stelle über das Ende hinausgeht
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  /**
+   * Macht den Code eines Kastens beschreibbar.
+   *
+   * @param {HTMLElement} wrap   die Hülle des Objekts (.obj-wrap)
+   * @param {object} obj
+   * @param {object} page
+   * @param {Function} [nachGroesse]  aufgerufen, wenn der Kasten wächst
+   */
+  function bearbeiteImKasten(wrap, obj, page, nachGroesse) {
+    if (!wrap || !obj || S.readOnly) return;
+
+    const pre = wrap.querySelector('.j-code-obj-text');
+    const nrn = wrap.querySelector('.j-code-obj-nrn');
+    if (!pre) return;
+    if (pre.getAttribute('contenteditable') === 'true') return;   // schon offen
+
+    /* Solange geschrieben wird, gehört der Kasten mir – sonst schiebt
+       ihn ein anderer unter der Marke weg (canvas/objects.js). */
+    const pgEl = wrap.closest('[data-pgid]');
+    if (pgEl && window.Collab && typeof Collab.beansprucheObjekt === 'function') {
+      Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
+    }
+
+    if (typeof pushPageHistory === 'function') pushPageHistory(page);
+
+    // Zum Schreiben ohne Farben: sie stünden sonst mitten im Getippten
+    pre.textContent = obj.code || '';
+    pre.setAttribute('contenteditable', 'true');
+    pre.setAttribute('spellcheck', 'false');
+    pre.classList.add('schreibt');
+    pre.focus();
+
+    let uhr = null;
+
+    const nummernNachziehen = () => {
+      if (!nrn) return;
+      const zahl = (pre.textContent || '').replace(/\n$/, '').split('\n').length;
+      nrn.textContent = Array.from({ length: zahl }, (_, i) => i + 1).join('\n');
+    };
+
+    const uebernehmen = () => {
+      obj.code = pre.textContent || '';
+      updateCodeObject(obj, obj.code);
+      wrap.style.width = obj.w + 'px';
+      wrap.style.height = obj.h + 'px';
+      if (typeof nachGroesse === 'function') nachGroesse();
+      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    };
+
+    const beiEingabe = () => {
+      nummernNachziehen();
+      uebernehmen();
+      clearTimeout(uhr);
+      uhr = setTimeout(() => {
+        if (pre.getAttribute('contenteditable') !== 'true') return;
+        const stelle = markeStelle(pre);
+        pre.innerHTML = faerbe(obj.code.replace(/\n$/, ''), obj.lang || 'text');
+        setzeMarke(pre, stelle);
+      }, FAERBE_PAUSE_MS);
+    };
+
+    const schliessen = () => {
+      clearTimeout(uhr);
+      pre.removeAttribute('contenteditable');
+      pre.classList.remove('schreibt');
+      pre.removeEventListener('input', beiEingabe);
+      pre.removeEventListener('blur', schliessen);
+      pre.removeEventListener('keydown', beiTaste);
+      uebernehmen();
+      pre.innerHTML = faerbe((obj.code || '').replace(/\n$/, ''), obj.lang || 'text');
+      if (pgEl && window.Collab && typeof Collab.gibObjektFrei === 'function') {
+        Collab.gibObjektFrei(pgEl.dataset.pgid, wrap.dataset.objid);
+      }
+    };
+
+    const beiTaste = (e) => {
+      // Esc beendet das Schreiben, Enter gehört in den Code
+      if (e.key === 'Escape') { e.preventDefault(); pre.blur(); return; }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        document.execCommand('insertText', false, '    ');
+      }
+    };
+
+    pre.addEventListener('input', beiEingabe);
+    pre.addEventListener('blur', schliessen);
+    pre.addEventListener('keydown', beiTaste);
   }
 
   window.InkwellsCode = {
     faerbe, errateSprache, messeCode, renderCodeBody,
-    insertCodeObject, updateCodeObject,
+    insertCodeObject, updateCodeObject, bearbeiteImKasten,
     SPRACHEN, SPRACH_LISTE
   };
 

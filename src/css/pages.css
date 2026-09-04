@@ -2820,7 +2820,9 @@ body.touch-input .obj-body[data-kind="shape"]::after {
    Fremdkoerper auf dem Blatt und soll auch so aussehen.
    ══════════════════════════════════════════════════════════════════════ */
 .j-code-obj {
-  transform-origin: left top;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2861,11 +2863,15 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   border-bottom-color: #e2dccd;
 }
 
+/* Der Kasten ist ein FENSTER auf den Code: was nicht hineinpasst, wird
+   darin geschoben – in beide Richtungen, wie in einer
+   Entwicklungsumgebung. Umbrechen waere schlechter, eine geknickte
+   Zeile verliert ihre Stufe, und bei Python ist die Stufe alles. */
 .j-code-obj-flaeche {
   flex: 1 1 auto;
   display: flex;
   padding: 12px 12px 12px 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 /* Die Zeilennummern, wie in einer Entwicklungsumgebung */
@@ -2907,3 +2913,16 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 .j-code-obj.hell .j-tok-typ  { color: #267f99 }
 .j-code-obj.hell .j-tok-attr { color: #e50000 }
 .j-code-obj.hell .j-tok-satz { color: #808080 }
+
+/* Der Code, waehrend er beschrieben wird (core/code.js,
+   bearbeiteImKasten). Die Marke muss sichtbar sein, und ein Rahmen sagt,
+   dass hier gerade geschrieben wird und nicht geschoben. */
+.j-code-obj-text.schreibt {
+  outline: none;
+  caret-color: #d7ba7d;
+  cursor: text;
+}
+
+.j-code-obj:has(.j-code-obj-text.schreibt) {
+  box-shadow: 0 0 0 2px var(--gold, #c8a96e), 0 2px 10px rgba(0, 0, 0, .18);
+}

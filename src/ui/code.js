@@ -30,8 +30,18 @@
   overlay.id = 'ov-code';
   overlay.style.display = 'none';
 
+  /* Dieselbe Hülle wie der Formel-Editor: `modal modal-nb` bringt Rand,
+     Innenabstand und Schatten mit. `code-modal` kommt nur für die Breite
+     dazu – ein Codefeld braucht mehr Platz als ein Formelfeld. */
   const kasten = document.createElement('div');
-  kasten.className = 'modal code-modal';
+  kasten.className = 'modal modal-nb code-modal';
+
+  /* Überschrift und Schließkreuz gehören in EINE Zeile. Einzeln ins
+     Modal gehängt stünden sie untereinander, und das ✕ säße unter der
+     Überschrift statt oben rechts, wo man es sucht. Dieselbe Lösung wie
+     .formula-head in ui/formula.js. */
+  const kopf = document.createElement('div');
+  kopf.className = 'code-head';
 
   const titel = document.createElement('h3');
   titel.id = 'code-title';
@@ -39,6 +49,9 @@
   const schliessenX = document.createElement('button');
   schliessenX.className = 'modal-close-x';
   schliessenX.textContent = '✕';
+
+  kopf.appendChild(titel);
+  kopf.appendChild(schliessenX);
 
   /* Das Eingabefeld. spellcheck aus – eine rote Wellenlinie unter jedem
      Bezeichner macht Code unlesbar. */
@@ -67,7 +80,7 @@
   erkannt.className = 'code-erkannt';
 
   const hellLabel = document.createElement('label');
-  hellLabel.className = 'modal-check';
+  hellLabel.className = 'code-hell-zeile';
   const hellHaken = document.createElement('input');
   hellHaken.type = 'checkbox';
   hellHaken.id = 'code-hell';
@@ -75,12 +88,17 @@
   hellLabel.appendChild(hellHaken);
   hellLabel.appendChild(hellText);
 
-  /* ── Die Knöpfe ───────────────────────────────────────────────────── */
+  /* ── Die Knöpfe ───────────────────────────────────────────────────
+     `modal-btns` gibt der Reihe ihre Lage; Grösse, Schrift und
+     Innenabstand der Knöpfe kommen von `.modal-btns button`. Der
+     Abbrechen-Knopf bekommt deshalb bewusst KEINE Klasse – nur der
+     bestätigende trägt `ok-btn` und damit die Farbe. Genau so macht es
+     der Formel-Editor. */
   const knopfZeile = document.createElement('div');
-  knopfZeile.className = 'modal-actions';
+  knopfZeile.className = 'modal-btns';
 
   const abbrechen = document.createElement('button');
-  abbrechen.className = 'ok-btn ghost';
+  abbrechen.id = 'code-abbrechen';
 
   const fertig = document.createElement('button');
   fertig.className = 'ok-btn';
@@ -94,8 +112,7 @@
   leiste.appendChild(erkannt);
   leiste.appendChild(hellLabel);
 
-  kasten.appendChild(schliessenX);
-  kasten.appendChild(titel);
+  kasten.appendChild(kopf);
   kasten.appendChild(feld);
   kasten.appendChild(leiste);
   kasten.appendChild(knopfZeile);

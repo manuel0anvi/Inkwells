@@ -822,7 +822,21 @@ function placeObject(objLayer, obj, page) {
         }
       });
 
-    body.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); bearbeiten(); });
+    /* ── Der Doppelklick schreibt AN ORT UND STELLE ────────────────────
+       Er machte zuerst das Fenster wieder auf. Das ist für das erste
+       Einsetzen richtig – dort bringt man eine ganze Datei herein –,
+       zum Ändern einer Zeile aber im Weg: man will hinklicken und
+       tippen, nicht durch einen Dialog. Das Fenster bleibt über den
+       Stift in der Leiste erreichbar. */
+    body.addEventListener('dblclick', ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (window.InkwellsCode && typeof InkwellsCode.bearbeiteImKasten === 'function') {
+        InkwellsCode.bearbeiteImKasten(wrap, obj, page, placeBar);
+      } else {
+        bearbeiten();
+      }
+    });
   }
 
   function markLayerButtons() {
@@ -882,6 +896,12 @@ function placeObject(objLayer, obj, page) {
   function beginInteraction(e) {
     if (S.mode !== 'cursor') return;
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
+
+    /* In einem Code-Kasten, der gerade beschrieben wird, gehört der
+       Zeiger dem Text: klicken, markieren, die Marke setzen. Würde hier
+       das Verschieben anspringen, liesse sich kein einziges Zeichen
+       ansteuern (core/code.js, bearbeiteImKasten). */
+    if (e.target.closest && e.target.closest('.j-code-obj-text[contenteditable="true"]')) return;
 
     /* Haelt es gerade jemand anderes? Dann gar nicht erst anfassen –
        auch nicht auswaehlen, denn an der Auswahl haengt die Leiste, und

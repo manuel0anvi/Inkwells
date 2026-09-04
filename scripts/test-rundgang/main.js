@@ -528,7 +528,10 @@ app.on('ready', async () => {
       if (!(k.h < hoheGross))
         throw new Error('er ist nicht wieder geschrumpft: ' + hoheGross + ' -> ' + k.h);`);
 
-    await schritt('Ein Doppelklick macht ihn wieder auf', `
+    /* Ein Doppelklick macht den Code AN ORT UND STELLE beschreibbar –
+       kein Fenster geht auf. Das Fenster bleibt fuer das erste Einsetzen
+       und ist ueber den Stift in der Leiste erreichbar. */
+    await schritt('Ein Doppelklick macht ihn beschreibbar, ohne Fenster', `
       const pg = getNb().pages[0];
       const k = window.__kasten;
       const wrap = document.querySelector('[data-pgid="' + pg.id + '"] .obj-wrap[data-objid="'
@@ -536,14 +539,51 @@ app.on('ready', async () => {
       if (!wrap) throw new Error('der Kasten liegt nicht im Baum');
       const body = wrap.querySelector('.obj-body');
       if (!body) throw new Error('kein Koerper');
+
       body.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       await new Promise(r => setTimeout(r, 250));
+
       const ov = E('ov-code');
-      if (!ov || ov.style.display === 'none') throw new Error('der Dialog ging nicht auf');
-      if (E('code-quelle').value !== k.code)
-        throw new Error('der bisherige Code steht nicht darin');
-      // wieder zu
-      document.querySelectorAll('.overlay').forEach(o => { o.style.display = 'none'; });`, 500);
+      if (ov && ov.style.display !== 'none')
+        throw new Error('es ging ein Fenster auf, statt an Ort und Stelle zu schreiben');
+
+      const pre = wrap.querySelector('.j-code-obj-text');
+      if (!pre) throw new Error('kein Textfeld im Kasten');
+      if (pre.getAttribute('contenteditable') !== 'true')
+        throw new Error('der Code ist nicht beschreibbar geworden');
+      if (pre.textContent !== k.code)
+        throw new Error('im Feld steht etwas anderes: ' + JSON.stringify(pre.textContent));
+      window.__pre = pre; window.__wrap = wrap;`, 500);
+
+    await schritt('Getipptes landet im Kasten, und er waechst mit', `
+      const k = window.__kasten;
+      const pre = window.__pre;
+      const hoheVorher = k.h;
+
+      /* Mit echten Schluesselwoertern – der Schritt davor hatte den Code
+         auf ein blosses "a" gesetzt, daran ist nichts einzufaerben. */
+      pre.textContent = 'def f(x):\\n    return x\\nzeile3\\nzeile4';
+      pre.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 120));
+
+      if (!/zeile3/.test(k.code)) throw new Error('das Getippte kam nicht im Heft an: ' + JSON.stringify(k.code));
+      if (!(k.h > hoheVorher))
+        throw new Error('der Kasten ist nicht gewachsen: ' + hoheVorher + ' -> ' + k.h);
+
+      // Die Zeilennummern muessen mitzaehlen
+      const nrn = window.__wrap.querySelector('.j-code-obj-nrn');
+      const zahl = (nrn.textContent || '').split('\\n').length;
+      const zeilen = k.code.replace(/\\n$/, '').split('\\n').length;
+      if (zahl !== zeilen) throw new Error(zahl + ' Nummern fuer ' + zeilen + ' Zeilen');`, 400);
+
+    await schritt('Und beim Verlassen wird wieder eingefaerbt', `
+      const pre = window.__pre;
+      pre.dispatchEvent(new FocusEvent('blur'));
+      await new Promise(r => setTimeout(r, 200));
+      if (pre.getAttribute('contenteditable') === 'true')
+        throw new Error('es bleibt beschreibbar');
+      if (!/j-tok-/.test(pre.innerHTML))
+        throw new Error('die Farben sind nicht zurueckgekommen');`, 400);
 
     await schritt('Er laesst sich verschieben und loeschen wie ein Bild', `
       const pg = getNb().pages[0];
