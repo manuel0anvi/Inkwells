@@ -169,6 +169,19 @@
     });
   }
 
+  /* Der Codeblock – dieselbe Machart wie die Formel: die Stelle beim
+     Aufsetzen merken, weil der Knopf dem Textfeld den Fokus nimmt und
+     die Schreibmarke im click schon weg wäre. */
+  const btnCode = E('btn-code');
+  if (btnCode) {
+    btnCode.addEventListener('pointerdown', merkeStelle);
+    btnCode.addEventListener('click', () => {
+      schliessen();
+      stelleWiederher();
+      if (window.InkwellsCode) window.InkwellsCode.insertCode(letzteSprache());
+    });
+  }
+
   /* ── Öffnen und Schließen ───────────────────────────────────────── */
   function offen() { return pop.style.display === 'flex'; }
 
@@ -272,11 +285,7 @@
       table: () => druecke(E('btn-table')),
       media: () => druecke(E('btn-media')),
       formula: () => druecke(E('btn-formula')),
-      /* Der Codeblock hat keinen eigenen Knopf in der Leiste – dort ist
-         kein Platz mehr, und er wird seltener gebraucht als Tabelle oder
-         Bild. Er entsteht deshalb unmittelbar. Die zuletzt gewählte
-         Sprache merkt sich core/code.js. */
-      code: () => window.InkwellsCode?.insertCode(letzteSprache()),
+      code: () => druecke(E('btn-code')),
       /* Der Verweis hört auf mousedown und nicht auf click (ui/links.js
          merkt sich dort die Auswahl, bevor der Knopf dem Textfeld den
          Fokus nimmt). druecke() schickt pointerdown und click – das

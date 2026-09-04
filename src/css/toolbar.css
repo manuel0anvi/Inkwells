@@ -626,7 +626,7 @@
 }
 
 /* ── Stufe 2: Einfügen wird ein „+" ──────────────────────────────────
-   Die fünf Einzelknöpfe weichen dem Sammelknopf. Sie verschwinden damit
+   Die sechs Einzelknöpfe weichen dem Sammelknopf. Sie verschwinden damit
    nicht aus der Bedienung: #insert-all-pop steuert genau sie an
    (ui/insert.js), es gibt sie also weiterhin nur einmal. */
 .toolbar.tb-plus .tb-insert-all {
@@ -643,6 +643,7 @@
 .toolbar.tb-plus #btn-media,
 .toolbar.tb-plus #btn-table,
 .toolbar.tb-plus #btn-formula,
+.toolbar.tb-plus #btn-code,
 .toolbar.tb-plus #fmt-link {
   display: none
 }
