@@ -2843,3 +2843,62 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   color: #8b8578;
   text-decoration: line-through;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE UNSICHTBARE TEXTEBENE ÜBER EINER FOLIE  ―  core/importExport.js
+
+   Eine Seite aus einem PDF-Import ist ein Bild. Der Text des PDF liegt
+   unsichtbar darueber, an genau der Stelle, an der er im Bild zu sehen
+   ist: die Suche findet ihn, markieren und kopieren geht, und gesehen
+   wird nichts davon.
+
+   >>> Warum transparent und nicht versteckt <<<
+   display:none oder visibility:hidden waere gar nicht auszuwaehlen –
+   und genau das Auswaehlen ist der Zweck. Transparente Schrift steht
+   im Layout, laesst sich markieren und kopieren, ist aber nicht zu
+   sehen. Die Auswahl selbst zeichnet der Browser trotzdem.
+   ══════════════════════════════════════════════════════════════════════ */
+/* Die negativen Masse sind genau die Einrueckungen von .j-text
+   (top 64, left 72, right 32, bottom 24) mit umgekehrtem Vorzeichen:
+   der Behaelter deckt damit das GANZE Blatt, nicht nur den Textbereich.
+
+   Das muss so sein, weil das Seitenbild ueber die volle Blattbreite
+   geht. Sonst liesse sich alles, was im linken Rand steht, gar nicht
+   ansteuern – dort waeren die Koordinaten negativ, und die Bereinigung
+   laesst nichts Negatives durch (istAbstand). Genau daran ist der erste
+   Anlauf gescheitert: von zwei Zeilen kam keine an.
+
+   Die Stellen darin sind deshalb in BLATT-Koordinaten gerechnet, so wie
+   das Bild auch (core/importExport.js, folienTextEbene). */
+.j-text .j-folie {
+  position: absolute;
+  left: -72px;
+  top: -64px;
+  right: -32px;
+  bottom: -24px;
+  /* Die Ebene selbst faengt nichts ab; nur ihre Stellen tun das. Sonst
+     laege ueber dem ganzen Blatt ein Fangnetz, und ein Klick daneben
+     setzte die Schreibmarke nicht mehr. */
+  pointer-events: none;
+  /* Hinter dem gewoehnlichen Text, vor dem Bild */
+  z-index: 1;
+}
+
+.j-text .j-folie .j-folie-z {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  /* Auswaehlen ja – dafuer ist sie da */
+  pointer-events: auto;
+  cursor: text;
+  /* Die Zeile soll genau so hoch sein wie die Schrift, sonst sitzt der
+     Auswahlrahmen ueber oder unter dem Wort im Bild. */
+  line-height: 1;
+  font-family: 'Crimson Pro', Georgia, serif;
+  transform-origin: left top;
+}
+
+/* Beim Zeichnen kommt der Folientext nicht in die Quere: die
+   Zeichenflaeche liegt auf z-index 1100 und damit ueber dem Textfeld
+   (1000). Wer den Stift fuehrt, trifft sie und nicht die Ebene – dafuer
+   braucht es hier keine eigene Regel. */

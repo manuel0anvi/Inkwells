@@ -117,7 +117,7 @@
      `j-erledigt` ist der gesetzte Haken einer Ankreuzliste. Er gehört
      zum Inhalt und nicht zur Anzeige: ob eine Aufgabe erledigt ist,
      sollen alle sehen und das Heft soll es behalten. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke|frei|code|code-hell|erledigt)$/;
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke|frei|code|code-hell|erledigt|folie|folie-z)$/;
 
   /* ── Abstand statt Leerzeichen ──────────────────────────────────────
      `j-luecke` ist der Abstandshalter, den ein Klick rechts neben schon
@@ -274,6 +274,19 @@
            und die Obergrenze haelt ihn auf dem Blatt. */
         const istFrei = istBlock && el.classList.contains('j-frei');
 
+        /* ── Eine Stelle der unsichtbaren Folien-Textebene ─────────────
+           Sie traegt Lage UND Schriftgroesse: nur damit sitzt die
+           unsichtbare Schrift genau auf der sichtbaren im Bild
+           darunter, und nur dann stimmt beim Markieren der Rahmen mit
+           dem, was man sieht (core/importExport.js, folienTextEbene).
+
+           Die Groesse ist die einzige Stelle, an der ein font-size
+           durchkommt. Sie ist geprueft wie jedes andere Mass hier – ein
+           Mass kann nichts ausfuehren, und die Obergrenze haelt es auf
+           dem Blatt. */
+        const istFolienStelle = el.tagName === 'SPAN' && el.classList.contains('j-folie-z');
+        const groesse = el.style && el.style.fontSize;
+
         el.removeAttribute('style');
         if (istFarbe(farbe)) el.style.color = farbe;
         if (istBlock && istAbstand(links)) el.style.marginLeft = links;
@@ -281,6 +294,9 @@
         if (istHalter && istAbstand(breite)) el.style.width = breite;
         if (istFrei && istAbstand(vonLinks)) el.style.left = vonLinks;
         if (istFrei && istAbstand(vonOben)) el.style.top = vonOben;
+        if (istFolienStelle && istAbstand(vonLinks)) el.style.left = vonLinks;
+        if (istFolienStelle && istAbstand(vonOben)) el.style.top = vonOben;
+        if (istFolienStelle && istAbstand(groesse)) el.style.fontSize = groesse;
         continue;
       }
 
@@ -323,6 +339,13 @@
          Gegenteil und machte aus jedem Element ein Eingabefeld. */
       if (name === 'contenteditable' && el.tagName === 'SPAN'
           && el.classList.contains('j-luecke') && String(wert) === 'false') continue;
+
+      /* Und derselbe Riegel an der Folien-Textebene: auswaehlen und
+         kopieren ja, hineinschreiben nein. Ohne ihn tippte man beim
+         Antippen der Folie mitten in den unsichtbaren Text hinein.
+         Wieder nur 'false' – 'true' waere das Gegenteil. */
+      if (name === 'contenteditable' && el.tagName === 'DIV'
+          && el.classList.contains('j-folie') && String(wert) === 'false') continue;
 
       /* Die Sprache eines Codeblocks. Nur an einem <pre class="j-code">
          und nur einer aus der Liste – sie landet als Klasse im DOM und

@@ -20,10 +20,26 @@ async function parsePdfToImages(pdfDataUrl) {
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+    /* Der Text derselben Seite – für die unsichtbare Ebene darüber
+       (folienTextEbene). Ein eingescanntes Blatt hat keinen, dann
+       bleibt es beim blossen Bild. Ein Fehler hier darf den Import
+       nicht aufhalten: das Bild ist das Wichtige. */
+    let zeilen = [];
+    try {
+      zeilen = pdfZeilen(await page.getTextContent());
+    } catch (err) {
+      console.warn('[PDF] Textebene der Seite', pageNum, err?.message || err);
+    }
+
     images.push({
       url: canvas.toDataURL('image/jpeg', 0.65),
       w: Math.round(viewport.width / 1.5), // native width (at scale 1.0)
-      h: Math.round(viewport.height / 1.5) // native height
+      h: Math.round(viewport.height / 1.5), // native height
+      zeilen,
+      // Die Masse, in denen die Textstellen gemessen sind
+      pdfW: viewport.width / 1.5,
+      pdfH: viewport.height / 1.5
     });
   }
   return images;
@@ -50,11 +66,35 @@ async function parsePdfToImages(pdfDataUrl) {
  */
 const BILD_KOPF_PX = 56;
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE BREITE VORLAGE BEKOMMT EIN BREITES BLATT
+
+   Hier stand fest `pg.w = CFG.PAGE_W` – also immer die Breite eines
+   hochkant stehenden A4. Fuer ein abfotografiertes Arbeitsblatt stimmt
+   das. Fuer eine FOLIE nicht: die ist 16:9, und auf 794 Punkten Breite
+   blieben davon 447 Punkte Hoehe. Ein Drittel des Fensters war Folie,
+   zwei Drittel leeres Grau – und die Schrift darauf so klein, dass man
+   zum Lesen zoomen musste.
+
+   Ist die Vorlage breiter als hoch, wird das Blatt deshalb ein quer
+   liegendes A4 (die lange Kante als Breite). Aus derselben Folie werden
+   damit 1123 x 632 statt 794 x 447 – dieselbe Seite, aber halb so viel
+   Zoom, um sie zu lesen.
+
+   Das Mass steht in page.w/page.h und damit im Heft: der Ausdruck
+   (buildPdfPage) und der Word-Export (sectionXml) lesen es von dort und
+   bekommen ihre Seite ohne weiteres Zutun quer.
+   ══════════════════════════════════════════════════════════════════════ */
 function makeImagePage(dataUrl, breite, hoehe) {
   const pg = makePage('blank');
   pg.bgImg = dataUrl;
-  pg.w = CFG.PAGE_W;
-  pg.h = Math.round(CFG.PAGE_W * (hoehe / (breite || 1))) + BILD_KOPF_PX;
+
+  // Die lange Kante von A4 als Breite, sobald die Vorlage quer liegt
+  const quer = breite > hoehe;
+  const blattBreite = quer ? CFG.PAGE_H : CFG.PAGE_W;
+
+  pg.w = blattBreite;
+  pg.h = Math.round(blattBreite * (hoehe / (breite || 1))) + BILD_KOPF_PX;
   return pg;
 }
 window.makeImagePage = makeImagePage;
@@ -332,11 +372,102 @@ async function fillNotebookFromPdf(nb, dataUrl) {
 
   /* Die leere Startseite faellt weg – sie stuende sonst vor der ersten
      Seite des Dokuments, und niemand hat sie bestellt. */
-  nb.pages = bilder.map(b => makeImagePage(b.url, b.w, b.h));
+  let mitText = 0;
+  nb.pages = bilder.map(b => {
+    const pg = makeImagePage(b.url, b.w, b.h);
+    /* Und der Text derselben Seite unsichtbar darueber, damit die Suche
+       ihn findet und man ihn herauskopieren kann (folienTextEbene). */
+    const ebene = folienTextEbene(b.zeilen, pg, b.pdfW, b.pdfH);
+    if (ebene) { pg.textContent = ebene; mitText++; }
+    return pg;
+  });
   nb.sections = [];
-  return { seiten: nb.pages.length };
+  return { seiten: nb.pages.length, mitText };
 }
 window.fillNotebookFromPdf = fillNotebookFromPdf;
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE TEXTEBENE ÜBER EINER FOLIE
+
+   Eine Seite aus fillNotebookFromPdf ist ein BILD. Man kann darauf
+   schreiben und malen – aber die Suche fand nichts darin, und kopieren
+   liess sich auch nichts. Für ein Heft, das aus fünfzig Folien einer
+   Vorlesung besteht, ist das die halbe Miete: „wo haben wir Subnetting
+   gemacht" muss eine Antwort haben.
+
+   Darüber liegt deshalb der Text des PDF, unsichtbar und an genau der
+   Stelle, an der er im Bild zu sehen ist. Suchen findet ihn (er steht
+   in page.textContent), markieren und kopieren geht, und beim Zeichnen
+   ist er nicht im Weg.
+
+   >>> Warum das im Text steht und nicht in einem eigenen Feld <<<
+   Ein neues Feld an der Seite müsste durch jede Stelle mitgeführt
+   werden, die Seiten feldweise neu aufbaut – applyStruct in
+   ui/collab.js und splitNotebook in core/share.js zählen die Felder
+   einzeln auf. Was dort fehlt, verschwindet beim ersten Abgleich eines
+   geteilten Hefts, still. In page.textContent ist es dagegen von
+   Anfang an überall dabei: sichern, teilen, Versionen, Ausgabe.
+
+   >>> Warum eigene Spans und keine freien Absätze <<<
+   Ein freier Absatz (p.j-frei) trägt seine Lage auch – aber
+   ordneFreieAbsaetze() schiebt sie auseinander, damit sie sich nicht
+   überlappen, und rechnet dafür bei JEDEM Anschlag jeden gegen jeden.
+   Bei vierzig Textstellen einer Folie wären das 1600 Vergleiche je
+   Tastendruck, und die Ebene sässe hinterher woanders als das Bild.
+   Ein eigener Behälter bleibt davon unberührt.
+
+   Der Behälter ist contenteditable="false": auswählen ja, ändern nein.
+   Sonst schriebe man beim Antippen mitten in den Folientext hinein.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Baut die unsichtbare Textebene einer Folie.
+ *
+ * @param {Array} zeilen   aus pdfZeilen(): { text, y, groesse, x0, x1 }
+ * @param {object} seite   die Heftseite (für w/h)
+ * @param {number} pdfW    Breite der PDF-Seite in ihren eigenen Punkten
+ * @param {number} pdfH    Höhe derselben
+ * @returns {string} HTML – oder '' wenn es nichts zu legen gibt
+ */
+function folienTextEbene(zeilen, seite, pdfW, pdfH) {
+  if (!Array.isArray(zeilen) || !zeilen.length || !pdfW || !pdfH) return '';
+
+  const blattB = seite.w || CFG.PAGE_W;
+  const bildH = (seite.h || CFG.PAGE_H) - BILD_KOPF_PX;
+  const skalaX = blattB / pdfW;
+  const skalaY = bildH / pdfH;
+
+  let html = '<div class="j-folie" contenteditable="false">';
+  let leer = true;
+
+  for (const z of zeilen) {
+    const text = String(z.text || '').trim();
+    if (!text) continue;
+
+    /* Der Nullpunkt eines PDF liegt UNTEN links, der einer Seite oben.
+       z.y ist die Grundlinie – die Oberkante liegt eine Schrifthöhe
+       darüber. */
+    const obenImBild = (pdfH - z.y - (z.groesse || 10)) * skalaY;
+
+    /* BLATT-Koordinaten, nicht die des Textbereichs: der Behälter deckt
+       das ganze Blatt (siehe .j-folie in css/pages.css). Das Bild tut
+       dasselbe, und nur so lässt sich auch ansteuern, was im linken
+       Rand steht – dort wären die Werte sonst negativ, und die
+       Bereinigung lässt nichts Negatives durch. */
+    const x = Math.round((z.x0 || 0) * skalaX);
+    const y = Math.round(obenImBild + BILD_KOPF_PX);
+    const groesse = Math.max(4, Math.min(200, Math.round((z.groesse || 10) * skalaY)));
+
+    // Was ganz ausserhalb des Blattes läge, gehört nicht in die Suche
+    if (x < 0 || y < 0) continue;
+
+    html += '<span class="j-folie-z" style="left:' + x + 'px;top:' + y + 'px'
+      + ';font-size:' + groesse + 'px">' + alsHtmlText(text) + '</span>';
+    leer = false;
+  }
+
+  return leer ? '' : html + '</div>';
+}
 
 /* ══════════════════════════════════════════════════════════════════════
    EIN PDF ALS ÄNDERBARER TEXT

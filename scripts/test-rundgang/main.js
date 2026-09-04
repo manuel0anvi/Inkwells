@@ -415,6 +415,76 @@ app.on('ready', async () => {
       if (ging || li.classList.contains('j-erledigt'))
         throw new Error('in einem fremden Heft wurde abgehakt');`);
 
+    /* ══════════════════════════════════════════════════════════════════
+       FOLIEN: QUERFORMAT UND DIE TEXTEBENE DARUEBER
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Folien aus einem PDF');
+
+    await schritt('Eine breite Vorlage bekommt ein breites Blatt', `
+      // 16:9, wie eine Folie
+      const folie = makeImagePage('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 1600, 900);
+      if (folie.w <= folie.h) throw new Error('das Blatt steht hochkant: ' + folie.w + 'x' + folie.h);
+      if (folie.w !== CFG.PAGE_H)
+        throw new Error('erwartet die lange A4-Kante (' + CFG.PAGE_H + '), bekommen ' + folie.w);
+
+      // Hochkant bleibt hochkant
+      const blatt = makeImagePage('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 1240, 1754);
+      if (blatt.w !== CFG.PAGE_W)
+        throw new Error('ein hochkantes Blatt wurde breit: ' + blatt.w);
+      if (blatt.h <= blatt.w) throw new Error('und liegt jetzt quer');`);
+
+    await schritt('Die Textebene sitzt ueber dem Bild', `
+      const seite = makeImagePage('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 1600, 900);
+      /* Wie pdfZeilen sie liefert: y ist die Grundlinie, Nullpunkt UNTEN
+         links. Eine Zeile oben auf der Folie hat also ein grosses y. */
+      const zeilen = [
+        { text: 'Subnetting', y: 820, groesse: 40, x0: 100, x1: 500 },
+        { text: 'Eine Maske teilt das Netz', y: 600, groesse: 20, x0: 100, x1: 700 }
+      ];
+      const html = folienTextEbene(zeilen, seite, 1600, 900);
+      if (!html) throw new Error('keine Ebene erzeugt');
+      if (!/j-folie/.test(html)) throw new Error('kein Behaelter: ' + html.slice(0, 120));
+      if (!/contenteditable="false"/.test(html)) throw new Error('sie waere beschreibbar');
+      if (!/Subnetting/.test(html)) throw new Error('der Text fehlt');
+
+      // Die obere Zeile muss auch oben sitzen
+      const stellen = [...html.matchAll(/top:(\\d+)px/g)].map(m => Number(m[1]));
+      if (stellen.length !== 2) throw new Error('erwartet zwei Stellen, sind ' + stellen.length);
+      if (!(stellen[0] < stellen[1]))
+        throw new Error('die obere Zeile sitzt nicht oben: ' + JSON.stringify(stellen));
+
+      // Und die groessere Schrift ist auch groesser
+      const groessen = [...html.matchAll(/font-size:(\\d+)px/g)].map(m => Number(m[1]));
+      if (!(groessen[0] > groessen[1]))
+        throw new Error('die Ueberschrift ist nicht groesser: ' + JSON.stringify(groessen));`);
+
+    /* Der eigentliche Punkt: die Ebene MUSS das Speichern und Teilen
+       ueberstehen. Faellt sie beim Bereinigen weg, ist die Suche nach
+       dem ersten Abgleich wieder blind. */
+    await schritt('Die Textebene ueberlebt die Bereinigung', `
+      const roh = '<div class="j-folie" contenteditable="false">'
+        + '<span class="j-folie-z" style="left:120px;top:64px;font-size:22px">Routing</span></div>';
+      const rein = sanitizePageHtml(roh);
+      if (!/j-folie/.test(rein)) throw new Error('der Behaelter ist weg: ' + rein);
+      if (!/contenteditable="false"/.test(rein)) throw new Error('der Riegel ist weg: ' + rein);
+      if (!/left:\\s*120px/.test(rein)) throw new Error('die Lage ist weg: ' + rein);
+      if (!/top:\\s*64px/.test(rein)) throw new Error('die Hoehe ist weg: ' + rein);
+      if (!/font-size:\\s*22px/.test(rein)) throw new Error('die Schriftgroesse ist weg: ' + rein);
+      if (!/Routing/.test(rein)) throw new Error('der Text ist weg: ' + rein);`);
+
+    await schritt('Ein font-size anderswo kommt weiterhin nicht durch', `
+      const rein = sanitizePageHtml('<p style="font-size:99px">gross</p>');
+      if (/font-size/.test(rein)) throw new Error('es kam durch: ' + rein);
+      const rein2 = sanitizePageHtml('<span class="j-folie-z" style="font-size:huge">x</span>');
+      if (/font-size/.test(rein2)) throw new Error('ein unsinniges Mass kam durch: ' + rein2);`);
+
+    await schritt('Und die Suche findet den Folientext', `
+      const seite = makeImagePage('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 1600, 900);
+      seite.textContent = folienTextEbene(
+        [{ text: 'Subnetzmaske', y: 700, groesse: 24, x0: 120, x1: 600 }], seite, 1600, 900);
+      const gefunden = nbSearchPlainText(seite).toLowerCase().includes('subnetzmaske');
+      if (!gefunden) throw new Error('die Suche findet ihn nicht: ' + nbSearchPlainText(seite));`);
+
     /* ── Dialoge und Ansichten ────────────────────────────────────── */
     abschnitt('Die Dialoge');
     const dialoge = [

@@ -187,13 +187,31 @@ async function laufe() {
     bildSeiten.every(p => !(p.textContent || '').replace(/<[^>]+>/g, '').trim()),
     'eine Bildseite trägt Text');
 
-  /* 200 pt breit und 100 pt hoch: die Seite ist so breit wie jede andere,
-     ihre Höhe folgt dem Verhältnis (makeImagePage, plus Seitenkopf). */
-  const flach = bildSeiten.find(p => Math.abs((p.h - BILD_KOPF_PX) - CFG.PAGE_W / 2) <= 2);
-  pruefe('die Bildseite behält das Seitenverhältnis', !!flach,
-    'Höhen: ' + bildSeiten.map(p => p.h).join(', '));
-  pruefe('und ist so breit wie eine gewöhnliche Seite',
-    bildSeiten.every(p => p.w === CFG.PAGE_W), 'Breiten: ' + bildSeiten.map(p => p.w).join(', '));
+  /* ── Das Blatt richtet sich nach der Vorlage ──────────────────────
+     Hier stand „so breit wie eine gewöhnliche Seite", also immer
+     CFG.PAGE_W. Für ein hochkantes Blatt stimmt das weiter – für eine
+     FOLIE nicht: 16:9 auf 794 Punkten Breite liess 447 Punkte Höhe, ein
+     Drittel Fenster und zwei Drittel Grau (makeImagePage, 4.9.2026).
+
+     Eine breite Vorlage bekommt seither die lange A4-Kante als Breite.
+     Das Seitenverhältnis bleibt in beiden Fällen erhalten – das ist der
+     Punkt, auf den es hier ankommt. */
+  const quer = bildSeiten.filter(p => p.w > p.h);
+  const hoch = bildSeiten.filter(p => p.w <= p.h);
+
+  pruefe('eine breite Vorlage bekommt ein breites Blatt',
+    quer.length > 0 && quer.every(p => p.w === CFG.PAGE_H),
+    'Breiten: ' + bildSeiten.map(p => p.w).join(', '));
+  pruefe('eine hochkante behält die gewöhnliche Breite',
+    hoch.every(p => p.w === CFG.PAGE_W),
+    'Breiten: ' + hoch.map(p => p.w).join(', '));
+
+  /* 200 pt breit und 100 pt hoch: die Höhe folgt dem Verhältnis – jetzt
+     bezogen auf die Breite, die das Blatt wirklich bekommen hat. */
+  const verhaeltnisStimmt = bildSeiten.every(p =>
+    Math.abs((p.h - BILD_KOPF_PX) - p.w / 2) <= 2 || p.w === CFG.PAGE_W);
+  pruefe('die Bildseite behält das Seitenverhältnis', verhaeltnisStimmt,
+    'Höhen: ' + bildSeiten.map(p => p.h + ' bei ' + p.w).join(', '));
 
   /* ── Die Reihenfolge ───────────────────────────────────────────── */
   abschnitt('Text und Bild in der Reihenfolge des Blatts');
