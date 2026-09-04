@@ -234,6 +234,75 @@ app.on('ready', async () => {
         throw new Error('im Heft steht "' + pg.bg + '", auf dem Blatt aber "'
           + [...pgEl.classList].filter(c => c.startsWith('bg-')).join(' ') + '"');`, 500);
 
+    /* ══════════════════════════════════════════════════════════════════
+       EINGEFUEGTES LAESST SICH ZURUECKNEHMEN
+
+       pushTypingHistory fasst alles zusammen, was innerhalb von 700 ms
+       geschieht – richtig fuers Tippen, falsch fuers Einfuegen. Wer
+       tippt und gleich darauf etwas einsetzt, bekam dafuer KEINEN
+       eigenen Schritt: ein Strg+Z nahm beides zusammen weg, oder
+       scheinbar gar nichts.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Eingefuegtes zurueknehmen');
+
+    await schritt('Einfuegen bekommt einen eigenen Schritt', `
+      const info = getPage(S.activePgId);
+      const pg = info.page;
+      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
+      const td = pgEl.querySelector('.j-text');
+      td.innerHTML = '<p>Anfang</p>';
+      td.focus();
+      setFlatCaret(td, 6);
+
+      S.history[pg.id] = { undo: [], redo: [] };
+      const anschlag = (art) => td.dispatchEvent(new InputEvent('beforeinput',
+        { inputType: art, bubbles: true, cancelable: true }));
+
+      // Erst tippen, dann SOFORT einfuegen – beides in derselben Sekunde
+      anschlag('insertText');
+      anschlag('insertFromPaste');
+
+      const tiefe = S.history[pg.id].undo.length;
+      if (tiefe < 2)
+        throw new Error('nur ' + tiefe + ' Schritt(e): das Eingefuegte laesst sich nicht '
+          + 'fuer sich zuruecknehmen, weil es mit dem Tippen zusammengefasst wurde');`, 400);
+
+    await schritt('Und danach faengt das Tippen einen neuen an', `
+      const pg = getPage(S.activePgId).page;
+      const td = document.querySelector('[data-pgid="' + pg.id + '"] .j-text');
+      const vorher = S.history[pg.id].undo.length;
+      td.dispatchEvent(new InputEvent('beforeinput',
+        { inputType: 'insertText', bubbles: true, cancelable: true }));
+      if (S.history[pg.id].undo.length <= vorher)
+        throw new Error('das Getippte danach klebt am Eingefuegten');`);
+
+    await schritt('Schnelles Tippen bleibt aber EIN Schritt', `
+      const pg = getPage(S.activePgId).page;
+      const td = document.querySelector('[data-pgid="' + pg.id + '"] .j-text');
+      /* Die Tipp-Uhr aus dem Schritt davor ablaufen lassen, sonst faellt
+         der erste Anschlag noch in dessen Gruppe (700 ms). */
+      await new Promise(r => setTimeout(r, 800));
+      S.history[pg.id] = { undo: [], redo: [] };
+      for (let i = 0; i < 5; i++) {
+        td.dispatchEvent(new InputEvent('beforeinput',
+          { inputType: 'insertText', bubbles: true, cancelable: true }));
+      }
+      const tiefe = S.history[pg.id].undo.length;
+      if (tiefe !== 1)
+        throw new Error('fuenf Anschlaege ergaben ' + tiefe + ' Schritte statt einem');`);
+
+    await schritt('Ausschneiden ebenso', `
+      const pg = getPage(S.activePgId).page;
+      const td = document.querySelector('[data-pgid="' + pg.id + '"] .j-text');
+      await new Promise(r => setTimeout(r, 800));   // siehe oben
+      S.history[pg.id] = { undo: [], redo: [] };
+      td.dispatchEvent(new InputEvent('beforeinput',
+        { inputType: 'insertText', bubbles: true, cancelable: true }));
+      td.dispatchEvent(new InputEvent('beforeinput',
+        { inputType: 'deleteByCut', bubbles: true, cancelable: true }));
+      if (S.history[pg.id].undo.length < 2)
+        throw new Error('das Ausgeschnittene laesst sich nicht fuer sich zuruecknehmen');`);
+
     /* ── Zoom und Lineal ──────────────────────────────────────────── */
     abschnitt('Zoom und Lineal');
     await schritt('Größer', `typeof setZoom === 'function' ? setZoom(1.4) : zoomIn()`);

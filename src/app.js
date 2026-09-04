@@ -453,6 +453,40 @@ function pushTypingHistory(page) {
   pushPageHistory(page);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINGESETZTES IST IMMER EIN EIGENER SCHRITT
+
+   Das Zusammenfassen in pushTypingHistory ist fürs TIPPEN gedacht: ein
+   Wort soll nicht Buchstabe für Buchstabe zurückgenommen werden. Für
+   alles, was in einem Zug hereinkommt, ist es falsch – wer tippt und
+   innerhalb von 700 ms etwas einsetzt, bekam dafür keinen eigenen
+   Sicherungspunkt. Ein Strg+Z nahm dann beides zusammen weg oder,
+   wenn der Punkt vor dem Tippen lag, scheinbar zu viel. Gemeldet als
+   „Rückgängig geht beim Einfügen nicht immer".
+
+   Diese Eingabearten kommen als Ganzes und gehören deshalb je für sich
+   in den Verlauf. Die Namen sind die des Browsers (inputType am
+   'beforeinput'), nicht selbst erfundene.
+   ══════════════════════════════════════════════════════════════════════ */
+const EIGENER_SCHRITT = new Set([
+  'insertFromPaste',            // Strg+V
+  'insertFromPasteAsQuotation',
+  'insertFromDrop',             // mit der Maus hereingezogen
+  'insertFromYank',
+  'insertReplacementText',      // Rechtschreibhilfe, Autokorrektur
+  'insertTranspose',
+  'deleteByCut',                // Strg+X – das Gegenstück dazu
+  'deleteByDrag'                // herausgezogen
+]);
+
+function pushEinfuegeHistory(page) {
+  if (!page || S._isUndoingOrRedoing) return;
+  pushPageHistory(page);
+  /* Und das Nächste, was getippt wird, fängt einen NEUEN Schritt an:
+     sonst klebte es am Eingesetzten und ginge mit ihm zusammen weg. */
+  delete _lastTypingSnapshot[page.id];
+}
+
 /* Setzt die Knöpfe für Rückgängig/Wiederholen auf verfügbar oder nicht.
 
    >>> Zurzeit tut das nichts <<<
@@ -923,7 +957,11 @@ function appendPageDOM(page, index) {
        Ereignis gilt unabhängig davon, wann er gebraucht wird. */
     if (S.readOnly) { e.preventDefault(); return; }
     if (lockedHere(page, textDiv, e.inputType)) { e.preventDefault(); return; }
-    pushTypingHistory(page);
+
+    /* Eingesetztes bekommt einen eigenen Sicherungspunkt, Getipptes wird
+       zusammengefasst – siehe der Kasten bei EIGENER_SCHRITT. */
+    if (EIGENER_SCHRITT.has(e.inputType)) pushEinfuegeHistory(page);
+    else pushTypingHistory(page);
   });
   textDiv.addEventListener('keydown', e => {
     const commitPlainTextEdit = (nextText, nextCaret) => {
