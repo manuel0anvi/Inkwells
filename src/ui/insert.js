@@ -257,11 +257,26 @@
       el.click();
     }
 
+    /* Die zuletzt gewählte Sprache überdauert das Schliessen der App –
+       wer Informatik hat, setzt zwanzig Blöcke in derselben Sprache und
+       soll sie nicht zwanzigmal auswählen müssen. */
+    const letzteSprache = () => {
+      const gemerkt = (typeof Settings !== 'undefined' && Settings.get)
+        ? Settings.get('codeSprache') : null;
+      return (window.InkwellsCode && window.InkwellsCode.SPRACHEN[gemerkt])
+        ? gemerkt : 'python';
+    };
+
     const ZIELE = {
       shape: () => druecke(E('btn-shape')),
       table: () => druecke(E('btn-table')),
       media: () => druecke(E('btn-media')),
       formula: () => druecke(E('btn-formula')),
+      /* Der Codeblock hat keinen eigenen Knopf in der Leiste – dort ist
+         kein Platz mehr, und er wird seltener gebraucht als Tabelle oder
+         Bild. Er entsteht deshalb unmittelbar. Die zuletzt gewählte
+         Sprache merkt sich core/code.js. */
+      code: () => window.InkwellsCode?.insertCode(letzteSprache()),
       /* Der Verweis hört auf mousedown und nicht auf click (ui/links.js
          merkt sich dort die Auswahl, bevor der Knopf dem Textfeld den
          Fokus nimmt). druecke() schickt pointerdown und click – das

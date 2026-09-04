@@ -107,9 +107,13 @@ console.log('Kein roher Editor-Inhalt im Datenmodell\n');
   /* Der schnelle Weg ohne Kopie darf nur greifen, wenn es wirklich
      nichts aufzuräumen gibt – sonst käme die Anzeige doch durch.
      Seit dem 17.8.2026 sind es drei Fälle: dazu kam die gerechnete
-     Spaltenbreite der frei stehenden Absätze (canvas/text.js). */
+     Spaltenbreite der frei stehenden Absätze (canvas/text.js).
+     Seit dem 4.9.2026 vier: die Einfärbung eines Codeblocks
+     (core/code.js) entsteht ebenfalls erst beim Anzeigen. */
   check('Der Weg ohne Kopie fragt ALLE Fälle ab',
-    /if \(!griffe && !marken && !geschoben\) return textDiv\.innerHTML;/.test(fn), true);
+    /if \(!griffe && !marken && !geschoben && !gefaerbt\) return textDiv\.innerHTML;/.test(fn), true);
+  check('Und die Farben eines Codeblocks werden abgezogen',
+    /InkwellsCode\.ohneFarben\(kopie\)/.test(fn), true);
   /* Gemeint sind margin-left und margin-top. Ein max-width stand hier
      auch einmal – vergeben hat es aber nie jemand, ordneFreieAbsaetze
      setzte es nur bei jedem Durchgang zurueck. Beides ist raus. */

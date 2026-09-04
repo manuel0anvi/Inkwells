@@ -832,6 +832,41 @@ window.__fertig = (async function () {
       /<a[^>]+href="https:\/\/inkwells\.me\/hilfe\?a=1&amp;b=2"/.test(htmlVerweis),
       htmlVerweis.slice(0, 200));
 
+    /* ══════════════════════════════════════════════════════════════════
+       EIN CODEBLOCK BLEIBT CODE
+
+       Word kennt keinen eigenen Typ dafuer; was es kennt, ist ein Absatz
+       mit fester Schrift und Hinterlegung. Jede ZEILE wird ein eigener
+       Absatz – ein einzelner mit Umbruechen darin liesse sich in Word
+       nicht zeilenweise anfassen.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein Codeblock bleibt Code');
+
+    const mitCode = {
+      id: 'pc', bg: 'blank', w: 794, h: 1123, inkStrokes: [], objects: [],
+      textContent: '<p>Davor</p>'
+        + '<pre class="j-code" data-lang="python">def gruss(name):\n    return "Servus"</pre>'
+        + '<p>Danach</p>'
+    };
+    const codeDatei = await InkwellsDocx.build([{ page: mitCode, bg: 'blank' }], { scale: 1 });
+    const codeArchiv = await InkwellsDocxImport.__intern.entpacke(codeDatei);
+    const codeXml = I.alsText(codeArchiv.get('word/document.xml'));
+
+    pruefe('Der Code steht in fester Schrift',
+      /w:ascii="Consolas"/.test(codeXml), 'keine Consolas im Dokument');
+    pruefe('Und ist hinterlegt',
+      /<w:shd w:val="clear" w:color="auto" w:fill="F2F0EB"\/>/.test(codeXml), 'kein Grund');
+    pruefe('Jede Zeile ist ein eigener Absatz',
+      codeXml.includes('def gruss(name):') && codeXml.includes('return &quot;Servus&quot;')
+        || codeXml.includes('return "Servus"'),
+      'die Zeilen fehlen oder kleben zusammen');
+    /* Die Einrueckung ist das Einzige, worauf es bei Python ankommt –
+       sie MUSS ueberleben. xml:space="preserve" haelt sie. */
+    pruefe('Die Einrueckung ueberlebt',
+      /xml:space="preserve">    return/.test(codeXml), 'die vier Leerzeichen sind weg');
+    pruefe('Der Text davor und danach bleibt gewoehnlich',
+      codeXml.includes('Davor') && codeXml.includes('Danach'), 'fehlt');
+
     /* ══ WAS NICHT MEHR IN DIE DATEI KOMMT ═════════════════════════
        Das Papier lag als Bild in doppelter Auflösung bei – Linien von
        einem Pixel, gerastert auf zwei. Ein weisses Blatt kostete so

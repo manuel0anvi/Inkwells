@@ -357,6 +357,69 @@
     textDiv.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     EINEN HAKEN SETZEN ODER WEGNEHMEN
+
+     Vorher war das ✓ ein blosses Aufzählungszeichen (list-style-type in
+     css/pages.css): es stand da, aber niemand konnte es setzen. Eine
+     Aufgabenliste, die man nicht abhaken kann, ist keine.
+
+     Der Haken gehört zum INHALT und nicht zur Anzeige – ob etwas
+     erledigt ist, sollen alle sehen und das Heft soll es behalten.
+     Deshalb steht `j-erledigt` in der Erlaubnisliste von
+     core/sanitize.js, und deshalb geht die Änderung über
+     meldeAenderung hinaus.
+
+     >>> Warum der Klick am Punkt und nicht am Kästchen hängt <<<
+     Das Kästchen ist ein ::before und damit kein eigenes Element – es
+     lässt sich nicht anklicken. Getroffen wird der <li>, und aus der
+     Stelle des Klicks wird geschlossen, ob er links neben dem Text lag,
+     also auf dem Kästchen.
+     ══════════════════════════════════════════════════════════════════ */
+  function hakeAb(li, textDiv) {
+    if (!li || !textDiv) return false;
+    if (typeof S !== 'undefined' && S.readOnly) return false;
+
+    /* Dieselbe Wache wie bei jeder anderen Eingabe: in der Zeile, an der
+       ein anderer gerade schreibt, wird nichts angehakt. */
+    if (typeof window.lockedHere === 'function') {
+      const pgEl = textDiv.closest('[data-pgid]');
+      const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+      if (info && window.lockedHere(info.page, textDiv, 'insertText')) return false;
+    }
+
+    const pgEl = textDiv.closest('[data-pgid]');
+    const info = pgEl && typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+    if (info && typeof pushPageHistory === 'function') pushPageHistory(info.page);
+
+    li.classList.toggle('j-erledigt');
+    meldeAenderung(textDiv);
+    return true;
+  }
+
+  /* Der Klick auf das Kästchen. Am Dokument und nicht je Seite: die
+     Seiten entstehen und vergehen, dieser Griff bleibt. */
+  document.addEventListener('click', (e) => {
+    const li = e.target && e.target.closest ? e.target.closest('li') : null;
+    if (!li) return;
+
+    const liste = li.parentElement;
+    if (!liste || !liste.classList.contains('j-list-check')) return;
+
+    const textDiv = li.closest('.j-text');
+    if (!textDiv) return;
+
+    /* Nur der Bereich links vom Text ist das Kästchen. Wer in den Text
+       klickt, will dort schreiben und nicht abhaken. */
+    const r = li.getBoundingClientRect();
+    const zoom = (typeof getZoom === 'function' && getZoom()) || 1;
+    if (e.clientX > r.left - 4) return;
+    if (e.clientX < r.left - 26 * zoom) return;
+
+    e.preventDefault();
+    hakeAb(li, textDiv);
+  });
+
   /* ── An und aus ─────────────────────────────────────────────────── */
 
   /**
@@ -839,6 +902,7 @@
     handleBackspace,
     atListItemStart,
     autoFormat,
+    hakeAb,
     activeStyleId,
     lastStyleId(art) { return art === 'ol' ? letzterOl : letzterUl; },
     /** Welche Art war zuletzt an der Reihe? Das Bild auf dem Knopf. */

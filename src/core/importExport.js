@@ -1833,6 +1833,34 @@ function buildPdf(nb, options = {}) {
         overflow-wrap: break-word; min-width: 28px; height: var(--lh, 32px) }
   .tx table.j-table th { font-weight: 600; text-align: left; background: rgba(28,20,10,.07) }
 
+  /* ── Code (core/code.js) ────────────────────────────────────────────
+     Im Ausdruck IMMER hell, auch wenn der Block im Heft dunkel ist. Ein
+     schwarzer Kasten auf Papier frisst Toner und ist schlechter zu
+     lesen als schwarz auf weiss; auf dem Bildschirm ist es umgekehrt,
+     deshalb steht es dort anders (css/pages.css).
+
+     Die Farben kommen im PDF nicht mit: im Heft steht nackter Code, und
+     buildPdfPage gibt genau den aus. Ein Listing in fester Schrift mit
+     erhaltener Einrueckung ist das, worauf es ankommt. */
+  .tx pre.j-code { font-family: 'DM Mono', Consolas, 'Courier New', monospace;
+        font-size: .82em; white-space: pre-wrap; word-break: break-word;
+        margin: 6px 0; padding: 8px 12px; border-radius: 5px;
+        background: #f4f1ea; color: #2b2b2b; border: 1px solid #ded6c6;
+        tab-size: 4 }
+
+  /* Die Ankreuzliste – das Kaestchen wird gezeichnet, damit kein
+     Zeichensatz noetig ist, der im Druck fehlen koennte. */
+  .tx ul.j-list-check { list-style: none; padding-left: 1.6em }
+  .tx ul.j-list-check > li { position: relative }
+  .tx ul.j-list-check > li::before { content: ''; position: absolute; left: -1.35em;
+        top: .35em; width: 11px; height: 11px; border: 1.4px solid #9a917f;
+        border-radius: 3px }
+  .tx ul.j-list-check > li.j-erledigt::before { background: #2e8a46; border-color: #2e8a46 }
+  .tx ul.j-list-check > li.j-erledigt::after { content: ''; position: absolute;
+        left: -1.06em; top: .5em; width: 3px; height: 7px; border: solid #fff;
+        border-width: 0 2px 2px 0; transform: rotate(45deg) }
+  .tx ul.j-list-check > li.j-erledigt { color: #8b8578; text-decoration: line-through }
+
   /* Dieselbe Staffelung wie in der App (css/pages.css): Muster 1 ·
      Bild hinten 100 · Text 1000 · Handschrift 1100 · Seitenkopf 1300 ·
      Bild vorne 2000. Die Reihenfolge innerhalb eines Bandes steckt hier

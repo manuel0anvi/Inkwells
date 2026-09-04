@@ -924,9 +924,8 @@ body.touch-draw .j-canvas {
   list-style-type: '➤ '
 }
 
-.j-text ul.j-list-check {
-  list-style-type: '✓ '
-}
+/* Die Ankreuzliste steht weiter unten – dort ist das ✓ ein echtes
+   Kaestchen zum Anklicken und kein blosses Aufzaehlungszeichen. */
 
 /* Nummern */
 .j-text ol.j-list-decimal {
@@ -2686,4 +2685,161 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   border-radius: 50%;
   background: var(--gold);
   border: 1.5px solid var(--bg)
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   CODE IM SEITENTEXT  ―  core/code.js
+
+   Dunkel ist die Voreinstellung: wer sechs Wochenstunden programmiert,
+   kennt Code so und liest ihn so am schnellsten. Mit `j-code-hell` wird
+   daraus ein heller Block – fuer den Ausdruck und fuer den, dem der
+   dunkle Kasten im Heft zu schwer ist.
+
+   Die Farben sind Dark+ aus Visual Studio Code. Sie sind bewusst nicht
+   an die Papierfarben angeglichen: ein Codeblock IST ein Fremdkoerper
+   auf dem Blatt, und er soll auch so aussehen.
+   ══════════════════════════════════════════════════════════════════════ */
+.j-text pre.j-code {
+  /* --lh haelt die Zeilen des Blocks auf dem Raster des Papiers, genau
+     wie bei den Tabellenzellen. */
+  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
+  font-size: .82em;
+  line-height: var(--lh, 32px);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 6px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #2d2d2d;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}
+
+.j-text pre.j-code.j-code-hell {
+  background: #f7f4ec;
+  color: #2b2b2b;
+  border-color: #ded6c6;
+}
+
+/* ── Die Farben, dunkel (VS Code Dark+) ──────────────────────────── */
+.j-text pre.j-code .j-tok-key  { color: #569cd6 }
+.j-text pre.j-code .j-tok-text { color: #ce9178 }
+.j-text pre.j-code .j-tok-komm { color: #6a9955; font-style: italic }
+.j-text pre.j-code .j-tok-zahl { color: #b5cea8 }
+.j-text pre.j-code .j-tok-fn   { color: #dcdcaa }
+.j-text pre.j-code .j-tok-typ  { color: #4ec9b0 }
+.j-text pre.j-code .j-tok-attr { color: #9cdcfe }
+.j-text pre.j-code .j-tok-satz { color: #808080 }
+
+/* ── ...und hell (VS Code Light+) ────────────────────────────────── */
+.j-text pre.j-code.j-code-hell .j-tok-key  { color: #0000ff }
+.j-text pre.j-code.j-code-hell .j-tok-text { color: #a31515 }
+.j-text pre.j-code.j-code-hell .j-tok-komm { color: #008000 }
+.j-text pre.j-code.j-code-hell .j-tok-zahl { color: #098658 }
+.j-text pre.j-code.j-code-hell .j-tok-fn   { color: #795e26 }
+.j-text pre.j-code.j-code-hell .j-tok-typ  { color: #267f99 }
+.j-text pre.j-code.j-code-hell .j-tok-attr { color: #e50000 }
+.j-text pre.j-code.j-code-hell .j-tok-satz { color: #808080 }
+
+/* ── Die Leiste am Block ─────────────────────────────────────────────
+   Am document.body und nicht im Text: dort wuerde sie mitgespeichert
+   und ueber Yjs mitreisen. Dieselbe Machart wie die Tabellenleiste. */
+.j-code-bar {
+  position: fixed;
+  z-index: 1200;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: var(--sh2, #23232e);
+  border: 1px solid var(--sb, #35354a);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+
+.j-code-bar .j-code-lang {
+  background: transparent;
+  color: var(--text, #e8e6e3);
+  border: 1px solid var(--sb, #35354a);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.j-code-bar .j-code-btn {
+  background: transparent;
+  color: var(--text, #e8e6e3);
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.j-code-bar .j-code-btn:hover { background: var(--sh3, #2e2e3d) }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ANKREUZLISTE IST WIRKLICH ANZUKREUZEN
+
+   Vorher war das ✓ ein blosses Aufzaehlungszeichen (list-style-type):
+   es stand da, aber niemand konnte es setzen oder wegnehmen. Jetzt ist
+   das Kaestchen ein ::before am Punkt, und ein Klick darauf schaltet
+   `j-erledigt` um (core/lists.js).
+
+   Der Haken gehoert zum INHALT, nicht zur Anzeige: ob eine Aufgabe
+   erledigt ist, sollen alle sehen und das Heft soll es behalten.
+   Deshalb steht j-erledigt in der Erlaubnisliste von core/sanitize.js.
+   ══════════════════════════════════════════════════════════════════════ */
+.j-text ul.j-list-check {
+  list-style-type: none;
+  padding-left: 1.6em;
+}
+
+.j-text ul.j-list-check > li {
+  position: relative;
+}
+
+.j-text ul.j-list-check > li::before {
+  content: '';
+  position: absolute;
+  left: -1.35em;
+  top: calc((var(--lh, 32px) - 15px) / 2);
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #9a917f;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .55);
+  /* Der Klick trifft das Kaestchen, nicht den Text daneben */
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.j-text ul.j-list-check > li.j-erledigt::before {
+  background: #2e8a46;
+  border-color: #2e8a46;
+}
+
+/* Der Haken selbst – ein gedrehtes Winkelstueck, damit keine Schrift
+   noetig ist, die auf einem anderen Rechner fehlen koennte. */
+.j-text ul.j-list-check > li.j-erledigt::after {
+  content: '';
+  position: absolute;
+  left: -1.02em;
+  top: calc((var(--lh, 32px) - 15px) / 2 + 2px);
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.j-text ul.j-list-check > li.j-erledigt {
+  color: #8b8578;
+  text-decoration: line-through;
 }

@@ -290,6 +290,131 @@ app.on('ready', async () => {
     await schritt('Eine Formel wird vermessen', `
       typeof measureFormula === 'function' ? JSON.stringify(measureFormula('x^2 + y^2')) : 'ok'`);
 
+    /* ══════════════════════════════════════════════════════════════════
+       CODE IM HEFT
+
+       Der Block ist ein <pre class="j-code"> mit NACKTEM Code darin. Die
+       Farben liegen nur darueber und muessen vor dem Speichern wieder
+       abgezogen werden – sonst ginge bei jedem Anschlag ein neues
+       Farbgeruest durch Yjs.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Code im Heft');
+
+    await schritt('Ein Codeblock entsteht', `
+      const pg = getNb().pages[0];
+      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
+      const td = pgEl.querySelector('.j-text');
+      td.innerHTML = '<p>Davor</p>';
+      td.focus();
+      setFlatCaret(td, 5);
+      if (!InkwellsCode.insertCode('python')) throw new Error('insertCode hat abgelehnt');
+      const pre = td.querySelector('pre.j-code');
+      if (!pre) throw new Error('kein <pre> im Text');
+      if (pre.dataset.lang !== 'python') throw new Error('Sprache: ' + pre.dataset.lang);`, 500);
+
+    await schritt('Der Code wird eingefaerbt', `
+      const td = document.querySelector('.j-text');
+      const pre = td.querySelector('pre.j-code');
+      pre.textContent = 'def gruss(name):\\n    # Hallo\\n    return "Servus " + name\\n';
+      InkwellsCode.faerbeBlock(pre);
+      const h = pre.innerHTML;
+      if (!/j-tok-key/.test(h)) throw new Error('kein Schluesselwort gefaerbt: ' + h.slice(0, 160));
+      if (!/j-tok-text/.test(h)) throw new Error('keine Zeichenkette gefaerbt');
+      if (!/j-tok-komm/.test(h)) throw new Error('kein Kommentar gefaerbt');
+      if (!/j-tok-fn/.test(h)) throw new Error('kein Funktionsname gefaerbt');`);
+
+    /* Das ist der Punkt, an dem die ganze Sache haengt: was ins Heft
+       geht, muss der nackte Code sein. */
+    await schritt('Ins Heft geht der nackte Code, ohne Farben', `
+      const td = document.querySelector('.j-text');
+      const raus = ohneGriffe(td);
+      if (/j-tok-/.test(raus)) throw new Error('die Farben sind mitgegangen: ' + raus.slice(0, 200));
+      if (!/def gruss/.test(raus)) throw new Error('der Code fehlt: ' + raus.slice(0, 200));
+      if (!/pre class="j-code"/.test(raus) && !/<pre[^>]*j-code/.test(raus))
+        throw new Error('der Block selbst fehlt: ' + raus.slice(0, 200));`);
+
+    await schritt('Und der Text zaehlt fuer die Marken unveraendert', `
+      const td = document.querySelector('.j-text');
+      const pre = td.querySelector('pre.j-code');
+      const vorher = flatTextOf(td);
+      InkwellsCode.faerbeBlock(pre);
+      const nachher = flatTextOf(td);
+      if (vorher !== nachher)
+        throw new Error('das Einfaerben hat den flachen Text veraendert - jede Marke saesse daneben');`);
+
+    await schritt('Der Block ueberlebt die Bereinigung', `
+      const roh = '<pre class="j-code" data-lang="java">int x = 1;</pre>';
+      const rein = sanitizePageHtml(roh);
+      if (!/<pre/.test(rein)) throw new Error('das <pre> ist weg: ' + rein);
+      if (!/j-code/.test(rein)) throw new Error('die Klasse ist weg: ' + rein);
+      if (!/data-lang="java"/.test(rein)) throw new Error('die Sprache ist weg: ' + rein);
+      if (!/int x = 1;/.test(rein)) throw new Error('der Code ist weg: ' + rein);`);
+
+    await schritt('Eine erfundene Sprache kommt nicht durch', `
+      const rein = sanitizePageHtml('<pre class="j-code" data-lang="boese">x</pre>');
+      if (/data-lang/.test(rein)) throw new Error('sie kam durch: ' + rein);
+      if (!/<pre/.test(rein)) throw new Error('der Block sollte trotzdem bleiben');`);
+
+    await schritt('Und die Farbklassen kommen nicht durch', `
+      const rein = sanitizePageHtml('<pre class="j-code"><span class="j-tok-key">def</span></pre>');
+      if (/j-tok-/.test(rein)) throw new Error('eine Farbklasse kam durch: ' + rein);
+      if (!/def/.test(rein)) throw new Error('der Text ist weg: ' + rein);`);
+
+    await schritt('Alle Sprachen faerben ohne Fehler', `
+      const probe = {
+        java: 'public class A { void f() { int i = 0; } }',
+        python: 'def f(x):\\n    return x  # ok',
+        c: '#include <stdio.h>\\nint main(void){ printf("hi"); }',
+        javascript: 'const f = (a) => { return \`x\${a}\`; };',
+        html: '<div class="a">Text<!-- weg --></div>',
+        css: '.a { color: red; }',
+        sql: 'SELECT name FROM kunden WHERE id = 1;',
+        bash: 'if [ -f x ]; then echo "da"; fi'
+      };
+      for (const [sprache, code] of Object.entries(probe)) {
+        const h = InkwellsCode.faerbe(code, sprache);
+        if (typeof h !== 'string' || !h.length) throw new Error(sprache + ': nichts zurueck');
+        // Was hineingeht, muss auch wieder herauskommen
+        const zurueck = h.replace(/<[^>]+>/g, '')
+          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        if (zurueck !== code) throw new Error(sprache + ': Text veraendert\\n  war: ' + code + '\\n  ist: ' + zurueck);
+      }`);
+
+    /* ══════════════════════════════════════════════════════════════════
+       DIE ANKREUZLISTE LAESST SICH ANKREUZEN
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Die Ankreuzliste');
+
+    await schritt('Ein Haken laesst sich setzen und wieder wegnehmen', `
+      const pg = getNb().pages[0];
+      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
+      const td = pgEl.querySelector('.j-text');
+      td.innerHTML = '<ul class="j-list-check"><li>Mathe lernen</li><li>Abgabe</li></ul>';
+      uebernimmText(pg, td);
+      const li = td.querySelector('li');
+
+      if (!Lists.hakeAb(li, td)) throw new Error('hakeAb hat abgelehnt');
+      if (!li.classList.contains('j-erledigt')) throw new Error('der Haken sitzt nicht');
+      if (!/j-erledigt/.test(pg.textContent)) throw new Error('im Heft steht er nicht: ' + pg.textContent);
+
+      Lists.hakeAb(li, td);
+      if (li.classList.contains('j-erledigt')) throw new Error('der Haken ging nicht wieder weg');`, 400);
+
+    await schritt('Der Haken ueberlebt die Bereinigung', `
+      const rein = sanitizePageHtml('<ul class="j-list-check"><li class="j-erledigt">fertig</li></ul>');
+      if (!/j-erledigt/.test(rein)) throw new Error('der Haken ist weg: ' + rein);
+      if (!/j-list-check/.test(rein)) throw new Error('die Liste ist weg: ' + rein);`);
+
+    await schritt('Im Nur-Lese-Modus haakt niemand ab', `
+      const td = document.querySelector('.j-text');
+      td.innerHTML = '<ul class="j-list-check"><li>fremd</li></ul>';
+      const li = td.querySelector('li');
+      S.readOnly = true;
+      const ging = Lists.hakeAb(li, td);
+      S.readOnly = false;
+      if (ging || li.classList.contains('j-erledigt'))
+        throw new Error('in einem fremden Heft wurde abgehakt');`);
+
     /* ── Dialoge und Ansichten ────────────────────────────────────── */
     abschnitt('Die Dialoge');
     const dialoge = [

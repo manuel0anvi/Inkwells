@@ -479,9 +479,34 @@ feld.innerHTML = '<ul class="j-list-dash"><li>a</li></ul>';
 pruefe('Strich statt Punkt', getComputedStyle(feld.querySelector('ul')).listStyleType === '"– "',
   getComputedStyle(feld.querySelector('ul')).listStyleType);
 
-feld.innerHTML = '<ul class="j-list-check"><li>a</li></ul>';
-pruefe('Haken', getComputedStyle(feld.querySelector('ul')).listStyleType === '"✓ "',
+/* ── Die Ankreuzliste ist kein Aufzaehlungszeichen mehr ──────────────
+   Hier stand `listStyleType === '"✓ "'`. Das ✓ war ein blosses Zeichen
+   vor dem Punkt: es stand da, aber niemand konnte es setzen oder
+   wegnehmen – eine Aufgabenliste, die man nicht abhaken kann.
+
+   Seit dem 4.9.2026 ist das Kaestchen ein ::before am <li> und
+   `j-erledigt` schaltet den Haken (core/lists.js, hakeAb). Deshalb hat
+   die Liste jetzt list-style-type: none. */
+feld.innerHTML = '<ul class="j-list-check"><li>a</li><li class="j-erledigt">b</li></ul>';
+pruefe('Die Ankreuzliste traegt kein Aufzaehlungszeichen mehr',
+  getComputedStyle(feld.querySelector('ul')).listStyleType === 'none',
   getComputedStyle(feld.querySelector('ul')).listStyleType);
+
+pruefe('Jeder Punkt bekommt ein Kaestchen',
+  getComputedStyle(feld.querySelector('li'), '::before').width === '13px',
+  getComputedStyle(feld.querySelector('li'), '::before').width);
+
+/* Der gesetzte Haken ist gruen hinterlegt und durchgestrichen – so
+   sieht man auf einen Blick, was noch offen ist. */
+{
+  const erledigt = feld.querySelectorAll('li')[1];
+  const kasten = getComputedStyle(erledigt, '::before');
+  pruefe('Ein gesetzter Haken ist gefuellt',
+    kasten.backgroundColor === 'rgb(46, 138, 70)', kasten.backgroundColor);
+  pruefe('Und die erledigte Zeile ist durchgestrichen',
+    getComputedStyle(erledigt).textDecorationLine === 'line-through',
+    getComputedStyle(erledigt).textDecorationLine);
+}
 
 /* Wie in Word wechselt die VOREINGESTELLTE Form mit der Ebene, eine
    selbst gewaehlte bleibt. */

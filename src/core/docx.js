@@ -896,6 +896,32 @@
           continue;
         }
 
+        /* ══ EIN CODEBLOCK IST IN WORD EIN CODEBLOCK ═══════════════
+           Word kennt keinen eigenen Typ dafür. Was es kennt, ist ein
+           Absatz mit fester Schrift und Hinterlegung – und genau so
+           sieht ein Codelisting in jedem Lehrbuch aus.
+
+           Jede ZEILE wird ein eigener Absatz. Ein einzelner mit
+           Umbrüchen darin ginge auch, aber dann liesse sich in Word
+           keine Zeile einzeln anfassen, und beim Zurücklesen käme
+           alles als ein Klumpen an.
+
+           Die Einfärbung kommt NICHT mit: im Heft steht nackter Code
+           (core/code.js), die Farben liegen nur darüber. Sie hier
+           nachzubauen hiesse, den Einfärber ein zweites Mal zu
+           schreiben – für ein Word-Dokument, in dem man den Code
+           ohnehin weiterbearbeitet. */
+        if (tag === 'PRE' && child.classList && child.classList.contains('j-code')) {
+          const zeilen = (child.textContent || '').replace(/\n$/, '').split('\n');
+          for (const zeile of zeilen) {
+            const p = openParagraph('code');
+            p.code = true;
+            if (zeile) p.runs.push({ ...format, text: zeile, code: true });
+          }
+          current = null;
+          continue;
+        }
+
         if (BLOCK_TAGS.has(tag)) {
           const absatz = openParagraph(paragraphStyleOf(child));
           absatz.align = ausrichtungVon(child);
@@ -978,6 +1004,15 @@
           size: halfPoints(Math.round(lh * 0.58)),
           italic: false, bold: true, color: '3A2E22', border: false, italicToo: true
         };
+      /* Ein Codeblock: feste Schrittweite, etwas kleiner, hinterlegt.
+         Consolas ist auf jedem Windows da; Courier New als Rückfall
+         auf allem anderen. */
+      case 'code':
+        return {
+          font: 'Consolas', fallback: 'Courier New',
+          size: halfPoints(Math.round(BASE_FONT_PX * 0.82)),
+          italic: false, bold: false, color: '1F1F1F', border: false
+        };
       default:
         return {
           font: 'Crimson Pro', fallback: 'Georgia',
@@ -986,6 +1021,11 @@
         };
     }
   }
+
+  /* Der graue Grund hinter einem Codeblock. Als w:shd am Absatz – so
+     reicht er über die ganze Zeilenbreite, wie ein Listing im Buch, und
+     nicht nur hinter den Zeichen. */
+  const CODE_GRUND = 'F2F0EB';
 
   /* Die Reihenfolge in <w:rPr> ist im Schema festgelegt (CT_RPr):
      rFonts, b, i, strike, color, sz, szCs, u. Word verzeiht Abweichungen
@@ -1126,6 +1166,11 @@
        Zahl und überall dieselbe. */
     const ebene = { h1: 0, h2: 1, h3: 2 }[paragraph.style];
     if (ebene !== undefined) props.push(`<w:outlineLvl w:val="${ebene}"/>`);
+
+    /* Der Grund hinter einer Codezeile. Nach CT_PPr steht w:shd hinter
+       jc und vor sectPr – Word ist da streng, in der falschen
+       Reihenfolge öffnet es die Datei gar nicht. */
+    if (paragraph.code) props.push(`<w:shd w:val="clear" w:color="auto" w:fill="${CODE_GRUND}"/>`);
 
     if (options.sectPr) props.push(options.sectPr);
 
