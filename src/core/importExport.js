@@ -1727,9 +1727,24 @@ function buildPdfPage(nb, sec, page, pageNo) {
      Reihenfolge im Dokument bleibt die aus page.objects, damit sich zwei
      Bilder derselben Ebene hier genauso überdecken wie dort. */
   for (const obj of (page.objects || [])) {
-    if (!obj || !obj.src) continue;
+    if (!obj) continue;
     const rot = obj.rot ? `transform:rotate(${obj.rot}deg);` : '';
     const cls = obj.layer === 'back' ? 'obj behind' : 'obj';
+
+    /* Ein Code-Kasten ist kein Bild, sondern HTML (core/code.js). Im
+       Ausdruck steht er in seiner HELLEN Fassung, auch wenn er im Heft
+       dunkel ist: ein schwarzer Kasten auf Papier frisst Toner und ist
+       schlechter zu lesen als schwarz auf weiss. Auf dem Bildschirm ist
+       es umgekehrt, deshalb steht es dort anders. */
+    if (obj.kind === 'code' && typeof renderCodeBody === 'function') {
+      html += `<div class="${cls} obj-code" style="left:${obj.x || 0}px;top:${obj.y || 0}px;`
+        + `width:${obj.w || 200}px;height:${obj.h || 200}px;${rot}">`
+        + renderCodeBody({ ...obj, hell: true })
+        + '</div>';
+      continue;
+    }
+
+    if (!obj.src) continue;
     html += `<img class="${cls}" src="${escapeAttr(obj.src)}" style="left:${obj.x || 0}px;top:${obj.y || 0}px;`
       + `width:${obj.w || 200}px;height:${obj.h || 200}px;${rot}">`;
   }
@@ -1998,6 +2013,29 @@ function buildPdf(nb, options = {}) {
      in der Dokumentreihenfolge – buildPdfPage gibt die Bilder in der
      Reihenfolge aus page.objects aus. */
   .obj { position: absolute; object-fit: contain; z-index: 2000 }
+  .obj-code { overflow: hidden }
+
+  /* Der Code-Kasten (core/code.js) – im Ausdruck immer hell. */
+  .j-code-obj { transform-origin: left top; display: flex; flex-direction: column;
+        overflow: hidden; border-radius: 6px; background: #fbfaf6; color: #2b2b2b;
+        border: 1px solid #ded6c6;
+        font-family: 'DM Mono', Consolas, 'Courier New', monospace;
+        font-size: 13px; line-height: 19px }
+  .j-code-obj-kopf { height: 24px; flex: 0 0 24px; display: flex; align-items: center;
+        padding: 0 10px; font-size: 10px; letter-spacing: .6px; text-transform: uppercase;
+        color: #8b8578; background: #f2efe7; border-bottom: 1px solid #e2dccd }
+  .j-code-obj-flaeche { flex: 1 1 auto; display: flex; padding: 12px 12px 12px 0; overflow: hidden }
+  .j-code-obj-nrn { flex: 0 0 34px; text-align: right; padding-right: 10px;
+        white-space: pre; color: #b3ab99 }
+  .j-code-obj-text { margin: 0; white-space: pre; font: inherit; tab-size: 4 }
+  .j-code-obj .j-tok-key  { color: #0000ff }
+  .j-code-obj .j-tok-text { color: #a31515 }
+  .j-code-obj .j-tok-komm { color: #008000 }
+  .j-code-obj .j-tok-zahl { color: #098658 }
+  .j-code-obj .j-tok-fn   { color: #795e26 }
+  .j-code-obj .j-tok-typ  { color: #267f99 }
+  .j-code-obj .j-tok-attr { color: #e50000 }
+  .j-code-obj .j-tok-satz { color: #808080 }
   .obj.behind { z-index: 100 }
   .ink { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1100 }
 </style></head><body>${body}</body></html>`;

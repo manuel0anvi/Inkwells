@@ -782,6 +782,44 @@ window.__fertig = (async function () {
       bilddateien.join(', '));
 
     /* ══════════════════════════════════════════════════════════════════
+       EIN CODE-KASTEN KOMMT ALS CODE IN WORD AN
+
+       Er haengt im Heft frei auf dem Blatt (ein Objekt), Word bekommt
+       ihn als Folge von Absaetzen in fester Schrift mit Hinterlegung.
+       Der Preis ist die Lage; dafuer laesst sich der Code in Word
+       weiterverwenden, statt als Bild tot dazustehen.
+       ══════════════════════════════════════════════════════════════════ */
+    abschnitt('Ein Code-Kasten kommt als Code an');
+
+    const mitKasten = {
+      id: 'pk', bg: 'blank', w: 794, h: 1123, inkStrokes: [],
+      textContent: '<p>Der Sortieralgorithmus:</p>',
+      objects: [{
+        id: 'k1', kind: 'code', lang: 'python',
+        code: 'def sortiere(a):\n    for i in range(len(a)):\n        pass',
+        x: 80, y: 200, w: 300, h: 90, natW: 300, natH: 90, rot: 0, layer: 'front'
+      }]
+    };
+    const kastenDatei = await InkwellsDocx.build([{ page: mitKasten, bg: 'blank' }], { scale: 1 });
+    const kastenArchiv = await InkwellsDocxImport.__intern.entpacke(kastenDatei);
+    const kastenXml = I.alsText(kastenArchiv.get('word/document.xml'));
+
+    pruefe('Der Code steht in fester Schrift',
+      /w:ascii="Consolas"/.test(kastenXml), 'keine Consolas im Dokument');
+    pruefe('Und ist hinterlegt',
+      /<w:shd w:val="clear" w:color="auto" w:fill="F2F0EB"\/>/.test(kastenXml), 'kein Grund');
+    pruefe('Die Einrueckung ueberlebt',
+      /xml:space="preserve">    for i in range/.test(kastenXml), 'die vier Leerzeichen sind weg');
+    pruefe('Der Text der Seite steht davor',
+      kastenXml.indexOf('Sortieralgorithmus') < kastenXml.indexOf('def sortiere'),
+      'der Kasten steht vor dem Text');
+    /* Er darf NICHT zusaetzlich als frei haengendes Bild dabeisein –
+       sonst stuende derselbe Code zweimal im Dokument. */
+    pruefe('Und nicht zusaetzlich als Bild',
+      [...kastenArchiv.keys()].filter(n => /^word\/media\//.test(n)).length === 0,
+      'es liegt ein Bild im Archiv');
+
+    /* ══════════════════════════════════════════════════════════════════
        EIN VERWEIS BLEIBT EIN VERWEIS
 
        Beim Lesen kannte der Weg <w:hyperlink> laengst, beim Schreiben

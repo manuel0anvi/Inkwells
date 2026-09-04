@@ -1489,6 +1489,11 @@
           { ...schrift, name: 'Handschrift' }, schriftRel, naechsteHoehe());
       }
 
+      /* Die Code-Kaesten dieser Seite. Sie werden unten als Absaetze
+         angehaengt, nicht als frei haengendes Ding – siehe der Kasten
+         beim obj.kind === 'code'. */
+      const codeAbsaetze = [];
+
       /* Jedes Objekt der Seite als eigenes Ding: ein Bild bekommt seine
          eigene Datei im Archiv, eine Form braucht gar keine. Beide
          hängen anschliessend am selben Absatz wie das Seitenbild – sie
@@ -1499,6 +1504,24 @@
 
         if (obj.kind === 'shape') {
           anchor += formAnkerXml(kennung, obj, naechsteHoehe());
+          continue;
+        }
+
+        /* ══ EIN CODE-KASTEN WIRD IN WORD ZU CODE-ABSÄTZEN ═══════════
+           Er hängt im Heft frei auf dem Blatt (core/code.js), Word
+           bekommt ihn aber als Folge von Absätzen in fester Schrift mit
+           Hinterlegung – dieselbe Darstellung, die htmlToParagraphs für
+           einen Codeblock erzeugt.
+
+           >>> Warum nicht als Bild an seiner Stelle <<<
+           Weil man Code in Word weiterverwenden will: kopieren, in eine
+           Arbeit einfügen, weiterschreiben. Ein Bild davon ist tot. Der
+           Preis ist die Lage – der Kasten steht danach im Textfluss und
+           nicht mehr genau dort, wo er auf dem Blatt lag. Für einen
+           Ausdruck mit genauer Lage gibt es das PDF, dort steht er, wo
+           er hingehört (core/importExport.js). */
+        if (obj.kind === 'code') {
+          codeAbsaetze.push(obj);
           continue;
         }
 
@@ -1520,6 +1543,17 @@
       }
 
       const paragraphs = htmlToParagraphs(entry.page.textContent);
+
+      /* Die Code-Kaesten hinter den Text der Seite. Jede Zeile ein
+         eigener Absatz, damit sie sich in Word einzeln anfassen laesst. */
+      for (const kasten of codeAbsaetze) {
+        const zeilen = String(kasten.code || '').replace(/\n$/, '').split('\n');
+        for (const zeile of zeilen) {
+          const p = { style: 'code', runs: [], code: true };
+          if (zeile) p.runs.push({ text: zeile, code: true });
+          paragraphs.push(p);
+        }
+      }
       // Das Seitenbild hängt am ersten Absatz. Ein frei positioniertes Bild
       // nimmt keinen Platz im Textfluss ein – ein eigener Absatz dafür würde
       // dagegen jede Seite um eine Leerzeile nach unten schieben.

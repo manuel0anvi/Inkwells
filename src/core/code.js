@@ -1,37 +1,32 @@
 'use strict';
 
 /* ══════════════════════════════════════════════════════════════════════
-   CODE IM SEITENTEXT
+   CODE AUF DEM BLATT
 
-   Ein Codeblock ist ein <pre class="j-code" data-lang="python"> im
-   contenteditable – genau wie eine Tabelle gewöhnliches HTML ist
-   (core/tables.js). Das ist keine Bequemlichkeit, sondern die
-   Voraussetzung dafür, dass er überhaupt mitspielt:
+   Ein Codeblock ist ein OBJEKT auf der Seite (page.objects), kein Text
+   im Fluss. Er liegt damit auf demselben Weg wie ein Bild oder eine
+   Formel: verschieben, ziehen, vervielfältigen, löschen, vor oder hinter
+   den Text – all das kann canvas/objects.js schon, und es gilt hier ohne
+   eine einzige zusätzliche Zeile.
 
-     · Der gemeinsame Text geht als HTML durch Yjs (ui/collab.js).
-     · Gespeichert wird derselbe Text (page.textContent).
-     · Die Schreibmarken rechnen über flatTextParts (canvas/text.js).
-       <PRE> steht dort schon in FLAT_BLOCK_TAGS, und die Zeilenumbrüche
-       im Code sind echte \n im Text – Marken und Sperrbänder sitzen also
-       ohne Zutun richtig.
+   >>> Warum nicht als <pre> mitten im Text <<<
+   So war es zuerst gebaut, und es hatte einen unangenehmen Preis: die
+   Einfärbung sass dann IM Seitentext. Jedes getippte Zeichen färbt die
+   ganze Zeile um – aus einem Anschlag wurde ein Unterschied über
+   hunderte Zeichen, der durch Yjs zu allen anderen reisen musste. Dagegen
+   half nur, die Farben vor jedem Speichern wieder abzuziehen, und daran
+   hingen vier weitere Stellen (ohneGriffe, der Sanitizer, das Einfärben
+   nach jeder Tipp-Pause, Enter und Tab im Block).
 
-   ── Was im Heft steht und was nur darüberliegt ──────────────────────
-   Im Heft steht NUR der nackte Code. Die Farben sind
-   <span class="j-tok-…">, sie entstehen erst beim Anzeigen und werden
-   von ohneGriffe() in app.js wieder abgezogen.
+   Als Objekt ist davon nichts mehr nötig. Was reist, ist `obj.code` –
+   eine schlichte Zeichenkette. Die Farben entstehen erst beim Zeichnen
+   des Körpers und stehen nirgends sonst.
 
-   >>> Warum das so sein MUSS <<<
-   Färbte man den Text im Heft ein, ginge bei jedem Tastendruck ein neues
-   Farbgerüst durch Yjs. Ein einziges getipptes Zeichen ändert die
-   Einfärbung der ganzen Zeile – aus einem Anschlag würde ein Unterschied
-   über hunderte Zeichen, und der Abgleich zweier Leute erstickte daran.
-   Dieselbe Überlegung wie bei den Greifstreifen der Tabelle.
-
-   >>> Und warum die Schreibmarke dabei nicht springt <<<
-   Weil das Einfärben den FLACHEN Text nicht anfasst: <span> zählt in
-   flatTextParts als inline, die Zeichen bleiben dieselben, nur ihre
-   Verpackung ändert sich. flatCaretPos() vor dem Einfärben und
-   setFlatCaret() danach treffen deshalb exakt dieselbe Stelle.
+   ── Was ein Code-Objekt trägt ───────────────────────────────────────
+     code   der Quelltext, unverändert wie eingefügt
+     lang   die Sprache (siehe SPRACHEN) – geraten oder selbst gewählt
+     hell   helle statt dunkler Fassung
+     natW/natH  die gemessene Größe; w/h ist die gezogene
 
    ── Der Einfärber ───────────────────────────────────────────────────
    Selbst geschrieben und klein gehalten. Eine Bibliothek von einem
@@ -39,6 +34,8 @@
    sie mitzuliefern hiesse ein halbes Megabyte für etwas, das hier aus
    Zeichenketten, Kommentaren, Zahlen und einer Wortliste je Sprache
    besteht.
+
+   Der Dialog zum Eingeben liegt in ui/code.js.
    ══════════════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -309,230 +306,229 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     EINFÄRBEN, OHNE DIE MARKE ZU VERLIEREN
+     WELCHE SPRACHE IST DAS?
 
-     Der flache Text ändert sich dabei nicht (siehe der Kasten oben),
-     deshalb genügt: Stelle merken, färben, Stelle wieder setzen.
+     Geraten wird über Merkmale, die für eine Sprache eigentümlich sind –
+     nicht über einzelne Schlüsselwörter, die es überall gibt („if",
+     „return", „class" stehen in fast jeder). Jedes Merkmal gibt Punkte,
+     die höchste Summe gewinnt.
+
+     Bleibt alles bei null, wird nichts geraten: dann steht „Text" da,
+     und der Nutzer stellt es selbst um. Falsch geraten ist ärgerlicher
+     als gar nicht geraten – die Farben sähen dann überall falsch aus.
      ══════════════════════════════════════════════════════════════════ */
-  function faerbeBlock(pre) {
-    if (!pre) return;
-    const sprache = pre.dataset.lang || 'text';
-    const roh = pre.textContent || '';
-    const neu = faerbe(roh, sprache);
-    // Nichts zu tun? Dann auch nicht anfassen – das spart das Setzen der Marke
-    if (pre.innerHTML === neu) return;
-    pre.innerHTML = neu;
-  }
+  const MERKMALE = [
+    ['python', [/^\s*def\s+\w+\s*\(.*\)\s*:/m, 3], [/^\s*from\s+[\w.]+\s+import\b/m, 3],
+      [/^\s*import\s+\w+$/m, 2], [/\bprint\s*\(/, 1], [/^\s*elif\b/m, 3], [/\bself\b/, 2],
+      [/^\s*#!.*python/m, 4], [/:\s*$/m, 1]],
+    ['java', [/\bpublic\s+(static\s+)?(class|void|int|String)\b/, 3],
+      [/System\.out\.print/, 4], [/^\s*package\s+[\w.]+;/m, 3],
+      [/^\s*import\s+java\./m, 4], [/\bnew\s+[A-Z]\w*\s*\(/, 1], [/@Override/, 3]],
+    ['csharp', [/\busing\s+System\b/, 4], [/Console\.Write/, 4],
+      [/\bnamespace\s+\w+/, 3], [/\bpublic\s+\w+\s+\w+\s*\{\s*get;/, 3]],
+    ['c', [/^\s*#include\s*[<"]/m, 4], [/\bprintf\s*\(/, 3], [/\bint\s+main\s*\(/, 3],
+      [/\bmalloc\s*\(/, 2], [/->\w/, 1]],
+    ['cpp', [/\bstd::/, 4], [/\bcout\s*<</, 4], [/^\s*#include\s*<iostream>/m, 4],
+      [/\bnamespace\s+std\b/, 3], [/\btemplate\s*</, 3]],
+    ['javascript', [/\bfunction\s*\w*\s*\(/, 1], [/=>\s*[{(]/, 2], [/\bconst\s+\w+\s*=/, 2],
+      [/\bconsole\.log\s*\(/, 3], [/\bdocument\.(getElementById|querySelector)/, 3],
+      [/\brequire\s*\(['"]/, 2], [/`[^`]*\$\{/, 2]],
+    ['typescript', [/:\s*(string|number|boolean|void|any)\b/, 3], [/\binterface\s+\w+\s*\{/, 3],
+      [/\bexport\s+(type|interface)\b/, 3]],
+    ['html', [/<!DOCTYPE\s+html/i, 5], [/<\/(div|span|p|body|html|head|table)>/i, 3],
+      [/<(div|span|body|html|head)\b[^>]*>/i, 2]],
+    ['xml', [/<\?xml\b/, 5], [/xmlns[:=]/, 3]],
+    ['css', [/^\s*[.#]?[\w-]+\s*\{[^}]*:[^}]*;/m, 3], [/@media\b/, 3],
+      [/\b(color|margin|padding|background|display)\s*:/, 2]],
+    ['sql', [/\bSELECT\b[\s\S]*\bFROM\b/i, 4], [/\bINSERT\s+INTO\b/i, 4],
+      [/\bCREATE\s+TABLE\b/i, 4], [/\bWHERE\b.*=/i, 1]],
+    ['bash', [/^#!.*\/(ba)?sh/m, 5], [/^\s*(sudo|apt|chmod|chown|ifconfig|ping)\b/m, 3],
+      [/\$\{?\w+\}?/, 1], [/^\s*echo\s+/m, 2], [/\bfi$/m, 2]],
+    ['json', [/^\s*[{[][\s\S]*"[\w-]+"\s*:/, 3], [/^\s*\{[\s\S]*\}\s*$/, 1]],
+    ['php', [/<\?php/, 5], [/\$\w+\s*=/, 2], [/\becho\s+["'$]/, 2]]
+  ];
 
-  /** Alle Blöcke eines Textfeldes einfärben, die Marke bleibt stehen. */
-  function faerbeAlle(textDiv) {
-    if (!textDiv) return;
-    const bloecke = textDiv.querySelectorAll('pre.j-code');
-    if (!bloecke.length) return;
+  function errateSprache(code) {
+    const text = String(code || '');
+    if (!text.trim()) return 'text';
 
-    let marke = null;
-    const drin = document.activeElement === textDiv;
-    if (drin && typeof flatCaretPos === 'function') {
-      try { marke = flatCaretPos(textDiv); } catch (err) { marke = null; }
+    let besteSprache = 'text';
+    let bestePunkte = 0;
+
+    for (const eintrag of MERKMALE) {
+      const sprache = eintrag[0];
+      let punkte = 0;
+      for (let i = 1; i < eintrag.length; i++) {
+        const [muster, wert] = eintrag[i];
+        if (muster.test(text)) punkte += wert;
+      }
+      if (punkte > bestePunkte) { bestePunkte = punkte; besteSprache = sprache; }
     }
 
-    for (const pre of bloecke) faerbeBlock(pre);
-
-    if (marke !== null && typeof setFlatCaret === 'function') {
-      try { setFlatCaret(textDiv, marke); } catch (err) { /* dann bleibt sie, wo sie ist */ }
-    }
-  }
-
-  /* ── Die Farben wieder abziehen ────────────────────────────────────
-     Für ohneGriffe() in app.js: was ins Heft geht, ist nackter Code. */
-  function ohneFarben(wurzel) {
-    for (const pre of wurzel.querySelectorAll('pre.j-code')) {
-      const roh = pre.textContent || '';
-      if (pre.innerHTML !== roh) pre.textContent = roh;
-    }
+    /* Unter drei Punkten ist es geraten und nicht erkannt. Lieber „Text"
+       als eine falsche Sprache – die färbte überall daneben. */
+    return bestePunkte >= 3 ? besteSprache : 'text';
   }
 
   /* ══════════════════════════════════════════════════════════════════
-     EINEN BLOCK EINSETZEN
+     WIE GROSS DER KASTEN WIRD
+
+     Gemessen wird mit einem unsichtbaren Zwilling in derselben Schrift –
+     dasselbe Verfahren wie measureFormula in core/formula.js. Raten
+     ginge auch (Zeichen mal Breite), aber bei fester Schrittweite ist
+     Messen genauso billig und stimmt immer.
+
+     Daran hängt, was der Nutzer als „das Schwarze geht weiter/zurück"
+     sieht: nimmt der Code eine Zeile zu, wächst der Kasten um eine
+     Zeilenhöhe.
      ══════════════════════════════════════════════════════════════════ */
-  function codeUnterMarke() {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return null;
-    let node = sel.getRangeAt(0).startContainer;
-    if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
-    if (!node || typeof node.closest !== 'function') return null;
-    const pre = node.closest('pre.j-code');
-    return (pre && pre.closest('.j-text')) ? pre : null;
+  const CODE_ZEILE_PX = 19;      // Zeilenhöhe im Kasten
+  const CODE_RAND_PX = 12;       // Luft ringsum
+  const CODE_KOPF_PX = 24;       // die Leiste mit dem Sprachnamen
+  const CODE_NRN_PX = 34;        // Spalte für die Zeilennummern
+  const CODE_MIN_W = 180;
+  const CODE_MAX_W = 900;
+
+  let messProbe = null;
+
+  function messeCode(code, sprache) {
+    const zeilen = String(code || '').replace(/\n$/, '').split('\n');
+
+    if (!messProbe) {
+      messProbe = document.createElement('div');
+      messProbe.setAttribute('aria-hidden', 'true');
+      messProbe.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:0;'
+        + 'white-space:pre;font-family:"DM Mono",Consolas,"Courier New",monospace;'
+        + 'font-size:13px;line-height:' + CODE_ZEILE_PX + 'px';
+      document.body.appendChild(messProbe);
+    }
+
+    // Die längste Zeile bestimmt die Breite
+    messProbe.textContent = zeilen.reduce((a, b) => (b.length > a.length ? b : a), '');
+    const textBreite = Math.ceil(messProbe.getBoundingClientRect().width);
+
+    const w = Math.max(CODE_MIN_W, Math.min(CODE_MAX_W,
+      textBreite + CODE_NRN_PX + CODE_RAND_PX * 2 + 8));
+    const h = CODE_KOPF_PX + zeilen.length * CODE_ZEILE_PX + CODE_RAND_PX * 2;
+
+    return { w, h, zeilen: zeilen.length };
   }
 
-  function insertCode(sprache = 'python') {
-    let textDiv = document.activeElement;
-    if (!textDiv || !textDiv.classList || !textDiv.classList.contains('j-text')) {
-      textDiv = (typeof tabelleOhneMarke === 'function') ? tabelleOhneMarke() : null;
-      if (!textDiv) {
-        if (typeof toast === 'function') toast(t('codeNeedsCaret') || 'Erst in den Text klicken.', true);
-        return false;
-      }
-    }
+  /* ══════════════════════════════════════════════════════════════════
+     DER KASTEN, WIE MAN IHN SIEHT
+
+     Zeilennummern links, gefärbter Code rechts, darüber eine schmale
+     Leiste mit dem Sprachnamen – so, wie man es aus einer
+     Entwicklungsumgebung kennt.
+
+     Das steckt im KÖRPER eines Objekts (canvas/objects.js) und nicht im
+     Seitentext. Damit ist es weder für den Sanitizer noch für Yjs ein
+     Thema: was reist, ist obj.code, eine schlichte Zeichenkette.
+     ══════════════════════════════════════════════════════════════════ */
+  function renderCodeBody(obj) {
+    const code = String(obj.code || '');
+    const sprache = SPRACHEN[obj.lang] ? obj.lang : 'text';
+    const zeilen = code.replace(/\n$/, '').split('\n');
+
+    const nrn = zeilen.map((_, i) => i + 1).join('\n');
+    const gefaerbt = faerbe(code.replace(/\n$/, ''), sprache);
+
+    /* Der Kasten wird auf die natürliche Größe gerechnet und dann als
+       Ganzes skaliert – so bleibt die Schrift beim Ziehen im Verhältnis,
+       statt umzubrechen. Dasselbe tut renderFormulaBody. */
+    const natW = obj.natW || obj.w || CODE_MIN_W;
+    const natH = obj.natH || obj.h || 100;
+    const kx = (obj.w || natW) / (natW || 1);
+    const ky = (obj.h || natH) / (natH || 1);
+    const k = Math.max(0.2, Math.min(kx, ky));
+
+    return '<div class="j-code-obj' + (obj.hell ? ' hell' : '') + '"'
+      + ' style="width:' + natW + 'px;height:' + natH + 'px;'
+      + 'transform:scale(' + k + ')">'
+      + '<div class="j-code-obj-kopf">' + esc(SPRACHEN[sprache].name) + '</div>'
+      + '<div class="j-code-obj-flaeche">'
+      + '<div class="j-code-obj-nrn">' + esc(nrn) + '</div>'
+      + '<pre class="j-code-obj-text">' + gefaerbt + '</pre>'
+      + '</div></div>';
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     EINEN CODE-KASTEN AUF DIE SEITE SETZEN
+     ══════════════════════════════════════════════════════════════════ */
+  function insertCodeObject(code, sprache, hell) {
+    const info = (typeof getPage === 'function' && S.activePgId) ? getPage(S.activePgId) : null;
+    if (!info) return false;
     if (S.readOnly) { if (typeof toast === 'function') toast(t('sharedNoRight'), true); return false; }
 
-    // Kein Block im Block, und keiner in einer Tabellenzelle
-    if (codeUnterMarke()) return false;
-
-    const pgEl = textDiv.closest('[data-pgid]');
-    const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
-    if (!info) return false;
+    const pgEl = document.querySelector('[data-pgid="' + info.page.id + '"]');
+    if (!pgEl) return false;
 
     if (typeof pushPageHistory === 'function') pushPageHistory(info.page);
 
-    const pre = document.createElement('pre');
-    pre.className = 'j-code';
-    pre.dataset.lang = SPRACHEN[sprache] ? sprache : 'python';
-    /* Eine Leerzeile als Inhalt: ein ganz leeres <pre> hat keine Höhe und
-       man kann nicht hineinklicken. */
-    pre.textContent = '\n';
+    const mass = messeCode(code, sprache);
+    const pw = info.page.w || CFG.PAGE_W;
+    const ph = info.page.h || CFG.PAGE_H;
 
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount) {
-      const r = sel.getRangeAt(0);
-      r.deleteContents();
-      r.insertNode(pre);
-      // Ein Absatz dahinter, sonst kommt man unter dem Block nicht mehr heraus
-      const danach = document.createElement('p');
-      danach.appendChild(document.createElement('br'));
-      pre.after(danach);
-    } else {
-      textDiv.appendChild(pre);
-    }
+    /* Dorthin, wo man gerade ist – aber immer ganz auf dem Blatt.
+       Dieselbe Rechnung wie beim Bild aus der Zwischenablage. */
+    let y = (typeof markeAufSeite === 'function' && markeAufSeite(info.page)) || 96;
+    y = Math.min(Math.max(y, 72), Math.max(72, ph - mass.h - 24));
+    const x = Math.max(24, Math.min(72, pw - mass.w - 24));
 
-    // Marke in den Block
-    try {
-      const r = document.createRange();
-      r.setStart(pre.firstChild || pre, 0);
-      r.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r);
-    } catch (err) { /* dann steht sie, wo sie steht */ }
-
-    if (typeof uebernimmText === 'function') uebernimmText(info.page, textDiv);
-    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
-    zeigeCodeLeiste(pre);
-    return true;
-  }
-
-  /* ══════════════════════════════════════════════════════════════════
-     DIE LEISTE AM BLOCK
-
-     Dieselbe Machart wie die Leiste an der Tabelle (core/tables.js): ein
-     Element am document.body, das mitwandert. Sie steht bewusst NICHT im
-     Text – dort würde sie mitgespeichert und über Yjs mitreisen.
-     ══════════════════════════════════════════════════════════════════ */
-  let leiste = null;
-  let leistePre = null;
-
-  function baueLeiste() {
-    if (leiste) return leiste;
-    leiste = document.createElement('div');
-    leiste.className = 'j-code-bar';
-    leiste.style.display = 'none';
-
-    const wahl = document.createElement('select');
-    wahl.className = 'j-code-lang';
-    for (const id of SPRACH_LISTE) {
-      const o = document.createElement('option');
-      o.value = id;
-      o.textContent = SPRACHEN[id].name;
-      wahl.appendChild(o);
-    }
-    wahl.addEventListener('change', () => {
-      if (!leistePre || !leistePre.isConnected) return;
-      if (S.readOnly) return;
-      leistePre.dataset.lang = wahl.value;
-      faerbeBlock(leistePre);
-      meldeAenderung(leistePre);
-      /* Der nächste Block bekommt dieselbe Sprache – siehe letzteSprache
-         in ui/insert.js. */
-      if (typeof Settings !== 'undefined' && Settings.update) {
-        Settings.update({ codeSprache: wahl.value }).catch(() => { /* nicht wichtig */ });
-      }
-    });
-    leiste.appendChild(wahl);
-
-    const knopf = (titel, zeichen, tun) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'j-code-btn';
-      b.title = titel;
-      b.textContent = zeichen;
-      b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
-      b.addEventListener('click', (e) => { e.preventDefault(); tun(); });
-      leiste.appendChild(b);
-      return b;
+    const obj = {
+      id: uid(),
+      kind: 'code',
+      code: String(code || ''),
+      lang: SPRACHEN[sprache] ? sprache : 'text',
+      hell: !!hell,
+      x, y,
+      w: mass.w, h: mass.h,
+      natW: mass.w, natH: mass.h,
+      rot: 0,
+      layer: 'front'
     };
 
-    knopf(t('codeToggleTheme') || 'Hell oder dunkel', '◐', () => {
-      if (!leistePre || !leistePre.isConnected || S.readOnly) return;
-      leistePre.classList.toggle('j-code-hell');
-      meldeAenderung(leistePre);
-    });
+    (info.page.objects || (info.page.objects = [])).push(obj);
 
-    knopf(t('codeCopy') || 'Code kopieren', '⧉', async () => {
-      if (!leistePre) return;
-      try {
-        await navigator.clipboard.writeText(leistePre.textContent || '');
-        if (typeof toast === 'function') toast(t('codeCopied') || 'Code kopiert.');
-      } catch (err) {
-        if (typeof toast === 'function') toast(t('codeCopyFailed') || 'Kopieren ging nicht.', true);
-      }
-    });
+    const objLayer = pgEl.querySelector('.j-objects');
+    if (objLayer && typeof placeObject === 'function') placeObject(objLayer, obj, info.page);
 
-    document.body.appendChild(leiste);
-    return leiste;
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+    return obj;
   }
 
-  /** Änderung ins Heft, an die anderen und auf den Merkzettel. */
-  function meldeAenderung(pre) {
-    const textDiv = pre && pre.closest ? pre.closest('.j-text') : null;
-    if (!textDiv) return;
-    const pgEl = textDiv.closest('[data-pgid]');
-    const info = pgEl ? getPage(pgEl.dataset.pgid) : null;
-    if (info && typeof uebernimmText === 'function') uebernimmText(info.page, textDiv);
+  /**
+   * Einen bestehenden Kasten neu setzen, nachdem sein Code geändert wurde.
+   *
+   * Die natürliche Größe wird neu gemessen; hat jemand den Kasten gezogen,
+   * bleibt sein Massstab erhalten. Genau das ist „das Schwarze geht
+   * weiter oder zurück": mehr Zeilen, höherer Kasten.
+   */
+  function updateCodeObject(obj, code, sprache, hell) {
+    if (!obj) return;
+    const alterFaktor = obj.natH ? (obj.h || obj.natH) / obj.natH : 1;
+
+    obj.code = String(code || '');
+    if (sprache !== undefined) obj.lang = SPRACHEN[sprache] ? sprache : 'text';
+    if (hell !== undefined) obj.hell = !!hell;
+
+    const mass = messeCode(obj.code, obj.lang);
+    obj.natW = mass.w;
+    obj.natH = mass.h;
+    obj.w = Math.round(mass.w * alterFaktor);
+    obj.h = Math.round(mass.h * alterFaktor);
   }
-
-  function zeigeCodeLeiste(pre) {
-    if (!pre || !pre.isConnected) { versteckeCodeLeiste(); return; }
-    const bar = baueLeiste();
-    leistePre = pre;
-
-    bar.querySelector('.j-code-lang').value = pre.dataset.lang || 'text';
-    bar.style.display = 'flex';
-
-    const r = pre.getBoundingClientRect();
-    if (!r.width && !r.height) { versteckeCodeLeiste(); return; }
-    bar.style.left = Math.round(r.left) + 'px';
-    bar.style.top = Math.round(r.top - bar.offsetHeight - 4) + 'px';
-  }
-
-  function versteckeCodeLeiste() {
-    if (leiste) leiste.style.display = 'none';
-    leistePre = null;
-  }
-
-  /* Steht die Marke in einem Block? Dann die Leiste zeigen, sonst weg.
-     Am selben Anlass wie die Tabellenleiste. */
-  document.addEventListener('selectionchange', () => {
-    const pre = codeUnterMarke();
-    if (pre) zeigeCodeLeiste(pre);
-    else versteckeCodeLeiste();
-  });
-
-  const nachziehen = () => { if (leistePre) zeigeCodeLeiste(leistePre); };
-  document.addEventListener('scroll', nachziehen, true);
-  window.addEventListener('resize', nachziehen, { passive: true });
 
   window.InkwellsCode = {
-    faerbe, faerbeAlle, faerbeBlock, ohneFarben,
-    insertCode, codeUnterMarke, versteckeCodeLeiste,
+    faerbe, errateSprache, messeCode, renderCodeBody,
+    insertCodeObject, updateCodeObject,
     SPRACHEN, SPRACH_LISTE
   };
+
+  /* canvas/objects.js ruft renderCodeBody wie renderFormulaBody – also
+     ohne Vorsilbe. Die Formel steht dort als gewöhnliche Funktion auf
+     oberster Ebene und ist damit von selbst global; hier liegt alles in
+     einer Hülle, deshalb ausdrücklich. */
+  window.renderCodeBody = renderCodeBody;
 })();

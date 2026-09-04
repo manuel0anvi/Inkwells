@@ -178,7 +178,7 @@
     btnCode.addEventListener('click', () => {
       schliessen();
       stelleWiederher();
-      if (window.InkwellsCode) window.InkwellsCode.insertCode(letzteSprache());
+      if (typeof openCodeEditor === 'function') openCodeEditor();
     });
   }
 
@@ -269,16 +269,6 @@
       el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       el.click();
     }
-
-    /* Die zuletzt gewählte Sprache überdauert das Schliessen der App –
-       wer Informatik hat, setzt zwanzig Blöcke in derselben Sprache und
-       soll sie nicht zwanzigmal auswählen müssen. */
-    const letzteSprache = () => {
-      const gemerkt = (typeof Settings !== 'undefined' && Settings.get)
-        ? Settings.get('codeSprache') : null;
-      return (window.InkwellsCode && window.InkwellsCode.SPRACHEN[gemerkt])
-        ? gemerkt : 'python';
-    };
 
     const ZIELE = {
       shape: () => druecke(E('btn-shape')),

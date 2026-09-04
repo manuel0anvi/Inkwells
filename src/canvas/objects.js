@@ -357,6 +357,7 @@ function placeObject(objLayer, obj, page) {
   if (obj.kind === 'image') { const img = document.createElement('img'); img.src = obj.src; img.draggable = false; img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;border-radius:2px'; body.appendChild(img); }
   else if (obj.kind === 'shape') { body.innerHTML = renderShapeBody(obj); }
   else if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
+  else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
   else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
   wrap.appendChild(body);
 
@@ -437,7 +438,7 @@ function placeObject(objLayer, obj, page) {
         if (pos === 'tl') { nx = ox + (ow - nw); ny = oy + (oh - nh); }
         // Eine Formel darf kleiner werden als ein Bild – sie ist oft nur
         // ein paar Zeichen breit und waere sonst nicht zu verkleinern
-        const mind = obj.kind === 'formula' ? 12 : 20;
+        const mind = obj.kind === 'formula' ? 12 : (obj.kind === 'code' ? 80 : 20);
         // Auch beim Ziehen an der Oberkante bleibt der Seitenkopf frei
         if (ny < CFG.HDR) { nh -= (CFG.HDR - ny); ny = CFG.HDR; }
         /* Nicht ueber das Blatt hinaus WACHSEN. Nur wachsen: sonst liesse
@@ -451,6 +452,8 @@ function placeObject(objLayer, obj, page) {
           // Formel-Inhalt neu rendern – er wird über transform:scale(k) mit
           // k = w/natW skaliert, nicht über Breitenänderung allein
           if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
+        else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
+          else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
           placeBar();
         }
       };
@@ -785,6 +788,40 @@ function placeObject(objLayer, obj, page) {
     barBtn('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2 13.8 4.7 5.6 12.9 2.4 13.6 3.1 10.4z"/></svg>',
       objText('formulaEdit', 'Formel bearbeiten'), bearbeiten);
     // Doppelklick auf die Formel selbst öffnet ihn ebenfalls
+    body.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); bearbeiten(); });
+  }
+
+  /* Code: derselbe Weg wie bei der Formel – ein Stift in der Leiste und
+     ein Doppelklick auf den Kasten. Beim Ändern wächst oder schrumpft er
+     mit der Zahl der Zeilen (updateCodeObject misst neu). */
+  if (obj.kind === 'code') {
+    const bearbeiten = () => {
+      if (typeof openCodeEditor !== 'function') return;
+      openCodeEditor({
+        obj, page,
+        neuZeichnen: () => {
+          wrap.style.width = obj.w + 'px';
+          wrap.style.height = obj.h + 'px';
+          body.innerHTML = renderCodeBody(obj);
+          placeBar();
+        }
+      });
+    };
+    barBtn('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2 13.8 4.7 5.6 12.9 2.4 13.6 3.1 10.4z"/></svg>',
+      objText('codeEdit', 'Code bearbeiten'), bearbeiten);
+
+    /* Und den Code herausholen – wer ihn im Heft stehen hat, will ihn
+       auch wieder in die Entwicklungsumgebung bringen. */
+    barBtn('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-3h-8v8h3"/></svg>',
+      objText('codeCopy', 'Code kopieren'), async () => {
+        try {
+          await navigator.clipboard.writeText(obj.code || '');
+          if (typeof toast === 'function') toast(objText('codeCopied', 'Code kopiert.'));
+        } catch (err) {
+          if (typeof toast === 'function') toast(objText('codeCopyFailed', 'Kopieren ging nicht.'), true);
+        }
+      });
+
     body.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); bearbeiten(); });
   }
 
@@ -1183,8 +1220,8 @@ function placeObject(objLayer, obj, page) {
       const scale = dist / pinchStartDist;
       let nw = pinchStartW * scale, nh = pinchStartH * scale;
       // Formeln dürfen kleiner werden als Bilder (Mindestmaß 12 statt 40×30)
-      const mindW = obj.kind === 'formula' ? 12 : 20;
-      const mindH = obj.kind === 'formula' ? 12 : 20;
+      const mindW = obj.kind === 'formula' ? 12 : (obj.kind === 'code' ? 80 : 20);
+      const mindH = obj.kind === 'formula' ? 12 : (obj.kind === 'code' ? 40 : 20);
       if (nw > mindW && nh > mindH) {
         obj.x -= (nw - obj.w) / 2; obj.y -= (nh - obj.h) / 2; obj.w = nw; obj.h = nh;
         // Es waechst aus der Mitte heraus – dabei kann es ueber den Rand geraten
@@ -1192,6 +1229,7 @@ function placeObject(objLayer, obj, page) {
         wrap.style.width = obj.w + 'px'; wrap.style.height = obj.h + 'px'; wrap.style.left = obj.x + 'px'; wrap.style.top = obj.y + 'px';
         // Formel-Inhalt neu rendern, damit die Skalierung greift
         if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
+        else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
         placeBar();
       }
     }

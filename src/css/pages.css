@@ -2688,102 +2688,6 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   CODE IM SEITENTEXT  ―  core/code.js
-
-   Dunkel ist die Voreinstellung: wer sechs Wochenstunden programmiert,
-   kennt Code so und liest ihn so am schnellsten. Mit `j-code-hell` wird
-   daraus ein heller Block – fuer den Ausdruck und fuer den, dem der
-   dunkle Kasten im Heft zu schwer ist.
-
-   Die Farben sind Dark+ aus Visual Studio Code. Sie sind bewusst nicht
-   an die Papierfarben angeglichen: ein Codeblock IST ein Fremdkoerper
-   auf dem Blatt, und er soll auch so aussehen.
-   ══════════════════════════════════════════════════════════════════════ */
-.j-text pre.j-code {
-  /* --lh haelt die Zeilen des Blocks auf dem Raster des Papiers, genau
-     wie bei den Tabellenzellen. */
-  font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
-  font-size: .82em;
-  line-height: var(--lh, 32px);
-  white-space: pre;
-  overflow-x: auto;
-  margin: 6px 0;
-  padding: 10px 14px;
-  border-radius: 6px;
-  background: #1e1e1e;
-  color: #d4d4d4;
-  border: 1px solid #2d2d2d;
-  tab-size: 4;
-  -moz-tab-size: 4;
-}
-
-.j-text pre.j-code.j-code-hell {
-  background: #f7f4ec;
-  color: #2b2b2b;
-  border-color: #ded6c6;
-}
-
-/* ── Die Farben, dunkel (VS Code Dark+) ──────────────────────────── */
-.j-text pre.j-code .j-tok-key  { color: #569cd6 }
-.j-text pre.j-code .j-tok-text { color: #ce9178 }
-.j-text pre.j-code .j-tok-komm { color: #6a9955; font-style: italic }
-.j-text pre.j-code .j-tok-zahl { color: #b5cea8 }
-.j-text pre.j-code .j-tok-fn   { color: #dcdcaa }
-.j-text pre.j-code .j-tok-typ  { color: #4ec9b0 }
-.j-text pre.j-code .j-tok-attr { color: #9cdcfe }
-.j-text pre.j-code .j-tok-satz { color: #808080 }
-
-/* ── ...und hell (VS Code Light+) ────────────────────────────────── */
-.j-text pre.j-code.j-code-hell .j-tok-key  { color: #0000ff }
-.j-text pre.j-code.j-code-hell .j-tok-text { color: #a31515 }
-.j-text pre.j-code.j-code-hell .j-tok-komm { color: #008000 }
-.j-text pre.j-code.j-code-hell .j-tok-zahl { color: #098658 }
-.j-text pre.j-code.j-code-hell .j-tok-fn   { color: #795e26 }
-.j-text pre.j-code.j-code-hell .j-tok-typ  { color: #267f99 }
-.j-text pre.j-code.j-code-hell .j-tok-attr { color: #e50000 }
-.j-text pre.j-code.j-code-hell .j-tok-satz { color: #808080 }
-
-/* ── Die Leiste am Block ─────────────────────────────────────────────
-   Am document.body und nicht im Text: dort wuerde sie mitgespeichert
-   und ueber Yjs mitreisen. Dieselbe Machart wie die Tabellenleiste. */
-.j-code-bar {
-  position: fixed;
-  z-index: 1200;
-  display: none;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 5px;
-  border-radius: 6px;
-  background: var(--sh2, #23232e);
-  border: 1px solid var(--sb, #35354a);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
-}
-
-.j-code-bar .j-code-lang {
-  background: transparent;
-  color: var(--text, #e8e6e3);
-  border: 1px solid var(--sb, #35354a);
-  border-radius: 4px;
-  font-size: 11px;
-  padding: 2px 4px;
-  cursor: pointer;
-}
-
-.j-code-bar .j-code-btn {
-  background: transparent;
-  color: var(--text, #e8e6e3);
-  border: none;
-  border-radius: 4px;
-  width: 24px;
-  height: 22px;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.j-code-bar .j-code-btn:hover { background: var(--sh3, #2e2e3d) }
-
-/* ══════════════════════════════════════════════════════════════════════
    DIE ANKREUZLISTE IST WIRKLICH ANZUKREUZEN
 
    Vorher war das ✓ ein blosses Aufzaehlungszeichen (list-style-type):
@@ -2902,3 +2806,104 @@ body.touch-input .obj-body[data-kind="shape"]::after {
    Zeichenflaeche liegt auf z-index 1100 und damit ueber dem Textfeld
    (1000). Wer den Stift fuehrt, trifft sie und nicht die Ebene – dafuer
    braucht es hier keine eigene Regel. */
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER CODE-KASTEN  ―  core/code.js
+
+   Er steckt im Koerper eines Objekts und liegt damit auf dem Blatt wie
+   ein Bild: verschiebbar, zu vervielfaeltigen, zu loeschen. Dunkel ist
+   die Voreinstellung – wer programmiert, liest Code so am schnellsten;
+   `hell` macht daraus die helle Fassung, fuer den Ausdruck.
+
+   Die Farben sind Dark+ bzw. Light+ aus Visual Studio Code. Sie sind
+   bewusst nicht an die Papierfarben angeglichen: ein Codeblock IST ein
+   Fremdkoerper auf dem Blatt und soll auch so aussehen.
+   ══════════════════════════════════════════════════════════════════════ */
+.j-code-obj {
+  transform-origin: left top;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #2d2d2d;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  font-family: 'DM Mono', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.j-code-obj.hell {
+  background: #fbfaf6;
+  color: #2b2b2b;
+  border-color: #ded6c6;
+}
+
+/* Die schmale Leiste mit dem Sprachnamen – wie der Reiter einer Datei */
+.j-code-obj-kopf {
+  height: 24px;
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 10px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: #8a8a8a;
+  background: #252526;
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.j-code-obj.hell .j-code-obj-kopf {
+  color: #8b8578;
+  background: #f2efe7;
+  border-bottom-color: #e2dccd;
+}
+
+.j-code-obj-flaeche {
+  flex: 1 1 auto;
+  display: flex;
+  padding: 12px 12px 12px 0;
+  overflow: hidden;
+}
+
+/* Die Zeilennummern, wie in einer Entwicklungsumgebung */
+.j-code-obj-nrn {
+  flex: 0 0 34px;
+  text-align: right;
+  padding-right: 10px;
+  white-space: pre;
+  color: #6e7681;
+  user-select: none;
+}
+
+.j-code-obj.hell .j-code-obj-nrn { color: #b3ab99 }
+
+.j-code-obj-text {
+  margin: 0;
+  white-space: pre;
+  font: inherit;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}
+
+/* ── Die Farben, dunkel (VS Code Dark+) ──────────────────────────── */
+.j-code-obj .j-tok-key  { color: #569cd6 }
+.j-code-obj .j-tok-text { color: #ce9178 }
+.j-code-obj .j-tok-komm { color: #6a9955; font-style: italic }
+.j-code-obj .j-tok-zahl { color: #b5cea8 }
+.j-code-obj .j-tok-fn   { color: #dcdcaa }
+.j-code-obj .j-tok-typ  { color: #4ec9b0 }
+.j-code-obj .j-tok-attr { color: #9cdcfe }
+.j-code-obj .j-tok-satz { color: #808080 }
+
+/* ── ...und hell (VS Code Light+) ────────────────────────────────── */
+.j-code-obj.hell .j-tok-key  { color: #0000ff }
+.j-code-obj.hell .j-tok-text { color: #a31515 }
+.j-code-obj.hell .j-tok-komm { color: #008000 }
+.j-code-obj.hell .j-tok-zahl { color: #098658 }
+.j-code-obj.hell .j-tok-fn   { color: #795e26 }
+.j-code-obj.hell .j-tok-typ  { color: #267f99 }
+.j-code-obj.hell .j-tok-attr { color: #e50000 }
+.j-code-obj.hell .j-tok-satz { color: #808080 }

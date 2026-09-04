@@ -2482,3 +2482,59 @@ body.hat-konflikt .view {
   color: var(--md);
   padding: 28px 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER CODE-DIALOG  ―  ui/code.js
+   ══════════════════════════════════════════════════════════════════════ */
+.code-modal {
+  width: min(760px, 92vw);
+}
+
+/* Das Eingabefeld: feste Schrittweite, kein Umbruch, waagerecht rollbar.
+   Umgebrochener Code ist unlesbar - lieber schieben als knicken. */
+.code-quelle {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  font-family: 'DM Mono', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 19px;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid var(--sb, #35354a);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.code-quelle::placeholder { color: #6e7681 }
+
+.code-leiste {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.code-leiste .modal-label { margin: 0 }
+
+.code-leiste select {
+  background: var(--sh2, #23232e);
+  color: var(--text, #e8e6e3);
+  border: 1px solid var(--sb, #35354a);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Was erkannt wurde. Zurueckhaltend - es ist ein Hinweis, keine Ansage. */
+.code-erkannt {
+  font-size: 11px;
+  color: var(--muted, #9a94a6);
+  flex: 1 1 auto;
+}

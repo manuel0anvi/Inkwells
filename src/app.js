@@ -226,26 +226,6 @@ function _applyPageSnapshot(page, snap) {
    an den Zeilenunterkanten (core/tables.js). */
 const GRIFF_WAHL = '.j-tbl-griff, .j-tbl-zeilengriff';
 
-/* ══════════════════════════════════════════════════════════════════════
-   CODE EINFÄRBEN, WENN DIE FINGER STILLSTEHEN
-
-   Bei jedem Anschlag neu einzufärben hiesse, bei jedem Anschlag den
-   Inhalt eines <pre> auszutauschen. Das ist nicht teuer, aber es ist
-   unnötig – und je weniger am DOM gerührt wird, solange jemand tippt,
-   desto besser. 220 ms sind kurz genug, dass die Farben beim Absetzen
-   schon dastehen, und lang genug, dass Durchtippen sie nicht auslöst.
-   ══════════════════════════════════════════════════════════════════════ */
-const FAERBE_PAUSE_MS = 220;
-const _faerbeUhren = new WeakMap();
-
-function planeEinfaerben(textDiv) {
-  if (!textDiv || !window.InkwellsCode) return;
-  clearTimeout(_faerbeUhren.get(textDiv));
-  _faerbeUhren.set(textDiv, setTimeout(() => {
-    if (textDiv.isConnected) InkwellsCode.faerbeAlle(textDiv);
-  }, FAERBE_PAUSE_MS));
-}
-window.planeEinfaerben = planeEinfaerben;
 
 /* ══════════════════════════════════════════════════════════════════════
    WAS IM TEXT STEHT UND WAS NUR DARÜBERLIEGT
@@ -310,18 +290,9 @@ function ohneGriffe(textDiv) {
      Gemeint sind margin-left und margin-top. In left/top steht dagegen
      die gewählte Stelle – die gehört ins Heft. */
   const geschoben = textDiv.querySelector('p.j-frei[style*="margin"]');
-  /* Die Einfärbung eines Codeblocks ist das Vierte dieser Art: die
-     <span class="j-tok-…"> entstehen erst beim Anzeigen (core/code.js).
-     Kämen sie mit, ginge bei jedem Tastendruck ein neues Farbgerüst
-     durch Yjs – ein einziges Zeichen färbt die ganze Zeile um, und aus
-     einem Anschlag würde ein Unterschied über hunderte Zeichen. */
-  const gefaerbt = textDiv.querySelector('pre.j-code .j-tok-key, pre.j-code .j-tok-text, '
-    + 'pre.j-code .j-tok-komm, pre.j-code .j-tok-zahl, pre.j-code .j-tok-fn, '
-    + 'pre.j-code .j-tok-typ, pre.j-code .j-tok-attr, pre.j-code .j-tok-satz');
-  if (!griffe && !marken && !geschoben && !gefaerbt) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
+  if (!griffe && !marken && !geschoben) return textDiv.innerHTML;   // der Normalfall, ohne Kopie
 
   const kopie = textDiv.cloneNode(true);
-  if (gefaerbt && window.InkwellsCode) InkwellsCode.ohneFarben(kopie);
   kopie.querySelectorAll('p.j-frei').forEach(p => {
     p.style.marginLeft = '';
     p.style.marginTop = '';
@@ -1029,15 +1000,6 @@ function appendPageDOM(page, index) {
        an den Spalten bleiben dabei draussen (core/tables.js): sie sind
        Bedienteil, kein Inhalt, und wüchsen sonst bei jedem Abgleich nach. */
     uebernimmText(page, textDiv);
-    /* ── Code neu einfärben, aber nicht bei jedem Anschlag ────────────
-       Erst wenn eine kurze Pause eintritt. Das Einfärben ändert den
-       FLACHEN Text nicht (Spans zählen als inline), deshalb lässt sich
-       die Schreibmarke danach auf dieselbe Zahl zurücksetzen und
-       springt nicht – siehe der Kasten in core/code.js.
-
-       NACH uebernimmText: ins Heft gehört der nackte Code, und den
-       liest ohneGriffe ohnehin ohne Farben aus. */
-    planeEinfaerben(textDiv);
     // Nicht bei jedem Anschlag den ganzen Baum neu bauen
     scheduleSideTree();
     maybeAutoPage();
@@ -1092,22 +1054,6 @@ function appendPageDOM(page, index) {
     // Dasselbe für die Zeilensperre des anderen
     if ((e.key === 'Tab' || e.key === 'Enter') && lockedHere(page, textDiv, 'insertText')) {
       e.preventDefault();
-      return;
-    }
-
-    /* ══ IN EINEM CODEBLOCK GILT NUR EINES: ES IST CODE ═══════════
-       Muss VOR Tabelle und Aufzählung stehen. Enter macht dort eine
-       neue Zeile und keinen neuen Absatz, Tab rückt ein und springt
-       nicht in die nächste Zelle. Beides ist in einem <pre> das
-       Selbstverständliche – und beides täte ohne diesen Zweig etwas
-       ganz anderes. */
-    if ((e.key === 'Enter' || e.key === 'Tab') && !S.readOnly
-        && window.InkwellsCode && InkwellsCode.codeUnterMarke()) {
-      e.preventDefault();
-      /* Über execCommand und nicht über eigenes Einsetzen: nur so kommt
-         ein 'input' heraus, und daran hängt der ganze Weg ins Heft und
-         zu den anderen (uebernimmText). */
-      document.execCommand('insertText', false, e.key === 'Tab' ? '    ' : '\n');
       return;
     }
 

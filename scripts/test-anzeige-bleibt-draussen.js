@@ -108,12 +108,16 @@ console.log('Kein roher Editor-Inhalt im Datenmodell\n');
      nichts aufzuräumen gibt – sonst käme die Anzeige doch durch.
      Seit dem 17.8.2026 sind es drei Fälle: dazu kam die gerechnete
      Spaltenbreite der frei stehenden Absätze (canvas/text.js).
-     Seit dem 4.9.2026 vier: die Einfärbung eines Codeblocks
-     (core/code.js) entsteht ebenfalls erst beim Anzeigen. */
+
+     >>> Der Codeblock steht hier bewusst NICHT <<<
+     Kurz war er als <pre> im Seitentext gebaut, und dann musste seine
+     Einfärbung hier abgezogen werden. Seit er ein OBJEKT ist
+     (core/code.js), steht sein Quelltext in obj.code und nicht im Text –
+     durch diese Funktion geht davon gar nichts mehr. Genau das war der
+     Grund für die Umstellung: die Farben im Text hätten bei jedem
+     Anschlag ein neues Gerüst durch Yjs geschickt. */
   check('Der Weg ohne Kopie fragt ALLE Fälle ab',
-    /if \(!griffe && !marken && !geschoben && !gefaerbt\) return textDiv\.innerHTML;/.test(fn), true);
-  check('Und die Farben eines Codeblocks werden abgezogen',
-    /InkwellsCode\.ohneFarben\(kopie\)/.test(fn), true);
+    /if \(!griffe && !marken && !geschoben\) return textDiv\.innerHTML;/.test(fn), true);
   /* Gemeint sind margin-left und margin-top. Ein max-width stand hier
      auch einmal – vergeben hat es aber nie jemand, ordneFreieAbsaetze
      setzte es nur bei jedem Durchgang zurueck. Beides ist raus. */

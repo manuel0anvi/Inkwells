@@ -422,108 +422,139 @@ app.on('ready', async () => {
       typeof measureFormula === 'function' ? JSON.stringify(measureFormula('x^2 + y^2')) : 'ok'`);
 
     /* ══════════════════════════════════════════════════════════════════
-       CODE IM HEFT
+       CODE ALS KASTEN AUF DEM BLATT
 
-       Der Block ist ein <pre class="j-code"> mit NACKTEM Code darin. Die
-       Farben liegen nur darueber und muessen vor dem Speichern wieder
-       abgezogen werden – sonst ginge bei jedem Anschlag ein neues
-       Farbgeruest durch Yjs.
+       Ein Codeblock ist ein OBJEKT (page.objects), kein Text im Fluss.
+       Damit gilt fuer ihn alles, was canvas/objects.js schon kann:
+       verschieben, vervielfaeltigen, loeschen, Ebenen.
        ══════════════════════════════════════════════════════════════════ */
-    abschnitt('Code im Heft');
+    abschnitt('Code als Kasten auf dem Blatt');
 
-    /* Der Knopf muss in der LEISTE stehen, nicht nur im Sammelmenue –
-       das erscheint erst, wenn die Leiste eng wird (Stufe tb-plus in
-       ui/toolbar.js). Zuerst stand er nur dort, und auf einem
-       gewoehnlichen Fenster gab es gar keinen Knopf. */
     await schritt('Der Knopf steht in der Werkzeugleiste', `
       const b = E('btn-code');
       if (!b) throw new Error('#btn-code gibt es nicht');
       if (!b.closest('#toolbar, .toolbar')) throw new Error('er haengt nicht in der Leiste');
       if (getComputedStyle(b).display === 'none')
         throw new Error('er ist unsichtbar, obwohl die Leiste breit ist');
-      // Und im Sammelmenue, fuer den Fall, dass es eng wird
       if (!document.querySelector('#insert-all-pop [data-einfuegen="code"]'))
         throw new Error('im Sammelmenue fehlt er');`);
 
-    await schritt('Ein Codeblock entsteht', `
-      const pg = getNb().pages[0];
-      const pgEl = document.querySelector('[data-pgid="' + pg.id + '"]');
-      const td = pgEl.querySelector('.j-text');
-      td.innerHTML = '<p>Davor</p>';
-      td.focus();
-      setFlatCaret(td, 5);
-      if (!InkwellsCode.insertCode('python')) throw new Error('insertCode hat abgelehnt');
-      const pre = td.querySelector('pre.j-code');
-      if (!pre) throw new Error('kein <pre> im Text');
-      if (pre.dataset.lang !== 'python') throw new Error('Sprache: ' + pre.dataset.lang);`, 500);
+    await schritt('Der Knopf macht den Dialog auf', `
+      if (typeof openCodeEditor !== 'function') throw new Error('openCodeEditor fehlt');
+      E('btn-code').click();
+      await new Promise(r => setTimeout(r, 200));
+      const ov = E('ov-code');
+      if (!ov || ov.style.display === 'none') throw new Error('der Dialog ist zu geblieben');
+      if (!E('code-quelle')) throw new Error('kein Eingabefeld');
+      if (!E('code-sprache')) throw new Error('keine Sprachauswahl');`, 400);
 
-    await schritt('Der Code wird eingefaerbt', `
-      const td = document.querySelector('.j-text');
-      const pre = td.querySelector('pre.j-code');
-      pre.textContent = 'def gruss(name):\\n    # Hallo\\n    return "Servus " + name\\n';
-      InkwellsCode.faerbeBlock(pre);
-      const h = pre.innerHTML;
-      if (!/j-tok-key/.test(h)) throw new Error('kein Schluesselwort gefaerbt: ' + h.slice(0, 160));
-      if (!/j-tok-text/.test(h)) throw new Error('keine Zeichenkette gefaerbt');
-      if (!/j-tok-komm/.test(h)) throw new Error('kein Kommentar gefaerbt');
-      if (!/j-tok-fn/.test(h)) throw new Error('kein Funktionsname gefaerbt');`);
+    /* Das Wichtigste am Feld: es haelt den Code Zeichen fuer Zeichen.
+       Ein contenteditable machte daraus Absaetze und schluckte die
+       Einrueckung – bei Python waere das Programm damit kaputt. */
+    await schritt('Das Feld haelt die Formatierung genau', `
+      const feld = E('code-quelle');
+      const roh = 'def f(x):\\n    if x:\\n        return "ja"\\n    return "nein"\\n';
+      feld.value = roh;
+      if (feld.value !== roh) throw new Error('das Feld hat den Text veraendert');
+      if (feld.tagName !== 'TEXTAREA') throw new Error('kein textarea: ' + feld.tagName);`);
 
-    /* Das ist der Punkt, an dem die ganze Sache haengt: was ins Heft
-       geht, muss der nackte Code sein. */
-    await schritt('Ins Heft geht der nackte Code, ohne Farben', `
-      const td = document.querySelector('.j-text');
-      const raus = ohneGriffe(td);
-      if (/j-tok-/.test(raus)) throw new Error('die Farben sind mitgegangen: ' + raus.slice(0, 200));
-      if (!/def gruss/.test(raus)) throw new Error('der Code fehlt: ' + raus.slice(0, 200));
-      if (!/pre class="j-code"/.test(raus) && !/<pre[^>]*j-code/.test(raus))
-        throw new Error('der Block selbst fehlt: ' + raus.slice(0, 200));`);
-
-    await schritt('Und der Text zaehlt fuer die Marken unveraendert', `
-      const td = document.querySelector('.j-text');
-      const pre = td.querySelector('pre.j-code');
-      const vorher = flatTextOf(td);
-      InkwellsCode.faerbeBlock(pre);
-      const nachher = flatTextOf(td);
-      if (vorher !== nachher)
-        throw new Error('das Einfaerben hat den flachen Text veraendert - jede Marke saesse daneben');`);
-
-    await schritt('Der Block ueberlebt die Bereinigung', `
-      const roh = '<pre class="j-code" data-lang="java">int x = 1;</pre>';
-      const rein = sanitizePageHtml(roh);
-      if (!/<pre/.test(rein)) throw new Error('das <pre> ist weg: ' + rein);
-      if (!/j-code/.test(rein)) throw new Error('die Klasse ist weg: ' + rein);
-      if (!/data-lang="java"/.test(rein)) throw new Error('die Sprache ist weg: ' + rein);
-      if (!/int x = 1;/.test(rein)) throw new Error('der Code ist weg: ' + rein);`);
-
-    await schritt('Eine erfundene Sprache kommt nicht durch', `
-      const rein = sanitizePageHtml('<pre class="j-code" data-lang="boese">x</pre>');
-      if (/data-lang/.test(rein)) throw new Error('sie kam durch: ' + rein);
-      if (!/<pre/.test(rein)) throw new Error('der Block sollte trotzdem bleiben');`);
-
-    await schritt('Und die Farbklassen kommen nicht durch', `
-      const rein = sanitizePageHtml('<pre class="j-code"><span class="j-tok-key">def</span></pre>');
-      if (/j-tok-/.test(rein)) throw new Error('eine Farbklasse kam durch: ' + rein);
-      if (!/def/.test(rein)) throw new Error('der Text ist weg: ' + rein);`);
-
-    await schritt('Alle Sprachen faerben ohne Fehler', `
-      const probe = {
-        java: 'public class A { void f() { int i = 0; } }',
-        python: 'def f(x):\\n    return x  # ok',
-        c: '#include <stdio.h>\\nint main(void){ printf("hi"); }',
-        javascript: 'const f = (a) => { return \`x\${a}\`; };',
-        html: '<div class="a">Text<!-- weg --></div>',
-        css: '.a { color: red; }',
+    await schritt('Die Sprache wird erraten', `
+      const C = window.InkwellsCode;
+      const proben = {
+        python: 'def gruss(name):\\n    return f"Hallo {name}"',
+        java: 'public class A {\\n  public static void main(String[] a) { System.out.println("x"); }\\n}',
+        c: '#include <stdio.h>\\nint main(void) { printf("hi"); return 0; }',
+        javascript: 'const f = (a) => { console.log(a); };',
+        html: '<!DOCTYPE html>\\n<html><body><div class="a">x</div></body></html>',
+        css: '.karte { color: red; margin: 4px; }',
         sql: 'SELECT name FROM kunden WHERE id = 1;',
-        bash: 'if [ -f x ]; then echo "da"; fi'
+        bash: '#!/bin/bash\\necho "hallo"'
       };
-      for (const [sprache, code] of Object.entries(probe)) {
-        const h = InkwellsCode.faerbe(code, sprache);
-        if (typeof h !== 'string' || !h.length) throw new Error(sprache + ': nichts zurueck');
-        // Was hineingeht, muss auch wieder herauskommen
-        const zurueck = h.replace(/<[^>]+>/g, '')
-          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-        if (zurueck !== code) throw new Error(sprache + ': Text veraendert\\n  war: ' + code + '\\n  ist: ' + zurueck);
-      }`);
+      const falsch = [];
+      for (const [erwartet, code] of Object.entries(proben)) {
+        const geraten = C.errateSprache(code);
+        if (geraten !== erwartet) falsch.push(erwartet + ' -> ' + geraten);
+      }
+      if (falsch.length) throw new Error('falsch geraten: ' + falsch.join(', '));
+
+      // Was nach nichts aussieht, bleibt Text – lieber nicht raten
+      if (C.errateSprache('Hallo, das ist einfach ein Satz.') !== 'text')
+        throw new Error('bei gewoehnlichem Text wurde etwas geraten');`);
+
+    await schritt('Fertig legt einen Kasten auf die Seite', `
+      const nb = getNb();
+      const pg = nb.pages[0];
+      S.activePgId = pg.id;
+      const vorher = (pg.objects || []).length;
+
+      E('code-quelle').value = 'def f(x):\\n    return x * 2';
+      E('code-sprache').value = 'python';
+      E('code-fertig').click();
+      await new Promise(r => setTimeout(r, 300));
+
+      const objekte = pg.objects || [];
+      if (objekte.length !== vorher + 1) throw new Error('kein Objekt dazugekommen');
+      const k = objekte[objekte.length - 1];
+      if (k.kind !== 'code') throw new Error('falsche Art: ' + k.kind);
+      if (k.code !== 'def f(x):\\n    return x * 2') throw new Error('der Code stimmt nicht: ' + JSON.stringify(k.code));
+      if (k.lang !== 'python') throw new Error('die Sprache stimmt nicht: ' + k.lang);
+      if (!(k.w > 0 && k.h > 0)) throw new Error('keine Groesse: ' + k.w + 'x' + k.h);
+      window.__kasten = k;`, 600);
+
+    await schritt('Der Kasten wird gezeichnet, mit Nummern und Farben', `
+      const k = window.__kasten;
+      const html = InkwellsCode.renderCodeBody(k);
+      if (!/j-code-obj/.test(html)) throw new Error('kein Kasten: ' + html.slice(0, 120));
+      if (!/j-code-obj-nrn/.test(html)) throw new Error('keine Zeilennummern');
+      if (!/j-tok-key/.test(html)) throw new Error('nichts eingefaerbt');
+      // Zwei Zeilen Code heisst zwei Nummern
+      const nrn = /<div class="j-code-obj-nrn">([^<]*)<\\/div>/.exec(html);
+      if (!nrn || nrn[1].split('\\n').length !== 2)
+        throw new Error('falsche Zeilennummern: ' + (nrn && JSON.stringify(nrn[1])));
+      // Dunkel ist die Voreinstellung
+      if (/\\bhell\\b/.test(html)) throw new Error('er ist hell, obwohl dunkel voreingestellt ist');`);
+
+    /* Genau das, was der Nutzer als "das Schwarze geht weiter oder
+       zurueck" beschrieben hat. */
+    await schritt('Mehr Zeilen heisst hoeherer Kasten', `
+      const k = window.__kasten;
+      const hoheVorher = k.h;
+      InkwellsCode.updateCodeObject(k, 'a\\nb\\nc\\nd\\ne\\nf\\ng\\nh', 'python');
+      if (!(k.h > hoheVorher))
+        throw new Error('der Kasten ist nicht gewachsen: ' + hoheVorher + ' -> ' + k.h);
+
+      const hoheGross = k.h;
+      InkwellsCode.updateCodeObject(k, 'a', 'python');
+      if (!(k.h < hoheGross))
+        throw new Error('er ist nicht wieder geschrumpft: ' + hoheGross + ' -> ' + k.h);`);
+
+    await schritt('Ein Doppelklick macht ihn wieder auf', `
+      const pg = getNb().pages[0];
+      const k = window.__kasten;
+      const wrap = document.querySelector('[data-pgid="' + pg.id + '"] .obj-wrap[data-objid="'
+        + CSS.escape(String(k.id)) + '"]');
+      if (!wrap) throw new Error('der Kasten liegt nicht im Baum');
+      const body = wrap.querySelector('.obj-body');
+      if (!body) throw new Error('kein Koerper');
+      body.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 250));
+      const ov = E('ov-code');
+      if (!ov || ov.style.display === 'none') throw new Error('der Dialog ging nicht auf');
+      if (E('code-quelle').value !== k.code)
+        throw new Error('der bisherige Code steht nicht darin');
+      // wieder zu
+      document.querySelectorAll('.overlay').forEach(o => { o.style.display = 'none'; });`, 500);
+
+    await schritt('Er laesst sich verschieben und loeschen wie ein Bild', `
+      const pg = getNb().pages[0];
+      const k = window.__kasten;
+      // Verschieben ist blosses Setzen der Lage – dieselben Felder wie beim Bild
+      k.x = 120; k.y = 200;
+      if (k.x !== 120) throw new Error('die Lage laesst sich nicht setzen');
+      // Und loeschen geht ueber dieselbe Liste
+      const vorher = pg.objects.length;
+      pg.objects = pg.objects.filter(o => o.id !== k.id);
+      if (pg.objects.length !== vorher - 1) throw new Error('nicht geloescht');`);
 
     /* ══════════════════════════════════════════════════════════════════
        DIE ANKREUZLISTE LAESST SICH ANKREUZEN
