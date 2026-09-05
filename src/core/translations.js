@@ -2,6 +2,7 @@
 
 const TRANSLATIONS = {
   de: {
+    letzteSeiteLeer: 'Die letzte Seite ist noch leer. Sobald du etwas darauf schreibst, kommt die nächste von selbst.',
     /* ══ HILFE ══════════════════════════════════════════════════════
        Die Texte des Hilfe-Fensters und der einmaligen Hinweise.
        Welche Themen es gibt und woraus sie bestehen: core/hilfe.js.
@@ -1033,6 +1034,7 @@ const TRANSLATIONS = {
   },
   
   en: {
+    letzteSeiteLeer: 'The last page is still empty. Write something on it and the next one appears by itself.',
     /* ══ HILFE ══════════════════════════════════════════════════════
        Die Texte des Hilfe-Fensters und der einmaligen Hinweise.
        Welche Themen es gibt und woraus sie bestehen: core/hilfe.js.
@@ -2045,6 +2047,7 @@ const TRANSLATIONS = {
   },
   
   it: {
+    letzteSeiteLeer: 'L\'ultima pagina è ancora vuota. Appena ci scrivi qualcosa, la successiva arriva da sola.',
     /* ══ HILFE ══════════════════════════════════════════════════════
        Die Texte des Hilfe-Fensters und der einmaligen Hinweise.
        Welche Themen es gibt und woraus sie bestehen: core/hilfe.js.

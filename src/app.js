@@ -743,11 +743,10 @@ function openSection(sec = null, scrollToPgId = null) {
        Im Hochformat gehört die Seite auf die Breite des Schirms
        (core/zoom.js). Das lief bisher nur beim Umklappen und beim Zoomen –
        wer die App im Tablet-Modus startet und ein Heft öffnet, bekam
-       deshalb die Grundgröße und musste selbst zurechtrücken. refreshSizer
-       braucht den gültigen Zoom ohnehin, sonst stimmt die Rollhöhe nicht. */
+       deshalb die Grundgröße und musste selbst zurechtrücken. Die
+       Rollhöhe braucht den gültigen Zoom ohnehin (core/zoom.js). */
     _applyZoom();
-    refreshSizer();
-    updateAddPageBtnVisibility();
+    rollhoeheNachrechnen();
     if (scrollToPgId) {
       const pgEl = E('pages-wrap').querySelector('[data-pgid="' + scrollToPgId + '"]');
       if (pgEl) {
@@ -1243,30 +1242,34 @@ function appendPageDOM(page, index) {
 
 /* CANVAS drawing and INPUT handling moved to canvas/drawing.js and canvas/input.js */
 
-/* ── AUTO PAGE ── */
-function updateAddPageBtnVisibility() {
+/* ══════════════════════════════════════════════════════════════════════
+   AM ENDE STEHT, WARUM KEINE SEITE MEHR KOMMT
+
+   Eine neue Seite entsteht von selbst, sobald man ans Ende rollt – aber
+   nur, wenn auf der letzten etwas steht (maybeAutoPage). Sonst bekäme
+   man beim blossen Blättern einen Stapel leerer Blätter.
+
+   Ohne ein Wort dazu sieht das aus, als sei die App am Ende hängen
+   geblieben: man rollt weiter, und es geschieht nichts. Deshalb steht
+   dort jetzt, woran es liegt.
+
+   Er hängt am unteren Rand und nicht im Fluss: ein Element, das beim
+   Rollen auftaucht und dabei die Rollhöhe ändert, schöbe genau das
+   weg, was man gerade ansieht.
+   ══════════════════════════════════════════════════════════════════════ */
+function pruefeLetzteLeer() {
+  const hinweis = E('letzte-leer');
   const sc = E('pg-scroll');
-  const btnWrap = E('add-page-btn-wrap');
-  if (!sc || !btnWrap) return;
-  const pw = E('pages-wrap');
-  const lastEl = pw ? pw.lastElementChild : null;
-  if (!lastEl) {
-    btnWrap.style.opacity = '0';
-    btnWrap.style.pointerEvents = 'none';
-    return;
-  }
-  const scRect = sc.getBoundingClientRect();
-  btnWrap.style.left = '';
-  btnWrap.style.right = '';
-  btnWrap.style.width = '';
-  const lastRect = lastEl.getBoundingClientRect();
-  if (lastRect.bottom <= scRect.bottom + 120) {
-    btnWrap.style.opacity = '1';
-    btnWrap.style.pointerEvents = 'auto';
-  } else {
-    btnWrap.style.opacity = '0';
-    btnWrap.style.pointerEvents = 'none';
-  }
+  if (!hinweis || !sc) return;
+
+  const nb = getNb();
+  const pages = nb ? visiblePages(nb) : [];
+  const last = pages[pages.length - 1];
+
+  const amEnde = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 40;
+  const zeigen = !S.readOnly && !!last && pageIsEmpty(last) && amEnde;
+
+  hinweis.style.opacity = zeigen ? '1' : '0';
 }
 
 function setupScrollAutoPage() {
@@ -1274,12 +1277,32 @@ function setupScrollAutoPage() {
   if (!sc._hasScrollListener) {
     sc.addEventListener('scroll', () => {
       maybeAutoPage();
-      updateAddPageBtnVisibility();
+      pruefeLetzteLeer();
     }, { passive: true });
     sc._hasScrollListener = true;
   }
 }
-function maybeAutoPage() { if (S.readOnly) return; const nb = getNb(); if (!nb) return; const pages = visiblePages(nb); const last = pages[pages.length - 1]; if (!last || pageIsEmpty(last)) return; const wrap = E('pages-wrap'); const lastEl = wrap.lastElementChild; if (!lastEl) return; const sc = E('pg-scroll'); if (sc.scrollTop + sc.clientHeight >= lastEl.offsetTop + lastEl.offsetHeight - CFG.SCROLL_THRESH) addAutoPage(); }
+/* ── AUTO PAGE ──────────────────────────────────────────────────────
+   >>> Warum hier mit dem Zoom multipliziert wird <<<
+   offsetTop und offsetHeight sind LAYOUT-Werte und kennen die
+   Transformation nicht; scrollTop dagegen zählt in dem, was man sieht.
+   Beides wurde direkt verglichen – bei jeder Vergrösserung ausser 100 %
+   lag die Schwelle deshalb woanders als gedacht. pages-wrap beginnt beim
+   oberen Innenabstand, und von dort skaliert alles um den Faktor z. */
+function maybeAutoPage() {
+  if (S.readOnly) return;
+  const nb = getNb(); if (!nb) return;
+  const pages = visiblePages(nb);
+  const last = pages[pages.length - 1];
+  if (!last || pageIsEmpty(last)) return;
+  const wrap = E('pages-wrap');
+  const lastEl = wrap.lastElementChild;
+  if (!lastEl) return;
+  const sc = E('pg-scroll');
+  const z = typeof getZoom === 'function' ? getZoom() : 1;
+  const unten = wrap.offsetTop + (lastEl.offsetTop + lastEl.offsetHeight) * z;
+  if (sc.scrollTop + sc.clientHeight >= unten - CFG.SCROLL_THRESH) addAutoPage();
+}
 function addAutoPage() {
   if (S.readOnly) return;
   const nb = getNb(); if (!nb) return; const sec = activeSection(nb); const pages = visiblePages(nb); const last = pages[pages.length - 1]; if (!last || pageIsEmpty(last)) return;
@@ -1548,27 +1571,14 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
 
 
 
-/* ── ADD PAGE BUTTON ── */
-E('btn-add-page-end').addEventListener('click', async () => {
-  if (S.readOnly) return;
-  const nb = getNb(); if (!nb) return;
-  const sec = activeSection(nb);
-  const pages = visiblePages(nb);
-  const last = pages[pages.length - 1];
-  if (last && pageIsVisuallyEmpty(last)) {
-    await showAlert('Die letzte Seite ist noch leer.');
-    return;
-  }
-  const pg = makePage(sec?.defaultBg || nb.defaultBg || 'ruled');
-  insertPageInto(nb, sec, pg);
-  const pgEl = appendPageDOM(pg, pages.length);
-  renumberVisiblePages();
-  pgEl.style.opacity = '0'; pgEl.style.transition = 'opacity .3s';
-  requestAnimationFrame(() => { pgEl.style.opacity = '1'; });
-  setTimeout(() => pgEl.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-  renderSideTree(); refreshSizer();
-  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-});
+/* Der Knopf „Neue Seite" stand hier.
+
+   Er tat nur etwas, wenn auf der letzten Seite schon etwas stand – und
+   dann hätte das Rollen ans Ende dieselbe Seite ohnehin von selbst
+   angelegt. War sie leer, öffnete er ein Fenster mit „Die letzte Seite
+   ist noch leer", das man wegklicken musste. Ein Knopf, der im einen
+   Fall überflüssig ist und im anderen nur eine Meldung zeigt, ist keiner.
+   Der Satz steht jetzt am unteren Rand (pruefeLetzteLeer). */
 
 /* ══ TOUCH HANDLING ═══════════════════════════════════════
    ≤100%: scroll normally (native touch scroll)
@@ -1698,13 +1708,13 @@ E('btn-add-page-end').addEventListener('click', async () => {
         sc.scrollTop -= dy;
         sc.scrollLeft -= dx;
       }
-      updateAddPageBtnVisibility();
+      pruefeLetzteLeer();
       e.preventDefault();
     } else if (e.touches.length === 1 && _panActive && _zoom > panThreshold()) {
       const dx = (e.touches[0].clientX - _panStartX) / _zoom;
       const dy = (e.touches[0].clientY - _panStartY) / _zoom;
       setPan(_panOriginX + dx, _panOriginY + dy);
-      updateAddPageBtnVisibility();
+      pruefeLetzteLeer();
       e.preventDefault();
     }
   }, { passive: false });
@@ -1712,7 +1722,7 @@ E('btn-add-page-end').addEventListener('click', async () => {
   sc.addEventListener('touchend', e => {
     if (e.touches.length < 2) _pinchDist = 0;
     if (e.touches.length === 0) _panActive = false;
-    updateAddPageBtnVisibility();
+    pruefeLetzteLeer();
   }, { passive: true });
 
   // Also block touch on the pages-wrap level (belt+suspenders)

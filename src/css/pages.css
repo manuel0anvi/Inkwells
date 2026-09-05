@@ -1513,43 +1513,43 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   color: var(--sec-color, #b0a898)
 }
 
-.add-page-btn-wrap {
+/* ── „Die letzte Seite ist noch leer" ─────────────────────────────────
+   Sitzt genau da, wo der Knopf „Neue Seite" sass, und sieht auch so aus:
+   an dieser Stelle sucht das Auge am Ende des Hefts ohnehin schon.
+
+   Nichts daran ist anklickbar – es ist eine Auskunft, kein Angebot. */
+.letzte-leer {
   display: flex;
   justify-content: center;
   padding: 16px;
   position: absolute;
   bottom: 0;
   left: 0;
-  transform: none;
   width: 100%;
   z-index: 100;
   pointer-events: none;
   opacity: 0;
   transition: opacity .25s ease;
-  background: linear-gradient(to top, #1a1a24 60%, transparent)
+  /* Kein Verlauf im Ruecken. Der Knopf hatte einen, weil er sich vom
+     Blatt abheben musste, um als anklickbar zu gelten. Diese Zeile will
+     nichts von einem - sie soll dastehen und den Blattrand in Ruhe
+     lassen. Der Kasten selbst hat Rand und Schatten genug. */
+  background: none
 }
 
-.add-page-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.letzte-leer span {
+  max-width: 420px;
+  text-align: center;
   background: var(--sp);
-  border: 1.5px solid var(--sb2);
+  border: 1px solid var(--sb2);
   border-radius: 10px;
   color: var(--md);
-  cursor: pointer;
-  padding: 14px 32px;
-  font-size: 14px;
+  padding: 12px 24px;
+  font-size: 13px;
+  line-height: 1.5;
   font-family: 'Crimson Pro', serif;
   font-style: italic;
-  transition: all .15s;
   box-shadow: 0 12px 24px rgba(0, 0, 0, .6)
-}
-
-.add-page-btn:hover {
-  border-color: var(--gold);
-  color: var(--gold);
-  background: rgba(200, 169, 110, .05)
 }
 
 .snap-line {
@@ -2002,7 +2002,7 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   position: relative
 }
 
-.add-page-btn-wrap {
+.letzte-leer {
   bottom: 24px
 }
 
