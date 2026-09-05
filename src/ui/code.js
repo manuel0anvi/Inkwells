@@ -79,14 +79,31 @@
   const erkannt = document.createElement('span');
   erkannt.className = 'code-erkannt';
 
+  /* ── Hell oder dunkel: ein Schalter, kein Kästchen ─────────────
+     Ein Kästchen beantwortet die Frage „ist das an?“. Hier geht es aber
+     nicht um ein Merkmal, das man dazuschaltet, sondern um eine von
+     zwei Fassungen desselben Kastens – und dafür ist der Schalter das
+     eingeführte Bild. Dieselben Klassen wie sonst in der App
+     (css/modals.css, .toggle-switch); die sichtbare Bahn MUSS als
+     Geschwister unmittelbar hinter dem Feld stehen, sonst greift die
+     Regel für den umgelegten Zustand nicht.
+
+     Die Beschriftung steht links, der Schalter rechts: so liest man
+     erst, worum es geht, und sieht dann den Zustand. */
   const hellLabel = document.createElement('label');
   hellLabel.className = 'code-hell-zeile';
+  const hellText = document.createElement('span');
+  const hellSchalter = document.createElement('span');
+  hellSchalter.className = 'toggle-switch';
   const hellHaken = document.createElement('input');
   hellHaken.type = 'checkbox';
   hellHaken.id = 'code-hell';
-  const hellText = document.createElement('span');
-  hellLabel.appendChild(hellHaken);
+  const hellBahn = document.createElement('span');
+  hellBahn.className = 'toggle-slider';
+  hellSchalter.appendChild(hellHaken);
+  hellSchalter.appendChild(hellBahn);
   hellLabel.appendChild(hellText);
+  hellLabel.appendChild(hellSchalter);
 
   /* ── Die Knöpfe ───────────────────────────────────────────────────
      `modal-btns` gibt der Reihe ihre Lage; Grösse, Schrift und
@@ -152,7 +169,7 @@
       ? txt('codeEdit', 'Code bearbeiten')
       : txt('codeInsert', 'Code einfügen');
     sprachLabel.textContent = txt('codeLanguage', 'Sprache');
-    hellText.textContent = ' ' + txt('codeLight', 'Heller Kasten');
+    hellText.textContent = txt('codeLight', 'Heller Kasten');
     abbrechen.textContent = txt('cancel', 'Abbrechen');
     fertig.textContent = txt('done', 'Fertig');
     feld.placeholder = txt('codePlaceholder', 'Code hier einfügen …');

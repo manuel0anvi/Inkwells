@@ -2588,19 +2588,34 @@ body.hat-konflikt .view {
   color: var(--md)
 }
 
-/* Der Haken fuer die helle Fassung – wie .formula-simple-row */
+/* Hell oder dunkel – ein Schalter, kein Kaestchen (ui/code.js).
+   Der Schalter selbst kommt aus .toggle-switch weiter oben; hier steht
+   nur, wie Beschriftung und Schalter zueinander liegen. */
 .code-hell-zeile {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   flex-shrink: 0;
   font-size: 13px;
   color: var(--md);
-  cursor: pointer
+  cursor: pointer;
+  user-select: none
 }
 
-.code-hell-zeile input[type="checkbox"] {
-  accent-color: var(--gold)
+/* Etwas kleiner als in den Einstellungen: er steht hier in einer Zeile
+   mit der Sprachauswahl und wuerde sie sonst auseinanderdruecken. */
+.code-hell-zeile .toggle-switch {
+  width: 36px;
+  height: 20px
+}
+
+.code-hell-zeile .toggle-slider:before {
+  height: 14px;
+  width: 14px
+}
+
+.code-hell-zeile .toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(16px)
 }
 
 /* ══════════════════════════════════════════════════════════════════════
