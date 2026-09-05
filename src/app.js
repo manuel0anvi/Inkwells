@@ -1057,6 +1057,33 @@ function appendPageDOM(page, index) {
       return;
     }
 
+    /* ══════════════════════════════════════════════════════════════════
+       DER SICHERUNGSPUNKT FÜR TAB UND ENTER MUSS HIER ENTSTEHEN
+
+       Sonst gibt es keinen. Der Sicherungspunkt sitzt in 'beforeinput'
+       (pushTypingHistory) – aber für diese beiden Tasten fällt dort
+       nichts an:
+
+         · Jeder Zweig unten ruft e.preventDefault(). Damit ist das
+           native 'beforeinput', das der Anschlag ausgelöst hätte, weg.
+         · Geschrieben wird danach selbst – über execCommand oder über
+           commitPlainTextEdit, das textContent unmittelbar setzt.
+           execCommand löst in Chromium nur 'input' aus, kein
+           'beforeinput'; commitPlainTextEdit löst ebenfalls nur 'input'
+           aus.
+
+       Gemessen: nach einem Enter stand in der Spur nur
+       „keydown Enter, input insertParagraph" und der Verlauf war leer.
+       Ein Umbruch liess sich deshalb NICHT zurücknehmen – Tippen und
+       Löschen schon, was es umso verwirrender machte. Genau so gemeldet.
+
+       pushTypingHistory und nicht pushEinfuegeHistory: ein Umbruch
+       gehört zum Schreibfluss und soll mit dem Getippten davor in einem
+       Schritt zusammengefasst werden, nicht jeder für sich. */
+    if ((e.key === 'Tab' || e.key === 'Enter') && !e.ctrlKey && !e.metaKey) {
+      pushTypingHistory(page);
+    }
+
     /* ── In einer Tabelle gelten Word-Regeln (core/tables.js) ──────
        Tab in die nächste Zelle, in der letzten eine Zeile mehr; Enter
        bleibt in der Zelle. Muss VOR den Aufzählungen stehen: eine Liste
