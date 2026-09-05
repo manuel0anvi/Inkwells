@@ -36,8 +36,7 @@
 
   .tb-mode,
   .tb-opt,
-  .sz-btn,
-  .strip-btn {
+  .sz-btn {
     min-width: 36px;
     min-height: 36px
   }

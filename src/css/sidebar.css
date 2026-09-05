@@ -5,41 +5,15 @@
   flex-direction: row;
   flex-shrink: 0;
   background: var(--sp);
+  /* Der Rand gehört zur OFFENEN Leiste. Zugeklappt belegt sie keine
+     Breite mehr – ein Strich am linken Blattrand wäre alles, was von ihr
+     übrig bliebe, und der sähe nach einem Fehler aus statt nach einer
+     Leiste, die einfach zu ist. */
+  border-right: 0
+}
+
+.side-panel.open {
   border-right: 1px solid var(--sb)
-}
-
-.side-strip {
-  width: 36px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 0;
-  border-right: 1px solid var(--sb)
-}
-
-.strip-btn {
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  color: var(--md);
-  cursor: pointer;
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all .12s
-}
-
-.strip-btn:hover {
-  background: var(--sh2);
-  color: var(--hi)
-}
-
-.strip-btn.active {
-  background: var(--sc);
-  color: var(--gold)
 }
 
 .side-content {

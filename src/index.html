@@ -201,16 +201,14 @@
   <div class="journal-layout">
 
     <!-- Side panel -->
+    <!-- Der 36 px schmale Streifen mit dem Navigations-Knopf stand hier.
+
+         Er war dauerhaft zu sehen und trug einen einzigen Knopf. Solange
+         die Leiste zu ist, belegte er trotzdem seinen Platz und schnitt
+         ihn dem Blatt ab – für etwas, das genauso gut in der
+         Werkzeugzeile stehen kann und dort neben „Rückgängig" sitzt.
+         Zugeklappt bleibt von der Leiste jetzt nichts übrig. -->
     <aside class="side-panel" id="side-panel">
-      <div class="side-strip">
-        <button class="strip-btn" id="btn-panel-toggle" data-i18n-title="navigation" title="Navigation">
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <rect x="2" y="2.5" width="11" height="1.4" fill="currentColor"/>
-            <rect x="2" y="6.8" width="11" height="1.4" fill="currentColor"/>
-            <rect x="2" y="11"  width="11" height="1.4" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
       <div class="side-content" id="side-content">
         <div class="side-head">
           <span class="side-label" data-i18n="navigation">Navigation</span>
@@ -272,6 +270,23 @@
       </div>
       <div class="toolbar" id="toolbar">
         <div class="tb-zone tb-left">
+          <!-- Die Navigation. Sie stand in einem eigenen Streifen am
+               linken Rand, der nur ihretwegen dauerhaft sichtbar war.
+               Hier steht sie als erstes in der Zeile: ganz links, also
+               auf derselben Seite wie die Leiste, die sie aufzieht.
+
+               Eigene Gruppe mit Trenner dahinter – sie schaltet eine
+               Ansicht um und gehört nicht zu den Schritten daneben. -->
+          <div class="tb-grp">
+            <button class="tb-opt" id="btn-panel-toggle" data-i18n-title="navigation" title="Navigation">
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <rect x="2" y="2.5" width="11" height="1.4" fill="currentColor"/>
+                <rect x="2" y="6.8" width="11" height="1.4" fill="currentColor"/>
+                <rect x="2" y="11"  width="11" height="1.4" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div class="tb-sep"></div>
           <!-- Rückgängig und Vor. Es gab sie schon einmal und sie wurden
                entfernt, weil Strg+Z jeder kennt – auf einem Tablet aber
                liegt keine Tastatur dabei, und ohne sie war ein Versehen
