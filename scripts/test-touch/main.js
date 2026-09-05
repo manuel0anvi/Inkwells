@@ -437,7 +437,7 @@ app.on('ready', async () => {
         const pg = makePage('ruled');
         insertPageInto(nb, activeSection(nb), pg);
         appendPageDOM(pg, visiblePages(nb).length - 1);
-        renumberVisiblePages(); refreshSizer();
+        renumberVisiblePages(); rollhoeheNachrechnen();
       }
       const seite1 = visiblePages(nb)[0];
       const obj = { id: 'probe-bild', kind: 'image', x: 260, y: 700, w: 240, h: 180,

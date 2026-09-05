@@ -308,7 +308,7 @@ app.on('ready', async () => {
         const pg = makePage('ruled');
         insertPageInto(nb, activeSection(nb), pg);
         appendPageDOM(pg, visiblePages(nb).length - 1);
-        renumberVisiblePages(); refreshSizer();
+        renumberVisiblePages(); rollhoeheNachrechnen();
       }
       const erste = visiblePages(nb)[0];
       erste.objects[0].x = 280; erste.objects[0].y = 880;
