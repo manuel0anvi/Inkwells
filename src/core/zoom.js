@@ -125,12 +125,7 @@ function _applyZoom() {
   if (!pw) return;
   pw.style.transform = 'scale(' + z + ')';
   pw.style.transformOrigin = 'top center';
-  // Update the sizer so the scroll container has the right height
-  const sizer = E('pg-sizer');
-  if (sizer) {
-    const totalH = pw.scrollHeight || (CFG.PAGE_H * Math.max(1, pw.children.length));
-    sizer.style.height = Math.round(totalH * z) + 'px';
-  }
+  passeRollhoeheAn();
   /* ══ WER DIE FINGERBEWEGUNG BEKOMMT: BROWSER ODER STRICH ══
      touch-action entscheidet, ob der Browser aus einem gezogenen Finger
      ein Scrollen macht. Tut er das, bricht er den Strich nach wenigen
@@ -155,7 +150,6 @@ function _applyZoom() {
   if (lbl) lbl.textContent = prozent;
   if (z <= 1.21 && typeof window.resetPan === 'function') window.resetPan();
   rerenderCanvasesForZoom();
-  updateAddPageBtnVisibility();
   if (typeof updateCursor === 'function') updateCursor();
   meldeZoom();
 }
@@ -229,12 +223,42 @@ function zoomReset() {
 
 function panThreshold() { return 1.21; }
 
-function refreshSizer() {
-  requestAnimationFrame(() => {
-    const pw = E('pages-wrap'); const sizer = E('pg-sizer'); if (!pw || !sizer) return;
-    sizer.style.height = Math.round(pw.offsetHeight * _wirksam) + 'px';
-    updateAddPageBtnVisibility();
-  });
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ROLLHÖHE MUSS ZUM ZOOM PASSEN
+
+   >>> Warum man rausgezoomt ins Leere rollen konnte <<<
+   Die Seiten werden mit transform: scale() verkleinert, und eine
+   Transformation ändert das LAYOUT nicht: pages-wrap belegt weiterhin
+   seine volle, ungezoomte Höhe. Bei 50 % sah man die halbe Höhe und
+   konnte trotzdem die ganze rollen – die untere Hälfte war leer, und
+   gemeldet wurde genau das: „man kann viel zu weit scrollen".
+
+   Ein unsichtbarer Klotz (#pg-sizer) sollte das früher richten. Er konnte
+   die Rollhöhe aber nur VERGRÖSSERN und nie verkleinern, denn die volle
+   Höhe von pages-wrap stand ja weiter im Fluss. Beim Rauszoomen – also
+   genau da, wo es klemmte – half er deshalb überhaupt nicht.
+
+   Ein negativer unterer Rand nimmt weg, was die Transformation an Höhe
+   übrig lässt: natürlich × (1 − z). Beim Vergrößern wird er von selbst
+   positiv und legt das Fehlende dazu. Danach endet der Rollbereich in
+   jeder Vergrößerung genau dort, wo die letzte Seite aufhört.
+
+   Der Rand liegt AUSSERHALB der Box, deshalb ändert er offsetHeight
+   nicht – die Rechnung beisst sich nicht selbst.
+   ══════════════════════════════════════════════════════════════════════ */
+function passeRollhoeheAn() {
+  const pw = E('pages-wrap');
+  if (!pw) return;
+  const natuerlich = pw.offsetHeight || pw.scrollHeight
+    || (CFG.PAGE_H * Math.max(1, pw.children.length));
+  pw.style.marginBottom = Math.round(natuerlich * (_wirksam - 1)) + 'px';
+  if (typeof pruefeLetzteLeer === 'function') pruefeLetzteLeer();
+}
+
+/* Nach dem nächsten Zeichnen – gebraucht, wenn Seiten dazugekommen sind
+   und ihre Höhe noch nicht im Layout steht. */
+function rollhoeheNachrechnen() {
+  requestAnimationFrame(passeRollhoeheAn);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

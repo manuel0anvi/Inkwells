@@ -402,8 +402,7 @@
 /* Werkzeugleiste im Nur-Lese-Modus: nur Zoom und Export bleiben nutzbar */
 body.read-only .toolbar .tb-zone.tb-left,
 body.read-only .toolbar .tb-zone.tb-center,
-body.read-only .toolbar #btn-doc-share,
-body.read-only #add-page-btn-wrap {
+body.read-only .toolbar #btn-doc-share {
   opacity: .35;
   pointer-events: none
 }
@@ -655,7 +654,15 @@ body.read-only #add-page-btn-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 28px 0 50vh;
+  /* Unten so viel Luft wie oben – und keine halbe Bildschirmhöhe mehr.
+
+     Die 50vh liessen einen weit über die letzte Seite hinausrollen, in
+     eine leere Fläche, die nach einem Fehler aussah. Sie standen dort,
+     damit sich auch das letzte Blatt an den oberen Rand holen liess
+     (scrollIntoView). Das kann es jetzt nicht mehr – dafür endet der
+     Rollbereich da, wo das Heft endet, und das ist die häufigere
+     Erwartung. */
+  padding: 28px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--sb2) transparent;
   position: relative
