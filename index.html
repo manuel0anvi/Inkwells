@@ -379,7 +379,6 @@ function setupDowngradeGuard(){
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeDowngradeModal();
   });
-
   confirmBtn?.addEventListener('click', () => {
     if (!pendingDowngrade) return;
     triggerDownload(pendingDowngrade.url, pendingDowngrade.filename);
