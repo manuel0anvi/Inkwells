@@ -2795,6 +2795,35 @@
     S.strokeHistory[pageId].push(stroke);
     info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[pageId]));
 
+    /* ═══════════════════════════════════════════════════════════════
+       EIN EMPFANGENER STRICH DARF KEINE ANTWORT AUSLÖSEN
+
+       >>> Hier verschwand die Handschrift im Live-Betrieb <<<
+       Gemeldet: „im Liveshare verschwinden manchmal einfache gezeichnete
+       Linien.“
+
+       Der Vergleichsstand (snapshot) wurde hier NICHT nachgezogen –
+       anders als in noteStroke, wo genau dafür eine Zeile steht. Der
+       nächste Heft-Vergleich sah also eine veränderte Strichliste, hielt
+       sie für eine eigene Änderung und schickte sie als 'inks' hinaus:
+       die GANZE Liste, und applyInkSet ersetzt beim Empfänger die seine
+       damit vollständig.
+
+       Das ist ein Wettlauf, und er geht regelmässig verloren. Zeichnet A
+       zwei Striche kurz hintereinander, kommt bei B der erste an, Bs
+       Vergleich läuft los und schickt seine Liste – in der A’s zweiter
+       Strich noch fehlt. Bei A ersetzt sie die eigene, und der zweite
+       Strich ist weg. Bei beiden.
+
+       Eine Zeile nachziehen genügt: was von aussen kam, steht schon bei
+       allen, es gibt nichts zu melden. Was WIRKLICH eine Änderung der
+       Liste ist – radiert, rückgängig gemacht –, fällt weiterhin auf,
+       denn dort ändert sich die Unterschrift gegenüber DIESEM Stand.
+       ═══════════════════════════════════════════════════════════════ */
+    if (snapshot && snapshot.pages[pageId]) {
+      snapshot.pages[pageId].ink = inkSig(info.page.inkStrokes);
+    }
+
     /* Dass der Strich beim nächsten Sichern mit hochgeht, ist in Ordnung:
        Firestore hängt ihn per arrayUnion an, und arrayUnion nimmt nur auf,
        was noch nicht drinsteht. Hat ihn der Urheber schon gesichert, ist
