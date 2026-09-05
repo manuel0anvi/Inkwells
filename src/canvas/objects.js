@@ -321,6 +321,33 @@ function objText(key, fallback) {
    damit überhaupt nicht mehr. */
 const OBJ_Z_CHROME = 5000;
 
+/* ═══════════════════════════════════════════════════════════════════
+   NUR LESEN HEISST AUCH: KEIN OBJEKT ANFASSEN
+
+   >>> Was hier fehlte <<<
+   Der Riegel gegen „nur lesen“ stand überall – beim Text
+   (contenteditable und noch einmal in 'beforeinput'), beim Stift
+   (handleDrawStart), bei Tabellen, Formeln und beim Code-Fenster. Nur
+   nicht am Objekt selbst. Wer ein geteiltes Dokument ohne Schreibrecht
+   offen hatte – oder wessen Recht ruhte, weil der Besitzer nicht im
+   Raum war –, konnte Bilder, Formen und Code-Kästen weiterhin
+   schieben, drehen, färben, verdoppeln und löschen. Genau so wurde es
+   gemeldet.
+
+   Und es blieb nicht örtlich: an jeder dieser Änderungen hängt
+   noteObjectChanged, das über den Heft-Vergleich in ui/collab.js
+   hinausgeht. Ein Zuschauer konnte damit das Blatt des Besitzers
+   umräumen.
+
+   Gesperrt wird an der WURZEL: ohne Auswahl gibt es weder Rahmen noch
+   Leiste und damit auch keine Griffe. Die Griffe fragen trotzdem noch
+   einmal selbst – sie gehen an beginInteraction vorbei, und eine
+   Auswahl kann aus der Zeit VOR dem Herabstufen stammen.
+   ═══════════════════════════════════════════════════════════════════ */
+function nurLesen() {
+  return typeof S !== 'undefined' && !!S.readOnly;
+}
+
 function deselect() {
   if (!_selObj) return;
   _selObj.classList.remove('selected');
@@ -396,12 +423,28 @@ function placeObject(objLayer, obj, page) {
   const istLinie = obj.kind === 'shape'
     && (obj.shapeType === 'line' || obj.shapeType === 'arrow');
 
+  /* ═════════════════════════════════════════════════════════════════
+     EIN CODE-KASTEN WIRD NICHT GEDREHT
+
+     Ein Bild darf schief liegen, eine Form auch – das ist Gestaltung.
+     Code liest man, und schräger Code ist unlesbar. Schlimmer noch: im
+     gedrehten Kasten lässt sich an Ort und Stelle nicht mehr sauber
+     tippen, denn die Zeilen laufen dann nicht mehr waagerecht über das
+     Blatt (core/code.js, bearbeiteImKasten).
+
+     Deshalb fällt beides weg: der Drehgriff unter dem Kasten und die
+     beiden Knopfe in der Leiste darüber. Gemeldet wurde genau das –
+     eine angebotene Möglichkeit, die niemand haben will.
+     ═════════════════════════════════════════════════════════════════ */
+  const drehbar = obj.kind !== 'code';
+
   if (istLinie) {
     baueEndGriffe();
   } else {
   ['tl', 'tr', 'bl', 'br'].forEach(pos => {
     const h = document.createElement('div'); h.className = 'obj-handle ' + pos; chrome.appendChild(h);
     h.addEventListener('pointerdown', e => {
+      if (nurLesen()) { e.stopPropagation(); e.preventDefault(); return; }
       /* Auch hier fragen: die Griffe gehen an beginInteraction vorbei,
          und ueber sie liesse sich sonst weiter aendern, was jemand
          anderes gerade in der Hand hat. */
@@ -452,7 +495,6 @@ function placeObject(objLayer, obj, page) {
           // Formel-Inhalt neu rendern – er wird über transform:scale(k) mit
           // k = w/natW skaliert, nicht über Breitenänderung allein
           if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
-        else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
           else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
           placeBar();
         }
@@ -467,8 +509,10 @@ function placeObject(objLayer, obj, page) {
     });
   });
 
+  if (drehbar) {
   const rotH = document.createElement('div'); rotH.className = 'obj-handle rot'; rotH.textContent = '↻'; chrome.appendChild(rotH);
   rotH.addEventListener('pointerdown', e => {
+    if (nurLesen()) { e.stopPropagation(); e.preventDefault(); return; }
     /* Auch hier fragen: die Griffe gehen an beginInteraction vorbei, und
        ueber sie liesse sich sonst weiter aendern, was jemand anderes
        gerade in der Hand haelt. */
@@ -492,6 +536,7 @@ function placeObject(objLayer, obj, page) {
     const up = (ev) => { if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { rotH.releasePointerCapture(ev.pointerId); } catch (err) { } rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); rotH.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
     rotH.addEventListener('pointermove', mv); rotH.addEventListener('pointerup', up); rotH.addEventListener('pointercancel', up);
   });
+  }
   }
 
   /**
@@ -619,7 +664,11 @@ function placeObject(objLayer, obj, page) {
     b.innerHTML = icon;
     b.title = label;
     b.setAttribute('aria-label', label);
-    b.addEventListener('click', ev => { ev.stopPropagation(); onClick(); });
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (nurLesen()) { if (typeof toast === 'function') toast(objText('sharedNoRight', 'Nur Lesen.'), true); return; }
+      onClick();
+    });
     bar.appendChild(b);
     return b;
   };
@@ -753,9 +802,11 @@ function placeObject(objLayer, obj, page) {
     noteObjectChanged();
   }
 
-  barBtn(OBJ_ICONS.rotL, objText('objTurnLeft', 'Nach links drehen'), () => turnBy(-90));
-  barBtn(OBJ_ICONS.rotR, objText('objTurnRight', 'Nach rechts drehen'), () => turnBy(90));
-  barSep();
+  if (drehbar) {
+    barBtn(OBJ_ICONS.rotL, objText('objTurnLeft', 'Nach links drehen'), () => turnBy(-90));
+    barBtn(OBJ_ICONS.rotR, objText('objTurnRight', 'Nach rechts drehen'), () => turnBy(90));
+    barSep();
+  }
   const btnFront = barBtn(OBJ_ICONS.front, objText('objInFrontOfText', 'Vor den Text'), () => setLayer('front'));
   const btnBack = barBtn(OBJ_ICONS.back, objText('objBehindText', 'Hinter den Text'), () => setLayer('back'));
   barSep();
@@ -895,6 +946,8 @@ function placeObject(objLayer, obj, page) {
   /** Auswählen und, solange der Zeiger unten bleibt, verschieben. */
   function beginInteraction(e) {
     if (S.mode !== 'cursor') return;
+    // Nur lesen: nicht einmal auswaehlen – siehe der Kasten bei nurLesen()
+    if (nurLesen()) return;
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
 
     /* ── Ein Code-Kasten, in dem gerade geschrieben wird ───────────────
@@ -1225,6 +1278,7 @@ function placeObject(objLayer, obj, page) {
        dieselbe Bedingung wie oben in beginInteraction(). Ueber allem
        anderen rollt die Seite weiter wie gewohnt.
        ══════════════════════════════════════════════════════════════ */
+    if (nurLesen()) return;
     if (e.touches.length === 1 && S.mode === 'cursor' && passtInDenGriff()) {
       e.preventDefault();
       return;
@@ -1238,6 +1292,7 @@ function placeObject(objLayer, obj, page) {
     }
   }, { passive: false });
   body.addEventListener('touchmove', e => {
+    if (nurLesen()) return;
     if (e.touches.length === 2 && pinchStartDist > 0 && S.mode === 'cursor') {
       e.stopPropagation(); e.preventDefault();
       if (!_pinchHasMutated) { _pinchHasMutated = true; pushPageHistory(page); }
