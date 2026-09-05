@@ -1565,10 +1565,42 @@
       const api = await whenShareReady();
       await api.whenIdentityReady();
 
+      /* ═════════════════════════════════════════════════════════════
+         OHNE KONTO GEHT ES HIER NICHT – UND DAS SOLL AUCH DASTEHEN
+
+         Wer den Link ohne Anmeldung öffnete, lief in den Versuch
+         hinein: eintragen übersprungen (joinViaLink steigt bei einer
+         anonymen Kennung aus), Kopf laden, öffnen. Was daraus wurde,
+         hing an den Sicherheitsregeln – mal eine Fehlermeldung aus der
+         Datenbank, mal ein Heft, das sich öffnete, in dem aber nichts
+         lief: keine Anwesenheit, keine Live-Übertragung, kein
+         Schreibrecht (weiter unten: „Ohne echtes Konto gar nicht erst
+         versuchen“). Niemand konnte daraus schliessen, dass eine
+         Anmeldung fehlt. Genau so gemeldet.
+
+         In der APP braucht ein geteiltes Heft eine echte Kennung – der
+         Besitzer baut daraus die Rollenliste des Raums
+         (core/share.js, registerMyUid). Ohne sie gibt es nichts als
+         Zusehen. Also wird vorher gefragt statt hinterher zu scheitern,
+         und der Weg zur Anmeldung steht gleich dabei.
+
+         Nur-Lesen ohne Konto gibt es weiterhin – auf der Website
+         (website/js/share.js), wofür sie gemacht ist.
+         ═════════════════════════════════════════════════════════════ */
+      if (!api.hasRealIdentity()) {
+        const jetzt = (typeof showConfirm === 'function')
+          ? await showConfirm(t('sharedLinkNeedsAccount'))
+          : false;
+        if (jetzt && typeof window.openAccountDialog === 'function') {
+          window.openAccountDialog();
+        }
+        return;
+      }
+
       const { docId } = await api.resolveLink(linkId);
       if (!docId) throw new Error('SHARE_NOT_FOUND');
 
-      if (api.hasRealIdentity()) {
+      {
         /* Zwei verschiedene Sperren, und sie sagen Verschiedenes:
              'blocked'      der BESITZER hat mich aus SEINEM Dokument
                             geworfen (blockedEmails)
