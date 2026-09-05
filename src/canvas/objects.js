@@ -897,11 +897,16 @@ function placeObject(objLayer, obj, page) {
     if (S.mode !== 'cursor') return;
     if (e.target.closest && e.target.closest('.obj-handle,.obj-bar')) return;
 
-    /* In einem Code-Kasten, der gerade beschrieben wird, gehört der
-       Zeiger dem Text: klicken, markieren, die Marke setzen. Würde hier
-       das Verschieben anspringen, liesse sich kein einziges Zeichen
-       ansteuern (core/code.js, bearbeiteImKasten). */
-    if (e.target.closest && e.target.closest('.j-code-obj-text[contenteditable="true"]')) return;
+    /* ── Ein Code-Kasten, in dem gerade geschrieben wird ───────────────
+       Dort gehört der Zeiger dem Text: klicken, markieren, die Marke
+       setzen. Würde hier das Verschieben anspringen, liesse sich kein
+       einziges Zeichen ansteuern (core/code.js, bearbeiteImKasten).
+
+       Der GANZE Kasten ist ausgenommen, nicht nur das Textfeld: ein
+       Klick auf die Zeilennummern oder in die Luft rechts vom Text
+       wurde sonst verschluckt, das Schreiben endete, und man musste
+       erneut doppelklicken. Genau so gemeldet. */
+    if (wrap.classList.contains('code-schreibt')) return;
 
     /* Haelt es gerade jemand anderes? Dann gar nicht erst anfassen –
        auch nicht auswaehlen, denn an der Auswahl haengt die Leiste, und

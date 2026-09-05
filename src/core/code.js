@@ -637,12 +637,29 @@
 
     if (typeof pushPageHistory === 'function') pushPageHistory(page);
 
-    // Zum Schreiben ohne Farben: sie stünden sonst mitten im Getippten
-    pre.textContent = obj.code || '';
+    /* ── Der Inhalt bleibt, wie er ist ─────────────────────────────────
+       Hier stand `pre.textContent = obj.code` – der Inhalt wurde also
+       gegen den nackten Code getauscht. Das hatte zwei Folgen, und beide
+       waren gemeldet:
+
+         · Die Schreibmarke sprang an den Anfang der Zeile. Sie stand
+           beim Doppelklick genau dort, wo man hingezeigt hatte – und
+           wurde mit dem Inhalt weggeworfen.
+         · Alles wurde weiss. Die Farben sind Spans im Inhalt; mit ihm
+           waren sie weg und kamen erst beim nächsten Einfärben zurück.
+
+       Beides ist unnötig. In einem contenteditable lässt sich zwischen
+       gefärbten Spans genauso schreiben; was man tippt, nimmt kurz die
+       Farbe der Umgebung an, und das nächste Einfärben rückt es gerade.
+       Ein weisser Block, in dem die Marke am Anfang steht, ist deutlich
+       schlechter als eine Farbe, die eine Drittelsekunde nachhinkt. */
+    wrap.classList.add('code-schreibt');
     pre.setAttribute('contenteditable', 'true');
     pre.setAttribute('spellcheck', 'false');
     pre.classList.add('schreibt');
-    pre.focus();
+    /* Ohne preventScroll springt die Seite zum Kasten, auch wenn er
+       längst zu sehen ist. */
+    try { pre.focus({ preventScroll: true }); } catch (err) { pre.focus(); }
 
     let uhr = null;
 
@@ -661,25 +678,32 @@
       if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
     };
 
+    const neuFaerben = () => {
+      if (pre.getAttribute('contenteditable') !== 'true') return;
+      const stelle = markeStelle(pre);
+      pre.innerHTML = faerbe((obj.code || '').replace(/\n$/, ''), obj.lang || 'text');
+      setzeMarke(pre, stelle);
+    };
+
     const beiEingabe = () => {
       nummernNachziehen();
       uebernehmen();
+      /* Erst wenn die Finger stillstehen. Bei jedem Anschlag den Inhalt
+         auszutauschen hiesse, bei jedem Anschlag die Marke neu zu
+         setzen – das ruckelt und verliert bei schnellem Tippen Zeichen. */
       clearTimeout(uhr);
-      uhr = setTimeout(() => {
-        if (pre.getAttribute('contenteditable') !== 'true') return;
-        const stelle = markeStelle(pre);
-        pre.innerHTML = faerbe(obj.code.replace(/\n$/, ''), obj.lang || 'text');
-        setzeMarke(pre, stelle);
-      }, FAERBE_PAUSE_MS);
+      uhr = setTimeout(neuFaerben, FAERBE_PAUSE_MS);
     };
 
     const schliessen = () => {
+      if (pre.getAttribute('contenteditable') !== 'true') return;
       clearTimeout(uhr);
       pre.removeAttribute('contenteditable');
       pre.classList.remove('schreibt');
+      wrap.classList.remove('code-schreibt');
       pre.removeEventListener('input', beiEingabe);
-      pre.removeEventListener('blur', schliessen);
       pre.removeEventListener('keydown', beiTaste);
+      document.removeEventListener('pointerdown', beiKlick, true);
       uebernehmen();
       pre.innerHTML = faerbe((obj.code || '').replace(/\n$/, ''), obj.lang || 'text');
       if (pgEl && window.Collab && typeof Collab.gibObjektFrei === 'function') {
@@ -687,9 +711,22 @@
       }
     };
 
+    /* ── Beendet wird beim Klick NACH DRAUSSEN, nicht bei blur ─────────
+       An 'blur' zu hängen war falsch: schon ein Klick auf die
+       Zeilennummern oder in die Luft neben dem Text nahm dem <pre> den
+       Fokus, das Schreiben endete, und der nächste Klick wurde von der
+       Verschiebe-Logik verschluckt. Man musste erneut doppelklicken –
+       und landete wieder am Zeilenanfang. Genau so gemeldet.
+
+       Innerhalb des Kastens darf man klicken, wohin man will. */
+    const beiKlick = (ev) => {
+      if (wrap.contains(ev.target)) return;
+      schliessen();
+    };
+
     const beiTaste = (e) => {
       // Esc beendet das Schreiben, Enter gehört in den Code
-      if (e.key === 'Escape') { e.preventDefault(); pre.blur(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); schliessen(); return; }
       if (e.key === 'Tab') {
         e.preventDefault();
         document.execCommand('insertText', false, '    ');
@@ -697,10 +734,9 @@
     };
 
     pre.addEventListener('input', beiEingabe);
-    pre.addEventListener('blur', schliessen);
     pre.addEventListener('keydown', beiTaste);
+    document.addEventListener('pointerdown', beiKlick, true);
   }
-
   window.InkwellsCode = {
     faerbe, errateSprache, messeCode, renderCodeBody,
     insertCodeObject, updateCodeObject, bearbeiteImKasten,

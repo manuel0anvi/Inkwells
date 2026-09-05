@@ -516,17 +516,32 @@ app.on('ready', async () => {
 
     /* Genau das, was der Nutzer als "das Schwarze geht weiter oder
        zurueck" beschrieben hat. */
+    /* An einem eigenen Objekt, nicht am eingesetzten: updateCodeObject
+       aendert nur die Daten, nicht den gezeichneten Kasten. Am
+       eingesetzten liefen DOM und Objekt sonst auseinander, und die
+       Schritte danach pruefen etwas, das es so gar nicht gibt. */
     await schritt('Mehr Zeilen heisst hoeherer Kasten', `
-      const k = window.__kasten;
-      const hoheVorher = k.h;
-      InkwellsCode.updateCodeObject(k, 'a\\nb\\nc\\nd\\ne\\nf\\ng\\nh', 'python');
-      if (!(k.h > hoheVorher))
-        throw new Error('der Kasten ist nicht gewachsen: ' + hoheVorher + ' -> ' + k.h);
+      const probe = { kind: 'code', code: 'a', lang: 'python', w: 0, h: 0, natW: 0, natH: 0 };
+      InkwellsCode.updateCodeObject(probe, 'a', 'python');
+      const klein = probe.h;
 
-      const hoheGross = k.h;
-      InkwellsCode.updateCodeObject(k, 'a', 'python');
-      if (!(k.h < hoheGross))
-        throw new Error('er ist nicht wieder geschrumpft: ' + hoheGross + ' -> ' + k.h);`);
+      InkwellsCode.updateCodeObject(probe, 'a\\nb\\nc\\nd\\ne\\nf\\ng\\nh', 'python');
+      if (!(probe.h > klein))
+        throw new Error('der Kasten ist nicht gewachsen: ' + klein + ' -> ' + probe.h);
+
+      const gross = probe.h;
+      InkwellsCode.updateCodeObject(probe, 'a', 'python');
+      if (!(probe.h < gross))
+        throw new Error('er ist nicht wieder geschrumpft: ' + gross + ' -> ' + probe.h);
+
+      /* Und wer den Kasten SELBST gezogen hat, behaelt seine Groesse –
+         sonst ueberschriebe ihm jede Zeile seine Einstellung. */
+      probe.h = probe.natH + 120;
+      const gezogen = probe.h;
+      InkwellsCode.updateCodeObject(probe, 'a\\nb\\nc', 'python');
+      if (probe.h !== gezogen)
+        throw new Error('die selbst gezogene Groesse wurde ueberschrieben: '
+          + gezogen + ' -> ' + probe.h);`);
 
     /* Ein Doppelklick macht den Code AN ORT UND STELLE beschreibbar –
        kein Fenster geht auf. Das Fenster bleibt fuer das erste Einsetzen
@@ -553,6 +568,19 @@ app.on('ready', async () => {
         throw new Error('der Code ist nicht beschreibbar geworden');
       if (pre.textContent !== k.code)
         throw new Error('im Feld steht etwas anderes: ' + JSON.stringify(pre.textContent));
+
+      /* Die Farben MUESSEN stehen bleiben. Wurde der Inhalt gegen den
+         nackten Code getauscht, ist alles weiss – und die Schreibmarke
+         springt dabei an den Zeilenanfang, weil sie mit dem Inhalt
+         weggeworfen wird. Beides war gemeldet. */
+      if (!/j-tok-/.test(pre.innerHTML))
+        throw new Error('beim Bearbeiten sind die Farben verschwunden');
+
+      /* Und der Kasten muss die Klicks behalten: sonst nimmt sie das
+         Verschieben weg, das Schreiben endet beim ersten Klick daneben. */
+      if (!wrap.classList.contains('code-schreibt'))
+        throw new Error('der Kasten ist nicht als "wird beschrieben" gekennzeichnet');
+
       window.__pre = pre; window.__wrap = wrap;`, 500);
 
     await schritt('Getipptes landet im Kasten, und er waechst mit', `
@@ -576,14 +604,32 @@ app.on('ready', async () => {
       const zeilen = k.code.replace(/\\n$/, '').split('\\n').length;
       if (zahl !== zeilen) throw new Error(zahl + ' Nummern fuer ' + zeilen + ' Zeilen');`, 400);
 
-    await schritt('Und beim Verlassen wird wieder eingefaerbt', `
+    /* Ein Klick INNERHALB des Kastens darf das Schreiben nicht beenden –
+       sonst muesste man nach jedem Umsetzen der Marke erneut
+       doppelklicken und laendete wieder am Zeilenanfang. */
+    await schritt('Ein Klick im Kasten beendet das Schreiben nicht', `
+      const pre = window.__pre, wrap = window.__wrap;
+      const nrn = wrap.querySelector('.j-code-obj-nrn');
+      nrn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 150));
+      if (pre.getAttribute('contenteditable') !== 'true')
+        throw new Error('ein Klick auf die Zeilennummern hat das Schreiben beendet');
+
+      pre.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 150));
+      if (pre.getAttribute('contenteditable') !== 'true')
+        throw new Error('ein Klick in den Text hat das Schreiben beendet');`, 400);
+
+    await schritt('Ein Klick daneben beendet es und faerbt neu ein', `
       const pre = window.__pre;
-      pre.dispatchEvent(new FocusEvent('blur'));
-      await new Promise(r => setTimeout(r, 200));
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      await new Promise(r => setTimeout(r, 250));
       if (pre.getAttribute('contenteditable') === 'true')
         throw new Error('es bleibt beschreibbar');
       if (!/j-tok-/.test(pre.innerHTML))
-        throw new Error('die Farben sind nicht zurueckgekommen');`, 400);
+        throw new Error('die Farben sind nicht zurueckgekommen');
+      if (window.__wrap.classList.contains('code-schreibt'))
+        throw new Error('der Kasten gilt weiterhin als beschrieben');`, 400);
 
     await schritt('Er laesst sich verschieben und loeschen wie ein Bild', `
       const pg = getNb().pages[0];

@@ -2886,8 +2886,13 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 
 .j-code-obj.hell .j-code-obj-nrn { color: #b3ab99 }
 
+/* Das Textfeld nimmt die ganze Breite: sonst reicht es nur so weit wie
+   die laengste Zeile, und ein Klick RECHTS daneben landet nicht darin.
+   Beim Schreiben heisst das, man kann das Zeilenende nicht anklicken. */
 .j-code-obj-text {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: pre;
   font: inherit;
   tab-size: 4;
@@ -2920,6 +2925,16 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 .j-code-obj-text.schreibt {
   outline: none;
   caret-color: #d7ba7d;
+  cursor: text;
+}
+
+/* Waehrend geschrieben wird, faengt der Kasten die Zeigerereignisse
+   selbst ab – auch die Zeilennummern und die Luft daneben. Ohne das
+   nimmt das Verschieben sie weg (canvas/objects.js). */
+.obj-wrap.code-schreibt .obj-body,
+.obj-wrap.code-schreibt .j-code-obj,
+.obj-wrap.code-schreibt .j-code-obj-flaeche {
+  pointer-events: auto;
   cursor: text;
 }
 
