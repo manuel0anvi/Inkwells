@@ -311,6 +311,8 @@
      damit sie im Hochformat nicht mit dem Zoom schrumpft.
      ══════════════════════════════════════════════════════════════════ */
   let leiste = null;
+  let farbKnopf = null;
+  let dickKnoepfe = [];
 
   function baueLeiste() {
     if (leiste) return leiste;
@@ -333,6 +335,56 @@
 
     const txt = (k, e) => (typeof t === 'function' && t(k)) || e;
 
+    /* ══════════════════════════════════════════════════════════════════
+       FARBE UND DICKE GEHÖREN AN DIE AUSWAHL
+
+       Hier standen nur Verdoppeln und Löschen. Gemeldet wurde der Fall,
+       in dem das am meisten fehlt: man zieht eine Linie, hält am Ende
+       kurz still, damit sie gerade wird – und will sie dann dicker oder
+       in einer anderen Farbe haben. Ein Strich behält aber Farbe und
+       Dicke des Stiftes, mit dem er gezogen wurde, und es gab keinen Weg
+       dorthin ausser: löschen, Stift umstellen, neu ziehen.
+
+       Eine FORM kann das längst (canvas/shapes.js, addShapeChrome). Dass
+       eine glattgezogene Linie es nicht kann, ist von aussen nicht zu
+       erklären – sie sieht genauso aus.
+
+       Es gilt für die ganze Auswahl, nicht nur für Geraden: bei
+       Handschrift ist „das da soll rot sein" dieselbe Bitte. Der Marker
+       bleibt dabei Marker (seine Durchsichtigkeit steckt in der Farbe
+       selbst) – deshalb wird nur die Farbe gesetzt, nicht die Art.
+       ══════════════════════════════════════════════════════════════════ */
+
+    farbKnopf = document.createElement('button');
+    farbKnopf.type = 'button';
+    farbKnopf.className = 'ink-sel-btn';
+    farbKnopf.innerHTML = '<span class="ink-sel-farbe"></span>';
+    farbKnopf.addEventListener('pointerdown', ev => ev.preventDefault());
+    farbKnopf.addEventListener('click', ev => { ev.stopPropagation(); farbeWaehlen(); });
+    leiste.appendChild(farbKnopf);
+
+    /* Dieselben vier Stärken wie beim Stift (core/state.js, PEN_SIZES) –
+       eine eigene Auswahl daneben wäre eine zweite Wahrheit. */
+    dickKnoepfe = [];
+    for (const dick of (typeof PEN_SIZES !== 'undefined' ? PEN_SIZES : [1.2, 2.5, 4.5, 8])) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ink-sel-btn ink-sel-dick';
+      b.dataset.dick = String(dick);
+      b.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><line x1="2.5" y1="8" x2="13.5" y2="8"'
+        + ' stroke="currentColor" stroke-width="' + dick + '" stroke-linecap="round"/></svg>';
+      b.title = dick + ' px';
+      b.setAttribute('aria-label', dick + ' px');
+      b.addEventListener('pointerdown', ev => ev.preventDefault());
+      b.addEventListener('click', ev => { ev.stopPropagation(); setzeDicke(dick); });
+      leiste.appendChild(b);
+      dickKnoepfe.push(b);
+    }
+
+    const trenner = document.createElement('span');
+    trenner.className = 'ink-sel-trenner';
+    leiste.appendChild(trenner);
+
     knopf('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="5.4" y="5.4" width="8.2" height="8.2" rx="1.3"/><path d="M10.6 3.2A1.4 1.4 0 0 0 9.3 2.4H3.7a1.3 1.3 0 0 0-1.3 1.3v5.6c0 .6.35 1.1.85 1.3" stroke-linecap="round"/></svg>',
       txt('objDuplicate', 'Verdoppeln'), verdoppeln);
 
@@ -346,7 +398,91 @@
   function zeigeLeiste() {
     const b = baueLeiste();
     b.style.display = 'flex';
+    spiegleAuswahl();
     stelleLeiste();
+  }
+
+  /** Die aktuelle Farbe im Knopf, die aktuelle Dicke hervorgehoben. */
+  function spiegleAuswahl() {
+    if (!_sel || !farbKnopf) return;
+    const striche = _sel.strokes || [];
+
+    /* Ohne Strich (nur Objekte in der Auswahl) gibt es hier nichts zu
+       stellen – Form und Bild haben ihre eigene Leiste. */
+    const zeigen = striche.length > 0 ? '' : 'none';
+    farbKnopf.style.display = zeigen;
+    for (const b of dickKnoepfe) b.style.display = zeigen;
+    if (!striche.length) return;
+
+    const farbe = striche[0].color || '#1a1510';
+    const feld = farbKnopf.firstElementChild;
+    if (feld) feld.style.background = farbe;
+    farbKnopf.title = (typeof t === 'function' && t('penColor')) || 'Stiftfarbe';
+
+    /* Bei gemischten Stärken bleibt keiner hervorgehoben – sonst stünde
+       dort eine Zahl, die nur für einen der Striche gilt. */
+    const dick = striche[0].width;
+    const einheitlich = striche.every(st => st.width === dick);
+    for (const b of dickKnoepfe) {
+      b.classList.toggle('active', einheitlich && Number(b.dataset.dick) === dick);
+    }
+  }
+
+  /** Farbe der ganzen Auswahl ändern. */
+  function farbeWaehlen() {
+    if (!_sel || !_sel.strokes.length || typeof openCustomColorPopover !== 'function') return;
+    const { pageId, strokes } = _sel;
+    const info = getPage(pageId);
+    let gesichert = false;
+
+    openCustomColorPopover('pen', farbKnopf, (farbe, endgueltig) => {
+      /* Der Verlauf bekommt EINEN Schritt, nicht einen je Bewegung im
+         Farbrad: der Rückruf läuft beim Ziehen ununterbrochen. */
+      if (!gesichert && info) { gesichert = true; pushPageHistory(info.page); }
+      for (const st of strokes) st.color = farbe;
+      const feld = farbKnopf.firstElementChild;
+      if (feld) feld.style.background = farbe;
+      notiere(pageId, endgueltig);
+      if (endgueltig) meldeStriche();
+    });
+  }
+
+  /** Strichstärke der ganzen Auswahl ändern. */
+  function setzeDicke(dick) {
+    if (!_sel || !_sel.strokes.length) return;
+    const { pageId, strokes } = _sel;
+    const info = getPage(pageId);
+    if (info) pushPageHistory(info.page);
+
+    /* Der Marker behält sein Verhältnis zum Stift: er ist dicker, weil
+       er ein Marker ist, und soll es nach dem Umstellen auch bleiben. */
+    for (const st of strokes) st.width = st.isHL ? dick * 4 : dick;
+
+    for (const b of dickKnoepfe) {
+      b.classList.toggle('active', Number(b.dataset.dick) === dick);
+    }
+    notiere(pageId, true);
+    meldeStriche();
+    // Die Hülle sitzt an der Dicke – ein dickerer Strich braucht mehr Platz
+    zeichneHuelle();
+    stelleLeiste();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     GEÄNDERTE STRICHE MÜSSEN AUCH BEIM ANDEREN ANKOMMEN
+
+     noteStroke hängt einen NEUEN Strich an – für einen geänderten taugt
+     es nicht, beim anderen stünde er danach zweimal da. Was hier
+     geschieht, ist dasselbe wie Radieren: die Liste der Seite ist eine
+     andere geworden. Genau dafür gibt es den Heft-Vergleich, und den
+     stösst markCurrentNotebookDirty an (notiere() tut das schon).
+
+     Ausdrücklich angestossen wird er trotzdem: der Vergleich läuft
+     gebremst, und eine Farbe, die erst in ein paar Sekunden ankommt,
+     sieht aus wie eine, die gar nicht ankommt.
+     ══════════════════════════════════════════════════════════════════ */
+  function meldeStriche() {
+    if (window.Collab && typeof Collab.noteChange === 'function') Collab.noteChange();
   }
 
   function stelleLeiste() {

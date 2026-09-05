@@ -1374,6 +1374,31 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   color: #ff8a80
 }
 
+/* Farbe und Dicke des ausgewaehlten Strichs (canvas/strokeSelect.js).
+   Dieselbe Sprache wie an der Form: ein Farbfeld und die Staerken als
+   Striche, der geltende hervorgehoben. */
+.ink-sel-farbe {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  display: block;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35) inset
+}
+
+.ink-sel-btn.active {
+  background: rgba(200, 169, 110, .22);
+  color: var(--gold)
+}
+
+/* Trennt das Aussehen vom Verdoppeln und Loeschen – das eine aendert
+   den Strich, das andere seine Zahl. */
+.ink-sel-trenner {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: var(--sb2)
+}
+
 @media (any-pointer: coarse) {
 
   .ink-sel-btn {
