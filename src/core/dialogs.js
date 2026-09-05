@@ -342,6 +342,15 @@ function applyEditableToPages(readOnly) {
   if (readOnly) {
     const aktiv = document.activeElement;
     if (aktiv && aktiv.classList && aktiv.classList.contains('j-text')) aktiv.blur();
+
+    /* Und was gerade AUSGEWAEHLT dalag, wird abgewaehlt. An der Auswahl
+       haengt die Leiste – drehen, verdoppeln, loeschen –, und die
+       bliebe sonst offen stehen, obwohl ab jetzt nichts mehr geht.
+       Neu anfassen laesst sich ohnehin nichts (canvas/objects.js,
+       nurLesen), aber eine Leiste, die nur noch Fehlermeldungen gibt,
+       ist schlechter als keine. */
+    if (typeof window.deselectObject === 'function') window.deselectObject();
+    if (typeof window.deselectStroke === 'function') window.deselectStroke();
   }
 }
 
