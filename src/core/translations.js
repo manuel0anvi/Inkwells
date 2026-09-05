@@ -2,6 +2,126 @@
 
 const TRANSLATIONS = {
   de: {
+    /* ══ HILFE ══════════════════════════════════════════════════════
+       Die Texte des Hilfe-Fensters und der einmaligen Hinweise.
+       Welche Themen es gibt und woraus sie bestehen: core/hilfe.js.
+       ══════════════════════════════════════════════════════════════ */
+
+    // Bedienung
+    hilfeTitel: 'Hilfe',
+    hilfeMehrDazu: 'Mehr dazu',
+    hinweisVerstanden: 'Verstanden',
+
+    // Beschriftungen in den Schaubildern
+    hilfeBildHeft: 'Das Heft',
+    hilfeBildFormeln: 'Formeln',
+    hilfeBildUebungen: 'Übungen',
+    hilfeBildAngeklickt: '„Formeln" angeklickt',
+    hilfeBildAbschnitteUnter: 'Die Nummern bleiben dieselben. Seite 5 heißt auch im Abschnitt Seite 5.',
+    hilfeBildPapierHeft: 'Heft',
+    hilfeBildPapierAbschnitt: 'Abschnitt',
+    hilfeBildPapierSeite: 'Seite',
+    hilfeBildPapierUnter: 'Heft und Abschnitt sagen „liniert" und „kariert" – gezeigt wird „leer".',
+    hilfeFarbeGruen: 'Grün',
+    hilfeFarbeGruenWas: 'Alles gesichert – auf der Festplatte und, wenn du angemeldet bist, auch in der Cloud.',
+    hilfeFarbeOrange: 'Orange',
+    hilfeFarbeOrangeWas: 'Noch nicht auf der Festplatte. Das ist der Teil, den ein Absturz kosten würde.',
+    hilfeFarbeBlau: 'Blau',
+    hilfeFarbeBlauWas: 'Auf der Platte, aber noch nicht hochgeladen. Ohne Internet bleibt es blau, bis die Verbindung wieder steht.',
+    hilfeRolleLesen: 'Lesen',
+    hilfeRolleSchreiben: 'Schreiben und zeichnen',
+    hilfeRolleKommentieren: 'Kommentare anlegen',
+    hilfeRolleChat: 'Im Chat mitreden',
+
+    // Erste Schritte
+    hilfeStartTitel: 'Erste Schritte',
+    hilfeStart1: 'Inkwells ist ein Heft, kein Textprogramm. Du legst ein Heft an, es hat Seiten, und auf jede Seite kannst du schreiben, zeichnen, Bilder legen, Tabellen und Formeln setzen.',
+    hilfeStartMerk: 'Alles außer dem gemeinsamen Arbeiten geht ohne Konto und ohne Internet.',
+    hilfeStart2: 'Gespeichert wird von selbst, kurz nachdem du aufhörst zu schreiben. Einen Speichern-Knopf musst du nicht suchen – die Farbe oben rechts sagt dir, ob alles gesichert ist.',
+    hilfeStart3: 'Was am Anfang am ehesten stolpern lässt, steht in den Themen daneben. Das Wichtigste zuerst: Abschnitte sind keine Kapitel.',
+
+    // Abschnitte
+    hilfeAbschnitteTitel: 'Abschnitte',
+    hilfeAbschnitte1: 'Ein Abschnitt ist ein farbiges Etikett, das du einer Seite anheftest. Er ordnet die Seiten nicht neu und fasst sie auch nicht zu Kapiteln zusammen.',
+    hilfeAbschnitteMerk: 'Die Seiten bleiben in der Reihenfolge des Hefts – ein Abschnitt zeigt nur einen Ausschnitt daraus.',
+    hilfeAbschnitte2: 'Klickst du links in der Leiste auf einen Abschnitt, siehst du nur noch dessen Seiten. Ihre Nummern bleiben dabei die aus dem Heft. Über „Alle Seiten" kommst du zurück.',
+    hilfeAbschnitte3: 'Daraus folgt dreierlei:',
+    hilfeAbschnitteL1: 'Eine Seite braucht keinen Abschnitt. Ohne Etikett steht sie einfach im Heft.',
+    hilfeAbschnitteL2: 'Ein Abschnitt darf leer sein. Er verschwindet nicht und legt auch keine Seiten an.',
+    hilfeAbschnitteL3: 'Löschst du einen Abschnitt, bleiben seine Seiten. Nur das Etikett ist weg.',
+
+    // Papier
+    hilfePapierTitel: 'Papier',
+    hilfePapier1: 'Das Papier – liniert, kariert, gepunktet, leer – lässt sich an drei Stellen festlegen: für das ganze Heft, für einen Abschnitt und für eine einzelne Seite.',
+    hilfePapierMerk: 'Es gilt immer die näherliegende Angabe. Eine Seite mit eigenem Papier lässt sich vom Heft nicht mehr umstimmen.',
+    hilfePapier2: 'Deshalb ändert sich beim Umstellen des Hefts nichts an Seiten, denen du schon einmal selbst ein Papier gegeben hast. Sollen sie wieder mitziehen, stell sie auf „Wie das Heft" zurück.',
+
+    // Schreiben
+    hilfeSchreibenTitel: 'Schreiben',
+    hilfeSchreiben1: 'Klickst du auf eine freie Stelle und tippst, entsteht dort ein Absatz, der frei auf dem Blatt steht. Er wächst mit dem Text nach unten.',
+    hilfeSchreiben2: 'Irgendwann stößt er an den nächsten. Was dann geschieht, entscheidest du in den Einstellungen unter „Wenn Texte aneinanderstoßen":',
+    hilfeSchreibenL1: 'Ausweichen und zurückkommen – der Nachbar rückt nur so weit zur Seite, dass ein Wortabstand bleibt, und geht von selbst zurück, sobald wieder Platz ist. So steht es, solange du nichts änderst.',
+    hilfeSchreibenL2: 'Ausweichen und dort bleiben – er weicht aus und bleibt, wo er hingerückt ist.',
+    hilfeSchreiben3: 'In einem geteilten Dokument gilt die Wahl des Besitzers, solange du darin arbeitest. Sonst sähe dieselbe Seite bei jedem anders aus.',
+
+    // Finger
+    hilfeFingerTitel: 'Mit dem Finger',
+    hilfeFinger1: 'Auf einem Gerät mit Berührungsbildschirm ist die häufigste Frage, warum der Finger einmal zeichnet und einmal blättert.',
+    hilfeFingerMerk: 'Der Finger zeichnet, sobald ein Zeichenwerkzeug gewählt ist – Stift, Marker oder Radierer.',
+    hilfeFingerL1: 'Zum Verschieben der Seite: zwei Finger, oder ein Finger auf dem Rand neben dem Blatt.',
+    hilfeFingerL2: 'Wer mit dem Finger nie zeichnen will, etwa weil er einen Stift benutzt, schaltet es in der Werkzeugleiste ab.',
+    hilfeFingerL3: 'Liegt der Stift auf dem Blatt, gehört die Seite ihm – der Handballen daneben zeichnet nicht mit.',
+    hilfeFinger2: 'Die Navigationsleiste am linken Rand ziehst du mit einem waagerechten Wischen auf. Zumachen geht überall auf der offenen Leiste.',
+
+    // Speichern
+    hilfeSpeichernTitel: 'Speichern',
+    hilfeSpeichern1: 'Gespeichert wird von selbst, etwa zwei Sekunden nachdem du aufhörst zu schreiben. Der Knopf oben rechts sagt jederzeit, wie weit deine Arbeit ist – und zwar über seine Farbe:',
+    hilfeSpeichern2: 'Ein Druck auf die breite Hälfte speichert sofort und lädt hoch, wenn du angemeldet bist. Der schmale Pfeil daneben öffnet das Fenster, in dem steht, was noch aussteht.',
+    hilfeSpeichernMerk: 'Die Farbe ist eine Auskunft, keine Aufforderung. Blau geht von selbst weiter, sobald wieder Verbindung besteht.',
+
+    // Konto
+    hilfeKontoTitel: 'Konto',
+    hilfeKontoMerk: 'Ein Konto brauchst du nur zum gemeinsamen Arbeiten. Alles andere geht ohne.',
+    hilfeKonto1: 'Ohne Anmeldung kannst du alles, wofür Inkwells da ist: Hefte anlegen, schreiben, zeichnen, Bilder, Tabellen und Formeln setzen, Word- und PDF-Dokumente öffnen und ausgeben, suchen, ältere Fassungen zurückholen. Deine Hefte liegen dabei als Dateien auf deiner Festplatte.',
+    hilfeKontoL1: 'Deine Hefte werden zusätzlich in deiner eigenen Cloud gesichert – Google Drive oder OneDrive.',
+    hilfeKontoL2: 'Du kannst an einem zweiten Rechner weiterschreiben.',
+    hilfeKontoL3: 'Du kannst ein Dokument freigeben. Wer den Link bekommt, sieht es im Browser, ohne Inkwells zu installieren – und das gemeinsame Arbeiten ist das Einzige, was ohne Konto gar nicht geht.',
+    hilfeKonto2: 'Angemeldet wird über Google oder Microsoft. Ein eigenes Passwort für Inkwells gibt es nicht, und ein Konto legst du hier auch nicht an – es ist deins, und Inkwells bekommt nur die Erlaubnis, darin einen Ordner zu benutzen.',
+    hilfeKonto3: 'Meldest du dich wieder ab, bleiben alle Hefte auf deiner Festplatte liegen. Es geht dabei nichts verloren.',
+
+    // Teilen
+    hilfeTeilenTitel: 'Teilen',
+    hilfeTeilen1: 'Ein freigegebenes Heft heißt hier „geteiltes Dokument". Alle, die es offen haben, sehen die Änderungen der anderen sofort. Zwei Wege führen hinein:',
+    hilfeTeilenL1: 'Über einen Link: jeder, der ihn hat, kommt herein. Du legst dabei fest, ob er nur lesen oder auch bearbeiten darf.',
+    hilfeTeilenL2: 'Über eine Einladung an eine E-Mail-Adresse: dann kommt nur diese Person herein, mit der Rolle, die du ihr gibst.',
+    hilfeTeilen2: 'Wer gerade mitarbeitet, steht als rundes Abzeichen oben am Blatt. Daneben liegen der Chat und die Kommentare am Rand.',
+    hilfeTeilen3: 'Du kannst jederzeit einzelne Personen entfernen, den Link erneuern – alle bisher verschickten laufen dann ins Leere – oder die ganze Freigabe aufheben.',
+    hilfeTeilenMerk: 'Jeder mit dem Link kann mitlesen, auch ohne Konto und ohne Inkwells. Gib ihn nur an Leute weiter, denen du den Inhalt anvertraust.',
+
+    // Rollen
+    hilfeRollenTitel: 'Wer darf schreiben?',
+    hilfeRollen1: 'Jeder in einem geteilten Dokument hat eine von zwei Rollen. Sie entscheidet, ob der Stift überhaupt etwas tut.',
+    hilfeRollen2: '„Bearbeiten" heißt: schreiben, zeichnen, Seiten anlegen und löschen, kommentieren – alles wie im eigenen Heft. „Nur lesen" heißt: zusehen. Der Stift schreibt dann nicht, und die Werkzeuge bleiben aus.',
+    hilfeRollenMerk: 'Mitreden darf trotzdem jeder: der Chat steht auch dem offen, der nur lesen darf. Kommentare kann er lesen, aber keine neuen anlegen.',
+    hilfeRollen3: 'Deine Rolle steht oben am Dokument. Ist sie „Nur lesen" und du müsstest schreiben, kann nur der Besitzer das ändern – im Freigabe-Fenster, neben deinem Namen.',
+    hilfeRollen4: 'Der Besitzer selbst hat immer alle Rechte. Er allein gibt frei, ändert Rollen, entfernt Leute und hebt die Freigabe wieder auf.',
+
+    // Die einmaligen Hinweise
+    hinweisAbschnitteTitel: 'Kurz zu den Abschnitten',
+    hinweisAbschnitte1: 'Abschnitte sind Etiketten, keine Kapitel. Eine Seite behält ihren Platz und ihre Nummer im Heft, auch wenn du sie einem Abschnitt gibst.',
+    hinweisAbschnitte2: 'Klickst du links einen Abschnitt an, siehst du nur noch seine Seiten. Über „Alle Seiten" kommst du zurück.',
+    hinweisPapierTitel: 'Papier für diese eine Seite',
+    hinweisPapier1: 'Was du hier wählst, gilt nur für diese Seite – und zwar dauerhaft. Sie zieht danach nicht mehr mit, wenn du das Papier des Hefts oder des Abschnitts änderst. Mit „Wie das Heft" nimmst du das zurück.',
+    hinweisSpeichernTitel: 'Gespeichert wird von selbst',
+    hinweisSpeichern1: 'Du musst nichts drücken. Gespeichert wird kurz nachdem du aufhörst zu schreiben.',
+    hinweisSpeichern2: 'Die Farbe des Knopfs sagt, wie weit deine Arbeit ist: grün heißt gesichert, orange heißt noch nicht auf der Festplatte, blau heißt noch nicht hochgeladen.',
+    hinweisKontoTitel: 'Ein Konto ist freiwillig',
+    hinweisKonto1: 'Inkwells funktioniert ohne Anmeldung vollständig. Schreiben, zeichnen, Word und PDF, Ausgeben – alles geht, und deine Hefte liegen als Dateien auf deiner Festplatte.',
+    hinweisKonto2: 'Ein Konto brauchst du für zweierlei: damit deine Hefte zusätzlich in deiner Cloud liegen und im Browser zu sehen sind – und um gemeinsam mit anderen an einem Dokument zu arbeiten. Nur das geht ohne Konto nicht.',
+    hinweisTeilenTitel: 'Bevor du freigibst',
+    hinweisTeilen1: 'Du legst je Person fest, ob sie nur lesen oder auch bearbeiten darf – und dasselbe noch einmal für den Link.',
+    hinweisTeilen2: 'Jeder mit dem Link kann mitlesen, auch ohne Konto und ohne Inkwells. Gib ihn nur an Leute weiter, denen du den Inhalt anvertraust.',
+
     // Postfach
     postfach: 'Postfach',
     postfachGelesen: 'Gelesen',
@@ -913,6 +1033,126 @@ const TRANSLATIONS = {
   },
   
   en: {
+    /* ══ HILFE ══════════════════════════════════════════════════════
+       Die Texte des Hilfe-Fensters und der einmaligen Hinweise.
+       Welche Themen es gibt und woraus sie bestehen: core/hilfe.js.
+       ══════════════════════════════════════════════════════════════ */
+
+    // Bedienung
+    hilfeTitel: 'Help',
+    hilfeMehrDazu: 'Tell me more',
+    hinweisVerstanden: 'Got it',
+
+    // Beschriftungen in den Schaubildern
+    hilfeBildHeft: 'The notebook',
+    hilfeBildFormeln: 'Formulas',
+    hilfeBildUebungen: 'Exercises',
+    hilfeBildAngeklickt: '"Formulas" selected',
+    hilfeBildAbschnitteUnter: 'The numbers stay the same. Page 5 is still page 5 inside the section.',
+    hilfeBildPapierHeft: 'Notebook',
+    hilfeBildPapierAbschnitt: 'Section',
+    hilfeBildPapierSeite: 'Page',
+    hilfeBildPapierUnter: 'Notebook and section say "ruled" and "grid" — what you see is "blank".',
+    hilfeFarbeGruen: 'Green',
+    hilfeFarbeGruenWas: 'Everything is safe — on your hard drive and, if you are signed in, in the cloud as well.',
+    hilfeFarbeOrange: 'Orange',
+    hilfeFarbeOrangeWas: 'Not on the hard drive yet. This is the part a crash would cost you.',
+    hilfeFarbeBlau: 'Blue',
+    hilfeFarbeBlauWas: 'On the drive, but not uploaded yet. Without a connection it stays blue until you are back online.',
+    hilfeRolleLesen: 'Read',
+    hilfeRolleSchreiben: 'Write and draw',
+    hilfeRolleKommentieren: 'Add comments',
+    hilfeRolleChat: 'Join the chat',
+
+    // Erste Schritte
+    hilfeStartTitel: 'Getting started',
+    hilfeStart1: 'Inkwells is a notebook, not a word processor. You create a notebook, it has pages, and on every page you can write, draw, place images, and add tables and formulas.',
+    hilfeStartMerk: 'Everything except working together needs no account and no internet.',
+    hilfeStart2: 'Saving happens on its own, shortly after you stop writing. There is no save button to look for — the colour in the top right tells you whether everything is safe.',
+    hilfeStart3: 'The topics beside this one cover what people actually trip over. Most important first: sections are not chapters.',
+
+    // Abschnitte
+    hilfeAbschnitteTitel: 'Sections',
+    hilfeAbschnitte1: 'A section is a coloured label you pin to a page. It does not reorder your pages, and it does not group them into chapters.',
+    hilfeAbschnitteMerk: 'Pages keep the order of the notebook — a section only shows you a slice of it.',
+    hilfeAbschnitte2: 'Click a section in the panel on the left and you see only its pages. Their numbers stay the ones from the notebook. "All pages" takes you back.',
+    hilfeAbschnitte3: 'Three things follow from that:',
+    hilfeAbschnitteL1: 'A page needs no section. Without a label it simply sits in the notebook.',
+    hilfeAbschnitteL2: 'A section may be empty. It does not disappear, and it does not create pages.',
+    hilfeAbschnitteL3: 'Delete a section and its pages stay. Only the label is gone.',
+
+    // Papier
+    hilfePapierTitel: 'Paper',
+    hilfePapier1: 'The paper — ruled, grid, dotted, blank — can be set in three places: for the whole notebook, for a section, and for a single page.',
+    hilfePapierMerk: 'The closest setting always wins. A page with its own paper can no longer be overruled by the notebook.',
+    hilfePapier2: 'So changing the notebook leaves alone any page you once gave its own paper. To let it follow along again, set it back to "Same as notebook".',
+
+    // Schreiben
+    hilfeSchreibenTitel: 'Writing',
+    hilfeSchreiben1: 'Click an empty spot and start typing, and a paragraph appears there, standing free on the sheet. It grows downwards as you write.',
+    hilfeSchreiben2: 'Sooner or later it meets the next one. What happens then is up to you, under "When text meets text" in the settings:',
+    hilfeSchreibenL1: 'Move aside and come back — the neighbour shifts only far enough to leave a word of space, and returns by itself once there is room again. This is how it behaves unless you change it.',
+    hilfeSchreibenL2: 'Move aside and stay there — it gives way and stays where it went.',
+    hilfeSchreiben3: 'In a shared document the owner\'s choice applies while you are working in it. Otherwise the same page would look different to everyone.',
+
+    // Finger
+    hilfeFingerTitel: 'Using your finger',
+    hilfeFinger1: 'On a touchscreen the most common question is why the finger sometimes draws and sometimes scrolls.',
+    hilfeFingerMerk: 'Your finger draws as soon as a drawing tool is selected — pen, highlighter or eraser.',
+    hilfeFingerL1: 'To move the page: two fingers, or one finger on the margin beside the sheet.',
+    hilfeFingerL2: 'If you never want to draw with your finger, because you use a stylus for instance, switch it off in the toolbar.',
+    hilfeFingerL3: 'While the stylus is on the sheet, the page belongs to it — the palm resting beside it does not draw.',
+    hilfeFinger2: 'Pull the navigation panel out from the left edge with a horizontal swipe. To close it, swipe anywhere on the open panel.',
+
+    // Speichern
+    hilfeSpeichernTitel: 'Saving',
+    hilfeSpeichern1: 'Saving happens on its own, about two seconds after you stop writing. The button in the top right tells you at any moment how far your work has got — through its colour:',
+    hilfeSpeichern2: 'Pressing the wide half saves immediately, and uploads too if you are signed in. The narrow arrow beside it opens the window listing what is still outstanding.',
+    hilfeSpeichernMerk: 'The colour is information, not a demand. Blue continues by itself as soon as you are connected again.',
+
+    // Konto
+    hilfeKontoTitel: 'Account',
+    hilfeKontoMerk: 'You only need an account for working together. Everything else works without one.',
+    hilfeKonto1: 'Without signing in you can do everything Inkwells is for: create notebooks, write, draw, add images, tables and formulas, open and export Word and PDF documents, search, and restore older versions. Your notebooks live as files on your hard drive.',
+    hilfeKontoL1: 'Your notebooks are backed up in your own cloud as well — Google Drive or OneDrive.',
+    hilfeKontoL2: 'You can carry on writing on a second computer.',
+    hilfeKontoL3: 'You can share a document. Whoever gets the link sees it in a browser, without installing Inkwells — and working together is the one thing that does not work without an account.',
+    hilfeKonto2: 'You sign in through Google or Microsoft. There is no separate Inkwells password, and you are not creating an account here — it is yours, and Inkwells only gets permission to use a folder inside it.',
+    hilfeKonto3: 'Sign out again and all your notebooks stay on your hard drive. Nothing is lost.',
+
+    // Teilen
+    hilfeTeilenTitel: 'Sharing',
+    hilfeTeilen1: 'A shared notebook is called a "shared document" here. Everyone who has it open sees the others\' changes immediately. There are two ways in:',
+    hilfeTeilenL1: 'Through a link: anyone who has it gets in. You decide whether they may only read or also edit.',
+    hilfeTeilenL2: 'Through an invitation to an email address: then only that person gets in, with the role you give them.',
+    hilfeTeilen2: 'Whoever is working right now appears as a round badge at the top of the sheet. The chat and the comments sit alongside, in the margin.',
+    hilfeTeilen3: 'At any time you can remove individual people, renew the link — every link sent so far then leads nowhere — or withdraw the sharing entirely.',
+    hilfeTeilenMerk: 'Anyone with the link can read along, without an account and without Inkwells. Only pass it to people you trust with the content.',
+
+    // Rollen
+    hilfeRollenTitel: 'Who may write?',
+    hilfeRollen1: 'Everyone in a shared document has one of two roles. It decides whether your pen does anything at all.',
+    hilfeRollen2: '"Edit" means writing, drawing, adding and deleting pages, commenting — everything you can do in your own notebook. "View only" means watching. The pen does not write, and the tools stay off.',
+    hilfeRollenMerk: 'Everyone may still speak up: the chat is open to viewers too. They can read comments, but not add new ones.',
+    hilfeRollen3: 'Your role is shown at the top of the document. If it says "View only" and you need to write, only the owner can change it — in the sharing window, beside your name.',
+    hilfeRollen4: 'The owner always has every right. They alone share, change roles, remove people and withdraw the sharing again.',
+
+    // Die einmaligen Hinweise
+    hinweisAbschnitteTitel: 'A word about sections',
+    hinweisAbschnitte1: 'Sections are labels, not chapters. A page keeps its place and its number in the notebook, even once you give it a section.',
+    hinweisAbschnitte2: 'Click a section on the left and you see only its pages. "All pages" takes you back.',
+    hinweisPapierTitel: 'Paper for this one page',
+    hinweisPapier1: 'What you choose here applies to this page only — and it sticks. Afterwards the page no longer follows when you change the paper of the notebook or the section. "Same as notebook" undoes it.',
+    hinweisSpeichernTitel: 'Saving happens on its own',
+    hinweisSpeichern1: 'There is nothing to press. Your work is saved shortly after you stop writing.',
+    hinweisSpeichern2: 'The colour of the button says how far it has got: green means safe, orange means not on the hard drive yet, blue means not uploaded yet.',
+    hinweisKontoTitel: 'An account is optional',
+    hinweisKonto1: 'Inkwells works completely without signing in. Writing, drawing, Word and PDF, exporting — all of it works, and your notebooks live as files on your hard drive.',
+    hinweisKonto2: 'You need an account for two things: so your notebooks are also kept in your cloud and can be viewed in a browser — and to work on a document together with others. That last one is the only thing that needs it.',
+    hinweisTeilenTitel: 'Before you share',
+    hinweisTeilen1: 'For each person you decide whether they may only read or also edit — and the same again for the link.',
+    hinweisTeilen2: 'Anyone with the link can read along, without an account and without Inkwells. Only pass it to people you trust with the content.',
+
     // Postfach
     postfach: 'Messages',
     postfachGelesen: 'Got it',
@@ -1805,6 +2045,126 @@ const TRANSLATIONS = {
   },
   
   it: {
+    /* ══ HILFE ══════════════════════════════════════════════════════
+       Die Texte des Hilfe-Fensters und der einmaligen Hinweise.
+       Welche Themen es gibt und woraus sie bestehen: core/hilfe.js.
+       ══════════════════════════════════════════════════════════════ */
+
+    // Bedienung
+    hilfeTitel: 'Guida',
+    hilfeMehrDazu: 'Approfondisci',
+    hinweisVerstanden: 'Ho capito',
+
+    // Beschriftungen in den Schaubildern
+    hilfeBildHeft: 'Il quaderno',
+    hilfeBildFormeln: 'Formule',
+    hilfeBildUebungen: 'Esercizi',
+    hilfeBildAngeklickt: '"Formule" selezionato',
+    hilfeBildAbschnitteUnter: 'I numeri restano gli stessi. La pagina 5 resta la pagina 5 anche dentro la sezione.',
+    hilfeBildPapierHeft: 'Quaderno',
+    hilfeBildPapierAbschnitt: 'Sezione',
+    hilfeBildPapierSeite: 'Pagina',
+    hilfeBildPapierUnter: 'Quaderno e sezione dicono "a righe" e "a quadretti" — si vede "vuoto".',
+    hilfeFarbeGruen: 'Verde',
+    hilfeFarbeGruenWas: 'Tutto è al sicuro — sul disco e, se hai eseguito l\'accesso, anche nel cloud.',
+    hilfeFarbeOrange: 'Arancione',
+    hilfeFarbeOrangeWas: 'Non ancora sul disco. È la parte che un blocco improvviso ti farebbe perdere.',
+    hilfeFarbeBlau: 'Blu',
+    hilfeFarbeBlauWas: 'Sul disco, ma non ancora caricato. Senza connessione resta blu finché non torni online.',
+    hilfeRolleLesen: 'Leggere',
+    hilfeRolleSchreiben: 'Scrivere e disegnare',
+    hilfeRolleKommentieren: 'Aggiungere commenti',
+    hilfeRolleChat: 'Partecipare alla chat',
+
+    // Erste Schritte
+    hilfeStartTitel: 'Per cominciare',
+    hilfeStart1: 'Inkwells è un quaderno, non un programma di videoscrittura. Crei un quaderno, questo ha delle pagine, e su ogni pagina puoi scrivere, disegnare, inserire immagini, tabelle e formule.',
+    hilfeStartMerk: 'Tutto tranne il lavoro condiviso funziona senza account e senza internet.',
+    hilfeStart2: 'Il salvataggio avviene da solo, poco dopo che smetti di scrivere. Non devi cercare nessun pulsante — il colore in alto a destra ti dice se è tutto al sicuro.',
+    hilfeStart3: 'Gli argomenti qui accanto raccolgono ciò su cui le persone inciampano davvero. Il più importante per primo: le sezioni non sono capitoli.',
+
+    // Abschnitte
+    hilfeAbschnitteTitel: 'Sezioni',
+    hilfeAbschnitte1: 'Una sezione è un\'etichetta colorata che attacchi a una pagina. Non riordina le pagine e non le raggruppa in capitoli.',
+    hilfeAbschnitteMerk: 'Le pagine mantengono l\'ordine del quaderno — una sezione ne mostra soltanto una parte.',
+    hilfeAbschnitte2: 'Se clicchi una sezione nel pannello a sinistra, vedi solo le sue pagine. I numeri restano quelli del quaderno. Con "Tutte le pagine" torni indietro.',
+    hilfeAbschnitte3: 'Ne derivano tre cose:',
+    hilfeAbschnitteL1: 'Una pagina non ha bisogno di una sezione. Senza etichetta sta semplicemente nel quaderno.',
+    hilfeAbschnitteL2: 'Una sezione può essere vuota. Non sparisce e non crea pagine.',
+    hilfeAbschnitteL3: 'Se elimini una sezione, le sue pagine restano. Sparisce solo l\'etichetta.',
+
+    // Papier
+    hilfePapierTitel: 'Carta',
+    hilfePapier1: 'La carta — a righe, a quadretti, puntinata, vuota — si può impostare in tre punti: per l\'intero quaderno, per una sezione e per la singola pagina.',
+    hilfePapierMerk: 'Vale sempre l\'indicazione più vicina. Una pagina con carta propria non può più essere sovrascritta dal quaderno.',
+    hilfePapier2: 'Perciò, cambiando il quaderno, non cambia nulla nelle pagine a cui hai già dato una carta tua. Se vuoi che tornino a seguirlo, rimettile su "Come il quaderno".',
+
+    // Schreiben
+    hilfeSchreibenTitel: 'Scrivere',
+    hilfeSchreiben1: 'Se clicchi su un punto libero e scrivi, lì nasce un paragrafo che sta libero sul foglio. Cresce verso il basso insieme al testo.',
+    hilfeSchreiben2: 'Prima o poi incontra quello successivo. Cosa succede allora lo decidi nelle impostazioni, sotto "Quando i testi si incontrano":',
+    hilfeSchreibenL1: 'Scostarsi e tornare — il vicino si sposta solo quanto basta a lasciare lo spazio di una parola, e torna da solo appena c\'è di nuovo posto. È così finché non cambi nulla.',
+    hilfeSchreibenL2: 'Scostarsi e restare — si sposta e rimane dove è andato.',
+    hilfeSchreiben3: 'In un documento condiviso vale la scelta del proprietario finché ci lavori dentro. Altrimenti la stessa pagina apparirebbe diversa a ciascuno.',
+
+    // Finger
+    hilfeFingerTitel: 'Con il dito',
+    hilfeFinger1: 'Su uno schermo touch la domanda più frequente è perché il dito a volte disegna e a volte scorre.',
+    hilfeFingerMerk: 'Il dito disegna non appena è selezionato uno strumento di disegno — penna, evidenziatore o gomma.',
+    hilfeFingerL1: 'Per spostare la pagina: due dita, oppure un dito sul margine accanto al foglio.',
+    hilfeFingerL2: 'Chi non vuole mai disegnare con il dito, per esempio perché usa una penna, lo disattiva nella barra degli strumenti.',
+    hilfeFingerL3: 'Se la penna è appoggiata sul foglio, la pagina appartiene a lei — il palmo appoggiato accanto non disegna.',
+    hilfeFinger2: 'Il pannello di navigazione sul bordo sinistro si apre con uno scorrimento orizzontale. Per chiuderlo, scorri in un punto qualsiasi del pannello aperto.',
+
+    // Speichern
+    hilfeSpeichernTitel: 'Salvataggio',
+    hilfeSpeichern1: 'Il salvataggio avviene da solo, circa due secondi dopo che smetti di scrivere. Il pulsante in alto a destra dice in ogni momento a che punto è il tuo lavoro — attraverso il suo colore:',
+    hilfeSpeichern2: 'Premendo la metà larga salvi subito e, se hai eseguito l\'accesso, carichi anche. La freccia stretta accanto apre la finestra con ciò che è ancora in sospeso.',
+    hilfeSpeichernMerk: 'Il colore è un\'informazione, non una richiesta. Il blu prosegue da solo appena la connessione torna.',
+
+    // Konto
+    hilfeKontoTitel: 'Account',
+    hilfeKontoMerk: 'Un account serve solo per lavorare insieme. Tutto il resto funziona senza.',
+    hilfeKonto1: 'Senza accesso puoi fare tutto ciò per cui Inkwells esiste: creare quaderni, scrivere, disegnare, inserire immagini, tabelle e formule, aprire ed esportare documenti Word e PDF, cercare, recuperare versioni precedenti. I tuoi quaderni stanno come file sul tuo disco.',
+    hilfeKontoL1: 'I tuoi quaderni vengono salvati anche nel tuo cloud — Google Drive o OneDrive.',
+    hilfeKontoL2: 'Puoi continuare a scrivere su un secondo computer.',
+    hilfeKontoL3: 'Puoi condividere un documento. Chi riceve il link lo vede nel browser, senza installare Inkwells — e il lavoro condiviso è l\'unica cosa che senza account non funziona affatto.',
+    hilfeKonto2: 'L\'accesso avviene tramite Google o Microsoft. Non esiste una password propria di Inkwells, e qui non stai creando un account — è il tuo, e Inkwells ottiene solo il permesso di usarci dentro una cartella.',
+    hilfeKonto3: 'Se esci di nuovo, tutti i quaderni restano sul tuo disco. Non si perde nulla.',
+
+    // Teilen
+    hilfeTeilenTitel: 'Condividere',
+    hilfeTeilen1: 'Un quaderno condiviso qui si chiama "documento condiviso". Tutti quelli che lo hanno aperto vedono subito le modifiche degli altri. Ci sono due strade per entrarci:',
+    hilfeTeilenL1: 'Con un link: chiunque lo abbia entra. Sei tu a stabilire se può solo leggere o anche modificare.',
+    hilfeTeilenL2: 'Con un invito a un indirizzo email: allora entra solo quella persona, con il ruolo che le assegni.',
+    hilfeTeilen2: 'Chi sta lavorando in questo momento compare come tondino in alto sul foglio. Accanto, nel margine, stanno la chat e i commenti.',
+    hilfeTeilen3: 'In qualsiasi momento puoi rimuovere singole persone, rinnovare il link — tutti quelli inviati finora non porteranno più da nessuna parte — o revocare del tutto la condivisione.',
+    hilfeTeilenMerk: 'Chiunque abbia il link può leggere, anche senza account e senza Inkwells. Dallo solo a persone a cui affidi il contenuto.',
+
+    // Rollen
+    hilfeRollenTitel: 'Chi può scrivere?',
+    hilfeRollen1: 'Ognuno in un documento condiviso ha uno di due ruoli. È il ruolo a decidere se la penna fa qualcosa oppure no.',
+    hilfeRollen2: '"Modificare" significa scrivere, disegnare, aggiungere ed eliminare pagine, commentare — tutto come nel proprio quaderno. "Sola lettura" significa guardare. La penna non scrive e gli strumenti restano spenti.',
+    hilfeRollenMerk: 'Parlare però può chiunque: la chat è aperta anche a chi può solo leggere. I commenti può leggerli, ma non aggiungerne di nuovi.',
+    hilfeRollen3: 'Il tuo ruolo è indicato in alto nel documento. Se è "Sola lettura" e ti servirebbe scrivere, solo il proprietario può cambiarlo — nella finestra di condivisione, accanto al tuo nome.',
+    hilfeRollen4: 'Il proprietario ha sempre tutti i diritti. Solo lui condivide, cambia i ruoli, rimuove persone e revoca la condivisione.',
+
+    // Die einmaligen Hinweise
+    hinweisAbschnitteTitel: 'Due parole sulle sezioni',
+    hinweisAbschnitte1: 'Le sezioni sono etichette, non capitoli. Una pagina mantiene il suo posto e il suo numero nel quaderno, anche quando le assegni una sezione.',
+    hinweisAbschnitte2: 'Se clicchi una sezione a sinistra, vedi solo le sue pagine. Con "Tutte le pagine" torni indietro.',
+    hinweisPapierTitel: 'Carta per questa sola pagina',
+    hinweisPapier1: 'Quello che scegli qui vale solo per questa pagina — e resta. Da quel momento la pagina non segue più il quaderno o la sezione quando ne cambi la carta. Con "Come il quaderno" annulli la scelta.',
+    hinweisSpeichernTitel: 'Il salvataggio avviene da solo',
+    hinweisSpeichern1: 'Non devi premere nulla. Si salva poco dopo che smetti di scrivere.',
+    hinweisSpeichern2: 'Il colore del pulsante dice a che punto è: verde significa al sicuro, arancione significa non ancora sul disco, blu significa non ancora caricato.',
+    hinweisKontoTitel: 'L\'account è facoltativo',
+    hinweisKonto1: 'Inkwells funziona del tutto senza accesso. Scrivere, disegnare, Word e PDF, esportare — funziona tutto, e i tuoi quaderni stanno come file sul tuo disco.',
+    hinweisKonto2: 'Un account serve per due cose: perché i tuoi quaderni stiano anche nel tuo cloud e siano visibili nel browser — e per lavorare insieme ad altri su un documento. Solo quest\'ultima cosa senza account non funziona.',
+    hinweisTeilenTitel: 'Prima di condividere',
+    hinweisTeilen1: 'Per ogni persona stabilisci se può solo leggere o anche modificare — e lo stesso vale per il link.',
+    hinweisTeilen2: 'Chiunque abbia il link può leggere, anche senza account e senza Inkwells. Dallo solo a persone a cui affidi il contenuto.',
+
     // Postfach
     postfach: 'Messaggi',
     postfachGelesen: 'Ho capito',
