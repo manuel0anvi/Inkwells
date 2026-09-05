@@ -61,10 +61,11 @@ vm.createContext(sandbox);
 vm.runInContext([
   extractConst('LINIE_MIN_WEG'),
   extractConst('LINIE_MIN_SPANNE'),
+  extract('istGeschlossen'),
   extract('langGenugFuerLinie')
 ].join('\n'), sandbox);
 
-const { langGenugFuerLinie } = sandbox;
+const { langGenugFuerLinie, istGeschlossen } = sandbox;
 
 let failed = 0;
 function check(label, actual, expected) {
@@ -155,6 +156,58 @@ console.log('\nDie Grenze sitzt zwischen beidem');
 }
 
 console.log('');
+/* ═══════════════════════════════════════════════════════════════════
+   EINE RUNDE IST KEINE STRECKE
+
+   Daran hing der gemeldete Fehler „ich halte für eine Form, und die
+   Linie ist weg“: ein geschlossener Strich, dessen Form NICHT erkannt
+   wird, fiel auf die Gerade zwischen Anfang und Ende zusammen – und die
+   ist bei einer Runde null lang. Der Zeitgeber in canvas/input.js fragt
+   deshalb istGeschlossen(), bevor er zusammenfallen lässt.
+   ═══════════════════════════════════════════════════════════════════ */
+
+console.log('\nWas eine Runde ist, wird als Runde erkannt');
+
+{
+  // Ein grosser Kreis – Anfang und Ende liegen aufeinander
+  const kreis = [];
+  for (let i = 0; i <= 40; i++) {
+    const w = (i / 40) * Math.PI * 2;
+    kreis.push([200 + Math.cos(w) * 60, 200 + Math.sin(w) * 60]);
+  }
+  check('Ein Kreis ist geschlossen', istGeschlossen(strich(kreis)), true);
+  check('Und er kommt an der Uhr vorbei', langGenugFuerLinie(strich(kreis)), true);
+
+  /* Ein Fuenfeck: geschlossen, aber erkenneForm() macht daraus nichts
+     (es kennt nur Ellipse, Viereck, Dreieck). Genau dieser Strich fiel
+     vorher auf einen Punkt von null Laenge zusammen. */
+  const fuenfeck = [];
+  for (let e = 0; e < 5; e++) {
+    const w1 = (e / 5) * Math.PI * 2, w2 = ((e + 1) / 5) * Math.PI * 2;
+    const x1 = 300 + Math.cos(w1) * 70, y1 = 300 + Math.sin(w1) * 70;
+    const x2 = 300 + Math.cos(w2) * 70, y2 = 300 + Math.sin(w2) * 70;
+    for (let i = 0; i < 10; i++) {
+      const t = i / 10;
+      fuenfeck.push([x1 + (x2 - x1) * t, y1 + (y2 - y1) * t]);
+    }
+  }
+  fuenfeck.push(fuenfeck[0]);
+  check('Ein Fuenfeck ist geschlossen', istGeschlossen(strich(fuenfeck)), true);
+
+  // Und eine ordentliche Gerade ist es NICHT
+  check('Eine Strecke ist offen', istGeschlossen(strecke(50, 50, 300, 50)), false);
+  check('Auch eine schraege', istGeschlossen(strecke(50, 50, 200, 180)), false);
+
+  /* Ein leicht gebogener Strich bleibt offen – sonst bekaeme niemand
+     mehr eine Gerade, der nicht mit dem Lineal zieht. */
+  check('Ein leichter Bogen bleibt offen', istGeschlossen(strich([
+    [50, 100], [110, 92], [170, 88], [230, 92], [290, 100]
+  ])), false);
+
+  check('Ohne Pfad gar nichts', istGeschlossen({}), false);
+  check('Ein einzelner Punkt ist keine Runde', istGeschlossen(strich([[50, 50]])), false);
+}
+
 if (failed) {
   console.error(`${failed} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

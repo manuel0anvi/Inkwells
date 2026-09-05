@@ -213,6 +213,25 @@ function attachInput(canvas, textDiv, objLayer, page) {
   const LINIE_MIN_WEG = 46;      // gelaufene Strecke, Seiten-Pixel
   const LINIE_MIN_SPANNE = 30;   // Abstand Anfang ↔ Ende
 
+  /**
+   * Liegt das Ende wieder beim Anfang? Dann ist der Strich eine Runde
+   * und keine Strecke.
+   *
+   * Gemessen am gelaufenen Weg und nicht an einer festen Zahl: ein
+   * kleiner Kreis darf ebenso geschlossen sein wie ein grosser.
+   */
+  function istGeschlossen(stroke) {
+    const pts = stroke && stroke.path;
+    if (!pts || pts.length < 2) return false;
+    let weg = 0;
+    for (let i = 1; i < pts.length; i++) {
+      weg += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    }
+    if (weg <= 0) return false;
+    const a = pts[0], b = pts[pts.length - 1];
+    return Math.hypot(b.x - a.x, b.y - a.y) < weg * 0.3;
+  }
+
   function langGenugFuerLinie(stroke) {
     const pts = stroke && stroke.path;
     if (!pts || pts.length < 2) return false;
@@ -223,15 +242,13 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
     if (weg < LINIE_MIN_WEG) return false;
 
-    const a = pts[0], b = pts[pts.length - 1];
     /* Bei einer FORM liegen Anfang und Ende dicht beieinander – die
-       Spanne darf sie deshalb nicht ausschliessen. Sie wird nur
-       verlangt, wenn keine Form erkannt wird; das entscheidet die Uhr
-       selbst, hier zählt allein die gelaufene Strecke, sobald der Strich
-       geschlossen ist. */
-    const geschlossen = Math.hypot(b.x - a.x, b.y - a.y) < weg * 0.3;
-    if (geschlossen) return true;
+       Spanne darf sie deshalb nicht ausschliessen. Ob daraus dann
+       wirklich eine Form wird, entscheidet die Uhr; was NICHT wird,
+       fängt sie jetzt auch selbst ab (siehe dort). */
+    if (istGeschlossen(stroke)) return true;
 
+    const a = pts[0], b = pts[pts.length - 1];
     return Math.hypot(b.x - a.x, b.y - a.y) >= LINIE_MIN_SPANNE;
   }
 
@@ -286,6 +303,34 @@ function attachInput(canvas, textDiv, objLayer, page) {
         ? InkwellsShapeSnap.erkenneForm(stroke) : null;
 
       if (form && machDarausEinObjekt(stroke, form)) return;
+
+      /* ═════════════════════════════════════════════════════════════
+         WAS EINE RUNDE WAR, WIRD KEINE GERADE
+
+         >>> Hier verschwanden die Striche <<<
+         Gemeldet: „ich ziehe eine Linie, halte für eine Form – und die
+         Linie ist weg.“ Genau das steht hier.
+
+         Der Weg dorthin: langGenugFuerLinie lässt einen GESCHLOSSENEN
+         Strich durch, ohne auf die Spanne zu sehen – richtig, denn bei
+         einer Form liegen Anfang und Ende aufeinander. Erkennt
+         erkenneForm() die Form dann aber NICHT (fünf Ecken statt vier,
+         eine zu flache Ellipse, eine Schleife), fiel der Strich in den
+         Zweig darunter: Pfad = [Anfang, Ende]. Bei einer Runde liegen
+         die beiden aufeinander – aus dem ganzen Gemalten wurde ein
+         Punkt von null Länge. Weg.
+
+         Also: bleibt es eine Runde, bleibt sie stehen, wie sie gemalt
+         wurde. Die Uhr wird dabei nicht festgestellt (_lineLocked bleibt
+         aus) – wer weiterzieht und die Runde wieder öffnet, bekommt
+         seine Gerade danach trotzdem.
+         ═════════════════════════════════════════════════════════════ */
+      if (istGeschlossen(stroke)) {
+        stroke._lineLocked = false;
+        _halteBei = null;
+        stroke._lineTimer = null;
+        return;
+      }
 
       stroke._shapeDetected = false;
       stroke.isGeometric = false;
