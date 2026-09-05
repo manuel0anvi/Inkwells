@@ -317,3 +317,18 @@
   from { transform: rotate(0deg) }
   to   { transform: rotate(360deg) }
 }
+
+/* ── Der Punkt am Fragezeichen ────────────────────────────────────────
+   Steht da, bis die Hilfe einmal offen war (ui/hilfe.js). Bewusst kein
+   Zähler wie am Postfach: dort steht eine Menge, hier nur „es gibt mich".
+   Deshalb auch ohne Zahl und ohne Rand. */
+.hilfe-punkt {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  pointer-events: none;
+}

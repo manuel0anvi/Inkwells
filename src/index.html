@@ -102,6 +102,20 @@
       </svg>
       <span id="postfach-badge" class="titlebar-badge" style="display:none">1</span>
     </button>
+    <!-- Die Hilfe. Sie steht bewusst in der Titelleiste und nicht in den
+         Einstellungen: wer nicht weiterweiss, sucht oben rechts und nicht
+         in einem Fenster, das er auch erst finden muesste.
+
+         Der Punkt daneben leuchtet, solange die Hilfe noch nie offen war –
+         einmal hinsehen genuegt, danach ist er weg (ui/hilfe.js). -->
+    <button class="titlebar-settings-btn" id="btn-hilfe" data-i18n-title="hilfeTitel" title="Hilfe">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.5-2.8 4"/>
+        <path d="M12 17.3v.01"/>
+      </svg>
+      <span id="hilfe-punkt" class="hilfe-punkt" style="display:none"></span>
+    </button>
     <button class="titlebar-settings-btn" id="btn-profile" data-i18n-title="account" title="Profil/Cloud">
       <svg id="profile-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -1602,6 +1616,49 @@
   </div>
 </div>
 
+<!-- ══ HILFE ══════════════════════════════════════════════════════════
+     Links die Themen, rechts der Text. Aufgeteilt wie die
+     Abschnittsverwaltung, damit niemand ein zweites Fenster-Muster
+     lernen muss.
+
+     Die Texte stehen NICHT hier, sondern in core/translations.js: es
+     gibt sie dreimal, in jeder Sprache. Im Quelltext stuenden sie nur
+     einmal da – auf Deutsch, fuer alle.
+     Welche Themen es gibt und in welcher Reihenfolge: core/hilfe.js.
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="ov-hilfe" style="display:none">
+  <div class="modal hilfe-modal">
+    <div class="sec-mgr-head">
+      <h3 data-i18n="hilfeTitel">Hilfe</h3>
+      <button class="modal-close-x" id="hilfe-close">✕</button>
+    </div>
+    <div class="hilfe-main">
+      <div class="hilfe-themen" id="hilfe-themen"></div>
+      <div class="hilfe-inhalt" id="hilfe-inhalt"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EINMALIGER HINWEIS ═════════════════════════════════════════════
+     Beim ERSTEN Oeffnen einer Funktion steht er da, danach nie wieder.
+     Was schon gezeigt wurde, merken sich die Einstellungen
+     (hinweiseGesehen) – sonst faenge es nach jedem Neustart von vorne an.
+
+     Er liegt ueber den Fenstern, die ihn ausloesen (z-index in
+     css/modals.css): der Hinweis zur Abschnittsverwaltung erscheint
+     waehrend sie offen ist.
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="ov-ersthinweis" style="display:none">
+  <div class="modal hinweis-modal">
+    <h3 id="hinweis-titel"></h3>
+    <div class="hinweis-text" id="hinweis-text"></div>
+    <div class="modal-btns">
+      <button id="hinweis-mehr" data-i18n="hilfeMehrDazu">Mehr dazu</button>
+      <button id="hinweis-ok" class="ok-btn" data-i18n="hinweisVerstanden">Verstanden</button>
+    </div>
+  </div>
+</div>
+
 <!-- PROFILE / CLOUD MODAL -->
 <div class="overlay" id="ov-account" style="display:none">
   <div class="modal auth-modal" style="width:400px; max-width:90vw;">
@@ -2106,6 +2163,8 @@
   <script src="ui/collab.js"></script>
   <!-- Weist beim Start darauf hin, wenn die Cloud-Sitzung im Hintergrund endete -->
   <script src="ui/signedOut.js"></script>
+  <script src="core/hilfe.js"></script>
+  <script src="ui/hilfe.js"></script>
   <script src="ui/shortcuts.js"></script>
   <script src="app.js"></script>
   <script src="core/init.js"></script>

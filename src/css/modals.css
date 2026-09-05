@@ -2602,3 +2602,338 @@ body.hat-konflikt .view {
 .code-hell-zeile input[type="checkbox"] {
   accent-color: var(--gold)
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   HILFE
+
+   Aufgeteilt wie die Abschnittsverwaltung: links die Themen, rechts der
+   Text. Zwei Fenster mit derselben Aufgabe sollen auch gleich aussehen –
+   wer das eine bedienen kann, kann das andere.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.hilfe-modal {
+  width: 740px;
+  max-width: 95vw;
+  height: 80vh;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-radius: 14px
+}
+
+.hilfe-main {
+  flex: 1;
+  display: flex;
+  min-height: 0
+}
+
+.hilfe-themen {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--sb);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb) transparent
+}
+
+.hilfe-thema {
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+  padding: 8px 12px;
+  color: var(--md);
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .12s, color .12s
+}
+
+.hilfe-thema:hover {
+  background: var(--sh2);
+  color: var(--hi)
+}
+
+.hilfe-thema.aktiv {
+  background: var(--sh2);
+  color: var(--gold)
+}
+
+.hilfe-inhalt {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 26px 26px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb) transparent
+}
+
+.hilfe-h {
+  font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;
+  font-weight: 300;
+  font-style: italic;
+  font-size: 21px;
+  color: var(--hi);
+  margin: 0 0 14px
+}
+
+.hilfe-p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--md);
+  margin: 0 0 12px
+}
+
+/* Der eine Satz, auf den es ankommt. Er steht abgesetzt, weil man ihn
+   im Vorbeilesen mitnehmen können soll – wer nur ihn liest, hat das
+   Wichtigste. */
+.hilfe-merk {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--hi);
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-left: 2px solid var(--gold);
+  background: rgba(200, 169, 110, .07);
+  border-radius: 0 6px 6px 0
+}
+
+.hilfe-liste {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  color: var(--md);
+  font-size: 14px;
+  line-height: 1.65
+}
+
+.hilfe-liste li {
+  margin-bottom: 5px
+}
+
+/* ── Die Schaubilder ─────────────────────────────────────────────── */
+
+.hilfe-bild {
+  margin: 4px 0 16px;
+  padding: 16px;
+  border: 1px solid var(--sb);
+  border-radius: 8px;
+  background: var(--sp)
+}
+
+.hb-zeile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px
+}
+
+.hb-mark {
+  width: 152px;
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--lo)
+}
+
+.hb-seiten {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap
+}
+
+/* Eine Seite als Kärtchen. Die Nummer steht drauf, das Etikett als
+   farbiger Strich darunter – genau so wie in der Verwaltung. */
+.hb-seite {
+  width: 30px;
+  height: 38px;
+  border: 1px solid var(--sb2);
+  border-bottom: 3px solid var(--sb2);
+  border-radius: 3px;
+  background: var(--sc);
+  color: var(--md);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center
+}
+
+.hb-getaggt {
+  color: var(--hi)
+}
+
+.hb-legende {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 12px 164px
+}
+
+.hb-leg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--md)
+}
+
+.hb-leg-punkt {
+  width: 9px;
+  height: 3px;
+  border-radius: 2px
+}
+
+.hb-unter {
+  margin: 12px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--lo)
+}
+
+/* Papier: drei Stufen nebeneinander, die letzte gewinnt */
+.hb-kette {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap
+}
+
+.hb-stufe {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 13px;
+  border: 1px solid var(--sb2);
+  border-radius: 6px;
+  background: var(--sc)
+}
+
+.hb-stufe-gilt {
+  border-color: var(--gold);
+  background: rgba(200, 169, 110, .09)
+}
+
+.hb-stufe-wo {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--lo)
+}
+
+.hb-stufe-was {
+  font-size: 13px;
+  color: var(--hi)
+}
+
+.hb-pfeil {
+  color: var(--gd);
+  font-size: 14px
+}
+
+/* Die Farben des Sync-Knopfs */
+.hb-farben {
+  display: flex;
+  flex-direction: column;
+  gap: 10px
+}
+
+.hb-farbe {
+  display: flex;
+  align-items: baseline;
+  gap: 10px
+}
+
+.hb-farbe-punkt {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center
+}
+
+.hb-farbe-name {
+  width: 74px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--hi)
+}
+
+.hb-farbe-was {
+  font-size: 13px;
+  color: var(--md);
+  line-height: 1.5
+}
+
+/* Wer darf was */
+.hb-rollen {
+  display: flex;
+  flex-direction: column;
+  gap: 1px
+}
+
+.hb-r-zeile {
+  display: flex;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--sb)
+}
+
+.hb-r-zeile:last-child {
+  border-bottom: 0
+}
+
+.hb-r-kopf .hb-r-spalte {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--lo)
+}
+
+.hb-r-was {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--md)
+}
+
+.hb-r-spalte {
+  width: 92px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 14px
+}
+
+.hb-ja {
+  color: var(--sync-ok)
+}
+
+.hb-nein {
+  color: var(--lo)
+}
+
+/* ── Der einmalige Hinweis ────────────────────────────────────────────
+   Er liegt ÜBER dem Fenster, das ihn ausgelöst hat (die stehen alle auf
+   900) – er gehört zu ihm und erscheint, während es offen ist. Unter den
+   Rückfragen auf 950 bleibt er trotzdem: „Wirklich löschen?" muss immer
+   obenauf liegen. */
+#ov-ersthinweis {
+  z-index: 940
+}
+
+.hinweis-modal {
+  width: 430px;
+  max-width: 92vw
+}
+
+.hinweis-modal h3 {
+  margin-bottom: 12px
+}
+
+.hinweis-text .hilfe-p:last-child {
+  margin-bottom: 0
+}

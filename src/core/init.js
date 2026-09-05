@@ -47,6 +47,9 @@
     await Settings.init();
     console.log('[Init] ✓ Settings initialized');
     console.log('[Init] Save location:', Settings.get('saveLocation'));
+    /* Ob am „?" der Punkt steht, hängt an den Einstellungen – beim Laden
+       von ui/hilfe.js gab es sie noch nicht. */
+    if (typeof window.hilfePunktPruefen === 'function') window.hilfePunktPruefen();
   } catch (err) {
     console.error('[Init] ✗ Settings init failed:', err);
   }

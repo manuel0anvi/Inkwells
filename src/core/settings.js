@@ -64,6 +64,11 @@ const DEFAULT_SETTINGS = {
   autoLinkShare: false,
   // Nur abweichende Tastenkürzel: { aktionId: 'Ctrl+S' }. Leer = alles Standard.
   shortcuts: {},
+  /* Welche einmaligen Hinweise schon dagewesen sind (core/hilfe.js).
+     Eine Liste und nicht ein Schalter je Hinweis: es kommen welche dazu,
+     und jeder neue bräuchte sonst hier einen eigenen Standardwert – und
+     eine Einstellungsdatei aus der Zeit davor kennt ihn nicht. */
+  hinweiseGesehen: [],
   /* Eigene Heft-Freigaben, zwei Arten nebeneinander:
        { [heftId]: { docId, linkId, url, linkMode } }  geteiltes Dokument
        { [heftId]: { shareId, url, mode } }            ältere Lesekopie
