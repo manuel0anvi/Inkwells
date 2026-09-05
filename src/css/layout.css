@@ -278,22 +278,28 @@
   color: var(--md)
 }
 
-/* Marker am rechten Seitenrand – INNERHALB der Seite, weil .j-page
-   alles abschneidet, was darüber hinausragt (overflow: hidden). Liegt
-   über dem Text, aber im schmalen Randstreifen, in den nicht geschrieben
-   wird. */
+/* Marker im SEITENKOPF, gleich neben der Seitenzahl (ui/collab.js).
+   Sie standen vorher frei am rechten Blattrand und sahen dort aus wie
+   etwas, das zur Seite gehört – der Kopf ist der Ort für Auskunft
+   über die Seite. Nebeneinander statt untereinander: der Kopf ist eine
+   Zeile. */
 .collab-marker {
-  position: absolute;
-  top: 64px;
-  right: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  z-index: 1200;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
   pointer-events: none
 }
 
+/* Kleiner als in der Werkzeugleiste: der Kopf ist 56 px hoch und trägt
+   Schrift in 9 px – ein 22-px-Abzeichen daneben wäre das Lauteste auf
+   dem Blatt. */
 .collab-marker .collab-dot {
+  width: 15px;
+  height: 15px;
+  font-size: 7px;
+  border-width: 1px;
+  box-shadow: none;
   pointer-events: auto;
   opacity: .9;
   animation: collab-pop .18s ease-out

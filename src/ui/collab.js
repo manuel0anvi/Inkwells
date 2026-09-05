@@ -753,11 +753,26 @@
   });
 
   /**
-   * Marker an den Seitenrand: ein Abzeichen mit den Initialen auf Höhe
-   * der Seite, auf der die Person gerade ist. Fremde Textcursor werden
-   * bewusst NICHT gezeigt – so gewünscht, und nebenbei erheblich
-   * einfacher.
+   * Marker in den Seitenkopf: ein Abzeichen mit den Initialen gleich
+   * neben der Seitenzahl der Seite, auf der die Person gerade ist.
    */
+  /* ═════════════════════════════════════════════════════════════════
+     WO DAS ABZEICHEN STEHT
+
+     Es hing frei am rechten Blattrand, 64 Pixel unter der Oberkante –
+     also mitten im beschriebenen Bereich, nur eben in einem Streifen,
+     in den selten jemand schreibt. Damit stand es über dem Text und
+     sah aus wie etwas, das zur Seite gehört.
+
+     Es gehört aber zur AUSKUNFT über die Seite, und die steht im Kopf:
+     Seitenzahl, Freigabe-Zeichen, Datum. Dorthin also, unmittelbar
+     neben die Seitenzahl – dieselbe Gruppe (.j-page-left), in der auch
+     das Freigabe-Zeichen sitzt. Genau so gemeldet.
+
+     Der Kopf lässt Klicks durch (pointer-events: none, css/pages.css);
+     die Abzeichen holen sie sich selbst zurück, sonst gäbe es keinen
+     Tooltip mit dem Namen.
+     ═════════════════════════════════════════════════════════════════ */
   /* ══════════════════════════════════════════════════════════════════
      DAS ABZEICHEN STEHT STILL
 
@@ -785,11 +800,16 @@
       const pgEl = document.querySelector('[data-pgid="' + cssEscapeId(pageId) + '"]');
       if (!pgEl) continue;
 
-      let rail = pgEl.querySelector(':scope > .collab-marker');
+      /* In die Gruppe links im Kopf, hinter Seitenzahl und
+         Freigabe-Zeichen. Fehlt sie (eine Seite aus einem älteren
+         Aufbau), bleibt es beim Blatt – lieber am alten Platz als
+         gar nicht. */
+      const heim = pgEl.querySelector('.j-page-hdr .j-page-left') || pgEl;
+      let rail = heim.querySelector(':scope > .collab-marker');
       if (!rail) {
         rail = document.createElement('div');
         rail.className = 'collab-marker';
-        pgEl.appendChild(rail);
+        heim.appendChild(rail);
       }
       gebrauchteLeisten.add(rail);
 
