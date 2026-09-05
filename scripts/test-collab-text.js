@@ -243,6 +243,139 @@ Y.applyUpdate(q, up);
 check('Kein Text verloren', p.getText('t').toString().includes('Welt') && p.getText('t').toString().includes('Erde'), true);
 check('Beide sehen dasselbe', p.getText('t').toString(), q.getText('t').toString());
 
+/* ══════════════════════════════════════════════════════════════════════
+   4. ZWEI ÄNDERUNGEN AUF EINMAL
+
+   Der Fall, der den Text zweier Leute durcheinanderbrachte. Gemeldet:
+   „ich schreibe eine Zeile über dem anderen, komme in seine Zeile – und
+   der ganze Text von uns beiden wird verschoben."
+
+   Unterscheiden sich die hiesige Fassung und der gemeinsame Stand an
+   ZWEI Stellen, spannt textDelta einen einzigen Block über alles
+   dazwischen. Der geht als Löschen-und-neu-Einfügen nach Yjs, und was
+   der andere gerade mittendrin geschrieben hat, steht in Zeichen, die
+   dabei gelöscht werden. Daran kann Yjs nichts mehr retten.
+
+   feinDelta zerlegt den Block in Abschnitte und liefert je Abweichung
+   eine eigene, kleine Änderung. Genau das wird hier geprüft.
+   ══════════════════════════════════════════════════════════════════════ */
+
+console.log('\nZwei Änderungen auf einmal werden nicht zu einer');
+
+const { _feinDelta: feinDelta, _inAbschnitte: inAbschnitte } = ctx.window.Collab;
+
+/** Wendet an, was feinDelta liefert – von hinten nach vorn, wie in collab.js. */
+function wendeAn(text, deltas) {
+  for (let i = deltas.length - 1; i >= 0; i--) {
+    const d = deltas[i];
+    text = text.slice(0, d.at) + d.insert + text.slice(d.at + d.remove);
+  }
+  return text;
+}
+
+/** Bildet nach, was applyLocalText seit der feinen Zerlegung tut. */
+function editFein(ydoc, next) {
+  const ytext = ydoc.getText('t');
+  const deltas = feinDelta(ytext.toString(), next);
+  if (!deltas.length) return;
+  ydoc.transact(() => {
+    for (let i = deltas.length - 1; i >= 0; i--) {
+      const d = deltas[i];
+      if (d.remove > 0) ytext.delete(d.at, d.remove);
+      if (d.insert) ytext.insert(d.at, d.insert);
+    }
+  });
+}
+
+/* Eine Seite, wie sie mit frei stehenden Absätzen aussieht: oben einer,
+   unten einer, dazwischen gewöhnlicher Text. */
+const fuellung = (mitte) =>
+  '<p>Zeile eins mit einer ordentlichen Menge Text darin</p>'
+  + '<p>' + mitte + '</p>'
+  + '<p>Zeile drei mit einer ordentlichen Menge Text darin</p>'
+  + '<p>Zeile vier mit einer ordentlichen Menge Text darin</p>';
+
+const seiteAlt = '<p class="j-frei" style="left:100px;top:40px">Oben</p>'
+  + fuellung('Zeile zwei')
+  + '<p class="j-frei" style="left:100px;top:400px">Unten</p>';
+
+{
+  /* Zwei Abweichungen in einer Runde: der freie Absatz oben ist
+     verschoben (das tut ordneFreieAbsaetze in der Einstellung „fest“),
+     und unten wurde getippt. Dazwischen liegt unveränderter Text. */
+  const seiteNeu = '<p class="j-frei" style="left:100px;top:70px">Oben</p>'
+    + fuellung('Zeile zwei')
+    + '<p class="j-frei" style="left:100px;top:400px">UntenX</p>';
+
+  const grob = textDelta(seiteAlt, seiteNeu);
+  const fein = feinDelta(seiteAlt, seiteNeu);
+
+  // Der grobe Vergleich fasst wirklich alles dazwischen an – das ist der Fehler
+  check('Der grobe Block reicht über die Mitte', grob.remove > 150, true);
+
+  check('Fein zerlegt sind es zwei Änderungen', fein.length, 2);
+  check('Und zusammen fassen sie fast nichts an',
+    fein.reduce((n, d) => n + d.remove, 0) < 20, true);
+  check('Angewandt ergibt es die neue Fassung', wendeAn(seiteAlt, fein), seiteNeu);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   … UND DER MITARBEITER SCHREIBT MITTENDRIN
+
+   A hat die zweite Abweichung im Text stehen (den verschobenen freien
+   Absatz oben) und tippt unten weiter. B schreibt im selben Augenblick
+   in einer Zeile DAZWISCHEN. Mit dem groben Block war Bs Zeile danach
+   weg; mit der feinen Zerlegung steht sie noch da.
+   ══════════════════════════════════════════════════════════════════════ */
+
+console.log('\nDer Mitarbeiter schreibt mittendrin');
+
+{
+  const a1 = new Y.Doc();
+  const b1 = new Y.Doc();
+  Y.applyUpdate(a1, seedUpdate(seiteAlt));
+  Y.applyUpdate(b1, seedUpdate(seiteAlt));
+
+  // B schreibt in der mittleren Zeile
+  editFein(b1, '<p class="j-frei" style="left:100px;top:40px">Oben</p>'
+    + fuellung('Zeile zwei BBB')
+    + '<p class="j-frei" style="left:100px;top:400px">Unten</p>');
+
+  // A verschiebt oben und tippt unten – zwei Abweichungen auf einmal
+  editFein(a1, '<p class="j-frei" style="left:100px;top:70px">Oben</p>'
+    + fuellung('Zeile zwei')
+    + '<p class="j-frei" style="left:100px;top:400px">UntenAAA</p>');
+
+  const ua = Y.encodeStateAsUpdate(a1);
+  const ub = Y.encodeStateAsUpdate(b1);
+  Y.applyUpdate(a1, ub);
+  Y.applyUpdate(b1, ua);
+
+  const ergebnis = a1.getText('t').toString();
+  check('Bs Zeile ist noch da', ergebnis.includes('Zeile zwei BBB'), true);
+  check('As Zeile ist auch da', ergebnis.includes('UntenAAA'), true);
+  check('Und As Verschiebung ist angekommen', ergebnis.includes('top:70px'), true);
+  check('Beide sehen dasselbe', b1.getText('t').toString(), ergebnis);
+}
+
+console.log('\nAbschnitte zerlegen ergibt wieder den Ausgangstext');
+
+{
+  const proben = [
+    '<p>eins</p><p>zwei</p><h2>drei</h2>',
+    '<p>eins<br>zwei</p>',
+    '<ul><li>a</li><li>b</li></ul>',
+    'ganz ohne Auszeichnung',
+    ''
+  ];
+  for (const probe of proben) {
+    check('Verkettet wieder ' + JSON.stringify(probe),
+      inAbschnitte(probe).join(''), probe);
+  }
+  check('Drei Absätze sind drei Abschnitte',
+    inAbschnitte('<p>a</p><p>b</p><p>c</p>').length, 3);
+}
+
 if (failed > 0) {
   console.error(`\n${failed} Prüfung(en) fehlgeschlagen.`);
   process.exit(1);

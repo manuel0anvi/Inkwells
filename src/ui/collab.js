@@ -245,6 +245,176 @@
     return { at: start, remove: endOld - start, insert: next.slice(start, endNew) };
   }
 
+
+  /* ══════════════════════════════════════════════════════════════════
+     ZWEI ÄNDERUNGEN SIND NICHT EINE
+
+     textDelta() vergleicht über gemeinsamen Anfang und gemeinsames Ende.
+     Das ist genau richtig, solange sich zwei Fassungen an EINER Stelle
+     unterscheiden – an einer Schreibmarke entsteht ja auch nur eine.
+
+     >>> Und was geschieht, wenn es doch zwei sind <<<
+     Dann reicht der eine gefundene Block über alles dazwischen. Er geht
+     als LÖSCHEN dieses ganzen Bereichs samt WIEDEREINFÜGEN nach Yjs –
+     und daran kann Yjs nichts mehr zusammenführen: was der andere im
+     selben Augenblick mittendrin geschrieben hat, steht in Zeichen, die
+     hier gerade gelöscht werden. Sein Text verschwindet oder rutscht an
+     eine andere Stelle, und die Marken beider sitzen hinterher falsch.
+
+     Genau so wurde es gemeldet: „ich schreibe eine Zeile über dem
+     anderen, komme in seine Zeile – und der ganze Text von uns beiden
+     wird verschoben.“
+
+     >>> Warum es überhaupt zwei sein können <<<
+     Der Regelfall ist es nicht: flushPending() trägt das Eigene ein,
+     BEVOR Fremdes angewandt wird. Aber es genügt eine einzige Stelle,
+     die das DOM ändert, ohne den gemeinsamen Text nachzuziehen – und
+     davon gibt es welche: ordneFreieAbsaetze schreibt in der Einstellung
+     „Ausweichen und dort bleiben“ neue left/top-Werte in die Absätze
+     (canvas/text.js). Dann steht die zweite Abweichung schon da, bevor
+     überhaupt jemand tippt.
+
+     Der Vergleich darf sich darauf nicht verlassen. Er zerlegt den
+     gefundenen Block deshalb in ABSCHNITTE – Absätze, Überschriften,
+     Listenpunkte, Umbrüche – und liefert je zusammenhängender Abweichung
+     eine eigene, kleine Änderung. Was unverändert dazwischen liegt, wird
+     nicht mehr angefasst, und Yjs führt wieder zusammen, was es
+     zusammenführen kann.
+
+     Zerlegt wird nur, wenn sich das lohnt: bei einem getippten Zeichen
+     ist der Block ein paar Zeichen lang, da wäre jede weitere Rechnung
+     verschwendet.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Ab dieser Blockgröße wird nachgesehen, ob mehr als eine Änderung
+     darin steckt. Darunter ist es eine, und zwar sicher. */
+  const GROB_GRENZE = 160;
+
+  /* Mehr Abschnitte als das werden nicht paarweise verglichen – die
+     Rechnung wächst mit dem Produkt beider Seiten. Eine Seite hat selten
+     mehr als ein paar Dutzend Absätze; wird es doch einmal mehr, bleibt
+     es beim groben Block. */
+  const ABSCHNITT_MAX = 300;
+
+  /* Wo ein Abschnitt endet. Geschnitten wird HINTER dem Zeichen, damit
+     die Teile aneinandergereiht wieder genau den Ausgangstext ergeben –
+     ohne das stünden alle Stellen dahinter daneben. */
+  const ABSCHNITT_ENDE =
+    /(?:<\/(?:p|h[1-6]|li|ul|ol|div|table|tbody|tr|blockquote|pre)>|<br\s*\/?>)/gi;
+
+  /**
+   * Zerlegt einen Text in Abschnitte, deren Verkettung wieder den Text
+   * ergibt. Ohne erkennbare Grenzen bleibt es ein einziger Abschnitt.
+   */
+  function inAbschnitte(text) {
+    const teile = [];
+    let ab = 0;
+    ABSCHNITT_ENDE.lastIndex = 0;
+    for (let m = ABSCHNITT_ENDE.exec(text); m; m = ABSCHNITT_ENDE.exec(text)) {
+      const bis = m.index + m[0].length;
+      teile.push(text.slice(ab, bis));
+      ab = bis;
+    }
+    if (ab < text.length) teile.push(text.slice(ab));
+    return teile.length ? teile : [text];
+  }
+
+  /**
+   * Die längste gemeinsame Folge zweier Abschnittslisten, ausgedrückt
+   * als Folge aus behalten / weg / neu.
+   *
+   * Bewusst die einfache Tabelle und nicht Myers: die Listen sind kurz
+   * (ABSCHNITT_MAX), und eine Tabelle ist zu lesen.
+   */
+  function abschnittsFolge(a, b) {
+    const n = a.length, m = b.length;
+    const dp = new Int32Array((n + 1) * (m + 1));
+    const bei = (i, j) => i * (m + 1) + j;
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[bei(i, j)] = a[i] === b[j]
+          ? dp[bei(i + 1, j + 1)] + 1
+          : Math.max(dp[bei(i + 1, j)], dp[bei(i, j + 1)]);
+      }
+    }
+
+    const folge = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { folge.push({ art: 'gleich', text: a[i] }); i++; j++; }
+      else if (dp[bei(i + 1, j)] >= dp[bei(i, j + 1)]) { folge.push({ art: 'weg', text: a[i] }); i++; }
+      else { folge.push({ art: 'neu', text: b[j] }); j++; }
+    }
+    while (i < n) { folge.push({ art: 'weg', text: a[i] }); i++; }
+    while (j < m) { folge.push({ art: 'neu', text: b[j] }); j++; }
+    return folge;
+  }
+
+  /**
+   * Der Unterschied zweier Fassungen als Folge KLEINER Änderungen.
+   *
+   * @returns {{at:number, remove:number, insert:string}[]} aufsteigend
+   *   nach `at`, jede Stelle bezogen auf `alt`. Anzuwenden von hinten
+   *   nach vorn, sonst verschieben die früheren die späteren.
+   */
+  function feinDelta(alt, neu) {
+    const grob = textDelta(alt, neu);
+    if (!grob) return [];
+    if (grob.remove + grob.insert.length <= GROB_GRENZE) return [grob];
+
+    const alteTeile = inAbschnitte(alt.slice(grob.at, grob.at + grob.remove));
+    const neueTeile = inAbschnitte(grob.insert);
+    if (alteTeile.length < 2 && neueTeile.length < 2) return [grob];
+    if (alteTeile.length > ABSCHNITT_MAX || neueTeile.length > ABSCHNITT_MAX) return [grob];
+
+    const folge = abschnittsFolge(alteTeile, neueTeile);
+
+    /* Zusammenhängende Abweichungen zu je einem Block bündeln. Was
+       gleich geblieben ist, schliesst den laufenden Block ab. */
+    const bloecke = [];
+    let stelle = grob.at;
+    let lauf = null;
+    for (const teil of folge) {
+      if (teil.art === 'gleich') {
+        if (lauf) { bloecke.push(lauf); lauf = null; }
+        stelle += teil.text.length;
+        continue;
+      }
+      if (!lauf) lauf = { at: stelle, remove: 0, insert: '' };
+      if (teil.art === 'weg') { lauf.remove += teil.text.length; stelle += teil.text.length; }
+      else lauf.insert += teil.text;
+    }
+    if (lauf) bloecke.push(lauf);
+
+    /* Und jeden Block noch einmal auf das Zeichen genau eingrenzen –
+       sonst ersetzte ein einziges getipptes Zeichen den ganzen Absatz. */
+    const fein = [];
+    for (const b of bloecke) {
+      const altTeil = alt.slice(b.at, b.at + b.remove);
+      const d = textDelta(altTeil, b.insert);
+      if (!d) continue;
+      fein.push({ at: b.at + d.at, remove: d.remove, insert: d.insert });
+    }
+    return fein.length ? fein : [grob];
+  }
+
+  /**
+   * Trägt eine Folge von Änderungen in einen Yjs-Text ein.
+   *
+   * Von HINTEN nach vorn: eine Änderung weiter vorn verschiebt alles
+   * dahinter, und die Stellen sind alle am selben Ausgangstext gemessen.
+   */
+  function schreibeDeltas(entry, deltas) {
+    if (!deltas || !deltas.length) return;
+    entry.ydoc.transact(() => {
+      for (let i = deltas.length - 1; i >= 0; i--) {
+        const d = deltas[i];
+        if (d.remove > 0) entry.ytext.delete(d.at, d.remove);
+        if (d.insert) entry.ytext.insert(d.at, d.insert);
+      }
+    });
+  }
+
   /**
    * Wo liegt eine Stelle, nachdem sich der Text davor geändert hat?
    *
@@ -409,13 +579,8 @@
     const entry = docs.get(pageId);
     if (!entry || entry.applying) return;
 
-    const delta = textDelta(entry.ytext.toString(), nextText);
-    if (!delta) return;
-
-    entry.ydoc.transact(() => {
-      if (delta.remove > 0) entry.ytext.delete(delta.at, delta.remove);
-      if (delta.insert) entry.ytext.insert(delta.at, delta.insert);
-    });
+    // Fein zerlegt – siehe der Kasten bei feinDelta()
+    schreibeDeltas(entry, feinDelta(entry.ytext.toString(), nextText));
   }
 
   /* ── Oberfläche: Leiste und Marker ────────────────────────────────── */
@@ -2487,14 +2652,9 @@
        Im Normalfall passiert gar nichts – sanitize ändert an dem, was
        der Editor erzeugt, nichts, und dann sind beide schon gleich. */
     if (nextText !== entry.ytext.toString()) {
-      const roh = entry.ytext.toString();
-      const d = textDelta(roh, nextText);
-      if (d) {
-        entry.ydoc.transact(() => {
-          if (d.remove > 0) entry.ytext.delete(d.at, d.remove);
-          if (d.insert) entry.ytext.insert(d.at, d.insert);
-        });
-      }
+      /* Auch hier fein zerlegt: die Bereinigung kann an mehreren
+         Stellen zugleich zuschlagen – siehe der Kasten bei feinDelta() */
+      schreibeDeltas(entry, feinDelta(entry.ytext.toString(), nextText));
     }
 
     if (info.page.textContent === nextText) return;
@@ -2563,8 +2723,28 @@
        sie ergibt sich aus der Lage der Nachbarn und wird deshalb bei
        jedem Einspielen neu gerechnet (canvas/text.js). Ohne das liefen
        zwei Absätze auf einer Zeile beim EMPFÄNGER ineinander, während
-       sie beim Schreiber sauber nebeneinander stehen. */
-    if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv);
+       sie beim Schreiber sauber nebeneinander stehen.
+
+       >>> Und zwar ausdrücklich „elastisch“, was auch eingestellt ist <<<
+       Die beiden Arten unterscheiden sich genau darin, ob das Ausweichen
+       den TEXT ändert: „elastisch“ rechnet es in margin-left/-top, und
+       die nimmt ohneGriffe wieder heraus; „fest“ schreibt neue
+       left/top-Werte in die Absätze, und die stehen im Text.
+
+       Hier stand kein Argument, also galt die Einstellung – und in
+       „fest“ änderte diese Zeile den Text des DOM, ohne dass der
+       gemeinsame Yjs-Stand und page.textContent davon erfuhren. Ab da
+       waren beide an ZWEI Stellen verschieden: an den verschobenen
+       Absätzen und an dem, was man als Nächstes tippte. Der Vergleich
+       fasst zwei Stellen zu einem Block zusammen, und der reicht über
+       alles dazwischen – genau der Weg, auf dem der Text von zweien
+       durcheinandergeriet (siehe der Kasten bei feinDelta).
+
+       Hier ist ohnehin nur die ANZEIGE gemeint. Wo ein Absatz wirklich
+       hingehört, entscheidet der, der ihn geschrieben hat; die Zahl
+       reist im Text mit. Beim eigenen Tippen greift die Einstellung
+       wie bisher (app.js, der input-Griff). */
+    if (typeof ordneFreieAbsaetze === 'function') ordneFreieAbsaetze(textDiv, 'elastisch');
 
     /* Die angeklickte Stelle wieder hinstellen – samt Marke. Steht sie
        wieder, ist das Zurücksetzen der Marke weiter unten gegenstandslos:
@@ -4492,6 +4672,8 @@
     offenesDokument: () => (docId ? { docId, ownerUid: ownerUidJetzt } : null),
     // offengelegt für scripts/test-collab-text.js
     _textDelta: textDelta,
+    _feinDelta: feinDelta,
+    _inAbschnitte: inAbschnitte,
     _stelleAusAnker: stelleAusAnker,
     _shiftedPos: shiftedPos,
     _seedUpdate: seedUpdate
