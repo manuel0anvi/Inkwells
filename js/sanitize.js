@@ -68,6 +68,21 @@
     'FONT',
     'UL', 'OL', 'LI', 'BLOCKQUOTE', 'SECTION',
 
+    /* ── Code ────────────────────────────────────────────────────────
+       Ein Codeblock ist ein <pre class="j-code" data-lang="python">.
+       Darin steht NUR der nackte Code – die Farben werden erst beim
+       Anzeigen darübergelegt und von ohneGriffe() in app.js wieder
+       abgezogen, bevor etwas gespeichert oder geteilt wird. Sonst ginge
+       bei jedem Tastendruck ein neues Farbgeruest durch Yjs, und die
+       Zusammenarbeit erstickte daran.
+
+       Ohne diese zwei Tags packte die Bereinigung den Block aus: aus
+       eingeruecktem Code wurde eine Reihe loser Woerter, und zwar
+       unwiederbringlich. Fuer eine Schule mit dreizehn Wochenstunden
+       Informatik, Systemen und Telekommunikation ist das der
+       Unterschied zwischen brauchbar und unbrauchbar. */
+    'PRE', 'CODE',
+
     /* ── Verweise ────────────────────────────────────────────────────
        Sie standen bewusst nicht hier: ein <a> traegt eine ADRESSE, und
        eine Adresse ist der uebliche Weg, ueber den in einer Seite etwas
@@ -105,7 +120,16 @@
      Alternative, von einem style bleibt unten allein die Farbe uebrig.
      Gebraucht wird sie vor allem beim Oeffnen von Word-Dokumenten –
      dort ist eine zentrierte Ueberschrift der Normalfall. */
-  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke|frei)$/;
+  /* `j-code` ist der Codeblock, `j-code-hell` seine helle Fassung (die
+     Voreinstellung ist dunkel, wie in einer Entwicklungsumgebung). Die
+     Farbklassen `j-tok-…` stehen hier bewusst NICHT: sie sind reine
+     Anzeige und werden vor dem Speichern abgezogen. Käme eine davon
+     doch einmal durch, fiele sie hier weg – richtig so.
+
+     `j-erledigt` ist der gesetzte Haken einer Ankreuzliste. Er gehört
+     zum Inhalt und nicht zur Anzeige: ob eine Aufgabe erledigt ist,
+     sollen alle sehen und das Heft soll es behalten. */
+  const ERLAUBTE_KLASSEN = /^j-(title-[123]|list-[a-z]{3,8}(-[a-z]{3,8})?|align-(center|right|justify)|table|formula(-block)?|comment-mark|resolved|luecke|frei|code|code-hell|erledigt|folie|folie-z)$/;
 
   /* ── Abstand statt Leerzeichen ──────────────────────────────────────
      `j-luecke` ist der Abstandshalter, den ein Klick rechts neben schon
@@ -132,6 +156,12 @@
      Filter: alles, was mit 'katex' beginnt, und alle kurzen Mathe-Klassen
      der Form m… (mord, mfrac etc.) und Hilfsklassen (base, strut, vlist). */
   const KATEX_KLASSEN = /^(katex|katex-(html|mathml|display)|base|strut|vlist|accent|overline|reset-size|sizing|delimsizing|nulldelimiter|op-symbol|m[a-z]{2,10}(-[a-z]{2,10})?)$/;
+
+  /* Die Sprachen, die der Einfaerber kennt (core/code.js). Bewusst eine
+     Liste und kein Muster: was hier durchkommt, wird zu einer CSS-Klasse. */
+  const SPRACHEN = new Set(['text', 'java', 'python', 'c', 'cpp', 'csharp',
+    'javascript', 'typescript', 'html', 'css', 'sql', 'bash', 'json', 'xml', 'php']);
+  const istSprache = (wert) => SPRACHEN.has(String(wert || '').trim().toLowerCase());
 
   /* Nur an Tabellenzellen, nur diese zwei, und nur als kleine Zahl. Ohne
      sie ginge eine verbundene Zelle beim ersten Abgleich auseinander –
@@ -256,6 +286,19 @@
            und die Obergrenze haelt ihn auf dem Blatt. */
         const istFrei = istBlock && el.classList.contains('j-frei');
 
+        /* ── Eine Stelle der unsichtbaren Folien-Textebene ─────────────
+           Sie traegt Lage UND Schriftgroesse: nur damit sitzt die
+           unsichtbare Schrift genau auf der sichtbaren im Bild
+           darunter, und nur dann stimmt beim Markieren der Rahmen mit
+           dem, was man sieht (core/importExport.js, folienTextEbene).
+
+           Die Groesse ist die einzige Stelle, an der ein font-size
+           durchkommt. Sie ist geprueft wie jedes andere Mass hier – ein
+           Mass kann nichts ausfuehren, und die Obergrenze haelt es auf
+           dem Blatt. */
+        const istFolienStelle = el.tagName === 'SPAN' && el.classList.contains('j-folie-z');
+        const groesse = el.style && el.style.fontSize;
+
         el.removeAttribute('style');
         if (istFarbe(farbe)) el.style.color = farbe;
         if (istBlock && istAbstand(links)) el.style.marginLeft = links;
@@ -263,6 +306,9 @@
         if (istHalter && istAbstand(breite)) el.style.width = breite;
         if (istFrei && istAbstand(vonLinks)) el.style.left = vonLinks;
         if (istFrei && istAbstand(vonOben)) el.style.top = vonOben;
+        if (istFolienStelle && istAbstand(vonLinks)) el.style.left = vonLinks;
+        if (istFolienStelle && istAbstand(vonOben)) el.style.top = vonOben;
+        if (istFolienStelle && istAbstand(groesse)) el.style.fontSize = groesse;
         continue;
       }
 
@@ -305,6 +351,19 @@
          Gegenteil und machte aus jedem Element ein Eingabefeld. */
       if (name === 'contenteditable' && el.tagName === 'SPAN'
           && el.classList.contains('j-luecke') && String(wert) === 'false') continue;
+
+      /* Und derselbe Riegel an der Folien-Textebene: auswaehlen und
+         kopieren ja, hineinschreiben nein. Ohne ihn tippte man beim
+         Antippen der Folie mitten in den unsichtbaren Text hinein.
+         Wieder nur 'false' – 'true' waere das Gegenteil. */
+      if (name === 'contenteditable' && el.tagName === 'DIV'
+          && el.classList.contains('j-folie') && String(wert) === 'false') continue;
+
+      /* Die Sprache eines Codeblocks. Nur an einem <pre class="j-code">
+         und nur einer aus der Liste – sie landet als Klasse im DOM und
+         steuert die Einfärbung, da hat nichts Freies etwas zu suchen. */
+      if (name === 'data-lang' && el.tagName === 'PRE'
+          && el.classList.contains('j-code') && istSprache(wert)) continue;
 
       /* data-cid an der kommentierten Stelle: die Kennung des Kommentars,
          zu dem sie gehört. Ohne sie ginge die Verknüpfung zwischen Text und

@@ -2768,6 +2768,45 @@ const CHAT_PRUNE_EVERY_MS = 60 * 60 * 1000;
    genug, dass es in der Abrechnung nicht auffällt. */
 const ROLES_REFRESH_MS = 20 * 1000;
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER BESITZER MELDET SICH, AUCH WENN ER NICHTS TUT
+
+   >>> Der Fall, den das schliesst <<<
+   Gemeldet: „wenn der Besitzer die Internetverbindung verliert, steht
+   bei ihm zwar, dass die Live-Übertragung unterbrochen ist – aber alle
+   anderen schreiben munter weiter, als wäre nichts."
+
+   Genau so war es. Ob der Besitzer noch da ist, hing allein am
+   onDisconnect-Auftrag: der Server räumt seinen Eintrag weg (bzw.
+   setzt lost = 1), sobald ER die tote Leitung bemerkt. Das kann dauern –
+   eine abgezogene Netzwerkkarte meldet sich nicht ab, der Server wartet
+   auf seinen eigenen Zeitablauf. Bis dahin steht der Eintrag unverändert
+   da und sagt: alles in Ordnung.
+
+   Über das ALTER des Eintrags ging es bisher ausdrücklich nicht, und
+   der Grund dafür war richtig: setPage schreibt nur bei einer Änderung,
+   ein Besitzer, der nur liest, frischt gar nichts auf. Er hätte als weg
+   gegolten, während er dasitzt.
+
+   Deshalb schreibt er jetzt von sich aus einen Puls – nichts als einen
+   neuen Zeitstempel. Bleibt der aus, ist die Leitung weg, und die
+   Eingeladenen gehen in den Lesemodus.
+
+   >>> Woran ein Beteiligter erkennt, dass es diesen Puls gibt <<<
+   An `lost: 0`. Eine ältere Fassung schreibt das Feld gar nicht, und
+   deren Eintrag darf deshalb nicht am Alter gemessen werden – sonst
+   sperrte ein untätiger Besitzer alle anderen aus. Ein neues Feld wäre
+   sauberer gewesen, hätte aber einen Regel-Deploy gebraucht; `lost`
+   steht schon in website/database.rules.json, und 0 bedeutet dort
+   dasselbe wie „nicht gesetzt": nicht verloren.
+   ══════════════════════════════════════════════════════════════════════ */
+const BESITZER_PULS_MS = 10 * 1000;
+
+/* Vier ausgefallene Schläge. Kürzer wäre eine hakelige Leitung schon
+   ein Abriss; länger säße man zu lange in einem Dokument, in das
+   niemand mehr hineinschreibt, was man tut. */
+const BESITZER_STILL_MS = 45 * 1000;
+
 /* Länger als das gilt niemand mehr als „schreibt gerade". Die Anzeige
    wird bei jedem Anschlag aufgefrischt (CHAT_TYPING_REFRESH_MS in
    ui/chat.js) – wer aufhört, verschwindet also nach dieser Zeit von
@@ -2915,6 +2954,7 @@ async function joinDocRoom(docId, options = {}) {
      Schreibrecht nicht dauerhaft wegnimmt. */
   let letzteRollen = null;
   let rollenTakt = null;
+  let pulsTakt = null;
 
   let meRef = ref(rtdb, `presence/${raum}/${me.uid}`);
   let opsRef = ref(rtdb, `ops/${raum}`);
@@ -3178,11 +3218,19 @@ async function joinDocRoom(docId, options = {}) {
         + 'dann nicht auf. Abhilfe: website/database.rules.json in der '
         + 'Firebase Console unter Realtime Database → Regeln veröffentlichen.');
     }
-    // Etwaigen lost-Vermerk der VORIGEN Verbindung überschreiben.
-    // Schließt der Besitzer die App und öffnet sie sofort wieder, feuert
-    // das alte onDisconnect serverseitig NACH der neuen Verbindung und
-    // setzt lost:1 auf den frischen Eintrag – das hier löscht es wieder.
-    await set(meRef, { ...card, lost: null, at: rtNow() });
+    /* Etwaigen lost-Vermerk der VORIGEN Verbindung überschreiben.
+       Schließt der Besitzer die App und öffnet sie sofort wieder, feuert
+       das alte onDisconnect serverseitig NACH der neuen Verbindung und
+       setzt lost:1 auf den frischen Eintrag – das hier löscht es wieder.
+
+       Und zwar auf NULL statt es zu entfernen, sobald der Auftrag oben
+       durchging: die 0 sagt den Eingeladenen, dass dieser Besitzer einen
+       Puls schreibt und sein Schweigen deshalb etwas bedeutet (siehe
+       BESITZER_PULS_MS). Ging der Auftrag nicht durch, kennen die
+       veröffentlichten Regeln das Feld nicht – dann bleibt alles wie
+       bisher. */
+    if (ownerMarkOk) card.lost = 0;
+    await set(meRef, { ...card, ...(ownerMarkOk ? {} : { lost: null }), at: rtNow() });
   }
   if (!ownerMarkOk) await onDisconnect(meRef).remove();
 
@@ -3428,7 +3476,46 @@ async function joinDocRoom(docId, options = {}) {
 
     let connected = true;
     let ownerHere = true;
-    const report = () => callback(!connected || !ownerHere);
+
+    /* ══════════════════════════════════════════════════════════════════════
+       … UND DER DRITTE GRUND: ER SCHWEIGT
+
+       Der Besitzer schreibt alle BESITZER_PULS_MS einen neuen
+       Zeitstempel in seinen Anwesenheitseintrag (siehe dort). Bleibt
+       der aus, ist seine Leitung weg – und zwar lange bevor der Server
+       das von sich aus bemerkt und den onDisconnect-Auftrag ausführt.
+       Genau diese Lücke war gemeldet worden.
+
+       Gemessen wird an der SERVERUHR, nicht an der hiesigen: die beiden
+       gehen selten gleich, und ein Rechner, dessen Uhr eine Minute
+       vorgeht, hielte sonst jeden Besitzer für verschwunden.
+       `.info/serverTimeOffset` ist genau dafür da.
+
+       Und nur bei einem Eintrag, der `lost` überhaupt führt: eine
+       ältere Fassung schreibt keinen Puls, ihr Zeitstempel ist alt,
+       sobald der Besitzer eine Minute nichts tut. Sie am Alter zu
+       messen hiesse, alle anderen wegen seiner Ruhe auszusperren.
+       ══════════════════════════════════════════════════════════════════════ */
+    let uhrVersatz = 0;         // Serverzeit minus hiesige Zeit
+    let letzterPuls = 0;        // wann der Besitzer zuletzt etwas sagte
+    let pulsBekannt = false;    // schreibt dieser Besitzer überhaupt einen?
+
+    function schweigtZuLange() {
+      if (!pulsBekannt || !letzterPuls) return false;
+      return (Date.now() + uhrVersatz) - letzterPuls > BESITZER_STILL_MS;
+    }
+
+    const report = () => callback(!connected || !ownerHere || schweigtZuLange());
+
+    const stopVersatz = onValue(ref(rtdb, '.info/serverTimeOffset'), (snap) => {
+      const v = Number(snap.val());
+      if (Number.isFinite(v)) uhrVersatz = v;
+    }, () => { /* dann eben ohne Versatz */ });
+
+    /* Schweigen ändert nichts am Baum – es kommt also auch keine
+       Meldung, die den Zustand neu bewerten liesse. Deshalb ein eigener
+       Takt. Er darf ruhig grob sein: es geht um Zehnersekunden. */
+    const stilleTakt = setInterval(report, 5000);
 
     const stopConn = onValue(ref(rtdb, '.info/connected'), (snap) => {
       connected = snap.val() === true;
@@ -3451,11 +3538,20 @@ async function joinDocRoom(docId, options = {}) {
          auf „Eintrag entfernen" zurück – was hier dasselbe bedeutet. */
       const eintrag = snap.val();
       ownerHere = snap.exists() && !eintrag?.lost;
+
+      /* Der Puls. `lost` steht nur dort, wo die Regeln es annehmen und
+         die Fassung es schreibt – daran hängt, ob das Alter überhaupt
+         zählt (siehe der Kasten oben). */
+      if (eintrag && typeof eintrag.lost === 'number') pulsBekannt = true;
+      if (eintrag && typeof eintrag.at === 'number') letzterPuls = eintrag.at;
+
       report();
     }, (err) => { ownerHere = false; report(); weg(err); }), 'Besitzer');
 
     stops.push(stopConn);
-    return () => { stopConn(); stopOwner(); };
+    stops.push(stopVersatz);
+    stops.push(() => clearInterval(stilleTakt));
+    return () => { clearInterval(stilleTakt); stopVersatz(); stopConn(); stopOwner(); };
   }
 
   /* ── Änderungsstrom ── */
@@ -3841,6 +3937,7 @@ const CHAT_QUOTE_LEN = 140;
     clearTimeout(pageTimer);
     clearInterval(chatPruneTimer);
     clearInterval(rollenTakt);
+    clearInterval(pulsTakt);
     for (const stop of stops) { try { stop(); } catch (e) {} }
     try { await onDisconnect(meRef).cancel(); } catch (e) {}
     try { await remove(meRef); } catch (e) {}
@@ -3907,6 +4004,20 @@ const CHAT_QUOTE_LEN = 140;
       set(child(rolesRef, 'w'), letzteRollen.w).catch(() => {});
       onDisconnect(child(rolesRef, 'w')).set({ [me.uid]: true }).catch(() => {});
     }, ROLES_REFRESH_MS);
+  }
+
+  /* ── Der Puls des Besitzers ───────────────────────────────────────
+     Nichts als ein neuer Zeitstempel. Warum es ihn braucht, steht bei
+     BESITZER_PULS_MS.
+
+     Nur, wenn die Regeln das Kennzeichen angenommen haben: ohne
+     `lost: 0` misst niemand das Alter, und dann wäre der Takt eine
+     Schreiboperation je zehn Sekunden für nichts. */
+  if (options.isOwner && ownerMarkOk) {
+    pulsTakt = setInterval(() => {
+      if (left) return;
+      update(meRef, { at: rtNow() }).catch(() => {});
+    }, BESITZER_PULS_MS);
   }
 
   /**

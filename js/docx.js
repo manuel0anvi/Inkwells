@@ -289,8 +289,22 @@
     };
   }
 
+  /**
+   * Die Farbe des Blattes.
+   *
+   * >>> Warum ein leeres Blatt hier NICHT weiss ist <<<
+   * Im Heft ist es das (css/pages.css, .bg-blank) – zwischen zwei warmen
+   * Seiten fällt das kaum auf, weil man immer nur eine ansieht. In einem
+   * Word-Dokument stehen sie untereinander, und dann steht ein weisses
+   * Blatt als heller Bruch zwischen den anderen. Es bekommt deshalb
+   * denselben Ton wie sie.
+   */
+  function papierFarbe(bg) {
+    return bg === 'craft' ? '#f0e8d5' : PAPER;
+  }
+
   function drawPaper(ctx, bg, w, h) {
-    ctx.fillStyle = bg === 'blank' ? '#ffffff' : bg === 'craft' ? '#f0e8d5' : PAPER;
+    ctx.fillStyle = papierFarbe(bg);
     ctx.fillRect(0, 0, w, h);
 
     if (bg === 'ruled') {
@@ -333,23 +347,6 @@
     }
   }
 
-  function drawHeader(ctx, w, leftText, rightText) {
-    ctx.fillStyle = PAPER_LINE;
-    ctx.fillRect(0, HEADER_H - 2, w, 2);
-
-    ctx.save();
-    ctx.font = '9px "DM Mono", Consolas, "Courier New", monospace';
-    ctx.fillStyle = HDR_COLOR;
-    ctx.textBaseline = 'middle';
-    try { ctx.letterSpacing = '0.5px'; } catch (e) { /* ältere Engines */ }
-
-    ctx.textAlign = 'left';
-    if (leftText) ctx.fillText(leftText, TEXT_LEFT, HEADER_H / 2);
-
-    ctx.textAlign = 'right';
-    if (rightText) ctx.fillText(rightText, w - TEXT_LEFT, HEADER_H / 2);
-    ctx.restore();
-  }
 
   // object-fit: contain
   function containBox(imgW, imgH, boxW, boxH) {
@@ -427,21 +424,118 @@
     ctx.restore();
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     DIE HANDSCHRIFT ALS EIGENES DING
+
+     Sie steckte im Seitenbild, zusammen mit dem Papier. In Word liess
+     sich damit nichts davon anfassen, und das Papier musste ihretwegen
+     fein gerastert werden – ein kariertes Blatt mit drei Strichen
+     kostete 96 KB statt 36.
+
+     Jetzt ist sie ein Bild fuer sich, und zwar nur so gross wie das,
+     was darauf steht: gemalt wird in den Kasten um alle Striche, nicht
+     auf ein ganzes Blatt. Eine Notiz in der Ecke kostet damit so viel
+     wie eine Notiz in der Ecke.
+
+     >>> Warum ein Bild und keine Freihandform <<<
+     Word kennt Freiformen (a:custGeom), und ein Strich liesse sich als
+     Pfad schreiben. Nur besteht ein Strich aus Hunderten von Punkten mit
+     wechselndem Druck – die Breite gehoert zum Weg, nicht zur Linie.
+     Als Pfad waere jeder Strich entweder gleichmaessig dick oder ein
+     Umriss aus tausend Punkten. Ein Bild sagt die Wahrheit darueber,
+     was es ist: ein Abbild der Handschrift.
+
+     >>> Warum hinter dem Text <<<
+     Im Heft liegt sie unter dem Textfeld (css/pages.css). Ein Textmarker
+     ueber einem Wort ist dort durchsichtig; als Objekt VOR dem Text
+     laege er darauf und deckte es zu.
+     ══════════════════════════════════════════════════════════════════ */
+  async function renderInkImage(page, scale) {
+    const strokes = (page.inkStrokes || []).map(normalizeStroke);
+    if (!strokes.length) return null;
+
+    const w = page.w || DEFAULT_PAGE_W;
+    const h = page.h || DEFAULT_PAGE_H;
+
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const s of strokes) {
+      const rand = (s.width || 2) / 2 + 1;
+      for (const p of (s.path || [])) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        if (p.x - rand < x0) x0 = p.x - rand;
+        if (p.x + rand > x1) x1 = p.x + rand;
+        if (p.y - rand < y0) y0 = p.y - rand;
+        if (p.y + rand > y1) y1 = p.y + rand;
+      }
+    }
+    if (!Number.isFinite(x0) || !Number.isFinite(y1)) return null;
+
+    // Im Seitenkopf steht nie ein Strich – derselbe Beschnitt wie drawInk
+    x0 = Math.max(0, Math.floor(x0));
+    y0 = Math.max(KOPF_H, Math.floor(y0));
+    x1 = Math.min(w, Math.ceil(x1));
+    y1 = Math.min(h, Math.ceil(y1));
+    const bw = x1 - x0;
+    const bh = y1 - y0;
+    if (bw < 2 || bh < 2) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bw * scale);
+    canvas.height = Math.round(bh * scale);
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    /* Der Ursprung wandert in die Ecke des Kastens; drinnen wird weiter
+       in Seitenmassen gerechnet, so wie drawInk es erwartet. */
+    ctx.translate(-x0, -y0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    drawInk(ctx, page.inkStrokes, w, h, scale);
+
+    // PNG, denn was zwischen den Strichen liegt, muss durchsichtig bleiben
+    return { dataUrl: canvas.toDataURL('image/png'), x: x0, y: y0, w: bw, h: bh };
+  }
+
   /**
-   * Zeichnet eine ganze Heftseite ohne den getippten Text.
-   * @returns {Promise<{dataUrl: string, extension: string}>}
+   * Zeichnet den Hintergrund einer Heftseite: das Papier und eine
+   * eingefügte Bildseite. Text, Objekte und Handschrift kommen als
+   * eigene Dinge dazu (build).
+   *
+   * >>> Warum nicht immer in voller Auflösung <<<
+   * Das Papiermuster besteht aus Linien von genau EINEM Pixel. Bei
+   * doppelter Auflösung werden daraus zwei, das Bild vervierfacht sich –
+   * und zu sehen ist davon nichts. Ein kariertes Blatt kostete so 172 KB
+   * statt 37 KB, auf zehn Seiten über ein Megabyte für Linien.
+   *
+   * Feiner gerechnet wird nur, wo es etwas bringt: bei einer
+   * eingefügten Bildseite, die ein Foto ist und grob gerastert sichtbar
+   * verliert.
+   *
+   * >>> Und warum ein Blatt ohne Muster gar keines bekommt <<<
+   * Auf ihm steht nichts als eine einzige Farbe. Ein Bild davon wären
+   * 66 KB für eine Fläche – die malt build stattdessen als Form, und
+   * die kostet nichts (papierFarbe).
+   *
+   * @returns {Promise<{dataUrl: string, extension: string}|null>}
+   *   null = diese Seite braucht kein Bild, nur ihre Farbe
    */
   async function renderPageImage(entry, scale) {
     const page = entry.page;
     const w = page.w || DEFAULT_PAGE_W;
     const h = page.h || DEFAULT_PAGE_H;
 
+    const ohneMuster = entry.bg === 'blank' || entry.bg === 'craft';
+    if (!page.bgImg && ohneMuster) return null;
+
+    const feinheit = page.bgImg ? scale : 1;
+
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(w * scale);
-    canvas.height = Math.round(h * scale);
+    canvas.width = Math.round(w * feinheit);
+    canvas.height = Math.round(h * feinheit);
 
     const ctx = canvas.getContext('2d');
-    ctx.scale(scale, scale);
+    ctx.scale(feinheit, feinheit);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
@@ -461,31 +555,14 @@
       drawPaper(ctx, entry.bg, w, h);
     }
 
-    drawHeader(ctx, w, entry.headerLeft, entry.headerRight);
+    /* ══ HIER WURDE EINMAL ALLES MITGEMALT ═════════════════════════
+       Papier, Hintergrund, jedes Foto, jede Zeichnung und die
+       Handschrift in einer Datei – die ganze Seite war ein einziges
+       Bild, und in Word liess sich davon nichts anfassen.
 
-    for (const obj of (page.objects || [])) {
-      if (!obj || !obj.src) continue;
-      const img = await loadImage(obj.src);
-      if (!img) continue;
-
-      hasPhoto = true;
-      const ow = obj.w || 200;
-      const oh = obj.h || 200;
-      const box = containBox(img.naturalWidth, img.naturalHeight, ow, oh);
-
-      ctx.save();
-      if (obj.rot) {
-        ctx.translate((obj.x || 0) + ow / 2, (obj.y || 0) + oh / 2);
-        ctx.rotate(obj.rot * Math.PI / 180);
-        ctx.translate(-ow / 2, -oh / 2);
-        ctx.drawImage(img, box.x, box.y, box.w, box.h);
-      } else {
-        ctx.drawImage(img, (obj.x || 0) + box.x, (obj.y || 0) + box.y, box.w, box.h);
-      }
-      ctx.restore();
-    }
-
-    drawInk(ctx, page.inkStrokes, w, h, scale);
+       Alles geht jetzt als eigenes Ding hinaus (build): ein Bild als
+       Bild, eine Form als Word-Form, die Handschrift als eigenes Bild in
+       ihrem eigenen Kasten. Hier bleibt nur, was das Blatt selbst ist. */
 
     // Papier und Handschrift sind große Flächen und dünne Linien – dafür ist
     // PNG klein und scharf. Sobald Fotos im Spiel sind, wird PNG schnell
@@ -669,6 +746,61 @@
     const ensureParagraph = () => current || openParagraph('body');
 
     /**
+     * Die Absätze, die in einer Zelle stehen.
+     *
+     * walk() hängt an dieselbe Liste an wie alles andere – die neu
+     * entstandenen Absätze werden deshalb hinten wieder abgeschnitten.
+     * Ein eigener Sammler dafür wäre eine zweite Fassung derselben
+     * Schleife, und die liefe beim nächsten Zusatz auseinander.
+     */
+    const zelleAbsaetze = (zelle, format) => {
+      const bisher = paragraphs.length;
+      const vorher = current;
+      current = null;
+      walk(zelle, format, null);
+      const neue = paragraphs.splice(bisher);
+      current = vorher;
+
+      /* Eine Tabelle in einer Tabelle geht nicht – Word kann es, dieser
+         Weg nicht. Ihr Inhalt bleibt als Absätze erhalten, statt still
+         zu verschwinden. */
+      const flach = [];
+      for (const e of neue) {
+        if (!e.tabelle) { flach.push(e); continue; }
+        for (const zeile of e.tabelle.zeilen) {
+          for (const z of zeile) flach.push(...z.absaetze);
+        }
+      }
+      // Word verlangt in jeder Zelle mindestens einen Absatz
+      return flach.length ? flach : [{ style: 'body', runs: [] }];
+    };
+
+    /** Die Zeilen einer Tabelle, ohne die einer verschachtelten. */
+    const tabellenZeilen = (tabelle, format) => {
+      const zeilen = [];
+      const reihen = [];
+      for (const teil of tabelle.children) {
+        if (teil.tagName === 'TR') reihen.push(teil);
+        else if (/^(THEAD|TBODY|TFOOT)$/.test(teil.tagName)) {
+          for (const tr of teil.children) if (tr.tagName === 'TR') reihen.push(tr);
+        }
+      }
+      for (const tr of reihen) {
+        const zellen = [];
+        for (const td of tr.children) {
+          if (td.tagName !== 'TD' && td.tagName !== 'TH') continue;
+          zellen.push({
+            kopf: td.tagName === 'TH',
+            spannt: Math.max(1, parseInt(td.getAttribute('colspan'), 10) || 1),
+            absaetze: zelleAbsaetze(td, format)
+          });
+        }
+        if (zellen.length) zeilen.push(zellen);
+      }
+      return zeilen;
+    };
+
+    /**
      * @param {object} [liste] die Liste, in der wir gerade stecken:
      *        { depth, styleId, n } – n zählt die Punkte DIESER Liste
      */
@@ -705,6 +837,45 @@
         const color = inlineColorOf(child);
         if (color) next.color = color;
 
+        /* ══ EIN VERWEIS BLEIBT EIN VERWEIS ═══════════════════════════
+           Bisher lief walk() durch ein <a> hindurch wie durch ein
+           <span>: der Text kam mit, die Adresse blieb liegen. Im
+           Word-Dokument stand danach ein Wort, das einmal anklickbar
+           war – im PDF-Export dagegen (core/importExport.js schreibt
+           HTML) ist der Verweis erhalten. Zwei Ausgabewege, zwei
+           verschiedene Ergebnisse.
+
+           Die Adresse wandert am Lauf mit; erst paragraphXml macht
+           daraus ein <w:hyperlink> samt Beziehung, denn nur dort gibt
+           es den Zähler dafür.
+
+           Eine Seitenmarke (inkwells://page/7) wird bewusst NICHT
+           mitgenommen: sie zeigt auf eine Seite dieses Hefts, und die
+           gibt es in Word nicht. Sie bliebe ein Verweis, der ins Leere
+           führt oder, schlimmer, die App aufruft. Ihr Text bleibt
+           stehen, wie bisher. */
+        if (tag === 'A') {
+          const ziel = child.getAttribute && child.getAttribute('href');
+          if (ziel && /^(https?:|mailto:)/i.test(ziel.trim())) next.link = ziel.trim();
+        }
+
+        /* ══ EINE TABELLE IST IN WORD EINE TABELLE ══════════════════
+           Bisher lief walk() einfach durch sie hindurch. Herauskam eine
+           Reihe von Textstücken in einem Absatz: "MeilensteinSollIst" –
+           die Tabelle war weg, und im Word-Dokument stand ihr Inhalt als
+           Fließtext ohne jede Trennung. Genau so wurde es gemeldet.
+
+           Sie wird deshalb als eigener Eintrag gesammelt und später zu
+           einem echten w:tbl (tabelleXml). */
+        if (tag === 'TABLE') {
+          const zeilen = tabellenZeilen(child, next);
+          if (zeilen.length) {
+            current = null;
+            paragraphs.push({ tabelle: { zeilen } });
+          }
+          continue;
+        }
+
         /* Eine Liste ist selbst kein Absatz, sondern die Hülle um ihre
            Punkte. Sie merkt sich nur, auf welcher Ebene wir sind und
            welche Marke gilt. */
@@ -734,6 +905,32 @@
             const anzahl = Math.max(1, Math.min(120, Math.round(px / LUECKE_ZEICHEN_PX)));
             ensureParagraph().runs.push({ ...format, text: ' '.repeat(anzahl) });
           }
+          continue;
+        }
+
+        /* ══ EIN CODEBLOCK IST IN WORD EIN CODEBLOCK ═══════════════
+           Word kennt keinen eigenen Typ dafür. Was es kennt, ist ein
+           Absatz mit fester Schrift und Hinterlegung – und genau so
+           sieht ein Codelisting in jedem Lehrbuch aus.
+
+           Jede ZEILE wird ein eigener Absatz. Ein einzelner mit
+           Umbrüchen darin ginge auch, aber dann liesse sich in Word
+           keine Zeile einzeln anfassen, und beim Zurücklesen käme
+           alles als ein Klumpen an.
+
+           Die Einfärbung kommt NICHT mit: im Heft steht nackter Code
+           (core/code.js), die Farben liegen nur darüber. Sie hier
+           nachzubauen hiesse, den Einfärber ein zweites Mal zu
+           schreiben – für ein Word-Dokument, in dem man den Code
+           ohnehin weiterbearbeitet. */
+        if (tag === 'PRE' && child.classList && child.classList.contains('j-code')) {
+          const zeilen = (child.textContent || '').replace(/\n$/, '').split('\n');
+          for (const zeile of zeilen) {
+            const p = openParagraph('code');
+            p.code = true;
+            if (zeile) p.runs.push({ ...format, text: zeile, code: true });
+          }
+          current = null;
           continue;
         }
 
@@ -778,7 +975,9 @@
 
     // Reine Hüllen ohne Inhalt (verschachtelte divs) fallen weg; ein
     // <div><br></div> hat einen Umbruch-Lauf und bleibt als Leerzeile stehen.
-    return paragraphs.filter(p => p.runs.length > 0);
+    /* Eine Tabelle hat keine Laeufe – sie faellt sonst genau hier
+       heraus, und zwar still. */
+    return paragraphs.filter(p => p.tabelle || p.runs.length > 0);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -789,7 +988,8 @@
     + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
     + 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
     + 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
-    + 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+    + 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" '
+    + 'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"';
 
   const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 
@@ -816,6 +1016,15 @@
           size: halfPoints(Math.round(lh * 0.58)),
           italic: false, bold: true, color: '3A2E22', border: false, italicToo: true
         };
+      /* Ein Codeblock: feste Schrittweite, etwas kleiner, hinterlegt.
+         Consolas ist auf jedem Windows da; Courier New als Rückfall
+         auf allem anderen. */
+      case 'code':
+        return {
+          font: 'Consolas', fallback: 'Courier New',
+          size: halfPoints(Math.round(BASE_FONT_PX * 0.82)),
+          italic: false, bold: false, color: '1F1F1F', border: false
+        };
       default:
         return {
           font: 'Crimson Pro', fallback: 'Georgia',
@@ -825,18 +1034,29 @@
     }
   }
 
+  /* Der graue Grund hinter einem Codeblock. Als w:shd am Absatz – so
+     reicht er über die ganze Zeilenbreite, wie ein Listing im Buch, und
+     nicht nur hinter den Zeichen. */
+  const CODE_GRUND = 'F2F0EB';
+
   /* Die Reihenfolge in <w:rPr> ist im Schema festgelegt (CT_RPr):
      rFonts, b, i, strike, color, sz, szCs, u. Word verzeiht Abweichungen
      meist, andere Programme (LibreOffice, Google Docs) nicht immer. */
+  /* Wie Word einen Verweis malt, wenn keine Formatvorlage da ist: blau
+     und unterstrichen. Eine Vorlage („Hyperlink") waere der uebliche
+     Weg, hiesse aber styles.xml anzulegen – und ihr Name ist in jeder
+     Word-Sprache ein anderer. Die zwei Angaben sind ueberall dieselben. */
+  const LINK_FARBE = '0563C1';
+
   function runXml(run, spec) {
     const props = [];
     props.push(`<w:rFonts w:ascii="${esc(spec.font)}" w:hAnsi="${esc(spec.font)}" w:cs="${esc(spec.font)}"/>`);
     if (run.bold || spec.bold) props.push('<w:b/>');
     if (run.italic || spec.italic || spec.italicToo) props.push('<w:i/>');
     if (run.strike) props.push('<w:strike/>');
-    props.push(`<w:color w:val="${esc(run.color || spec.color)}"/>`);
+    props.push(`<w:color w:val="${esc(run.link ? LINK_FARBE : (run.color || spec.color))}"/>`);
     props.push(`<w:sz w:val="${spec.size}"/><w:szCs w:val="${spec.size}"/>`);
-    if (run.underline) props.push('<w:u w:val="single"/>');
+    if (run.underline || run.link) props.push('<w:u w:val="single"/>');
 
     const rPr = `<w:rPr>${props.join('')}</w:rPr>`;
 
@@ -847,13 +1067,29 @@
   }
 
   /** Das Vollseiten-Bild, frei positioniert und hinter dem Text. */
-  function anchorXml(id, relationshipId, widthPx, heightPx) {
+  /* ══════════════════════════════════════════════════════════════════
+     WER LIEGT VOR WEM
+
+     Word stapelt frei hängende Objekte nach relativeHeight: höher heisst
+     weiter vorn. Hier stand für das Seitenbild eine feste 0 – und eine 0
+     liest Word wie "nicht gesetzt". Das Papier landete damit je nach
+     Fassung irgendwo im Stapel, im schlimmsten Fall VOR der Handschrift,
+     und die war dann unter einem deckenden Blatt nicht mehr zu sehen.
+     Genau so wurde es gemeldet.
+
+     Jede Stelle bekommt deshalb eine eigene, aufsteigende Zahl aus einem
+     Zähler, und der beginnt bei derselben Basis, die Word selbst
+     benutzt. Das Papier zieht als Erstes und liegt damit ganz hinten.
+     ══════════════════════════════════════════════════════════════════ */
+  const Z_BASIS = 251658240;      // 0x0F000000, wie Word es schreibt
+
+  function anchorXml(id, relationshipId, widthPx, heightPx, hoehe) {
     const cx = Math.round(widthPx * EMU_PER_PX);
     const cy = Math.round(heightPx * EMU_PER_PX);
 
     return '<w:r><w:rPr><w:noProof/></w:rPr><w:drawing>'
-      + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" '
-      + 'behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1">'
+      + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" '
+      + `relativeHeight="${hoehe}" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1">`
       + '<wp:simplePos x="0" y="0"/>'
       + '<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>'
       + '<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>'
@@ -943,12 +1179,208 @@
     const ebene = { h1: 0, h2: 1, h3: 2 }[paragraph.style];
     if (ebene !== undefined) props.push(`<w:outlineLvl w:val="${ebene}"/>`);
 
+    /* Der Grund hinter einer Codezeile. Nach CT_PPr steht w:shd hinter
+       jc und vor sectPr – Word ist da streng, in der falschen
+       Reihenfolge öffnet es die Datei gar nicht. */
+    if (paragraph.code) props.push(`<w:shd w:val="clear" w:color="auto" w:fill="${CODE_GRUND}"/>`);
+
     if (options.sectPr) props.push(options.sectPr);
 
-    const runs = (options.leadingXml || '')
-      + paragraph.runs.map(run => runXml(run, spec)).join('');
+    /* ── Verweise zusammenfassen ───────────────────────────────────────
+       Aufeinanderfolgende Läufe mit derselben Adresse gehören in EIN
+       <w:hyperlink>. Sonst bekäme jedes Wort eines Verweises einen
+       eigenen – Word zeigt das zwar an, aber beim Anklicken springt der
+       Mauszeiger von Stück zu Stück, und beim Zurücklesen entstünden
+       ebenso viele Verweise.
+
+       options.verweis liefert die Beziehungskennung; ohne den Rückruf
+       (Tabellenzellen rufen paragraphXml ohne options) bleibt es beim
+       blossen Text – lieber ein toter Verweis als eine Datei, die Word
+       wegen einer fehlenden Beziehung gar nicht erst öffnet. */
+    let runs = options.leadingXml || '';
+    const laeufe = paragraph.runs || [];
+    for (let i = 0; i < laeufe.length; i++) {
+      const ziel = laeufe[i].link;
+      if (!ziel || typeof options.verweis !== 'function') {
+        runs += runXml(laeufe[i], spec);
+        continue;
+      }
+      let bis = i;
+      while (bis + 1 < laeufe.length && laeufe[bis + 1].link === ziel) bis++;
+      const inhalt = laeufe.slice(i, bis + 1).map(r => runXml(r, spec)).join('');
+      const rId = options.verweis(ziel);
+      runs += rId ? `<w:hyperlink r:id="${rId}">${inhalt}</w:hyperlink>` : inhalt;
+      i = bis;
+    }
 
     return `<w:p><w:pPr>${props.join('')}</w:pPr>${runs}</w:p>`;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     EIN OBJEKT AN SEINER STELLE AUF DER SEITE
+
+     Bild wie Form hängen frei auf dem Blatt (wp:anchor, relativ zur
+     Seite) – genau dort, wo sie im Heft liegen. Sie nehmen keinen Platz
+     im Text ein; der Text steht darunter weiter, so wie im Heft auch.
+
+     >>> Warum vor und nicht hinter dem Text <<<
+     Im Heft liegen Objekte über dem Textfeld (canvas/objects.js,
+     z-index 2000), und ein Bild deckt dort zu, was darunter steht.
+     behindDoc="0" hält das ein. Nur ein Objekt der hinteren Ebene
+     (layer 'back') geht nach hinten – dafür ist die Ebene da.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /** Die gemeinsame Hülle: Lage, Grösse, Ebene. */
+  function objektAnkerXml(id, obj, inhaltXml, name, hoehe) {
+    const x = Math.max(0, Math.round((obj.x || 0) * EMU_PER_PX));
+    const y = Math.max(0, Math.round((obj.y || 0) * EMU_PER_PX));
+    const cx = Math.max(1, Math.round((obj.w || 100) * EMU_PER_PX));
+    const cy = Math.max(1, Math.round((obj.h || 100) * EMU_PER_PX));
+    const hinten = obj.layer === 'back' ? '1' : '0';
+
+    return '<w:r><w:rPr><w:noProof/></w:rPr><w:drawing>'
+      + '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" '
+      + `relativeHeight="${hoehe}" behindDoc="${hinten}" locked="0" layoutInCell="0" allowOverlap="1">`
+      + '<wp:simplePos x="0" y="0"/>'
+      + `<wp:positionH relativeFrom="page"><wp:posOffset>${x}</wp:posOffset></wp:positionH>`
+      + `<wp:positionV relativeFrom="page"><wp:posOffset>${y}</wp:posOffset></wp:positionV>`
+      + `<wp:extent cx="${cx}" cy="${cy}"/>`
+      + '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:wrapNone/>'
+      + `<wp:docPr id="${id}" name="${esc(name)}"/>`
+      + inhaltXml(cx, cy)
+      + '</wp:anchor></w:drawing></w:r>';
+  }
+
+  /** Ein Bild aus dem Heft. */
+  function bildAnkerXml(id, obj, relationshipId, hoehe) {
+    /* Die Drehung steht in Sechzigsteln eines Grades; im Heft sind es
+       Grad (canvas/objects.js). */
+    const dreh = obj.rot ? ` rot="${Math.round(obj.rot * 60000)}"` : '';
+    return objektAnkerXml(id, obj, (cx, cy) =>
+      '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="0"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic>'
+      + `<pic:nvPicPr><pic:cNvPr id="${id}" name="${esc(obj.name || 'Bild')}"/><pic:cNvPicPr/></pic:nvPicPr>`
+      + `<pic:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`
+      + `<pic:spPr><a:xfrm${dreh}><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic>',
+      obj.name || 'Bild', hoehe);
+  }
+
+  /* Die fünf Formen des Hefts (canvas/shapes.js) in Words Sprache. */
+  const FORM_NACH_WORD = {
+    rect: 'rect', ellipse: 'ellipse', triangle: 'triangle',
+    line: 'line', arrow: 'line'
+  };
+
+  /** Eine Form aus dem Heft – als Form, nicht als Bild davon. */
+  function formAnkerXml(id, obj, hoehe) {
+    const prst = FORM_NACH_WORD[obj.shapeType] || 'rect';
+    const fuellung = toHexColor(obj.fill);
+    const strich = toHexColor(obj.stroke);
+    const breite = Math.max(1, Math.round((obj.strokeWidth || 2) * EMU_PER_PX));
+
+    /* Eine Linie zeigt in Word von links oben nach rechts unten; die
+       Enden des Hefts liegen als Anteile im Rechteck (shapeEnden). Aus
+       ihrer Richtung werden die beiden Spiegelungen. */
+    const p1 = obj.p1 || { x: 0, y: 1 };
+    const p2 = obj.p2 || { x: 1, y: 0 };
+    const gerade = prst === 'line';
+    const spiegel = gerade
+      ? ((p2.x - p1.x) < 0 ? ' flipH="1"' : '') + ((p2.y - p1.y) < 0 ? ' flipV="1"' : '')
+      : '';
+    const dreh = obj.rot ? ` rot="${Math.round(obj.rot * 60000)}"` : '';
+
+    // Ein Pfeil ist eine Linie mit Spitze – Word setzt sie an den Strich
+    const spitze = obj.shapeType === 'arrow'
+      ? '<a:tailEnd type="triangle" w="med" len="med"/>' : '';
+
+    return objektAnkerXml(id, obj, (cx, cy) =>
+      '<wp:cNvGraphicFramePr/>'
+      + '<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+      + '<wps:wsp>'
+      + `<wps:cNvSpPr/>`
+      + `<wps:spPr><a:xfrm${dreh}${spiegel}><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+      + `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>`
+      + (fuellung ? `<a:solidFill><a:srgbClr val="${fuellung}"/></a:solidFill>` : '<a:noFill/>')
+      + (strich
+        ? `<a:ln w="${breite}"><a:solidFill><a:srgbClr val="${strich}"/></a:solidFill>${spitze}</a:ln>`
+        : '<a:ln><a:noFill/></a:ln>')
+      + '</wps:spPr>'
+      + '<wps:bodyPr rot="0" anchor="ctr"/>'
+      + '</wps:wsp></a:graphicData></a:graphic>',
+      'Form', hoehe);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     EINE TABELLE ALS w:tbl
+
+     Die Spalten teilen sich die Textbreite zu gleichen Teilen. Word
+     rechnet sie beim Öffnen selbst nach dem Inhalt um (tblLayout
+     autofit) – eine genaue Breite je Spalte müsste hier gemessen
+     werden, und gemessen wird an dieser Stelle nichts.
+
+     Die Kopfzeile wird als solche gekennzeichnet (w:tblHeader): läuft
+     die Tabelle über die Seite hinaus, wiederholt Word sie oben. Genau
+     das macht der Seitenumbruch im Heft auch (core/docxPaginate.js).
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Die nutzbare Textbreite einer Heftseite – wie in css/pages.css. */
+  const TEXT_BREITE_PX = DEFAULT_PAGE_W - 72 - 32;
+  const TABELLE_RAHMEN = 'D9D2C4';
+
+  function tabelleXml(tabelle, lh, verweis) {
+    let spalten = 1;
+    for (const zeile of tabelle.zeilen) {
+      const n = zeile.reduce((s, z) => s + z.spannt, 0);
+      if (n > spalten) spalten = n;
+    }
+    const spaltenBreite = Math.round(TEXT_BREITE_PX * TWIPS_PER_PX / spalten);
+
+    const kante = (name) =>
+      `<w:${name} w:val="single" w:sz="4" w:space="0" w:color="${TABELLE_RAHMEN}"/>`;
+
+    const rahmen = '<w:tblBorders>'
+      + kante('top') + kante('left') + kante('bottom') + kante('right')
+      + kante('insideH') + kante('insideV')
+      + '</w:tblBorders>';
+
+    const kopf = '<w:tblPr>'
+      + '<w:tblW w:w="0" w:type="auto"/>'
+      + '<w:tblLayout w:type="autofit"/>'
+      + rahmen
+      + '<w:tblCellMar>'
+      + '<w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/>'
+      + '<w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/>'
+      + '</w:tblCellMar></w:tblPr>'
+      + '<w:tblGrid>' + `<w:gridCol w:w="${spaltenBreite}"/>`.repeat(spalten) + '</w:tblGrid>';
+
+    const zeilen = tabelle.zeilen.map((zeile, nr) => {
+      const istKopfzeile = zeile.every(z => z.kopf);
+      const zellen = zeile.map(z => {
+        const breite = spaltenBreite * z.spannt;
+        const eigenschaften = '<w:tcPr>'
+          + `<w:tcW w:w="${breite}" w:type="dxa"/>`
+          + (z.spannt > 1 ? `<w:gridSpan w:val="${z.spannt}"/>` : '')
+          + (z.kopf ? '<w:shd w:val="clear" w:color="auto" w:fill="F4F0E6"/>' : '')
+          + '<w:vAlign w:val="center"/>'
+          + '</w:tcPr>';
+        /* Eine Kopfzelle steht fett – im Heft macht das die Papierregel
+           (css/pages.css, th), in Word muss es am Text stehen. */
+        const inhalt = z.absaetze
+          .map(a => paragraphXml(z.kopf ? { ...a, runs: a.runs.map(r => ({ ...r, bold: true })) } : a, lh, { verweis }))
+          .join('');
+        return `<w:tc>${eigenschaften}${inhalt}</w:tc>`;
+      }).join('');
+
+      const zeilenkopf = (istKopfzeile && nr === 0)
+        ? '<w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>' : '';
+      return `<w:tr>${zeilenkopf}${zellen}</w:tr>`;
+    }).join('');
+
+    return `<w:tbl>${kopf}${zeilen}</w:tbl>`;
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -957,7 +1389,7 @@
 
   /**
    * @param {Array} entries  je Seite ein Eintrag:
-   *   { page, bg, headerLeft, headerRight }
+   *   { page, bg }
    * @param {object} [options]
    * @param {string} [options.title] Titel in den Dokumenteigenschaften
    * @param {number} [options.scale=2] Auflösung der Seitenbilder
@@ -974,39 +1406,194 @@
     const relationships = [];
     const body = [];
 
+    /* Kennungen laufen jetzt über das ganze Dokument: neben den Seiten
+       hängt an jedem Bild eine eigene Datei, und zwei Objekte mit
+       derselben Kennung öffnet Word gar nicht erst. */
+    let relZaehler = 0;
+    let ankerZaehler = 0;
+    let zZaehler = 0;
+    const naechsteRel = () => `rId${++relZaehler}`;
+
+    /* ══════════════════════════════════════════════════════════════════
+       EINE BEZIEHUNG JE ADRESSE, NICHT JE VERWEIS
+
+       Ein Verweis nach draussen ist in OOXML eine Beziehung mit
+       TargetMode="External"; im Text steht nur ihre Kennung. Dieselbe
+       Adresse zweimal anzulegen ginge zwar, blaeht die Datei aber auf –
+       und in einem Heft steht derselbe Link oft auf mehreren Seiten.
+
+       Die Adresse wird escaped: sie landet als Attribut im XML, und ein
+       & in einer Suchadresse (?a=1&b=2) macht die Datei sonst
+       unlesbar. Word oeffnet sie dann gar nicht erst. */
+    const verweisRels = new Map();
+    const verweisRel = (adresse) => {
+      const ziel = String(adresse || '').trim();
+      if (!ziel) return '';
+      if (verweisRels.has(ziel)) return verweisRels.get(ziel);
+      const rId = naechsteRel();
+      verweisRels.set(ziel, rId);
+      relationships.push(
+        `<Relationship Id="${rId}" `
+        + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" '
+        + `Target="${esc(ziel)}" TargetMode="External"/>`
+      );
+      return rId;
+    };
+    // Wer später zieht, liegt weiter vorn – das Papier zieht als Erstes
+    const naechsteHoehe = () => Z_BASIS + (++zZaehler);
+
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
       const lh = lhForBg(entry.bg);
 
       const image = await renderPageImage(entry, scale);
-      const relationshipId = `rId${i + 1}`;
-      const fileName = `seite${i + 1}.${image.extension}`;
-
-      media.push({ name: `word/media/${fileName}`, data: dataUrlToBytes(image.dataUrl) });
-      relationships.push(
-        `<Relationship Id="${relationshipId}" `
-        + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
-        + `Target="media/${fileName}"/>`
-      );
-
       const width = entry.page.w || DEFAULT_PAGE_W;
       const height = entry.page.h || DEFAULT_PAGE_H;
-      const anchor = anchorXml(i + 1, relationshipId, width, height);
+
+      let anchor = '';
+      if (!image) {
+        /* Kein Muster, nichts drauf – aber die Farbe des Papiers gehört
+           trotzdem hin. Als Form statt als Bild: sie kostet keine
+           einzige Datei im Archiv und lässt sich in Word anklicken und
+           wegnehmen, wenn jemand doch ein weisses Blatt will. */
+        anchor = formAnkerXml(++ankerZaehler, {
+          shapeType: 'rect', x: 0, y: 0, w: width, h: height,
+          fill: papierFarbe(entry.bg), stroke: 'none', strokeWidth: 0, layer: 'back'
+        }, naechsteHoehe());
+      }
+      if (image) {
+        const relationshipId = naechsteRel();
+        const fileName = `seite${i + 1}.${image.extension}`;
+
+        media.push({ name: `word/media/${fileName}`, data: dataUrlToBytes(image.dataUrl) });
+        relationships.push(
+          `<Relationship Id="${relationshipId}" `
+          + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+          + `Target="media/${fileName}"/>`
+        );
+        anchor = anchorXml(++ankerZaehler, relationshipId, width, height, naechsteHoehe());
+      }
+
+      /* Die Handschrift kommt gleich nach dem Papier – und VOR den
+         Text.
+
+         >>> Warum nicht dahinter, wie im Heft <<<
+         Dahinter teilt sie sich die Ebene mit dem Papier, und das ist
+         ein deckendes Blatt. Stimmt die Stapelreihenfolge dort auch nur
+         einmal nicht, ist die Handschrift verschwunden – und niemand
+         sucht sie unter dem Papier. Vor dem Text ist sie immer zu sehen.
+         Ihr Preis ist gering: ein Textmarker ist ohnehin durchsichtig
+         gemalt (drawInk, Alpha 0.38), und ein Stift, mit dem jemand
+         ueber ein Wort gestrichen hat, soll darauf liegen. */
+      const schrift = await renderInkImage(entry.page, scale);
+      if (schrift) {
+        const kennung = ++ankerZaehler;
+        const schriftRel = naechsteRel();
+        const schriftDatei = `schrift${kennung}.png`;
+
+        media.push({ name: `word/media/${schriftDatei}`, data: dataUrlToBytes(schrift.dataUrl) });
+        relationships.push(
+          `<Relationship Id="${schriftRel}" `
+          + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+          + `Target="media/${schriftDatei}"/>`
+        );
+        anchor += bildAnkerXml(kennung,
+          { ...schrift, name: 'Handschrift' }, schriftRel, naechsteHoehe());
+      }
+
+      /* Die Code-Kaesten dieser Seite. Sie werden unten als Absaetze
+         angehaengt, nicht als frei haengendes Ding – siehe der Kasten
+         beim obj.kind === 'code'. */
+      const codeAbsaetze = [];
+
+      /* Jedes Objekt der Seite als eigenes Ding: ein Bild bekommt seine
+         eigene Datei im Archiv, eine Form braucht gar keine. Beide
+         hängen anschliessend am selben Absatz wie das Seitenbild – sie
+         sitzen ohnehin frei auf der Seite. */
+      for (const obj of (entry.page.objects || [])) {
+        if (!obj) continue;
+        const kennung = ++ankerZaehler;
+
+        if (obj.kind === 'shape') {
+          anchor += formAnkerXml(kennung, obj, naechsteHoehe());
+          continue;
+        }
+
+        /* ══ EIN CODE-KASTEN WIRD IN WORD ZU CODE-ABSÄTZEN ═══════════
+           Er hängt im Heft frei auf dem Blatt (core/code.js), Word
+           bekommt ihn aber als Folge von Absätzen in fester Schrift mit
+           Hinterlegung – dieselbe Darstellung, die htmlToParagraphs für
+           einen Codeblock erzeugt.
+
+           >>> Warum nicht als Bild an seiner Stelle <<<
+           Weil man Code in Word weiterverwenden will: kopieren, in eine
+           Arbeit einfügen, weiterschreiben. Ein Bild davon ist tot. Der
+           Preis ist die Lage – der Kasten steht danach im Textfluss und
+           nicht mehr genau dort, wo er auf dem Blatt lag. Für einen
+           Ausdruck mit genauer Lage gibt es das PDF, dort steht er, wo
+           er hingehört (core/importExport.js). */
+        if (obj.kind === 'code') {
+          codeAbsaetze.push(obj);
+          continue;
+        }
+
+        if (!obj.src) continue;          // Formeln haben kein Bild
+        const bytes = dataUrlToBytes(obj.src);
+        if (!bytes || !bytes.length) continue;
+
+        const endung = /^data:image\/(png|jpe?g|gif|webp|bmp)/i.exec(obj.src);
+        const dateiname = `bild${kennung}.${(endung ? endung[1] : 'png').replace('jpg', 'jpeg')}`;
+        const bildRel = naechsteRel();
+
+        media.push({ name: `word/media/${dateiname}`, data: bytes });
+        relationships.push(
+          `<Relationship Id="${bildRel}" `
+          + 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+          + `Target="media/${dateiname}"/>`
+        );
+        anchor += bildAnkerXml(kennung, obj, bildRel, naechsteHoehe());
+      }
 
       const paragraphs = htmlToParagraphs(entry.page.textContent);
+
+      /* Die Code-Kaesten hinter den Text der Seite. Jede Zeile ein
+         eigener Absatz, damit sie sich in Word einzeln anfassen laesst. */
+      for (const kasten of codeAbsaetze) {
+        const zeilen = String(kasten.code || '').replace(/\n$/, '').split('\n');
+        for (const zeile of zeilen) {
+          const p = { style: 'code', runs: [], code: true };
+          if (zeile) p.runs.push({ text: zeile, code: true });
+          paragraphs.push(p);
+        }
+      }
       // Das Seitenbild hängt am ersten Absatz. Ein frei positioniertes Bild
       // nimmt keinen Platz im Textfluss ein – ein eigener Absatz dafür würde
       // dagegen jede Seite um eine Leerzeile nach unten schieben.
       if (!paragraphs.length) paragraphs.push({ style: 'body', runs: [] });
+
+      /* Eine Tabelle kann weder das Seitenbild noch die Abschnittsangabe
+         tragen – beide gehören in einen Absatz. Und nach der letzten
+         Tabelle muss ohnehin einer stehen, sonst öffnet Word die Datei
+         gar nicht erst. */
+      if (paragraphs[paragraphs.length - 1].tabelle) {
+        paragraphs.push({ style: 'body', runs: [] });
+      }
+      let ankerBei = paragraphs.findIndex(p => !p.tabelle);
+      if (ankerBei < 0) ankerBei = paragraphs.length - 1;
 
       // Die Abschnittsangaben stehen beim letzten Absatz der Seite; dadurch
       // beginnt die nächste Seite automatisch neu, ganz ohne Seitenumbruch.
       const isLast = i === list.length - 1;
 
       paragraphs.forEach((paragraph, index) => {
+        if (paragraph.tabelle) {
+          body.push(tabelleXml(paragraph.tabelle, lh, verweisRel));
+          return;
+        }
         body.push(paragraphXml(paragraph, lh, {
-          leadingXml: index === 0 ? anchor : '',
-          sectPr: (!isLast && index === paragraphs.length - 1) ? sectionXml(entry) : ''
+          leadingXml: index === ankerBei ? anchor : '',
+          sectPr: (!isLast && index === paragraphs.length - 1) ? sectionXml(entry) : '',
+          verweis: verweisRel
         }));
       });
 
