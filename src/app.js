@@ -1489,12 +1489,13 @@ E('btn-panel-toggle').addEventListener('click', () => {
 /* ══════════════════════════════════════════════════════════════════════
    DIE ABSCHNITTE MIT DEM FINGER AUFZIEHEN
 
-   Mit der Maus ist der Knopf am Rand der Weg; mit dem Finger sucht man
-   ihn: 28 px in einer 36 px schmalen Leiste, weit weg vom Daumen.
+   Mit der Maus ist der Knopf in der Werkzeugzeile der Weg; mit dem
+   Finger ist er weit oben und weit weg vom Daumen.
 
-   >>> Warum es NICHT an der Leiste selbst anfangen darf <<<
-   Der erste Anlauf horchte nur auf der Leiste. Die ist 36 px breit und
-   klebt am linken Fensterrand – bei einem Vollbild also am
+   >>> Warum es NICHT ganz am Rand anfangen darf <<<
+   Der erste Anlauf horchte nur auf dem schmalen Streifen, den es hier
+   einmal gab. Der war 36 px breit und klebte am linken Fensterrand –
+   bei einem Vollbild also am
    BILDSCHIRMrand. Genau dort greift Windows selbst zu: ein Wischen von
    links holt die Widgets herein. Gemeldet wurde beides, was daraus
    folgt: „geht ganz selten" und „stattdessen geht dieses Microsoft-Ding
