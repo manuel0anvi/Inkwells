@@ -39,6 +39,14 @@
   profileBtn.addEventListener('click', () => {
     refreshUI();
     accountOverlay.style.display = 'flex';
+
+    /* Beim ersten Öffnen steht hier, dass ein Konto freiwillig ist – aber
+       nur, solange keines da ist. Wer schon angemeldet ist, hat die Frage
+       längst für sich beantwortet, und der Hinweis wäre eine Belehrung. */
+    const schonAngemeldet = !!(window.CloudSync_ && CloudSync_.isAuthenticated
+      && CloudSync_.isAuthenticated());
+    if (!schonAngemeldet && typeof zeigeErsthinweis === 'function') zeigeErsthinweis('konto');
+
     syncNow();
   });
 

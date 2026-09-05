@@ -442,6 +442,8 @@
     overlay.style.display = 'flex';
     render();
     refreshButton();
+    // Beim ersten Mal: dass von selbst gespeichert wird und was die Farbe sagt
+    if (typeof zeigeErsthinweis === 'function') zeigeErsthinweis('speichern');
   }
 
   function close() {

@@ -165,6 +165,8 @@ E('pgctx-bg').addEventListener('click', () => {
   _pgCtxBg = cur;
   buildBgRow(E('pg-bg-picker-row'), cur, id => { _pgCtxBg = id; });
   E('ov-pg-bg').style.display = 'flex';
+  // Dass diese Wahl die Seite dauerhaft vom Heft abkoppelt, sieht man ihr nicht an
+  if (typeof zeigeErsthinweis === 'function') zeigeErsthinweis('papier');
 });
 E('pg-bg-cancel').addEventListener('click', () => E('ov-pg-bg').style.display = 'none');
 E('pg-bg-ok').addEventListener('click', () => {

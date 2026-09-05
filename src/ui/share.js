@@ -470,6 +470,9 @@
 
     overlay.style.display = 'flex';
 
+    // Beim ersten Freigeben: worauf man sich mit dem Link einlässt
+    if (typeof zeigeErsthinweis === 'function') zeigeErsthinweis('teilen');
+
     /** Kein Netz: sagen, dass es das Netz ist, und nichts weiter anbieten. */
     const ohneNetz = () => {
       needsAccountEl.textContent = t('shareOffline');

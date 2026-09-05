@@ -1374,6 +1374,11 @@ function openSecMgr(sec) {
   renderSecMgrBody();
   ov.style.display = 'grid';
 
+  /* Beim ersten Mal steht hier, was ein Abschnitt überhaupt ist. Der
+     Satz oben im Fenster sagt es zwar auch, aber wer ihn dort liest,
+     hat meist schon eine falsche Erwartung mitgebracht. */
+  if (typeof zeigeErsthinweis === 'function') zeigeErsthinweis('abschnitte');
+
   closeBtn.onclick = () => closeSecMgr();
   doneBtn.onclick = () => closeSecMgr();
   addSecBtn.onclick = () => addSectionFromManager();
