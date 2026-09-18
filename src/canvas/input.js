@@ -24,6 +24,29 @@ function attachInput(canvas, textDiv, objLayer, page) {
   let _tippStart = null;
 
   /* ══════════════════════════════════════════════════════════════════
+     DIE FORM WAECHST, SOLANGE DIE SPITZE UNTEN BLEIBT
+
+     Aus dem gemalten Kreis ist gerade ein Kreis geworden – und die Hand
+     liegt noch auf dem Blatt. Genau dieser Augenblick war bisher tot:
+     S._cur ist weg, jede weitere Bewegung lief ins Leere, und wer die
+     Groesse aendern wollte, musste absetzen, aufs Zeigerwerkzeug
+     wechseln, die Form anfassen und an einer Ecke ziehen.
+
+     Naeher heisst jetzt kleiner, weiter heisst groesser. Gemessen wird
+     der Abstand zur MITTE der Form – nicht zu einer Kante. Eine Kante
+     zoege nur an einer Seite und machte aus dem Kreis ein Ei; die Mitte
+     haelt das Verhaeltnis und laesst die Form dort, wo sie gemalt wurde.
+
+     { obj, cx, cy, startW, startH, startAbstand, geaendert }
+     ══════════════════════════════════════════════════════════════════ */
+  let _formZieht = null;
+
+  /* Steht die Spitze fast auf der Mitte, ist der Abstand ein Zufallswert
+     und jeder Millimeter ein Vielfaches davon. Darunter wird deshalb mit
+     diesem Mindestmass gerechnet. */
+  const FORM_MIN_ABSTAND = 14;   // Seiten-Pixel
+
+  /* ══════════════════════════════════════════════════════════════════
      DAS RECHTECK DER SEITE WIRD EINEN LIDSCHLAG LANG GEMERKT
 
      coords() rechnet Bildschirm → Seite und holte sich dafür bei JEDER
@@ -369,6 +392,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
          also wird auch nur sie neu gezeichnet. Ein redrawStrokes hier
          brachte ihn ein zweites Mal auf die Seite, und beim Marker
          hiesse zweimal: doppelt so kraeftig. */
+      // Ein angemeldetes Bild traegt noch die krumme Fassung – weg damit
+      stopVorschau();
       stiftVorschau(stroke);
     }, LINE_HOLD_MS);
   }
@@ -440,9 +465,71 @@ function attachInput(canvas, textDiv, objLayer, page) {
     redrawStrokes(canvas, S.strokeHistory[page.id]);
     placeObject(objLayer, obj, page);
 
+    /* Die Spitze ist noch unten – ab jetzt bestimmt sie die Groesse
+       (siehe der Kasten bei _formZieht und ziehFormWeiter). Als
+       Ausgangsabstand gilt die Stelle, an der stillgehalten wurde; sie
+       steht in _halteBei, weil genau sie die Uhr hat ablaufen lassen. */
+    const spitze = _halteBei || (stroke.path && stroke.path[stroke.path.length - 1]);
+    const mx = obj.x + obj.w / 2, my = obj.y + obj.h / 2;
+    _formZieht = {
+      obj, cx: mx, cy: my,
+      startW: obj.w, startH: obj.h,
+      startAbstand: Math.max(FORM_MIN_ABSTAND,
+        spitze ? Math.hypot(spitze.x - mx, spitze.y - my) : FORM_MIN_ABSTAND),
+      geaendert: false
+    };
+
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
     if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
     return true;
+  }
+
+  /**
+   * Die eben entstandene Form auf den Abstand zur Spitze bringen.
+   *
+   * @param {{x:number,y:number}} c  Stelle der Spitze, in Seiten-Pixeln
+   * @returns {boolean} true, solange eine Form am Zeiger haengt
+   */
+  function ziehFormWeiter(c) {
+    const z = _formZieht;
+    if (!z) return false;
+
+    const abstand = Math.max(FORM_MIN_ABSTAND, Math.hypot(c.x - z.cx, c.y - z.cy));
+    /* Nach oben und unten begrenzt: ein Faktor von 30 waere eine Form,
+       die das Blatt zehnmal ueberdeckt, einer von 0,02 ein Staubkorn. */
+    const faktor = Math.min(6, Math.max(0.2, abstand / z.startAbstand));
+
+    const o = z.obj;
+    const nw = Math.max(12, Math.round(z.startW * faktor));
+    const nh = Math.max(12, Math.round(z.startH * faktor));
+    if (nw === o.w && nh === o.h) return true;
+
+    o.w = nw; o.h = nh;
+    o.x = Math.round(z.cx - nw / 2);
+    o.y = Math.round(z.cy - nh / 2);
+    // Aus der Mitte heraus gewachsen kann sie ueber den Rand geraten
+    if (typeof haltAufBlatt === 'function') haltAufBlatt(o, page);
+    z.geaendert = true;
+
+    const wrap = objLayer && objLayer.querySelector(
+      '.obj-wrap[data-objid="' + CSS.escape(String(o.id)) + '"]');
+    if (wrap) {
+      wrap.style.left = o.x + 'px';
+      wrap.style.top = o.y + 'px';
+      wrap.style.width = o.w + 'px';
+      wrap.style.height = o.h + 'px';
+    }
+    return true;
+  }
+
+  /** Die Spitze hebt ab: was gewachsen ist, gilt und geht an die anderen. */
+  function beendeFormZug() {
+    const z = _formZieht;
+    _formZieht = null;
+    if (!z) return;
+    if (!z.geaendert) return;
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    if (typeof noteObjectChanged === 'function') noteObjectChanged();
   }
 
   function coords(e) {
@@ -692,7 +779,19 @@ function attachInput(canvas, textDiv, objLayer, page) {
     const lctx = getLiveCtx(div, pw, ph);
     // Die 38 % gehoeren dem Marker; alles andere deckt
     setLiveOpacity(stroke.isHL ? 0.38 : 1);
-    lctx.clearRect(0, 0, pw, ph);
+
+    /* ── Geleert wird nur, wo etwas stand ──────────────────────────
+       Hier stand clearRect ueber das ganze Blatt. Bei zwei- bis
+       dreifacher Bildpunktdichte sind das gut acht Millionen Punkte –
+       je Bild, und das neben dem Zeichnen des Strichs selbst. Genau
+       diese Sorte Arbeit macht sich als Nachlaufen der Spitze
+       bemerkbar, und je laenger man schreibt, desto mehr.
+
+       Gemerkt wird deshalb der Kasten, in dem zuletzt gezeichnet
+       wurde; geleert wird er und sonst nichts. Ein Kasten reicht: auf
+       der Vorschau liegt immer nur EIN Strich. */
+    const alt = stroke._vorschauKasten;
+    if (alt) lctx.clearRect(alt.x, alt.y, alt.w, alt.h);
 
     /* Die vorhergesagten Punkte werden nur GEZEICHNET, nicht behalten:
        angehaengt, gezeichnet, wieder abgeschnitten. Was gespeichert
@@ -704,9 +803,73 @@ function attachInput(canvas, textDiv, objLayer, page) {
       applyStrokeStyles(lctx, stroke);
       traceStrokePath(lctx, stroke);
       lctx.restore();
+      stroke._vorschauKasten = strichKasten(stroke, pw, ph);
     } finally {
       if (dazu) stroke.path.length -= dazu.length;
     }
+  }
+
+  /** Der Kasten um einen Strich, mit Platz fuer Strichbreite und Kanten. */
+  function strichKasten(stroke, pw, ph) {
+    const pts = stroke.path;
+    if (!pts || !pts.length) return null;
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const p of pts) {
+      if (p.x < x1) x1 = p.x;
+      if (p.x > x2) x2 = p.x;
+      if (p.y < y1) y1 = p.y;
+      if (p.y > y2) y2 = p.y;
+    }
+    // Die halbe Strichbreite plus zwei Punkte fuer die Kantenglaettung
+    const luft = (stroke.width || 2) / 2 + 2;
+    x1 = Math.max(0, Math.floor(x1 - luft));
+    y1 = Math.max(0, Math.floor(y1 - luft));
+    x2 = Math.min(pw, Math.ceil(x2 + luft));
+    y2 = Math.min(ph, Math.ceil(y2 + luft));
+    return { x: x1, y: y1, w: Math.max(0, x2 - x1), h: Math.max(0, y2 - y1) };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     EIN BILD, EIN STRICH
+
+     >>> Gemeldet: „oft kommt die Zeichnung spaeter, als ich sie
+     geschrieben habe" <<<
+     Ein Stift meldet sich 120- bis 240-mal je Sekunde, der Bildschirm
+     zeigt 60 Bilder. Die ueberzaehligen Meldungen haengt der Browser an
+     ein pointermove an (getCoalescedEvents) – das wurde hier schon
+     richtig abgeholt. Ausgeliefert werden die Buendel aber trotzdem
+     oefter als einmal je Bild, und JEDES zeichnete die ganze Vorschau
+     neu. Zwei bis vier vollstaendige Zeichnungen fuer ein einziges
+     Bild: die letzte sieht man, die davor sind verlorene Zeit – und
+     genau diese Zeit fehlt der Spitze.
+
+     Die Punkte werden deshalb weiterhin bei JEDER Meldung angehaengt
+     (nichts geht verloren), gezeichnet wird aber erst, wenn der
+     Browser das naechste Bild anfordert.
+     ══════════════════════════════════════════════════════════════════ */
+  let _vorschauBild = 0, _vorschauStrich = null, _vorschauPunkte = null;
+
+  function planeVorschau(stroke, vorhersage) {
+    _vorschauStrich = stroke;
+    _vorschauPunkte = vorhersage || null;
+    if (_vorschauBild) return;
+    _vorschauBild = requestAnimationFrame(() => {
+      _vorschauBild = 0;
+      const s = _vorschauStrich;
+      _vorschauStrich = null;
+      // Zwischenzeitlich abgehoben oder abgebrochen: nichts mehr zu malen
+      if (!s || S._cur !== s) return;
+      stiftVorschau(s, _vorschauPunkte);
+      _vorschauPunkte = null;
+    });
+  }
+
+  /** Vor dem Leeren der Flaeche: ein angemeldetes Bild darf nicht mehr kommen. */
+  function stopVorschau() {
+    if (_vorschauBild) cancelAnimationFrame(_vorschauBild);
+    _vorschauBild = 0;
+    _vorschauStrich = null;
+    _vorschauPunkte = null;
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -822,6 +985,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
     // Ohne diese Bremse landeten die Striche zwar nur lokal, wären aber
     // sichtbar – und wirkten dadurch wie eine gespeicherte Änderung.
     if (S.readOnly) return;
+
+    // Ein neuer Strich beendet einen offen gebliebenen Form-Zug
+    beendeFormZug();
 
     const radiert = istRadierTaste(e);
     const lasso = !radiert && istLassoTaste(e);
@@ -1298,6 +1464,13 @@ function attachInput(canvas, textDiv, objLayer, page) {
       return;
     }
 
+    /* Gerade ist aus dem Strich eine Form geworden und die Spitze ist
+       noch unten: dann gehoert die Bewegung der Form (siehe oben). */
+    if (!S._cur && _formZieht) {
+      ziehFormWeiter(coords(e));
+      return;
+    }
+
     const stroke = S._cur;
     if (!stroke) return;
 
@@ -1337,7 +1510,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
     /* Nichts dazugekommen heisst nichts zu zeichnen. Ohne diese Frage
        liefe bei jeder ruhig gehaltenen Spitze die ganze Vorschau neu –
        fuer ein Bild, das genauso aussieht wie das davor. */
-    if (gewachsen && !stroke._shapeDetected) stiftVorschau(stroke, vorhergesagtePunkte(e, stroke));
+    if (gewachsen && !stroke._shapeDetected) planeVorschau(stroke, vorhergesagtePunkte(e, stroke));
   }, { passive: false });
 
   div.addEventListener('pointerup', e => {
@@ -1345,7 +1518,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
     S.isDrawing = false;
     S._drawPointerId = null;
     S._rulerKlebt = false;    // der nächste Strich fängt frei an
+    beendeFormZug();
     stopLineTimer(S._cur);
+    stopVorschau();
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
 
@@ -1449,7 +1624,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
      dazwischenging, ist kein Grund, die Arbeit wegzuwerfen.
      ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointercancel', () => {
+    beendeFormZug();
     stopLineTimer(S._cur);
+    stopVorschau();
     const abgebrochen = S._cur;
     S.isDrawing = false; S._cur = null; S._drawPointerId = null;
     S._rulerKlebt = false;
