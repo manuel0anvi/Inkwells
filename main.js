@@ -2144,6 +2144,31 @@ ipcMain.handle('load-from-path', async (_, filePath) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════
+   DAS BILD AUS DER ZWISCHENABLAGE
+
+   Die Oberflaeche fragt zuerst navigator.clipboard.read(); das ist der
+   Weg, der auch im Browser geht (website/). In Electron haengt er aber
+   an einer Erlaubnis, die der Nutzer nie zu Gesicht bekommt - wird sie
+   abgeschlagen, kaeme gar nichts an, ohne dass jemand erfuehrt, warum.
+
+   Hier liegt deshalb der zweite Weg: der Hauptprozess darf die
+   Zwischenablage ohne Umweg lesen. Zurueck geht nur ein PNG als
+   Datenadresse, kein Text und keine Dateiliste - eingesetzt wird auf
+   dem Blatt ohnehin nur ein Bild (core/importExport.js).
+   ═══════════════════════════════════════════════════════════════════════ */
+ipcMain.handle('clipboard-image', async () => {
+  try {
+    const { clipboard } = require('electron');
+    const bild = clipboard.readImage();
+    if (!bild || bild.isEmpty()) return null;
+    return bild.toDataURL();
+  } catch (err) {
+    console.warn('[Zwischenablage]', err?.message || err);
+    return null;
+  }
+});
+
 ipcMain.handle('check-internet', async () => {
   try {
     const { net } = require('electron');

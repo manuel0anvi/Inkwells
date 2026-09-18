@@ -340,7 +340,7 @@ function setzeBildObjekt(page, bild, ab) {
  *
  * @returns {Promise<number>} wie viele Bilder eingesetzt wurden
  */
-async function fuegeBilderAusZwischenablage(dataTransfer, page) {
+async function fuegeBilderAusZwischenablage(dataTransfer, page, abVorgabe) {
   if (!dataTransfer || !page) return 0;
   if (S.readOnly) return 0;
 
@@ -364,7 +364,7 @@ async function fuegeBilderAusZwischenablage(dataTransfer, page) {
 
   /* Die Stelle JETZT messen, vor dem Einlesen: das dauert einen Moment,
      und bis dahin kann die Marke längst woanders stehen. */
-  let ab = markeAufSeite(page);
+  let ab = Number.isFinite(abVorgabe) ? abVorgabe : markeAufSeite(page);
 
   /* Der Schritt in den Verlauf steht VOR der ersten Änderung und gilt für
      alle Bilder zusammen: einmal Rückgängig nimmt das Einsetzen zurück,
@@ -435,6 +435,249 @@ document.addEventListener('paste', (e) => {
   fuegeBilderAusZwischenablage(e.clipboardData, info.page)
     .catch(err => console.warn('[Einfügen] Bild:', err?.message || err));
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+   STRG+V, WENN DIE SCHREIBMARKE NIRGENDS STEHT
+
+   >>> Warum der paste-Hörer darüber dafür nicht reicht <<<
+   Gemeldet: „Strg+V geht nicht“. Der Hörer war da und richtig – nur
+   bekam er nichts zu sehen. Ein Browser schickt das paste-Ereignis
+   nämlich nur an ein Ziel, in das sich auch schreiben lässt: ein
+   Eingabefeld oder etwas Beschreibbares. Wer zuletzt gerollt, ein Bild
+   angeklickt oder mit dem Stift gezeichnet hat, hat den Fokus auf
+   nichts dergleichen – und dann entsteht das Ereignis erst gar nicht.
+   Der Hörer griff also genau in dem Fall nicht, für den er gedacht war.
+
+   Der Tastendruck selbst kommt immer an. Aus ihm heraus wird die
+   Zwischenablage gelesen (navigator.clipboard) – das ist derselbe
+   Inhalt, nur aktiv geholt statt zugestellt bekommen.
+
+   >>> Und warum das nicht doppelt einsetzt <<<
+   Steht die Marke doch im Text, schickt der Browser sein paste-Ereignis
+   wie gewohnt, und app.js setzt das Bild ein. Deshalb wird hier nicht
+   sofort gelesen, sondern eine Wimpernlänge gewartet: kommt in dieser
+   Zeit ein echtes paste-Ereignis, war jemand anderes zuständig.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Die Bilder, die gerade in der System-Zwischenablage liegen. */
+async function bilderInDerZwischenablage() {
+  /* ── Zuerst der Hauptprozess ──────────────────────────────────────
+     In Electron haengt navigator.clipboard an einer Erlaubnis, die der
+     Nutzer nie zu Gesicht bekommt; wird sie abgeschlagen, kaeme nichts
+     an und niemand wuesste, warum. Der Hauptprozess darf ohne Umweg
+     lesen (main.js, clipboard-image). Im Browser gibt es ihn nicht –
+     dort greift der Weg darunter. */
+  if (window.api && typeof window.api.clipboardImage === 'function') {
+    try {
+      const datenUrl = await window.api.clipboardImage();
+      if (datenUrl) {
+        /* Selbst zerlegt und nicht ueber fetch(): connect-src laesst in
+           der Sicherheitsregel kein data: zu (src/index.html), ein fetch
+           darauf waere also stumm geblockt. */
+        const blob = new Blob([dataUrlZuBytes(datenUrl)], { type: 'image/png' });
+        return [new File([blob], 'Zwischenablage.png', { type: 'image/png' })];
+      }
+    } catch (err) {
+      console.warn('[Einfügen] Zwischenablage über den Hauptprozess:', err?.message || err);
+    }
+  }
+
+  if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') return [];
+  let eintraege;
+  try {
+    eintraege = await navigator.clipboard.read();
+  } catch (err) {
+    /* Kein Zugriff (Fokus verloren, Rechte verweigert) oder schlicht
+       nichts drin. Beides ist kein Fehler, den der Nutzer sehen muss. */
+    return [];
+  }
+
+  const dateien = [];
+  for (const eintrag of eintraege || []) {
+    const typ = (eintrag.types || []).find(x => /^image\//.test(x));
+    if (!typ) continue;
+    try {
+      const blob = await eintrag.getType(typ);
+      const endung = (typ.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+      dateien.push(new File([blob], 'Zwischenablage.' + endung, { type: typ }));
+    } catch (err) {
+      console.warn('[Einfügen] Zwischenablage:', err?.message || err);
+    }
+  }
+  return dateien;
+}
+
+/**
+ * Was in der Zwischenablage liegt, auf die Seite setzen.
+ *
+ * @param {object} [page]  Ohne Angabe die Seite, die gerade im Bild steht
+ * @param {number} [ab]    Höhe auf der Seite; sonst bei der Schreibmarke
+ * @returns {Promise<number>} wie viele Bilder eingesetzt wurden
+ */
+async function fuegeAusZwischenablageEin(page, ab) {
+  if (typeof S === 'undefined' || S.readOnly) return 0;
+  let ziel = page;
+  if (!ziel) {
+    const info = (typeof getPage === 'function' && S.activePgId) ? getPage(S.activePgId) : null;
+    ziel = info && info.page;
+  }
+  if (!ziel) return 0;
+
+  const dateien = await bilderInDerZwischenablage();
+  if (!dateien.length) return 0;
+
+  // fuegeBilderAusZwischenablage sieht in items und files nach – files genügt
+  return fuegeBilderAusZwischenablage({ files: dateien }, ziel, ab);
+}
+window.fuegeAusZwischenablageEin = fuegeAusZwischenablageEin;
+
+/** Steht der Fokus irgendwo, wo das Einsetzen dem Browser gehört? */
+function schreibtGeradeWo(el) {
+  if (!el || !el.closest) return false;
+  if (el.closest('.j-text')) return true;
+  return !!el.closest('input, textarea, [contenteditable=""], [contenteditable="true"]');
+}
+
+let _echtesEinsetzen = false;
+document.addEventListener('paste', () => { _echtesEinsetzen = true; }, true);
+
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+  if ((e.key || '').toLowerCase() !== 'v') return;
+  if (typeof S === 'undefined' || !S.activePgId || S.readOnly) return;
+  if (schreibtGeradeWo(e.target) || schreibtGeradeWo(document.activeElement)) return;
+
+  _echtesEinsetzen = false;
+  setTimeout(() => {
+    if (_echtesEinsetzen) return;   // der Browser hat es selbst erledigt
+    fuegeAusZwischenablageEin()
+      .catch(err => console.warn('[Einfügen] Strg+V:', err?.message || err));
+  }, 60);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AUF EINEM TABLET: LANG DRÜCKEN STATT STRG+V
+
+   Ein Tablet hat keine Strg-Taste. Gefragt war deshalb ein Weg über den
+   Finger – und der einzige, der auf einer Seite noch frei ist, ist das
+   lange Drücken: Tippen wählt aus, Ziehen rollt, zwei Finger zoomen.
+   Es ist zugleich der Weg, den jedes andere Programm auf einem Tablet
+   dafür nimmt; niemand muss ihn lernen.
+
+   >>> Warum daraus ein Knöpfchen wird und nicht gleich ein Bild <<<
+   Ein Druck, der von selbst etwas einsetzt, ist nicht rückfragbar –
+   und die Hand liegt beim Schreiben ständig auf dem Blatt. Es erscheint
+   deshalb nur ein Eintrag „Einfügen“ an der Stelle; wer ihn nicht
+   antippt, hat nichts getan. Er kommt ausserdem nur, wenn wirklich
+   etwas in der Zwischenablage liegt – ein Eintrag, der nichts tut,
+   wäre schlimmer als keiner.
+
+   >>> Warum nicht, während der Finger malt <<<
+   Mit eingeschaltetem „mit dem Finger malen“ ist ein langer Druck ein
+   Punkt auf dem Blatt, und der entsteht schon. Beides zugleich wäre ein
+   Fleck plus ein Menü. Dort bleibt es beim Punkt.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const HALTE_MS = 550;      // so lange muss der Finger liegen bleiben
+  const WACKELN = 12;        // so weit darf er dabei wandern (Bildschirm-Px)
+
+  let uhr = null, start = null, menu = null;
+
+  function schliesse() {
+    if (menu) menu.style.display = 'none';
+  }
+
+  function abbrechen() {
+    if (uhr) clearTimeout(uhr);
+    uhr = null; start = null;
+  }
+
+  /** Das Knöpfchen – einmal gebaut, danach nur noch gezeigt. */
+  function baueMenu() {
+    if (menu) return menu;
+    menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.style.display = 'none';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ctx-item';
+    btn.innerHTML = '<svg class="btn-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" '
+      + 'stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/>'
+      + '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>'
+      + '<span></span>';
+    menu.appendChild(btn);
+    document.body.appendChild(menu);
+
+    btn.addEventListener('click', () => {
+      const wo = menu._wo;
+      schliesse();
+      if (!wo) return;
+      fuegeAusZwischenablageEin(wo.page, wo.ab)
+        .catch(err => console.warn('[Einfügen] Langer Druck:', err?.message || err));
+    });
+
+    document.addEventListener('pointerdown', ev => {
+      if (menu.style.display !== 'none' && !menu.contains(ev.target)) schliesse();
+    }, true);
+    return menu;
+  }
+
+  async function zeige(wo) {
+    // Nichts in der Zwischenablage hiesse ein Eintrag, der nichts tut
+    const dabei = await bilderInDerZwischenablage();
+    if (!dabei.length) return;
+
+    const m = baueMenu();
+    m._wo = wo;
+    m.querySelector('span').textContent =
+      (typeof t === 'function' ? t('insert') : 'Einfügen');
+
+    const RAND = 8;
+    m.style.cssText = 'display:block;position:fixed;left:0;top:0;z-index:1400;visibility:hidden';
+    const b = m.offsetWidth || 150, h = m.offsetHeight || 40;
+    m.style.left = Math.max(RAND, Math.min(wo.x, window.innerWidth - b - RAND)) + 'px';
+    m.style.top = Math.max(RAND, Math.min(wo.y, window.innerHeight - h - RAND)) + 'px';
+    m.style.visibility = 'visible';
+  }
+
+  document.addEventListener('pointerdown', e => {
+    abbrechen();
+    if (e.pointerType !== 'touch') return;
+    if (typeof S === 'undefined' || S.readOnly) return;
+    // Malt der Finger, entsteht dort schon ein Punkt – siehe oben
+    if (typeof touchDrawActive === 'function' && touchDrawActive()) return;
+    if (!e.target || !e.target.closest) return;
+
+    const pgEl = e.target.closest('.j-page');
+    if (!pgEl) return;
+    // Was selbst etwas kann, behält seinen langen Druck
+    if (e.target.closest('.obj-wrap, .obj-bar, .obj-handle, .j-page-hdr, .ink-sel, .j-page-actions')) return;
+
+    const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+    if (!info || !info.page) return;
+
+    const r = pgEl.getBoundingClientRect();
+    const hoch = info.page.h || CFG.PAGE_H;
+    const ab = r.height > 0 ? (e.clientY - r.top) * (hoch / r.height) : undefined;
+
+    start = { id: e.pointerId, sx: e.clientX, sy: e.clientY };
+    uhr = setTimeout(() => {
+      uhr = null;
+      const wo = start;
+      if (!wo) return;
+      zeige({ x: wo.sx, y: wo.sy, page: info.page, ab })
+        .catch(err => console.warn('[Einfügen] Langer Druck:', err?.message || err));
+    }, HALTE_MS);
+  }, true);
+
+  document.addEventListener('pointermove', e => {
+    if (!uhr || !start || e.pointerId !== start.id) return;
+    if (Math.hypot(e.clientX - start.sx, e.clientY - start.sy) > WACKELN) abbrechen();
+  }, true);
+
+  document.addEventListener('pointerup', abbrechen, true);
+  document.addEventListener('pointercancel', abbrechen, true);
+})();
 
 /* ══════════════════════════════════════════════════════════════════════
    EIN PDF ALS NEUES HEFT

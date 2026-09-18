@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
   saveToPath:    (p, d) => ipcRenderer.invoke('save-to-path', p, d),
   loadFromPath:     (p) => ipcRenderer.invoke('load-from-path', p),
   checkInternet:     () => ipcRenderer.invoke('check-internet'),
+  // Das Bild aus der Zwischenablage als PNG-Datenadresse (core/importExport.js)
+  clipboardImage:    () => ipcRenderer.invoke('clipboard-image'),
   deleteFile:        (p) => ipcRenderer.invoke('delete-file', p),
   moveFile:      (o, n) => ipcRenderer.invoke('move-file', o, n),
   fileExists:        (p) => ipcRenderer.invoke('file-exists', p),
