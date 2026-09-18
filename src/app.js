@@ -1673,6 +1673,10 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
   let _pinchMidX = 0, _pinchMidY = 0;
   let _panActive = false, _panStartX = 0, _panStartY = 0;
   let _panOriginX = 0, _panOriginY = 0; // current translate offset
+  /* Wo der Finger bei der letzten Meldung stand. Gerechnet wird von
+     Meldung zu Meldung und nicht mehr vom Aufsetzen aus: das Rollen des
+     Rahmens ist ein Weiterschieben, kein Setzen auf einen Wert. */
+  let _panLastX = 0, _panLastY = 0;
 
   const mitte = (e) => ({
     x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
@@ -1930,8 +1934,8 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
       e.preventDefault();
     } else if (e.touches.length === 1 && _zoom > panThreshold()) {
       _panActive = true;
-      _panStartX = e.touches[0].clientX;
-      _panStartY = e.touches[0].clientY;
+      _panStartX = _panLastX = e.touches[0].clientX;
+      _panStartY = _panLastY = e.touches[0].clientY;
       const off = getPanOffset();
       _panOriginX = off.x; _panOriginY = off.y;
       e.preventDefault();
@@ -1969,9 +1973,54 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
       _pinchZuletzt = { d, mx: m.x, my: m.y };
       planePinch();
     } else if (e.touches.length === 1 && _panActive && _zoom > panThreshold()) {
-      const dx = (e.touches[0].clientX - _panStartX) / _zoom;
-      const dy = (e.touches[0].clientY - _panStartY) / _zoom;
-      setPan(_panOriginX + dx, _panOriginY + dy);
+      /* ══════════════════════════════════════════════════════════
+         VERGRÖSSERT WIRD TROTZDEM GEROLLT, NICHT NUR VERSCHOBEN
+
+         >>> Gemeldet: „mit dem Finger scrollen, wenn man nicht auf
+         100 % ist – es geht ein Stück und dann stoppt es“ <<<
+         Genau das stand hier. Über panThreshold() bekam der Finger
+         nicht mehr das Rollen des Rahmens, sondern ausschliesslich das
+         transform am Blatt – und dessen Weg ist begrenzt (setPan): er
+         reicht über das, was der Massstab über den Rand hinausschiebt,
+         und keinen Millimeter weiter. Am Anschlag stand das Heft still,
+         obwohl darunter noch zwanzig Seiten lagen. Die Rollposition
+         rührte sich dabei nie.
+
+         Jetzt in dieser Reihenfolge:
+           1. ROLLEN, solange der Rahmen kann – das reicht senkrecht
+              über das ganze Heft und waagerecht so weit, wie
+              overflow-x zulässt (core/zoom.js).
+           2. was er NICHT mehr aufnehmen konnte, geht als Rest ins
+              Verschieben. Genau dafür ist es da: an den Rand einer
+              Seite zu kommen, die breiter ist als der Rahmen.
+
+         Gerechnet wird von Meldung zu Meldung. Vom Aufsetzen aus ginge
+         es nicht mehr: sobald ein Teil der Bewegung im Rollen steckt,
+         ist der Bezugspunkt ein anderer.
+         ══════════════════════════════════════════════════════════ */
+      const f = e.touches[0];
+      const dxS = f.clientX - _panLastX;
+      const dyS = f.clientY - _panLastY;
+      _panLastX = f.clientX; _panLastY = f.clientY;
+
+      // Der Finger geht nach unten, also muss der Inhalt nach unten
+      const wollteY = -dyS, wollteX = -dxS;
+      const warY = sc.scrollTop, warX = sc.scrollLeft;
+      sc.scrollTop = warY + wollteY;
+      sc.scrollLeft = warX + wollteX;
+      const restY = wollteY - (sc.scrollTop - warY);
+      const restX = wollteX - (sc.scrollLeft - warX);
+
+      if (restX || restY) {
+        /* getZoom() und nicht _zoom: im schmalen Fenster gilt weniger,
+           als eingestellt ist – dieselbe Begründung wie in setPan(). */
+        const z = getZoom() || _zoom;
+        const off = getPanOffset();
+        /* Nach unten nicht ueber die natuerliche Lage hinaus: sonst
+           schoebe ein Zug am oberen Ende das Heft in eine leere Flaeche
+           ueber der ersten Seite – und liesse es dort liegen. */
+        setPan(off.x - restX / z, Math.min(0, off.y - restY / z));
+      }
       pruefeLetzteLeer();
       e.preventDefault();
     }
