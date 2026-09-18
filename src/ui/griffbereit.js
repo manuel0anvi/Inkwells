@@ -137,6 +137,31 @@
      Auflösung des Schirms liegt. */
   const MAX_LEINWAND = 2600;
 
+  /* ════════════════════════════════════════════════════════════════
+     FEINER GEZEICHNET, ALS DER SCHIRM AUFLÖST
+
+     >>> Gemeldet: „ohne ganz hineinzuzoomen ist die Qualität sehr
+     schlecht – man sollte auch dann klar sehen können“ <<<
+     Gezeichnet wurde in genau der Breite, in der die Seite dasteht, mal
+     der Bildpunktdichte des Schirms. Auf einem gewöhnlichen Windows-
+     Bildschirm ist die 1 – eine A4-Seite in einer 400 Punkte breiten
+     Spalte bekam also 400 Bildpunkte. Das sind bei 21 cm Papierbreite
+     gut 48 dpi. Ein Drucker macht 300, ein Buch 600; Fußnoten und feine
+     Serifen fallen bei 48 schlicht unter den Tisch, und dagegen hilft
+     keine Kantenglättung.
+
+     Deshalb wird überabgetastet: die Leinwand ist ein Vielfaches der
+     Anzeigebreite, der Browser rechnet sie beim Zeichnen sauber
+     herunter. Das ist dieselbe Rechnung, die der Zuschnitt schon macht
+     (SCHNITT_FEINHEIT weiter unten), nur muss sie hier auch für die
+     Ansicht gelten und nicht erst beim Herausschneiden.
+
+     Zwei Komma fünf ist der Punkt, an dem es aufhört, etwas zu bringen:
+     Text wird ab da nicht mehr sichtbar besser, die Seite aber weiter
+     teurer. Nach oben deckelt MAX_LEINWAND ohnehin.
+     ════════════════════════════════════════════════════════════════ */
+  const FEINHEIT = 2.5;
+
   /** Der Spiegel dessen, was der Hauptprozess hält. */
   let _stand = { versteckt: false, dateien: [] };
 
@@ -1002,7 +1027,7 @@
     if (breite < 10) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const leinwandBreite = Math.min(Math.round(breite * dpr), MAX_LEINWAND);
+    const leinwandBreite = Math.min(Math.round(breite * dpr * FEINHEIT), MAX_LEINWAND);
 
     /* Verglichen wird die LEINWAND und nicht die Kästchenbreite: jenseits
        der Obergrenze ändert sich die Breite weiter, das Bild aber nicht
