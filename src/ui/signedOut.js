@@ -64,6 +64,18 @@
    */
   async function checkOnStartup() {
     if (!window.CloudSync_ || typeof CloudSync_.sessionWasLost !== 'function') return;
+
+    /* ── Ohne Internet gar nicht erst ──────────────────────────────
+       Der Hinweis endet mit „Jetzt anmelden", und anmelden braucht
+       genau das, was gerade fehlt. Das Kennzeichen wird dabei NICHT
+       bestätigt: steht es zu Recht, kommt der Hinweis beim nächsten
+       Start mit Leitung – dann kann man auch etwas tun.
+
+       Ein Kennzeichen aus einer älteren Fassung wird hier ebenfalls
+       abgefangen; die setzte es beim Start ohne Netz noch (siehe
+       core/cloudSync.js, binOffline). */
+    if (typeof CloudSync_.binOffline === 'function' && CloudSync_.binOffline()) return;
+
     if (!CloudSync_.sessionWasLost()) return;
 
     show();

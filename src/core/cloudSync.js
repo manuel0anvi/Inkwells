@@ -435,7 +435,35 @@ class CloudSyncManager {
   isAuthenticated() {
     if (!(Settings.get('cloudAccessToken') && Settings.get('cloudUserId'))) return false;
     if (!this.isTokenExpired()) return true;
+    /* Ohne Leitung ist ueber die Anmeldung nichts entschieden – siehe
+       binOffline(). Sie gilt weiter, gesichert wird ohnehin nichts. */
+    if (this.binOffline()) return true;
     return this.sessionIsRenewable();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     OHNE LEITUNG IST UEBER DIE ANMELDUNG NICHTS ENTSCHIEDEN
+
+     >>> Gemeldet: „wenn offline, kommt die Meldung, dass man abgemeldet
+     wurde und sich neu anmelden muss – das geht ja gar nicht" <<<
+
+     An drei Stellen wurde ein abgelaufenes Zugriffstoken zum Abmelden:
+     _handleExpiredToken, _restoreSession und isAuthenticated. Alle drei
+     fragten nur, ob sich die Sitzung ERNEUERN laesst – und das heisst
+     bei Google ohne hinterlegtes Client-Secret grundsaetzlich nein,
+     ganz unabhaengig vom Netz. Wer die App zumachte, offline ging und
+     wiederkam, stand deshalb als abgemeldet da, samt Aufforderung, sich
+     neu anzumelden. Anmelden braucht aber genau das, was fehlt.
+
+     Diese Frage steht jetzt vor allen anderen: ohne Leitung bleibt
+     alles, wie es ist. Hochgeladen wird nichts – dafuer gibt es die
+     Warteschlange –, und der Nutzer erfaehrt genau das: offline, die
+     Sicherung ruht. Sobald das Netz zurueck ist, entscheidet der
+     Anbieter, und erst SEIN Nein meldet jemanden ab.
+     ══════════════════════════════════════════════════════════════════ */
+  binOffline() {
+    if (this.isOnline === false) return true;
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
   }
 
   isTokenExpired() {
@@ -1129,8 +1157,9 @@ class CloudSyncManager {
        gesagt hat – dann hat der Provider needsReauth geworfen und das
        Refresh-Token ist schon weg (siehe _refreshSession).
        ══════════════════════════════════════════════════════════════ */
-    if (this._erneuernScheitertAmNetz && this.sessionIsRenewable()) {
+    if (this.binOffline() || (this._erneuernScheitertAmNetz && this.sessionIsRenewable())) {
       console.log('[CloudSync] Token abgelaufen, aber kein Netz – Sitzung bleibt');
+      this._meldeOffline();
       this._notify();
       return;
     }
@@ -1165,6 +1194,23 @@ class CloudSyncManager {
     document.dispatchEvent(new CustomEvent('inkwells-identity-changed'));
 
     this._notify();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WAS STATTDESSEN DASTEHT
+
+     „Sitzung abgelaufen – bitte erneut anmelden" war nicht nur falsch,
+     sondern eine Aufforderung zu etwas Unmoeglichem. Gesagt wird jetzt,
+     was wirklich los ist: kein Netz, das Konto bleibt, gesichert wird
+     nachher. Hoechstens einmal je Offline-Zeit – _onConnectivityChange
+     setzt den Merker zurueck, sobald die Leitung wieder steht.
+     ══════════════════════════════════════════════════════════════════ */
+  _meldeOffline() {
+    if (this._offlineToastShown) return;
+    this._offlineToastShown = true;
+    if (typeof toast !== 'function') return;
+    toast(typeof t === 'function' ? t('sessionOfflinePaused')
+      : 'Kein Internet – du bleibst angemeldet, gesichert wird, sobald du wieder online bist.');
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -2813,6 +2859,16 @@ class CloudSyncManager {
            wird beim naechsten erfolgreichen Versuch still erneuert.
            ══════════════════════════════════════════════════════════════ */
         console.log('[CloudSync] Erneuern am Netz gescheitert – Anmeldung bleibt bestehen');
+        this._session = null;
+        return;
+      } else if (this.binOffline()) {
+        /* Dasselbe wie im Zweig darueber, nur ohne dass ueberhaupt
+           gefragt werden konnte: bei einem Anbieter ohne Refresh-Token
+           kommt _refreshSession gar nicht bis zur Netzpruefung, und
+           _erneuernScheitertAmNetz bleibt deshalb aus. Genau dieser Fall
+           – Google ohne Client-Secret, ohne Internet – meldete beim
+           Start ab. */
+        console.log('[CloudSync] Ohne Netz gestartet – Anmeldung bleibt bestehen');
         this._session = null;
         return;
       } else {
