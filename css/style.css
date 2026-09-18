@@ -70,6 +70,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .btn-p:hover, .btn-p:active, .btn-p:focus{background:var(--cream);color:var(--navy);transform:translateY(-2px);outline:none;box-shadow:0 6px 20px rgba(201,162,39,0.3)}
 .btn-g{display:inline-flex;align-items:center;gap:8px;color:var(--text-muted);text-decoration:none;font-size:14px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;transition:color .2s;cursor:pointer;padding:18px 24px}
 .btn-g:hover, .btn-g:active, .btn-g:focus{color:var(--gold);outline:none}
+/* Der leise Hinweis unter den Knoepfen (Mac/iPad) */
+.hero-soon{margin:2px 0 0;font-size:11.5px;letter-spacing:.06em;color:var(--text-muted);opacity:0;animation:fu .7s .62s forwards}
 .hero-meta{margin-top:52px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);opacity:0;animation:fu .7s .7s forwards}
 .hero-meta span{color:var(--gold);margin:0 5px}
 
