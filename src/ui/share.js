@@ -135,6 +135,8 @@
     if (msg === 'BAD_EMAIL') return t('shareBadEmail');
     if (msg === 'OWN_EMAIL') return t('shareOwnEmail');
     if (msg === 'SHARE_NOT_FOUND') return t('sharedGone');
+    // Kopf da, Seiten noch unterwegs – siehe ui/sharedDocs.js
+    if (msg === 'SHARE_EMPTY' || msg === 'SHARE_INCOMPLETE') return t('sharedNotReady');
     return t('shareFailed').replace('{msg}', msg || '?');
   }
 

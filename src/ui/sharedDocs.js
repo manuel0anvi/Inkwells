@@ -434,6 +434,11 @@
     if (msg === 'SHARE_OFFLINE') return t('shareOffline');
     if (msg === 'NEEDS_ACCOUNT') return t('sharedNeedsAccount');
     if (msg === 'SHARE_NOT_FOUND') return t('sharedGone');
+    /* Der Kopf ist da, die Seiten (noch) nicht. Frueher stand hier der
+       nackte Code – „Freigabe fehlgeschlagen: SHARE_EMPTY“ sagt dem, der
+       gerade eingeladen wurde, nichts ueber das, was er tun kann.
+       (core/share.js, loadDocument) */
+    if (msg === 'SHARE_EMPTY' || msg === 'SHARE_INCOMPLETE') return t('sharedNotReady');
     if (msg === 'DOC_OUTDATED') return t('sharedOutdated');
     if (msg === 'NOT_ALLOWED') return t('sharedNoRight');
     return t('shareFailed').replace('{msg}', msg || '?');
