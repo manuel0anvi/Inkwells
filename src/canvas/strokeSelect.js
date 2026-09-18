@@ -160,6 +160,146 @@
         g.style.left = (p.x - r.x) + 'px';
         g.style.top = (p.y - r.y) + 'px';
       });
+    } else {
+      // Die vier Ecken des Rechtecks – siehe baueEckgriffe()
+      _sel.griffe.forEach(g => {
+        g.style.left = (g.dataset.ecke[1] === 'w' ? 0 : r.w) + 'px';
+        g.style.top = (g.dataset.ecke[0] === 'n' ? 0 : r.h) + 'px';
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     GRÖSSER UND KLEINER – DIE PUNKTE AN DEN ECKEN
+
+     >>> Gemeldet: „eine grosse Zeichnung lässt sich löschen, verdoppeln
+     und in der Strichstärke ändern – nur nicht grösser oder kleiner
+     machen" <<<
+     Stimmt: die Hülle konnte bis hierher nur schieben. Eine Skizze, die
+     eine Spur zu gross geraten ist, musste neu gezeichnet werden.
+
+     >>> Warum das Verhältnis erhalten bleibt <<<
+     An einer Ecke gezogen wird GANZ skaliert, nicht in die Breite oder
+     in die Höhe. Handschrift, die in einer Richtung gestaucht wird,
+     sieht nicht nach kleinerer Handschrift aus, sondern nach einem
+     Fehler. Gemessen wird deshalb der Abstand zur gegenüberliegenden
+     Ecke – die bleibt stehen, wie bei jedem Bildrahmen auch.
+
+     Die STRICHSTÄRKE wächst mit. Ohne das wäre eine verdreifachte
+     Zeichnung eine Spinnwebe und eine gedrittelte ein Klecks; wer die
+     Stärke eigens setzen will, hat dafür die Leiste.
+     ══════════════════════════════════════════════════════════════════ */
+  const ECKEN = ['nw', 'ne', 'sw', 'se'];
+  const MIN_KANTE = 10;      // Seiten-Pixel, kleiner wird keine Auswahl
+
+  function baueEckgriffe(huelle, griffe, holeLage) {
+    for (const ecke of ECKEN) {
+      const g = document.createElement('div');
+      g.className = 'ink-sel-ecke ' + ecke;
+      g.dataset.ecke = ecke;
+      huelle.appendChild(g);
+      griffe.push(g);
+
+      g.addEventListener('pointerdown', e => {
+        e.stopPropagation(); e.preventDefault();
+        if (!_sel) return;
+        g.setPointerCapture(e.pointerId);
+
+        const lage = holeLage();
+        const { pageId, pageEl } = lage;
+        const info = getPage(pageId);
+        if (info) pushPageHistory(info.page);
+
+        const strokes = _sel.strokes, objekte = _sel.objekte;
+        const box = rohRechteck(strokes, objekte);
+        const b0 = Math.max(1, box.maxX - box.minX);
+        const h0 = Math.max(1, box.maxY - box.minY);
+
+        /* Die Ecke gegenüber bleibt stehen – an ihr wird gemessen. */
+        const festX = ecke[1] === 'w' ? box.maxX : box.minX;
+        const festY = ecke[0] === 'n' ? box.maxY : box.minY;
+        const d0 = Math.max(1, Math.hypot(b0, h0));
+
+        const anfang = strokes.map(s => ({
+          punkte: s.path.map(p => ({ x: p.x, y: p.y })),
+          dick: s.width || 2
+        }));
+        const objAnfang = objekte.map(o => ({
+          x: o.x || 0, y: o.y || 0, w: o.w || 0, h: o.h || 0
+        }));
+
+        const mass = seitenMass(pageId);
+        const zoom = typeof getZoom === 'function' ? getZoom() : 1;
+        const rect = pageEl.getBoundingClientRect();
+
+        const mv = ev => {
+          // Zeigerstelle in Seiten-Pixeln
+          const px = (ev.clientX - rect.left) / zoom;
+          const py = (ev.clientY - rect.top) / zoom;
+          let f = Math.hypot(px - festX, py - festY) / d0;
+
+          /* Nicht auf null zusammenziehen und nicht über das Blatt
+             hinaus – sonst wäre die Auswahl weg oder nicht mehr da,
+             wo man sie sehen kann. */
+          f = Math.max(MIN_KANTE / Math.max(b0, h0), f);
+          const raumX = ecke[1] === 'w' ? festX : mass.w - festX;
+          const raumY = ecke[0] === 'n' ? festY - CFG.HDR : mass.h - festY;
+          f = Math.min(f, Math.max(0.05, raumX / b0), Math.max(0.05, raumY / h0));
+
+          strokes.forEach((st, i) => {
+            const a = anfang[i];
+            st.path.forEach((p, k) => {
+              p.x = festX + (a.punkte[k].x - festX) * f;
+              p.y = festY + (a.punkte[k].y - festY) * f;
+            });
+            st.width = Math.min(40, Math.max(0.3, Math.round(a.dick * f * 10) / 10));
+          });
+          objekte.forEach((o, i) => {
+            const a = objAnfang[i];
+            o.x = festX + (a.x - festX) * f;
+            o.y = festY + (a.y - festY) * f;
+            o.w = Math.max(8, a.w * f);
+            o.h = Math.max(8, a.h * f);
+            const w = objHuelle(pageEl, o);
+            if (w) {
+              w.style.left = o.x + 'px'; w.style.top = o.y + 'px';
+              w.style.width = o.w + 'px'; w.style.height = o.h + 'px';
+            }
+          });
+
+          notiere(pageId, false);
+          zeichneHuelle();
+          stelleLeiste();
+        };
+        const up = ev => {
+          try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
+          g.removeEventListener('pointermove', mv);
+          g.removeEventListener('pointerup', up);
+          g.removeEventListener('pointercancel', up);
+          notiere(pageId, true);
+          meldeStriche();
+          /* Eine Formel und ein Code-Kasten zeichnen ihren Inhalt nach
+             der Grösse – sie müssen neu gesetzt werden, die blosse
+             Rahmengrösse genügt dort nicht. */
+          if (objekte.length) {
+            const i2 = getPage(pageId);
+            const layer = pageEl.querySelector('.j-objects');
+            if (i2 && layer) {
+              for (const o of objekte) {
+                const w = objHuelle(pageEl, o);
+                if (w && (o.kind === 'formula' || o.kind === 'code')) {
+                  w.remove();
+                  if (typeof placeObject === 'function') placeObject(layer, o, i2.page);
+                }
+              }
+            }
+            if (typeof noteObjectChanged === 'function') noteObjectChanged();
+          }
+        };
+        g.addEventListener('pointermove', mv);
+        g.addEventListener('pointerup', up);
+        g.addEventListener('pointercancel', up);
+      });
     }
   }
 
@@ -241,18 +381,26 @@
       });
     }
 
+    /* Die vier Ecken zum Grösser- und Kleinermachen. Eine gerade Linie
+       bekommt sie nicht: bei ihr zählen die beiden Enden. */
+    if (!istGerade(strokes, objekte)) {
+      baueEckgriffe(huelle, griffe, () => ({ pageId: _sel.pageId, pageEl: _sel.pageEl }));
+    }
+
     /* ── Verschieben: überall in der Hülle anfassen ───────────────── */
     huelle.addEventListener('pointerdown', e => {
       if (e.target !== huelle) return;    // nicht auf einem Griff
       e.stopPropagation(); e.preventDefault();
       huelle.setPointerCapture(e.pointerId);
 
-      const info = getPage(pageId);
+      let aktId = _sel.pageId, aktEl = _sel.pageEl;
+      const info = getPage(aktId);
       if (info) pushPageHistory(info.page);
 
-      const sx = e.clientX, sy = e.clientY;
-      const anfang = strokes.map(s => s.path.map(p => ({ x: p.x, y: p.y })));
-      const objAnfang = objekte.map(o => ({ x: o.x || 0, y: o.y || 0 }));
+      let sx = e.clientX, sy = e.clientY;
+      let anfang = strokes.map(s => s.path.map(p => ({ x: p.x, y: p.y })));
+      let objAnfang = objekte.map(o => ({ x: o.x || 0, y: o.y || 0 }));
+      let gewechselt = false;
       const zoom = typeof getZoom === 'function' ? getZoom() : 1;
 
       /* ══════════════════════════════════════════════════════════
@@ -270,22 +418,126 @@
          klemme() steht in canvas/objects.js – dort gilt dieselbe
          Grenze für Bilder, Formen und Formeln.
          ══════════════════════════════════════════════════════════ */
-      const box = rohRechteck(strokes, objekte);
+      let box = rohRechteck(strokes, objekte);
+      let mass2 = seitenMass(aktId);
+
+      /* ══════════════════════════════════════════════════════════
+         AUF DIE NÄCHSTE SEITE, WÄHREND MAN ZIEHT
+
+         >>> Gemeldet: „am Seitenende bleibt es stecken – auf die
+         nächste Seite kommt nur ein Bild“ <<<
+         Genau so war es. Ein Bild, eine Form, ein Code-Kasten wandert
+         beim Ziehen mit (canvas/objects.js, wechsleSeite); alles, was
+         über die HÜLLE angefasst wird – Gezeichnetes, mehrere Dinge
+         zusammen, eine eingekreiste Auswahl –, stiess unten an und
+         blieb liegen. Die Grenze hier war als Schutz gedacht: was über
+         den Blattrand geschoben wird, schneidet die Zeichenfläche ab
+         und ist danach unsichtbar. Sie durfte nur nie der einzige Weg
+         sein.
+
+         Also dieselbe Regel wie beim Bild: steht der Zeiger wirklich
+         IN einer anderen Seite, zieht die ganze Auswahl um. In der
+         Lücke ZWISCHEN zwei Seiten geschieht nichts – dort flackerte
+         es sonst zwischen beiden hin und her.
+         ══════════════════════════════════════════════════════════ */
+      function seiteUnterZeiger(cx, cy) {
+        for (const el of QA('.j-page')) {
+          const r = el.getBoundingClientRect();
+          if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return el;
+        }
+        return null;
+      }
+
+      /**
+       * @param {number} dx  bisherige Verschiebung auf der ALTEN Seite
+       * @returns {boolean}  ob wirklich umgezogen wurde
+       */
+      function wechsleSeite(zielEl, ev, dx, dy) {
+        const zielId = zielEl.dataset.pgid;
+        if (!zielId || zielId === aktId) return false;
+        const ziel = getPage(zielId);
+        const zielLayer = zielEl.querySelector('.j-objects');
+        if (!ziel || !zielLayer) return false;
+
+        // Beide Seiten ändern sich – beide brauchen ihren Schritt zurück
+        pushPageHistory(ziel.page);
+
+        /* Der Bezug wird umgerechnet, nicht neu gemessen: der Rahmen auf
+           dem Schirm hinkt bei einem schnellen Zug ein Bild hinterher,
+           und über eine Seitengrenze zieht man schnell. */
+        const altR = aktEl.getBoundingClientRect();
+        const zielR = zielEl.getBoundingClientRect();
+        const vx = dx + (altR.left - zielR.left) / zoom;
+        const vy = dy + (altR.top - zielR.top) / zoom;
+
+        // Die Striche hängen um
+        const alteListe = S.strokeHistory[aktId] || [];
+        S.strokeHistory[aktId] = alteListe.filter(st => !strokes.includes(st));
+        const neueListe = S.strokeHistory[zielId] || (S.strokeHistory[zielId] = []);
+        strokes.forEach((st, i) => {
+          st.path.forEach((pt, k) => { pt.x = anfang[i][k].x + vx; pt.y = anfang[i][k].y + vy; });
+          neueListe.push(st);
+        });
+
+        // Und die Objekte dazu
+        const altInfo = getPage(aktId);
+        if (objekte.length && altInfo) {
+          const weg = new Set(objekte.map(o => String(o.id)));
+          altInfo.page.objects = (altInfo.page.objects || []).filter(o => !weg.has(String(o.id)));
+          const zielObjekte = ziel.page.objects || (ziel.page.objects = []);
+          objekte.forEach((o, i) => {
+            const w = objHuelle(aktEl, o);
+            if (w) w.remove();
+            o.x = objAnfang[i].x + vx;
+            o.y = objAnfang[i].y + vy;
+            zielObjekte.push(o);
+            if (typeof placeObject === 'function') placeObject(zielLayer, o, ziel.page);
+          });
+          const altLayer = aktEl.querySelector('.j-objects');
+          if (altLayer && typeof restackObjects === 'function') restackObjects(altLayer, altInfo.page);
+          if (typeof restackObjects === 'function') restackObjects(zielLayer, ziel.page);
+        }
+
+        // Die alte Seite ist jetzt leerer – das muss sie auch zeigen
+        notiere(aktId, false);
+
+        zielEl.appendChild(huelle);
+        /* Ein umgehängtes Element verliert den gefangenen Zeiger; ohne
+           das Nachfangen bliebe die Auswahl beim Übertritt stehen. */
+        try { huelle.setPointerCapture(ev.pointerId); } catch (err) { }
+
+        aktId = zielId; aktEl = zielEl;
+        _sel.pageId = zielId; _sel.pageEl = zielEl;
+        mass2 = seitenMass(zielId);
+        // Ab hier wird von der neuen Lage aus gerechnet
+        anfang = strokes.map(st => st.path.map(pt => ({ x: pt.x, y: pt.y })));
+        objAnfang = objekte.map(o => ({ x: o.x || 0, y: o.y || 0 }));
+        box = rohRechteck(strokes, objekte);
+        sx = ev.clientX; sy = ev.clientY;
+        gewechselt = true;
+        return true;
+      }
 
       const mv = ev => {
         let dx = (ev.clientX - sx) / zoom, dy = (ev.clientY - sy) / zoom;
-        dx = klemme(dx, -box.minX, mass.w - box.maxX);
-        dy = klemme(dy, CFG.HDR - box.minY, mass.h - box.maxY);
+
+        const drunter = seiteUnterZeiger(ev.clientX, ev.clientY);
+        if (drunter && drunter !== aktEl && wechsleSeite(drunter, ev, dx, dy)) {
+          dx = 0; dy = 0;
+        }
+
+        dx = klemme(dx, -box.minX, mass2.w - box.maxX);
+        dy = klemme(dy, CFG.HDR - box.minY, mass2.h - box.maxY);
         strokes.forEach((s, i) => {
           s.path.forEach((p, k) => { p.x = anfang[i][k].x + dx; p.y = anfang[i][k].y + dy; });
         });
         objekte.forEach((o, i) => {
           o.x = objAnfang[i].x + dx;
           o.y = objAnfang[i].y + dy;
-          const w = objHuelle(pageEl, o);
+          const w = objHuelle(aktEl, o);
           if (w) { w.style.left = o.x + 'px'; w.style.top = o.y + 'px'; }
         });
-        notiere(pageId, false);
+        notiere(aktId, false);
         zeichneHuelle();
         stelleLeiste();
       };
@@ -293,11 +545,22 @@
         try { huelle.releasePointerCapture(ev.pointerId); } catch (err) { }
         huelle.removeEventListener('pointermove', mv);
         huelle.removeEventListener('pointerup', up);
-        notiere(pageId, true);
+        huelle.removeEventListener('pointercancel', up);
+        notiere(aktId, true);
+        meldeStriche();
         if (objekte.length && typeof noteObjectChanged === 'function') noteObjectChanged();
+
+        if (gewechselt) {
+          /* Neu aufbauen: die Schliessungen dieser Hülle – die Endgriffe
+             einer Geraden vor allem – zeigen noch auf die alte Seite. */
+          const zielEl = aktEl, zielId = aktId;
+          abwaehlen();
+          baueHuelle(zielEl, zielId, strokes, objekte);
+        }
       };
       huelle.addEventListener('pointermove', mv);
       huelle.addEventListener('pointerup', up);
+      huelle.addEventListener('pointercancel', up);
     });
 
     zeichneHuelle();

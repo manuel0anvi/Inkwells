@@ -1393,6 +1393,33 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   transform: scale(1.25)
 }
 
+/* ── Die vier Ecken zum Groesser- und Kleinermachen ─────────────────
+   Dieselbe Machart wie die Endgriffe einer Geraden, nur eckig: rund
+   heisst hier „Ende einer Linie", eckig heisst „Ecke eines Rahmens".
+   (canvas/strokeSelect.js, baueEckgriffe) */
+.ink-sel-ecke {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  border-radius: 2px;
+  background: var(--gold, #c9a227);
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  touch-action: none;
+  transition: transform .1s ease
+}
+
+.ink-sel-ecke.nw { cursor: nwse-resize }
+.ink-sel-ecke.se { cursor: nwse-resize }
+.ink-sel-ecke.ne { cursor: nesw-resize }
+.ink-sel-ecke.sw { cursor: nesw-resize }
+
+.ink-sel-ecke:hover {
+  transform: scale(1.25)
+}
+
 .ink-sel-bar {
   position: fixed;
   /* Ueber allem, was auf der Seite liegt: der Seitenkopf und die
@@ -1475,6 +1502,14 @@ body.touch-input .obj-body[data-kind="shape"]::after {
     height: 20px;
     margin-left: -10px;
     margin-top: -10px
+  }
+
+  /* Mit dem Finger getroffen werden muessen sie auch */
+  .ink-sel-ecke {
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    margin-top: -9px
   }
 }
 
