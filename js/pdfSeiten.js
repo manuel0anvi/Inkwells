@@ -142,7 +142,8 @@ const PdfSeiten = {
       const roh = window.atob(eintrag.daten);
       const bytes = new Uint8Array(roh.length);
       for (let i = 0; i < roh.length; i++) bytes[i] = roh.charCodeAt(i);
-      return pdfjsLib.getDocument({ data: bytes }).promise;
+      // Kein eval – die Begruendung steht in core/importExport.js
+      return pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
     })();
 
     this._docs.set(schluessel, geladen);

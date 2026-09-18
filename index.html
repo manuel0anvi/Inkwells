@@ -127,6 +127,11 @@
       <p class="dl-store-note" data-i18n="dl_store_note">Ohne Warnmeldung von Windows, Updates kommen von selbst.</p>
     </div>
 
+    <!-- Was als Nächstes kommt. Steht bewusst IN der Download-Box und
+         nicht im Kleingedruckten: wer hier steht und kein Windows hat,
+         soll nicht raten müssen, ob es ihn je geben wird. -->
+    <p class="dl-soon" data-i18n="dl_soon">Mac und iPad kommen bald – die Arbeit daran läuft.</p>
+
     <div class="dl-meta"><span id="dm-ver">Version 1.0.0</span><span data-i18n="dl_free">Kostenlos &amp; Open Source</span></div>
   </div>
 </section>
@@ -249,6 +254,21 @@
     <div class="modal-actions">
       <button id="downgrade-cancel" class="btn-m" type="button" data-i18n="downgrade_cancel">Abbrechen</button>
       <button id="downgrade-confirm" class="btn-m warn" type="button" data-i18n="downgrade_confirm">Trotzdem herunterladen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Warnung für alles, was kein Windows ist -->
+<div id="plat-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plat-title">
+    <div class="modal-kicker" data-i18n="plat_kicker">Hinweis zum Gerät</div>
+    <h4 id="plat-title">Inkwells ist für Windows gemacht</h4>
+    <p id="plat-body">Was du hier lädst, ist ein Installierer für Windows 10 und 11.</p>
+    <p id="plat-hint" class="modal-note" data-i18n="plat_hint">Lade die Datei auf einem Windows-Rechner herunter – der Link funktioniert dort genauso.</p>
+    <p id="plat-soon" class="modal-note" data-i18n="plat_soon">Fassungen für Mac und iPad sind in Arbeit und kommen bald.</p>
+    <div class="modal-actions">
+      <button id="plat-cancel" class="btn-m" type="button" data-i18n="plat_cancel">Abbrechen</button>
+      <button id="plat-confirm" class="btn-m warn" type="button" data-i18n="plat_confirm">Trotzdem herunterladen</button>
     </div>
   </div>
 </div>
@@ -433,6 +453,100 @@ async function loadReleases(){
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   WER HIER LÄDT, HAT NICHT UNBEDINGT WINDOWS
+
+   Die Datei ist ein NSIS-Installierer. Auf einem iPhone oder Android
+   landet sie im Download-Ordner und tut dort nichts; auf einem Mac
+   ebenso. Ohne ein Wort dazu sieht das aus, als sei der Download kaputt
+   – und die Seite sagte bis hierher nur im Kleingedruckten, wofür das
+   Programm gemacht ist.
+
+   Erkannt wird über die User-Agent-Angaben. Sie sind nicht verlässlich,
+   und genau deshalb HALTEN sie niemanden auf: es ist eine Rückfrage mit
+   „Trotzdem herunterladen“, kein Riegel. Ein Windows-Rechner, der sich
+   falsch meldet, verliert höchstens einen Klick.
+   ═══════════════════════════════════════════════════════════════════════ */
+function geraeteArt() {
+  const uaD = navigator.userAgentData;
+  const plat = ((uaD && uaD.platform) || navigator.platform || '').toLowerCase();
+  const ua = (navigator.userAgent || '').toLowerCase();
+
+  if (/windows|win32|win64/.test(plat) || /windows nt/.test(ua)) return 'windows';
+  if (uaD && uaD.mobile === true) return 'mobile';
+  if (/android|iphone|ipod|ipad/.test(ua)) return 'mobile';
+  /* Ein iPad meldet sich seit iPadOS 13 als „Macintosh“. Auseinander
+     hält beide nur die Frage, ob der Schirm Berührungen kennt. */
+  if (/macintosh|mac os x/.test(ua) || /mac/.test(plat)) {
+    return navigator.maxTouchPoints > 1 ? 'mobile' : 'apple';
+  }
+  if (/mobile/.test(ua)) return 'mobile';
+  if (/linux|cros/.test(plat) || /linux|cros/.test(ua)) return 'other';
+  return 'windows';
+}
+
+const GERAET = geraeteArt();
+let plattformBestaetigt = false;
+let plattformWeiter = null;
+
+function schliessePlatModal() {
+  const m = document.getElementById('plat-modal');
+  if (!m) return;
+  m.classList.remove('open');
+  m.setAttribute('aria-hidden', 'true');
+  plattformWeiter = null;
+}
+
+function zeigePlatModal(weiter) {
+  const m = document.getElementById('plat-modal');
+  if (!m) { weiter(); return; }
+  plattformWeiter = weiter;
+
+  const art = GERAET === 'mobile' ? 'mobile' : (GERAET === 'apple' ? 'apple' : 'other');
+  document.getElementById('plat-title').textContent = t('plat_title_' + art);
+  document.getElementById('plat-body').textContent = t('plat_body_' + art);
+  document.getElementById('plat-hint').textContent = t('plat_hint');
+  document.getElementById('plat-soon').textContent = t('plat_soon');
+  // Der Satz über Mac und iPad gehört nur dorthin, wo er etwas verspricht
+  document.getElementById('plat-soon').style.display =
+    (art === 'apple' || art === 'mobile') ? '' : 'none';
+
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+}
+
+function setupPlattformGuard() {
+  document.getElementById('plat-cancel')?.addEventListener('click', schliessePlatModal);
+  document.getElementById('plat-modal')?.addEventListener('click', (ev) => {
+    if (ev.target === ev.currentTarget) schliessePlatModal();
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') schliessePlatModal();
+  });
+  document.getElementById('plat-confirm')?.addEventListener('click', () => {
+    const weiter = plattformWeiter;
+    plattformBestaetigt = true;
+    schliessePlatModal();
+    if (weiter) weiter();
+  });
+
+  if (GERAET === 'windows') return;
+
+  /* In der ABFANGPHASE, damit die Rückfrage vor allen anderen kommt –
+     auch vor der Downgrade-Warnung, die am selben Knopf hängt. Ist sie
+     einmal beantwortet, läuft der nächste Klick ungehindert durch und
+     die Downgrade-Warnung ist wieder an der Reihe. */
+  document.addEventListener('click', (ev) => {
+    if (plattformBestaetigt) return;
+    const ziel = ev.target.closest('#hero-dl, #main-dl, button.v-dl');
+    if (!ziel) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    zeigePlatModal(() => ziel.click());
+  }, true);
+}
+
+setupPlattformGuard();
 setupDowngradeGuard();
 loadReleases();
 

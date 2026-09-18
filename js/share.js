@@ -2232,6 +2232,8 @@ async function setLinkMode(docId, mode) {
 
     if (head.linkId) await deleteDoc(doc(db, DOC_LINKS, head.linkId)).catch(() => {});
     await updateDocFelder(docId, felder);
+    // Wer über den Link drin war, ist auch im Live-Raum draußen
+    await entzieheRaumrechte(head, ueberLink);
     return { linkMode: 'off', linkId: '', url: '' };
   }
 
@@ -2264,8 +2266,21 @@ async function rotateLink(docId) {
   return { linkId, url: docUrlFor(linkId) };
 }
 
-/** Adresse einladen oder ihre Rolle ändern. */
-async function setMember(docId, email, role) {
+/**
+ * Adresse einladen oder ihre Rolle ändern.
+ *
+ * @param {string} via  'invite' schreibt die Herkunft ausdrücklich um.
+ *   Ohne Angabe bleibt sie, wie sie war – das ist der Fall „nur die Rolle
+ *   ändern".
+ *
+ * >>> Warum die Herkunft überhaupt eine Rolle spielt <<<
+ * „Link aus" entfernt alle, die über den Link hereingekommen sind. Wer
+ * zuerst über den Link kam und DANACH ausdrücklich per E-Mail eingeladen
+ * wurde, behielt bisher trotzdem 'link' – und flog beim nächsten
+ * Abschalten des Links mit hinaus, obwohl sein Zugang mit dem Link nichts
+ * mehr zu tun hatte.
+ */
+async function setMember(docId, email, role, via) {
   const me = requireIdentity();
   const key = normalizeEmail(email);
   if (!looksLikeEmail(key)) throw new Error('BAD_EMAIL');
@@ -2275,8 +2290,10 @@ async function setMember(docId, email, role) {
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
 
   // Einzeln, nicht als ganze Liste – siehe updateDocFelder()
+  const herkunft = via === 'invite' ? 'invite' : (head.memberVia[key] || 'invite');
+
   await updateDocFelder(docId, [
-    ...eintragSetzen(key, normalizeRole(role), head.memberVia[key] || 'invite'),
+    ...eintragSetzen(key, normalizeRole(role), herkunft),
     // Wer wieder eingeladen wird, ist nicht mehr gesperrt
     'blockedEmails', arrayRemove(key)
   ]);
@@ -2306,6 +2323,10 @@ async function removeMember(docId, email) {
   felder.push('blockedEmails', arrayUnion(key));
 
   await updateDocFelder(docId, felder);
+
+  /* Und dieselbe Tür in der Live-Datenbank zu – siehe
+     entzieheRaumrechte(). Ohne das blieb der Hinausgeworfene im Chat. */
+  await entzieheRaumrechte(head, [key]);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2416,12 +2437,36 @@ function listMembers(head) {
   })).sort((a, b) => a.email.localeCompare(b.email));
 }
 
-/** Dokument ganz zurückziehen: Inhalt, Kopf und Link verschwinden. */
+/**
+ * Dokument ganz zurückziehen: Inhalt, Kopf und Link verschwinden.
+ *
+ * >>> Warum hier nicht jeder Fehler „ist schon weg" heißt <<<
+ * Der Kopf wurde mit einem blanken .catch(() => null) geholt, und ein
+ * fehlendes Ergebnis galt als „gibt es nicht mehr, also erledigt". Ein
+ * abgebrochener Abruf sah damit genauso aus wie eine bereits aufgehobene
+ * Freigabe: die Oberfläche meldete „Freigabe aufgehoben", vergaß Kennung
+ * und Link örtlich – und in der Cloud stand alles unverändert weiter. Der
+ * Besitzer glaubte, den Zugriff entzogen zu haben, und hatte danach nicht
+ * einmal mehr den Link, um nachzusehen.
+ *
+ * „Schon weg" ist deshalb genau ein Fall: SHARE_NOT_FOUND. Alles andere
+ * geht als Fehler nach oben.
+ */
 async function unshareDocument(docId) {
   const me = requireIdentity();
-  const head = await loadDocumentHead(docId).catch(() => null);
-  if (!head) return true;
+
+  let head = null;
+  try {
+    head = await loadDocumentHead(docId);
+  } catch (err) {
+    if (err && err.message === 'SHARE_NOT_FOUND') return true;
+    throw err;
+  }
   if (head.owner !== me.uid) throw new Error('SHARE_NOT_OWNED');
+
+  /* Zuerst der Live-Raum: nach dem Löschen des Kopfes käme niemand mehr
+     durch die Oberfläche hinein, um ihn aufzuräumen. */
+  await raeumeRaumAuf(head);
 
   if (head.linkId) await deleteDoc(doc(db, DOC_LINKS, head.linkId)).catch(() => {});
   await clearDocContent(docId);
@@ -2923,6 +2968,87 @@ function loadRealtime() {
     });
 
   return _rtdbPromise;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   RECHTE ENTZIEHEN HEISST AUCH: IM LIVE-RAUM
+
+   Firestore und die Realtime Database sind zwei getrennte Türen. Wer aus
+   der Freigabe entfernt wurde, kam durch die erste nicht mehr herein –
+   die zweite stand weiter offen: die Regeln der Live-Datenbank richten
+   sich ausschließlich nach roles/{raum}, und die wurde nur von einer
+   gerade GEÖFFNETEN Besitzersitzung nachgeführt. Wer jemanden aus dem
+   Freigabefenster hinauswarf, ohne das Heft offen zu haben, ließ ihn im
+   Chat sitzen: mitlesen und mitschreiben ging weiter.
+
+   Der Besitzer darf roles/{raum} jederzeit schreiben (siehe
+   website/database.rules.json) – auch ohne Raumsitzung. Genau das
+   geschieht hier.
+
+   Warum das trotzdem ein Versuch bleibt und kein Versprechen: die
+   maßgebliche Grenze ist Firestore. Ist die Live-Datenbank gerade nicht
+   erreichbar, soll der Entzug deswegen nicht scheitern – er wäre sonst
+   gar nicht geschehen.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Der Raum eines Dokuments – meist die Kennung, siehe describeDoc(). */
+function raumVon(head) {
+  return (head && head.roomKey) || (head && head.docId) || '';
+}
+
+/** Die Firebase-Kennungen, die zu diesen Adressen gehören. */
+function uidsZuAdressen(head, emails) {
+  const gesucht = new Set((emails || []).map(normalizeEmail).filter(Boolean));
+  const treffer = [];
+  for (const [uid, mail] of Object.entries((head && head.memberUids) || {})) {
+    if (uid && gesucht.has(normalizeEmail(mail))) treffer.push(uid);
+  }
+  return treffer;
+}
+
+/** Diesen Adressen das Lesen und Schreiben im Live-Raum nehmen. */
+async function entzieheRaumrechte(head, emails) {
+  const me = currentIdentity();
+  const raum = raumVon(head);
+  if (!me || !raum || !head || head.owner !== me.uid) return;
+
+  const uids = uidsZuAdressen(head, emails);
+  if (!uids.length) return;
+
+  try {
+    const { mod, db: rtdb } = await loadRealtime();
+    const { ref, remove } = mod;
+    for (const uid of uids) {
+      await mitZeitgrenze(remove(ref(rtdb, `roles/${raum}/r/${uid}`)), 6000);
+      await mitZeitgrenze(remove(ref(rtdb, `roles/${raum}/w/${uid}`)), 6000);
+    }
+  } catch (err) {
+    console.warn('[Share] Live-Rechte nicht entzogen:', err?.message || err);
+  }
+}
+
+/**
+ * Den ganzen Raum wegräumen. Nach dem Aufheben der Freigabe hat niemand
+ * mehr etwas darin zu suchen – und niemand käme über die Oberfläche noch
+ * einmal hinein, um ihn aufzuräumen. Chat und Änderungsstrom blieben
+ * sonst liegen, samt Text.
+ */
+async function raeumeRaumAuf(head) {
+  const me = currentIdentity();
+  const raum = raumVon(head);
+  if (!me || !raum || !head || head.owner !== me.uid) return;
+
+  try {
+    const { mod, db: rtdb } = await loadRealtime();
+    const { ref, remove } = mod;
+    /* Die Rollenliste ZULETZT: an ihr hängt die Erlaubnis, die anderen
+       drei überhaupt anzufassen. */
+    for (const zweig of ['chat', 'ops', 'presence', 'roles']) {
+      await mitZeitgrenze(remove(ref(rtdb, `${zweig}/${raum}`)), 6000);
+    }
+  } catch (err) {
+    console.warn('[Share] Raum nicht aufgeräumt:', err?.message || err);
+  }
 }
 
 /** Initialen aus Anzeigename oder E-Mail – für den Marker. */
@@ -4331,7 +4457,22 @@ async function ladeMeldungenFuerMich() {
     const snap = await getDocs(query(
       collection(db, 'meldungen'),
       where('ownerUid', '==', ich.uid),
-      where('erledigt', '==', false)
+      where('erledigt', '==', false),
+      /* ══════════════════════════════════════════════════════════════
+         DER FILTER GEHOERT IN DIE ABFRAGE, NICHT IN DIE ANZEIGE
+
+         Die Regel lässt eine Meldung über den Besitzer selbst nicht zu
+         ihm durch – ein Einzelabruf wird abgewiesen. Bei einer
+         LISTENABFRAGE hilft das nicht: entweder liefert die Datenbank
+         sie mit aus (so im Emulator gemessen), oder sie weist die ganze
+         Abfrage ab, weil ein Treffer nicht erlaubt ist. Im ersten Fall
+         stehen Vorwurf und Melder beim Gemeldeten auf der Leitung, im
+         zweiten sieht der Besitzer überhaupt keine Meldungen mehr.
+
+         Nachträglich in ui/melden.js zu filtern nimmt nichts zurück,
+         was schon beim Client angekommen ist.
+         ══════════════════════════════════════════════════════════════ */
+      where('gegenBesitzer', '==', false)
     ));
     return snap.docs.map(d => ({ id: d.id, ...d.data(), erstellt: alsIso(d.data().erstellt) }));
   } catch (err) {
@@ -4360,9 +4501,11 @@ function beobachteMeldungenFuerMich(beiAenderung) {
   if (!ich || !ich.uid) return () => {};
   try {
     return onSnapshot(
+      // Derselbe Filter wie in ladeMeldungenFuerMich – siehe dort
       query(collection(db, 'meldungen'),
             where('ownerUid', '==', ich.uid),
-            where('erledigt', '==', false)),
+            where('erledigt', '==', false),
+            where('gegenBesitzer', '==', false)),
       (snap) => beiAenderung(snap.docs.map(d => ({
         id: d.id, ...d.data(), erstellt: alsIso(d.data().erstellt)
       }))),
@@ -4487,16 +4630,38 @@ async function ladePostfachStand() {
  * Immer den GESAMTEN vereinigten Stand, nicht nur das Neue: dadurch
  * bringt derselbe Aufruf auch das mit, was auf diesem Rechner oertlich
  * schon feststand, aber nach einem Kennungswechsel noch nie oben war.
+ *
+ * >>> Warum arrayUnion und nicht die fertige Liste <<<
+ * Hier standen beide Listen als GANZES, mit { merge: true } dahinter.
+ * Das Wort täuscht: merge vereinigt die FELDER eines Dokuments, nicht die
+ * Elemente eines Feldes. Der Inhalt des Feldes wurde ersetzt.
+ *
+ * Zwei Rechner löschten sich damit gegenseitig aus: A liest den leeren
+ * Stand, löscht Nachricht 1, schreibt [1]. B hatte denselben leeren Stand
+ * gelesen, liest Nachricht 2 und schreibt [2] – die 1 von A ist weg. Auf
+ * einem dritten Rechner tauchte sie wieder auf.
+ *
+ * arrayUnion hängt an, und zwar auf dem Server. Die Vereinigung geschieht
+ * dort, wo beide hinschreiben, und braucht deshalb weder eine Transaktion
+ * noch einen frisch gelesenen Stand. Dass die Listen nur wachsen, gilt
+ * damit auch serverseitig – bisher stand das nur im Kommentar.
  */
 async function sichrePostfachStand(stand) {
   const ich = currentIdentity();
   if (!ich || !ich.uid) return false;
+
+  const gelesen = ((stand && stand.gelesen) || []).filter(Boolean);
+  const geloescht = ((stand && stand.geloescht) || []).filter(Boolean);
+
+  /* arrayUnion() ohne Werte wirft – deshalb nur die Listen, die etwas
+     enthalten. Ein Stand ohne beides ist trotzdem ein gültiger Aufruf:
+     er setzt nur den Zeitstempel. */
+  const felder = { aktualisiert: serverTimestamp() };
+  if (gelesen.length) felder.gelesen = arrayUnion(...gelesen);
+  if (geloescht.length) felder.geloescht = arrayUnion(...geloescht);
+
   try {
-    await setDoc(doc(db, 'postfach', ich.uid), {
-      gelesen: (stand && stand.gelesen) || [],
-      geloescht: (stand && stand.geloescht) || [],
-      aktualisiert: serverTimestamp()
-    }, { merge: true });
+    await setDoc(doc(db, 'postfach', ich.uid), felder, { merge: true });
     return true;
   } catch (err) {
     console.warn('[Postfach] Stand nicht sicherbar:', err.message);

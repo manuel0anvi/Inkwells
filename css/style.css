@@ -105,6 +105,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .btn-store{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;box-sizing:border-box;background:transparent;color:var(--gold-light);text-decoration:none;font-family:'Jost',sans-serif;font-size:13px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;padding:16px 24px;border:0.5px solid var(--gold);transition:background .2s,color .2s,transform .15s}
 .btn-store:hover,.btn-store:active,.btn-store:focus{background:var(--gold);color:var(--navy);transform:translateY(-2px);outline:none}
 .dl-store-note,.dl-direct-note{margin:12px 0 0;text-align:center;font-size:11px;line-height:1.65;color:var(--text-muted);letter-spacing:.05em}
+/* Was als Naechstes kommt – in der Download-Box, nicht im Kleingedruckten */
+.dl-soon{margin:14px 0 0;text-align:center;font-size:11.5px;line-height:1.65;color:var(--gold-light,#ffd289);letter-spacing:.06em}
 .dl-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);letter-spacing:.07em;border-top:0.5px solid var(--navy-border);padding-top:18px;margin-top:18px}
 
 .ver-section{max-width:720px;margin:0 auto;padding:0 40px 140px}

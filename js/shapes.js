@@ -386,12 +386,25 @@ function addShapeChrome(bar, obj, page, objLayer) {
     fuellBtn.addEventListener('click', ev => {
       ev.stopPropagation();
       if (typeof openCustomColorPopover !== 'function') return;
+      /* ══════════════════════════════════════════════════════════
+         DER SCHNAPPSCHUSS GEHOERT VOR DIE ERSTE AENDERUNG
+
+         pushPageHistory stand im final-Zweig – also NACH obj.fill = c,
+         und nach den Zwischenwerten, die beim Ziehen im Farbfeld schon
+         ins Modell geschrieben werden. Der gesicherte Stand trug damit
+         die neue Farbe: der erste Druck auf Strg+Z tat nichts, und der
+         zweite nahm eine ganz andere, gewollte Aktion zurueck.
+
+         Ein Schritt fuer die ganze Farbwahl, nicht einer je Bewegung –
+         dieselbe Loesung wie beim Deckkraft-Schieber weiter unten. */
+      let gesichertF = false;
       openCustomColorPopover('shape-fill', fuellBtn, (c, final) => {
+        if (!gesichertF) { pushPageHistory(page); gesichertF = true; }
         obj.fill = c;
         fuellBtn.style.background = c;
         fuellBtn.title = c;
         zeigeFuellSachen(true);
-        if (final) { pushPageHistory(page); neuZeichnen(); }
+        if (final) neuZeichnen();
       }, obj.fill && obj.fill !== 'none' ? obj.fill : '#c04040');
     });
     fuellWahl.appendChild(fuellBtn);
@@ -484,11 +497,14 @@ function addShapeChrome(bar, obj, page, objLayer) {
     strichBtn.addEventListener('click', ev => {
       ev.stopPropagation();
       if (typeof openCustomColorPopover !== 'function') return;
+      // Genauso wie bei der Fuellfarbe – die Begruendung steht dort
+      let gesichertS = false;
       openCustomColorPopover('shape-stroke', strichBtn, (c, final) => {
+        if (!gesichertS) { pushPageHistory(page); gesichertS = true; }
         obj.stroke = c;
         strichBtn.style.background = c;
         strichBtn.title = c;
-        if (final) { pushPageHistory(page); neuZeichnen(); }
+        if (final) neuZeichnen();
       }, aktStrich);
     });
     strichWahl.appendChild(strichBtn);
