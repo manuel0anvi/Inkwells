@@ -44,6 +44,22 @@ const DEFAULT_SETTINGS = {
      man darin ist (nb.textFluss, siehe ausweichArt). Sonst sähe die
      Seite bei jedem Beteiligten anders aus. */
   textFluss: 'elastisch',
+  /* ═══════════════════════════════════════════════════════════════
+     WAS IN DER WERKZEUGLEISTE GEWÄHLT IST
+
+     Stiftfarbe, Strichstärke, Radierer, Textfarbe, die Vorgaben für
+     Formen – all das stand ausschliesslich in S (core/state.js) und
+     war mit dem Fenster weg. Gemeldet als: „ich wähle Grün, beim
+     nächsten Öffnen ist wieder Schwarz da.“
+
+     >>> Warum EIN Feld und nicht zwölf <<<
+     Es sind zwölf Werte, und es kommen welche dazu. Stünde jeder
+     einzeln hier, bräuchte jedes neue Werkzeug einen eigenen
+     Standardwert – und eine Einstellungsdatei aus der Zeit davor
+     kennt ihn nicht. Der Standard steht dort, wo er hingehört: in S.
+     Hier liegt nur, was davon abweicht (ui/toolbar.js, merkeWerkzeuge).
+     ═══════════════════════════════════════════════════════════════ */
+  werkzeuge: {},
   cloudEnabled: false,
   // Cloud-Anbieter: 'google' (Drive) oder 'microsoft' (OneDrive).
   // Siehe core/cloudConfig.js und core/providers/.

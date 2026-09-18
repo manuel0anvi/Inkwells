@@ -1729,6 +1729,8 @@ function switchMode(mode) {
   updatePenUI();
   applyMode();
   updateUndoRedoUI();
+  // Ein Wechsel per Tastenkürzel kommt ohne Klick – siehe merkeWerkzeuge
+  if (typeof merkeWerkzeuge === 'function') merkeWerkzeuge();
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1868,3 +1870,142 @@ QA('#shape-sw-row [data-shape-sw]').forEach(btn => {
   });
 });
 
+/* ═══════════════════════════════════════════════════════════════════════
+   WAS GEWÄHLT IST, BLEIBT GEWÄHLT
+
+   >>> Gemeldet: „ich wähle die Stiftfarbe Grün, und beim nächsten
+   Öffnen bin ich wieder bei den Vorgaben“ <<<
+   Genau so war es, und zwar für jede einzelne Wahl in der Leiste:
+   Farbe, Strichstärke, Radiererart und -grösse, Textfarbe, die Vorgaben
+   für Formen, zuletzt benutzte eigene Farben. Sie standen allein in S
+   (core/state.js), und S entsteht bei jedem Start neu. Gespeichert wurde
+   davon nichts – es gab dafür nicht einmal einen Platz in der
+   Einstellungsdatei.
+
+   >>> Warum nicht an jedem Knopf einzeln gespeichert wird <<<
+   Die Leiste hat gut zwei Dutzend Stellen, an denen sich einer dieser
+   Werte ändert: Farbfelder, Grössenreihen, der Farbkreis, das Textmenü,
+   das Formenfenster, dazu die Tastenkürzel. Jede davon um einen
+   Speicheraufruf zu ergänzen hiesse, beim nächsten neuen Knopf daran
+   denken zu müssen – und genau das vergisst man. Deshalb andersherum:
+   nach jeder Bedienung wird NACHGESEHEN, ob sich etwas geändert hat. Der
+   Vergleich ist ein kurzer Text; geschrieben wird nur, wenn er anders
+   lautet als zuletzt.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Verschachtelte Werte stehen als Objekt da (pen1, eraser …), einfache
+   als Wert – zusammengeführt wird feldweise, damit ein später
+   dazugekommenes Feld seinen Standard aus S behält. */
+const WERKZEUG_FELDER = [
+  'mode', '_letzterStift',
+  'pen1', 'pen2', 'hl', 'eraser',
+  /* Die GEWÄHLTE Textfarbe, nicht S.textColor: das trägt zwischendurch
+     die Farbe unter der Schreibmarke (siehe „Sticky Textfarbe“ weiter
+     oben) und wäre damit kein Wunsch, sondern ein Zufall. */
+  '_textColorChosen', 'textCustomColor',
+  'shapeFill', 'shapeStroke', 'shapeStrokeWidth',
+  'fontSize', 'fontFamily'
+];
+
+/* Der Radierer ist kein Werkzeug, zu dem man zurückkehren will: wer die
+   App aufmacht, will schreiben, nicht wegwischen – und ein Radierer, der
+   nach Tagen noch aktiv ist, löscht beim ersten Strich. Er fällt deshalb
+   beim Wiederherstellen auf den Zeiger zurück; seine GRÖSSE und seine
+   Art bleiben trotzdem gemerkt. */
+const WERKZEUG_MODI = ['cursor', 'pen1', 'pen2', 'hl'];
+
+function werkzeugStand() {
+  const out = {};
+  for (const feld of WERKZEUG_FELDER) {
+    const wert = S[feld];
+    if (wert === undefined) continue;
+    out[feld] = (wert && typeof wert === 'object') ? { ...wert } : wert;
+  }
+  out.letzteFarben = _recentCustomColors.slice(0, RECENT_CUSTOM_COLORS_MAX);
+  return out;
+}
+
+let _werkzeugZuletzt = null;
+let _werkzeugUhr = null;
+
+/**
+ * Nachsehen, ob sich etwas geändert hat – und nur dann schreiben.
+ *
+ * Die Verzögerung fängt das Ziehen am Farbkreis ab: dort meldet sich
+ * jeder Pixel, und jede Meldung wäre sonst ein Schreibvorgang auf die
+ * Platte.
+ */
+function merkeWerkzeuge() {
+  if (typeof Settings === 'undefined' || !Settings || typeof Settings.update !== 'function') return;
+  const stand = werkzeugStand();
+  const text = JSON.stringify(stand);
+  if (text === _werkzeugZuletzt) return;
+  _werkzeugZuletzt = text;
+
+  clearTimeout(_werkzeugUhr);
+  _werkzeugUhr = setTimeout(() => {
+    Settings.update({ werkzeuge: stand })
+      .catch(err => console.warn('[Werkzeuge] nicht gespeichert:', err?.message || err));
+  }, 500);
+}
+window.merkeWerkzeuge = merkeWerkzeuge;
+
+/**
+ * Den gemerkten Stand zurückholen und die Leiste darauf einstellen.
+ * Wird aus core/init.js gerufen, sobald die Einstellungen dastehen.
+ */
+function stelleWerkzeugeHer() {
+  const gemerkt = (typeof Settings !== 'undefined' && Settings && typeof Settings.get === 'function')
+    ? Settings.get('werkzeuge') : null;
+
+  if (gemerkt && typeof gemerkt === 'object') {
+    for (const feld of WERKZEUG_FELDER) {
+      const wert = gemerkt[feld];
+      if (wert === undefined || wert === null) continue;
+      if (S[feld] && typeof S[feld] === 'object' && typeof wert === 'object') {
+        Object.assign(S[feld], wert);
+      } else if (typeof wert !== 'object') {
+        S[feld] = wert;
+      }
+    }
+    if (Array.isArray(gemerkt.letzteFarben)) {
+      _recentCustomColors.length = 0;
+      for (const farbe of gemerkt.letzteFarben.slice(0, RECENT_CUSTOM_COLORS_MAX)) {
+        if (typeof farbe === 'string') _recentCustomColors.push(farbe);
+      }
+    }
+  }
+
+  /* Ab hier gilt der wiederhergestellte Stand als „schon gespeichert“ –
+     sonst schriebe der erste Klick ihn unverändert noch einmal weg. */
+  _werkzeugZuletzt = JSON.stringify(werkzeugStand());
+
+  // Und jetzt die Leiste darauf einstellen
+  const modus = WERKZEUG_MODI.includes(S.mode) ? S.mode : 'cursor';
+  S.mode = modus;
+  try {
+    if (typeof switchMode === 'function') switchMode(modus);
+    if (typeof renderRecentCustomColors === 'function') renderRecentCustomColors();
+    QA('[data-eraser]').forEach(b => b.classList.toggle('active', b.dataset.eraser === S.eraser.type));
+    QA('#er-sz-row .sz-btn').forEach(b => b.classList.toggle('active', +b.dataset.esz === S.eraser.szIdx));
+    QA('#shape-sw-row [data-shape-sw]').forEach(
+      b => b.classList.toggle('active', +b.dataset.shapeSw === S.shapeStrokeWidth));
+    if (S._textColorChosen) {
+      S.textColor = S._textColorChosen;
+      const punkt = E('txt-color-dot');
+      if (punkt) punkt.style.background = S._textColorChosen;
+    }
+  } catch (err) {
+    console.warn('[Werkzeuge] Leiste nicht eingestellt:', err?.message || err);
+  }
+}
+window.stelleWerkzeugeHer = stelleWerkzeugeHer;
+
+/* ══ NACH JEDER BEDIENUNG EINMAL NACHSEHEN ══
+   Am ganzen Dokument und nicht an der Leiste: die Farbfenster hängen am
+   body (openCustomColorPopover), nicht in der Leiste. Kein 'input' und
+   kein 'keyup' – die feuern beim Schreiben ständig, und die wenigen
+   Wege, die ohne Klick auskommen, melden sich selbst (switchMode). */
+for (const art of ['click', 'change', 'pointerup']) {
+  document.addEventListener(art, () => merkeWerkzeuge(), { passive: true });
+}

@@ -50,6 +50,11 @@
     /* Ob am „?" der Punkt steht, hängt an den Einstellungen – beim Laden
        von ui/hilfe.js gab es sie noch nicht. */
     if (typeof window.hilfePunktPruefen === 'function') window.hilfePunktPruefen();
+    /* Was in der Werkzeugleiste gewählt war, gilt wieder – Stiftfarbe,
+       Strichstärke, Radierer und der Rest (ui/toolbar.js). Erst hier,
+       weil es in den Einstellungen steht, und vor dem Heft, damit die
+       erste Seite schon mit der richtigen Schrift aufgebaut wird. */
+    if (typeof window.stelleWerkzeugeHer === 'function') window.stelleWerkzeugeHer();
   } catch (err) {
     console.error('[Init] ✗ Settings init failed:', err);
   }
