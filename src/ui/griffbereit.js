@@ -1283,11 +1283,34 @@
      ══════════════════════════════════════════════════════════════════ */
   const WISCH_MIN = 30;
 
+  /* ══ DIE HAND SCHLÄGT NICHTS AUF ═══════════════════════════════════
+     >>> Gemeldet: „wenn ich beim Schreiben den Reiter anfasse, geht das
+     PDF auf, und die Seite verschiebt sich" <<<
+     Der Reiter steht am rechten Rand – genau da, wo beim Schreiben der
+     Handballen liegt. Eine Beruehrung, waehrend der Stift auf oder ueber
+     dem Bildschirm ist, ist deshalb die Hand und schlaegt nichts auf
+     (dieselbe Regel wie beim Zeichnen, core/state.js). Und weil die Hand
+     oft VOR dem Stift aufliegt, wird beim Abheben noch einmal gefragt –
+     und ob der Stift zwischendurch da war.
+
+     Ein Antippen ist ausserdem kurz. Was lange liegt, hat nicht getippt,
+     sondern sich abgelegt. */
+  const TIPP_HOECHSTENS_MS = 600;
+  const stiftDa = () => (typeof stiftInDerNaehe === 'function' && stiftInDerNaehe())
+    || (typeof penIsActive === 'function' && penIsActive());
+
+  let _stiftZuletzt = 0;
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'pen') _stiftZuletzt = performance.now();
+  }, { capture: true, passive: true });
+
   function haengeWischAn(el, id) {
-    let x0 = 0, y0 = 0, zeiger = null;
+    let x0 = 0, y0 = 0, zeiger = null, t0 = 0, hand = false;
 
     el.addEventListener('pointerdown', (e) => {
-      zeiger = e.pointerId; x0 = e.clientX; y0 = e.clientY;
+      hand = e.pointerType === 'touch' && stiftDa();
+      if (hand) { e.preventDefault(); return; }
+      zeiger = e.pointerId; x0 = e.clientX; y0 = e.clientY; t0 = performance.now();
       try { el.setPointerCapture(e.pointerId); } catch (err) { /* egal */ }
     });
 
@@ -1295,8 +1318,12 @@
       if (e.pointerId !== zeiger) return;
       zeiger = null;
       try { el.releasePointerCapture(e.pointerId); } catch (err) { /* egal */ }
+      if (e.pointerType === 'touch') {
+        if (hand || stiftDa() || _stiftZuletzt >= t0) return;
+      }
       const dx = e.clientX - x0, dy = e.clientY - y0;
-      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) { oeffne(id); return; }        // angetippt
+      const lange = e.pointerType === 'touch' && performance.now() - t0 > TIPP_HOECHSTENS_MS;
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) { if (!lange) oeffne(id); return; } // angetippt
       if (dx < -WISCH_MIN && Math.abs(dx) > Math.abs(dy)) { oeffne(id); return; } // nach links
       if (dx > WISCH_MIN && String(_offen) === String(id)) schliesse();           // nach rechts
     };

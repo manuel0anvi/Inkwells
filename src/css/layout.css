@@ -669,18 +669,70 @@ body.read-only .toolbar #btn-doc-share {
      Rollbereich da, wo das Heft endet, und das ist die häufigere
      Erwartung. */
   padding: 28px 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sb2) transparent;
+  /* Der Balken des Browsers ist aus – an seiner Stelle steht die eigene
+     Rollleiste (ui/rollleiste.js). Eine Beruehrung auf dem Balken des
+     Browsers erreicht die Seite nie, die Handballensperre konnte dort
+     also nicht greifen: die Hand rollte beim Schreiben das Blatt weg. */
+  scrollbar-width: none;
   position: relative
 }
 
-.pg-scroll::-webkit-scrollbar {
-  width: 6px
+/* ══ DIE EIGENE ROLLLEISTE ═════════════════════════════════════════════
+   Liegt ueber dem rechten (bzw. unteren) Rand der Blattspalte, genau da,
+   wo vorher der Balken des Browsers war. Lage und Laenge setzt
+   ui/rollleiste.js. */
+.rollleiste {
+  position: absolute;
+  z-index: 3;
+  /* Kein Rollen und kein Zoomen des Browsers aus einer Beruehrung hier –
+     was die Leiste tut, entscheidet sie selbst */
+  touch-action: none;
+  user-select: none
 }
 
-.pg-scroll::-webkit-scrollbar-thumb {
+.rollleiste.senkrecht {
+  right: 0;
+  width: 12px
+}
+
+.rollleiste.waagerecht {
+  height: 12px
+}
+
+.rollleiste-griff {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 4px;
   background: var(--sb2);
-  border-radius: 3px
+  transition: background .12s, inset .12s
+}
+
+.rollleiste.senkrecht .rollleiste-griff {
+  left: 3px;
+  right: 3px
+}
+
+.rollleiste.waagerecht .rollleiste-griff {
+  top: 3px;
+  bottom: 3px
+}
+
+.rollleiste:hover .rollleiste-griff,
+.rollleiste.zieht .rollleiste-griff {
+  background: var(--gd)
+}
+
+.rollleiste.senkrecht:hover .rollleiste-griff,
+.rollleiste.senkrecht.zieht .rollleiste-griff {
+  left: 2px;
+  right: 2px
+}
+
+.rollleiste.waagerecht:hover .rollleiste-griff,
+.rollleiste.waagerecht.zieht .rollleiste-griff {
+  top: 2px;
+  bottom: 2px
 }
 
 .pages-wrap {

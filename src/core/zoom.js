@@ -419,9 +419,37 @@ let _querZoom = BASE_ZOOM;
     if (!jetzt || jetzt === zuletzt) return;
     zuletzt = jetzt;
     if (isVerticalMode()) return;
-    _applyZoom();
+    zoomNachrechnenAnDerStelle();
   }).observe(sc);
 })();
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE STELLE BLEIBT, WENN DER RAHMEN SICH ÄNDERT
+
+   >>> Gemeldet: „wenn das PDF aufgeht, verschiebt es die Stelle der
+   Seite, an der ich gerade war" <<<
+   Die Unterlage (ui/griffbereit.js) schiebt das Blatt zur Seite, der
+   Rahmen wird schmaler, und der Zoom passt sich an – die Seite wird
+   kleiner. Die Rollposition blieb dabei aber in PIXELN stehen, und
+   dieselben Pixel sind bei kleinerem Massstab eine andere Stelle im
+   Heft: je weiter unten man war, desto weiter sprang es. Dasselbe beim
+   Zumachen, bei Chat und Kommentaren und beim Aendern der Fenstergroesse.
+
+   Festgehalten wird deshalb, welche Stelle des Hefts in der Mitte des
+   Ausschnitts steht – ungezoomt gerechnet, wie in setZoom() –, und nach
+   dem Nachrechnen steht sie wieder dort.
+   ══════════════════════════════════════════════════════════════════════ */
+function zoomNachrechnenAnDerStelle() {
+  const sc = E('pg-scroll');
+  if (!sc || _gesteLaeuft) { _applyZoom(); return; }
+  const OBEN = 28;   // padding-top von .pg-scroll (css/layout.css)
+  const vorher = _wirksam;
+  const stelle = (sc.scrollTop + sc.clientHeight / 2 - OBEN) / vorher;
+  _applyZoom();
+  // Nur die Hoehe geaendert: dann bleibt der obere Rand, wie ueberall sonst
+  if (Math.abs(_wirksam - vorher) < 1e-4) return;
+  sc.scrollTop = stelle * _wirksam + OBEN - sc.clientHeight / 2;
+}
 
 window.addEventListener('resize', () => {
   const nowVertical = isVerticalMode();
@@ -434,5 +462,5 @@ window.addEventListener('resize', () => {
     _zoom = _querZoom;
   }
   _lastVerticalMode = nowVertical;
-  _applyZoom();
+  zoomNachrechnenAnDerStelle();
 }, { passive: true });

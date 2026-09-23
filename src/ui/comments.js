@@ -466,6 +466,8 @@
       aktiv = false;
       if (e.touches.length !== 1 || !imHeft()) return;
       if (typeof touchDrawActive === 'function' && touchDrawActive()) return;
+      // Der Handballen beim Schreiben wischt nichts auf (core/state.js)
+      if (typeof stiftInDerNaehe === 'function' && stiftInDerNaehe()) return;
       const t = e.touches[0];
       const p = leiste();
       const links = p ? p.getBoundingClientRect().left : window.innerWidth;
