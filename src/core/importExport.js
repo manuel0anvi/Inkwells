@@ -2418,8 +2418,15 @@ function buildPdfPage(nb, sec, page, pageNo, seitenBilder, fmtKlasse) {
       + `width:${obj.w || 200}px;height:${obj.h || 200}px;${rot}">`;
   }
 
-  const ink = renderInkToDataUrl(page);
-  if (ink) html += `<img class="ink" src="${ink}">`;
+  /* Die Handschrift als Vektor (core/inkSvg.js) – im PDF scharf bei jedem
+     Zoom. Das Rasterbild bleibt der Rückfall, falls das Modul fehlt. */
+  const inkVektor = window.InkSvg
+    ? InkSvg.svg(page.inkStrokes, page.w || CFG.PAGE_W, page.h || CFG.PAGE_H, { klasse: 'ink' }) : null;
+  if (inkVektor) html += inkVektor;
+  else {
+    const ink = renderInkToDataUrl(page);
+    if (ink) html += `<img class="ink" src="${ink}">`;
+  }
 
   html += '</div>';
 

@@ -12,6 +12,7 @@
      · src/canvas/shapes.js  →  website/js/shapes.js     Formen
      · src/core/code.js      →  website/js/code.js       Code-Kästen
      · src/core/pdfSeiten.js →  website/js/pdfSeiten.js  Seiten aus einem PDF
+     · src/core/inkSvg.js    →  website/js/inkSvg.js     Handschrift als Vektor
      · src/css/pages.css     →  website/css/pages.css    wie eine Seite aussieht
 
    Dazu unverändert die Bibliotheken, die davon gebraucht werden (LIBS).
@@ -65,6 +66,7 @@ const PAIRS = [
   { source: ['src', 'canvas', 'shapes.js'], target: ['website', 'js', 'shapes.js'] },
   { source: ['src', 'core', 'code.js'], target: ['website', 'js', 'code.js'] },
   { source: ['src', 'core', 'pdfSeiten.js'], target: ['website', 'js', 'pdfSeiten.js'] },
+  { source: ['src', 'core', 'inkSvg.js'], target: ['website', 'js', 'inkSvg.js'] },
   { source: ['src', 'css', 'pages.css'], target: ['website', 'css', 'pages.css'] }
 ];
 
