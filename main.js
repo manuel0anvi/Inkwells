@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, Notification } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const zlib = require('zlib');
 const https = require('https');
 const http = require('http');
 const { spawn } = require('child_process');
@@ -1685,7 +1686,7 @@ ipcMain.handle('pick-document', async () => {
      Rückfall – er kann umbenannt worden sein und sagt dann etwas
      anderes als das Heft darin. */
   if (ext === '.jrnl') {
-    const text = fs.readFileSync(p, 'utf-8');
+    const text = await leseHeftDatei(p);
     let heftName = name;
     try {
       const d = JSON.parse(text);
@@ -1853,7 +1854,7 @@ ipcMain.handle('load', async () => {
   if (r.canceled) return null;
   
   try {
-    const data = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf-8'));
+    const data = JSON.parse(await leseHeftDatei(r.filePaths[0]));
     console.log('[Load] Loaded file:', r.filePaths[0]);
     
     // Handle both old format {notebooks: [...]} and new format (single notebook)
@@ -2118,39 +2119,99 @@ function pfadAbgelehnt(was, filePath) {
 // dann in einem Zug. Vorher wurde direkt in die .jrnl geschrieben – ein
 // Absturz oder Stromausfall mitten im Schreiben hinterließ eine abgeschnittene
 // Datei, das Notizbuch war damit verloren.
-ipcMain.handle('save-to-path', async (_, filePath, data) => {
-  if (!pfadErlaubt(filePath)) return pfadAbgelehnt('Schreiben', filePath);
+/* ══════════════════════════════════════════════════════════════════════
+   EIN HEFT SCHREIBEN, OHNE DIE APP ANZUHALTEN
+
+   >>> Gemeldet: „wenn es laggt, laggt alles – Schreiben, Zeichnen,
+   Farbe waehlen, Verschieben" <<<
+   Hier stand alles synchron: JSON.stringify, writeFileSync, fsyncSync.
+   Der Hauptprozess ist aber auch der, der die Eingaben an die Oberflaeche
+   weiterreicht. Bei einem Heft von 14 MB stand er bei jedem Speichern
+   (zwei Sekunden nach der letzten Aenderung) eine spuerbare Weile still –
+   und mit ihm Stift, Maus und Finger, egal was man gerade tat.
+
+   Jetzt kommt das Heft schon als Text (core/fileManager.js), und
+   geschrieben wird ueber die Warteschlange des Betriebssystems. Weil
+   dabei zwei Speichervorgaenge desselben Pfads ineinanderlaufen koennten
+   – beide schreiben in dieselbe .tmp-Datei –, stehen sie je Pfad in einer
+   Reihe. Ein Objekt nimmt der Kanal weiterhin an (core/versions.js).
+   ══════════════════════════════════════════════════════════════════════ */
+const _schreibReihe = new Map();   // Pfad (klein) -> Versprechen des letzten Schreibens
+
+async function schreibeHeftDatei(filePath, jsonData) {
   const tmpPath = `${filePath}.tmp`;
   try {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const jsonData = JSON.stringify(data);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
 
     // Schreiben und auf die Platte durchdrücken, bevor ersetzt wird
-    const fd = fs.openSync(tmpPath, 'w');
+    const fh = await fs.promises.open(tmpPath, 'w');
     try {
-      fs.writeFileSync(fd, jsonData, 'utf-8');
-      fs.fsyncSync(fd);
+      await fh.writeFile(jsonData, 'utf-8');
+      await fh.sync();
     } finally {
-      fs.closeSync(fd);
+      await fh.close();
     }
 
     // rename ersetzt eine vorhandene Datei atomar (auch unter Windows)
-    fs.renameSync(tmpPath, filePath);
+    await fs.promises.rename(tmpPath, filePath);
 
-    const stats = fs.statSync(filePath);
+    const stats = await fs.promises.stat(filePath);
     console.log(`[Save] ✓ ${filePath} (${stats.size} Bytes)`);
     return { success: true, path: filePath };
   } catch (err) {
     console.error('[Save] ✗ Error:', err);
     // Halbfertige Nebendatei nicht liegen lassen
-    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (e) { /* egal */ }
+    try { await fs.promises.unlink(tmpPath); } catch (e) { /* egal */ }
     return { success: false, error: err.message };
   }
+}
+
+ipcMain.handle('save-to-path', async (_, filePath, data) => {
+  if (!pfadErlaubt(filePath)) return pfadAbgelehnt('Schreiben', filePath);
+  let jsonData;
+  try {
+    jsonData = typeof data === 'string' ? data : JSON.stringify(data);
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+  const schluessel = String(filePath).toLowerCase();
+  const davor = _schreibReihe.get(schluessel) || Promise.resolve();
+  const jetzt = davor.catch(() => {}).then(() => schreibeHeftDatei(filePath, jsonData));
+  _schreibReihe.set(schluessel, jetzt);
+  try {
+    return await jetzt;
+  } finally {
+    if (_schreibReihe.get(schluessel) === jetzt) _schreibReihe.delete(schluessel);
+  }
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   EIN HEFT LESEN – AUCH EIN GEPACKTES
+
+   Geschrieben wird ein Heft als reines JSON (schreibeHeftDatei). Gelesen
+   wird hier aber auch eines, das mit gzip gepackt ist – erkennbar an den
+   zwei ersten Bytes 1F 8B, die JSON nie haben kann.
+
+   >>> Warum lesen, bevor irgendwer so schreibt <<<
+   Gepackt waere ein Heft mit viel Handschrift noch einmal etwa ein
+   Drittel so gross. Eine aeltere App koennte eine solche Datei aber gar
+   nicht oeffnen – und die Hefte liegen oft in einem Ordner, den mehrere
+   Geraete teilen (OneDrive). Deshalb zwei Schritte: erst lernt jede App
+   das Lesen, und erst wenn diese Fassung ueberall angekommen ist, darf
+   das Schreiben folgen. Dies hier ist der erste Schritt.
+   ══════════════════════════════════════════════════════════════════════ */
+function heftTextAus(bytes) {
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    bytes = zlib.gunzipSync(bytes);
+  }
+  let text = bytes.toString('utf-8');
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);   // BOM
+  return text;
+}
+
+async function leseHeftDatei(filePath) {
+  return heftTextAus(await fs.promises.readFile(filePath));
+}
 
 ipcMain.handle('load-from-path', async (_, filePath) => {
   if (!pfadErlaubt(filePath)) return pfadAbgelehnt('Lesen', filePath);
@@ -2160,7 +2221,7 @@ ipcMain.handle('load-from-path', async (_, filePath) => {
       console.log('[Load] File not found:', filePath);
       return { success: false, error: 'File not found' };
     }
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const data = JSON.parse(await leseHeftDatei(filePath));
     console.log('[Load] ✓ Successfully loaded:', filePath);
     return { success: true, data };
   } catch (err) {

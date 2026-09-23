@@ -1588,6 +1588,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
         && window.versucheLasso(page.id, finished, performance.now() - _strichAnfang);
     }
 
+    /* Was stehen bleibt, geht ohne Ballast an die anderen und in die
+       Seite: gerundete Punkte, kein Druck, keine Hilfsfelder (core/data.js,
+       strichVerdichten). Erst hier – die Schlinge oben liest noch _lasso. */
+    if (finished && !alsAuswahl && typeof strichVerdichten === 'function') strichVerdichten(finished);
+
     if (alsAuswahl) {
       redrawStrokes(canvas, S.strokeHistory[page.id]);
       if (typeof popPageHistory === 'function') popPageHistory(page.id);
@@ -1645,6 +1650,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
     // Auch ein abgebrochener Strich ist am Lineal eine Linie – siehe dort
     linealStrichEindampfen(abgebrochen);
+    if (typeof strichVerdichten === 'function') strichVerdichten(abgebrochen);
     redrawStrokes(canvas, S.strokeHistory[page.id]);
     page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
     if (!abgebrochen.isEraser && window.Collab) Collab.noteStroke(page.id, abgebrochen);

@@ -181,8 +181,25 @@ class FileManager {
        gelöschtes 40-MB-Buch blähte das Heft sonst für immer auf. */
     if (window.PdfSeiten) PdfSeiten.raeumeAuf(notebook);
 
+    /* Verschobene, vergrösserte und empfangene Striche haben wieder lange
+       Brüche – vor dem Schreiben kommen sie auf das Raster (core/data.js).
+       Was schon passt, wird nur gelesen. */
+    if (typeof stricheVerdichten === 'function') stricheVerdichten(notebook);
+
     try {
-      const saveData = { notebooks: [notebook] };
+      /* ══ ALS TEXT UND NICHT ALS GEGENSTAND ════════════════════════════
+         Hier ging das Heft als Objekt über die Brücke. Electron klont es
+         dafür Feld für Feld – bei 5000 Strichen sind das Hunderttausende
+         kleiner Objekte, und das auf dem Faden, der auch den Stift
+         zeichnet. Danach verwandelte der Hauptprozess es noch einmal in
+         Text, und zwar synchron: in der Zeit stand dort die Weiterleitung
+         der Eingaben still. Beides zusammen war das Ruckeln, das alle zwei
+         Sekunden durch Schreiben, Auswählen und Farbwahl ging.
+
+         Jetzt wird hier einmal JSON gebaut – schnell und am Stück –, und
+         über die Brücke geht nur noch eine Zeichenkette. main.js schreibt
+         sie, ohne den Faden anzuhalten. */
+      const saveData = JSON.stringify({ notebooks: [notebook] });
       const result = await window.api.saveToPath(filePath, saveData);
 
       if (!result.success) {

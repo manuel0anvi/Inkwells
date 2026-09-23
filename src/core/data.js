@@ -185,8 +185,91 @@ const SCHEMA_VERSION = 2;
  * Durchblättern gesehen hätte – erst Abschnitt für Abschnitt, dann was in
  * keinem stand.
  */
+/* ══════════════════════════════════════════════════════════════════════
+   EIN STRICH BRAUCHT KEINE FÜNFZEHN NACHKOMMASTELLEN
+
+   >>> Gemeldet: „17 Seiten mit dem Stift, dazu zwei, drei Bilder – und
+   die Datei hat 13 MB" <<<
+   Nachgemessen an genau so einem Heft: 12,7 der 14,1 MB waren Striche,
+   die Bilder nur 1,4. Ein einziger Punkt kostete rund 65 Zeichen:
+
+       {"x":71.72225584593518,"y":92.77777522005222,"p":0.046875}
+
+   Drei Dinge daran sind Ballast:
+     · die STELLEN. Der Stift liefert Bildschirmpunkte, geteilt durch den
+       Zoom – daher die langen Brueche. Auf ein Hundertstel eines
+       Seitenpunkts gerundet ist die Abweichung selbst bei 400 % noch
+       ein Zwanzigstel eines Bildpunkts. Das sieht niemand.
+     · der DRUCK `p`. Er wird mitgeschrieben, aber nirgends gezeichnet:
+       ein Strich hat ueberall dieselbe Breite (canvas/drawing.js,
+       applyStrokeStyles). Gebraucht wird er nur waehrend des Zeichnens
+       (canvas/shapeSnap.js), und dort liegt er noch vor.
+     · die HILFSFELDER mit Unterstrich (`_lineTimer`, `_vorschauKasten`,
+       `_lineLocked` …). Sie gehoeren dem laufenden Strich in
+       canvas/input.js und hatten auf der Platte nie etwas verloren.
+
+   Die Form bleibt dieselbe – `path` ist weiterhin eine Liste aus {x, y}.
+   Ein aelterer Stand der App liest das Ergebnis ohne jede Aenderung.
+
+   Verdichtet wird an drei Stellen: am fertigen Strich (canvas/input.js),
+   beim Laden (normalizeNotebook, unten) und vor dem Speichern
+   (core/fileManager.js) – dort fuer alles, was sich seither bewegt hat:
+   verschobene, vergroesserte, von anderen empfangene Striche.
+   ══════════════════════════════════════════════════════════════════════ */
+const STRICH_RASTER = 100;   // 1/100 Seitenpunkt
+
+function strichRund(v) {
+  return Math.round(v * STRICH_RASTER) / STRICH_RASTER;
+}
+
+/** Braucht dieser Strich die Kur? Liest nur, schreibt nichts. */
+function strichUnverdichtet(s) {
+  if (!s || typeof s !== 'object') return false;
+  for (const k in s) if (k.charCodeAt(0) === 95 /* _ */) return true;
+  const pts = s.path;
+  if (!Array.isArray(pts)) return false;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (!p || p.p !== undefined || strichRund(p.x) !== p.x || strichRund(p.y) !== p.y) return true;
+  }
+  return false;
+}
+
+/**
+ * Einen Strich verdichten – an Ort und Stelle, derselbe Gegenstand bleibt.
+ *
+ * Die ANZAHL der Punkte bleibt, auch wo zwei hintereinander nach dem
+ * Runden gleich sind: die Live-Bearbeitung erkennt eine geaenderte Seite
+ * unter anderem an ihr (ui/collab.js, inkSig), und der Gewinn waere
+ * winzig – gemessen 62 von knapp 200 000 Punkten.
+ */
+function strichVerdichten(s) {
+  if (!strichUnverdichtet(s)) return s;
+  for (const k of Object.keys(s)) if (k.charCodeAt(0) === 95) delete s[k];
+  if (Array.isArray(s.path)) {
+    s.path = s.path.filter(Boolean).map(p => ({
+      x: strichRund(Number(p.x) || 0),
+      y: strichRund(Number(p.y) || 0)
+    }));
+  }
+  return s;
+}
+
+/** Alle Striche eines Hefts, wie sie gespeichert werden (page.inkStrokes). */
+function stricheVerdichten(nb) {
+  for (const page of ((nb && nb.pages) || [])) {
+    const liste = page && page.inkStrokes;
+    if (!Array.isArray(liste)) continue;
+    for (const s of liste) strichVerdichten(s);
+  }
+  return nb;
+}
+
 function normalizeNotebook(nb) {
   if (!nb || !Array.isArray(nb.pages)) return nb;
+
+  // Alte Hefte werden beim ersten Laden kleiner (siehe oben)
+  stricheVerdichten(nb);
 
   /* Auch ein schon umgestelltes Heft kommt hier noch einmal durch: der
      Zwangsabschnitt wurde erst später abgeschafft, und Hefte, die die

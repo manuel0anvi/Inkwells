@@ -51,6 +51,8 @@ const AUTOSAVE_RETRIES = 3;
    niemand hat.
    ══════════════════════════════════════════════════════════════════════ */
 const AUTOSAVE_MAX_MS = 20000;
+// Liegt der Stift gerade auf, wird so lange gewartet und neu gefragt
+const AUTOSAVE_STRICH_WARTEN_MS = 250;
 
 class AutoSaveEngine {
   constructor() {
@@ -228,6 +230,20 @@ class AutoSaveEngine {
       this._debounceTimers.delete(nbId);
       if (!this.isDirty(nbId)) return;
       if ((this._changeVersions.get(nbId) || 0) !== expectedVersion) return;
+
+      /* ══ NICHT MITTEN IM STRICH ═════════════════════════════════════
+         Die harte Grenze (AUTOSAVE_MAX_MS) laeuft auch dann ab, wenn der
+         Stift gerade unten ist – beim durchgehenden Mitschreiben fast
+         immer. Speichern heisst hier: den Editor einlesen und das Heft in
+         Text verwandeln, auf demselben Faden, der den Strich zeichnet.
+         Das ist kurz, aber mitten in einem Wort sieht man es als Haken
+         in der Linie. Also warten, bis der Stift abhebt – das dauert
+         selten laenger als ein Wort. */
+      if (typeof S !== 'undefined' && S.isDrawing) {
+        this._scheduleDebouncedSave(nbId, AUTOSAVE_STRICH_WARTEN_MS);
+        return;
+      }
+
       this._saveNotebook(nbId, expectedVersion).then(res => {
         if (res && res.success === false) this._retryLater(nbId, res.error);
       }).catch(err => {
