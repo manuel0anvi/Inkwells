@@ -1894,7 +1894,116 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
   document.addEventListener('pointermove', stiftMeldetSich, { capture: true, passive: true });
   document.addEventListener('pointerdown', stiftMeldetSich, { capture: true, passive: true });
 
+  /* ══════════════════════════════════════════════════════════════════
+     UND VERGRÖSSERT ROLLT ES NACH
+
+     >>> Gemeldet: „über 100 % kann man mit dem Finger nicht richtig
+     scrollen, man muss erst wieder auf 100 % zurück" <<<
+     Gerollt wurde vergrössert schon (siehe touchmove) – aber nur, solange
+     der Finger lag. Beim Abheben stand das Blatt sofort still. Bis 100 %
+     rollt der Browser selbst und gibt dem Wisch seinen Schwung mit; hier
+     rechnen wir selbst, und der Schwung fehlte. Ein Heft von zwanzig
+     Seiten verlangte damit Dutzende kurze Züge, und genau das fühlte sich
+     an wie „nur langsam verschieben".
+
+     Jetzt wird aus den letzten Fingerbewegungen die Geschwindigkeit
+     gemessen und nach dem Abheben weitergerollt, bis die Reibung sie
+     aufgezehrt hat – auf demselben Weg wie der Finger selbst (erst
+     rollen, der Rest verschiebt). Ein neuer Finger, der Stift, das
+     Mausrad halten es an.
+     ══════════════════════════════════════════════════════════════════ */
+  const SCHWUNG_REIBUNG = 0.997;   // je Millisekunde; kleiner = kuerzer
+  const SCHWUNG_AB = 0.15;         // Bildpunkte je ms, darunter kein Nachlauf
+  const SCHWUNG_BIS = 0.02;        // darunter steht es
+  let _zugProben = [];             // die letzten Fingerstaende { t, x, y }
+  let _schwung = null;             // { vx, vy, zuletzt, bild }
+
+  /* Bruchteile, die der Rahmen noch nicht genommen hat. Die Rollposition
+     steht auf ganzen Bildpunkten; was darunter liegt, blieb bisher als
+     „Rest" uebrig und wanderte ins Verschieben – bei jedem Zug ein
+     Stueckchen, bis das Blatt merklich neben seiner Lage stand. Echter
+     Rest ist nur, was am ANSCHLAG uebrig bleibt; alles andere rollt beim
+     naechsten Schritt mit. */
+  let _bruchX = 0, _bruchY = 0;
+
+  /** Um so viel rollen – was der Rahmen nicht aufnimmt, verschiebt. */
+  function rolleUndSchiebe(wollteX, wollteY) {
+    wollteX += _bruchX; wollteY += _bruchY;
+    _bruchX = _bruchY = 0;
+    const warY = sc.scrollTop, warX = sc.scrollLeft;
+    sc.scrollTop = warY + wollteY;
+    sc.scrollLeft = warX + wollteX;
+    let restY = wollteY - (sc.scrollTop - warY);
+    let restX = wollteX - (sc.scrollLeft - warX);
+    let bewegt = sc.scrollTop !== warY || sc.scrollLeft !== warX;
+
+    const amRandY = sc.scrollTop <= 0 || sc.scrollTop >= sc.scrollHeight - sc.clientHeight - 1;
+    const amRandX = sc.scrollLeft <= 0 || sc.scrollLeft >= sc.scrollWidth - sc.clientWidth - 1;
+    if (!amRandY && Math.abs(restY) < 1) { _bruchY = restY; restY = 0; if (_bruchY) bewegt = true; }
+    if (!amRandX && Math.abs(restX) < 1) { _bruchX = restX; restX = 0; if (_bruchX) bewegt = true; }
+
+    if (restX || restY) {
+      /* getZoom() und nicht _zoom: im schmalen Fenster gilt weniger,
+         als eingestellt ist – dieselbe Begründung wie in setPan(). */
+      const z = getZoom() || _zoom;
+      const off = getPanOffset();
+      /* Nach unten nicht ueber die natuerliche Lage hinaus: sonst
+         schoebe ein Zug am oberen Ende das Heft in eine leere Flaeche
+         ueber der ersten Seite – und liesse es dort liegen. */
+      setPan(off.x - restX / z, Math.min(0, off.y - restY / z));
+      const neu = getPanOffset();
+      if (Math.abs(neu.x - off.x) > 0.01 || Math.abs(neu.y - off.y) > 0.01) bewegt = true;
+    }
+    return bewegt;
+  }
+
+  function schwungStopp() {
+    if (!_schwung) return;
+    cancelAnimationFrame(_schwung.bild);
+    _schwung = null;
+    pruefeLetzteLeer();
+  }
+
+  function schwungStart() {
+    const jetzt = performance.now();
+    const proben = _zugProben.filter(p => jetzt - p.t < 100);
+    _zugProben = [];
+    if (proben.length < 2) return;
+    const a = proben[0], b = proben[proben.length - 1];
+    // Lag der Finger vor dem Abheben still, war es ein Absetzen, kein Wisch
+    if (jetzt - b.t > 60) return;
+    const dauer = b.t - a.t;
+    if (dauer < 8) return;
+    // Der Finger geht nach unten, also muss der Inhalt nach unten
+    const vx = -(b.x - a.x) / dauer, vy = -(b.y - a.y) / dauer;
+    if (Math.hypot(vx, vy) < SCHWUNG_AB) return;
+
+    _schwung = { vx, vy, zuletzt: jetzt, bild: 0 };
+    const schritt = () => {
+      const s = _schwung;
+      if (!s) return;
+      const t = performance.now();
+      const dt = Math.min(40, t - s.zuletzt);
+      s.zuletzt = t;
+      const bewegt = rolleUndSchiebe(s.vx * dt, s.vy * dt);
+      const reibung = Math.pow(SCHWUNG_REIBUNG, dt);
+      s.vx *= reibung; s.vy *= reibung;
+      // Am Anschlag oder ausgerollt
+      if (!bewegt || Math.hypot(s.vx, s.vy) < SCHWUNG_BIS) { _schwung = null; pruefeLetzteLeer(); return; }
+      s.bild = requestAnimationFrame(schritt);
+    };
+    _schwung.bild = requestAnimationFrame(schritt);
+  }
+
+  // Stift und Maus halten den Nachlauf an, das Mausrad ebenso
+  document.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') schwungStopp(); },
+    { capture: true, passive: true });
+  sc.addEventListener('wheel', schwungStopp, { passive: true });
+
   sc.addEventListener('touchstart', e => {
+    // Ein neuer Finger faengt das nachrollende Blatt auf
+    schwungStopp();
+    _bruchX = _bruchY = 0;
     if (penIsActive()) { e.preventDefault(); return; }
 
     // Alles, was jetzt liegt, ist neu: hier faengt eine Beruehrung an
@@ -1936,6 +2045,7 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
       _panActive = true;
       _panStartX = _panLastX = e.touches[0].clientX;
       _panStartY = _panLastY = e.touches[0].clientY;
+      _zugProben = [{ t: performance.now(), x: _panLastX, y: _panLastY }];
       const off = getPanOffset();
       _panOriginX = off.x; _panOriginY = off.y;
       e.preventDefault();
@@ -2002,25 +2112,12 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
       const dxS = f.clientX - _panLastX;
       const dyS = f.clientY - _panLastY;
       _panLastX = f.clientX; _panLastY = f.clientY;
+      // Fuer den Nachlauf beim Abheben (siehe oben, UND VERGRÖSSERT ROLLT ES NACH)
+      _zugProben.push({ t: performance.now(), x: f.clientX, y: f.clientY });
+      if (_zugProben.length > 24) _zugProben.shift();
 
       // Der Finger geht nach unten, also muss der Inhalt nach unten
-      const wollteY = -dyS, wollteX = -dxS;
-      const warY = sc.scrollTop, warX = sc.scrollLeft;
-      sc.scrollTop = warY + wollteY;
-      sc.scrollLeft = warX + wollteX;
-      const restY = wollteY - (sc.scrollTop - warY);
-      const restX = wollteX - (sc.scrollLeft - warX);
-
-      if (restX || restY) {
-        /* getZoom() und nicht _zoom: im schmalen Fenster gilt weniger,
-           als eingestellt ist – dieselbe Begründung wie in setPan(). */
-        const z = getZoom() || _zoom;
-        const off = getPanOffset();
-        /* Nach unten nicht ueber die natuerliche Lage hinaus: sonst
-           schoebe ein Zug am oberen Ende das Heft in eine leere Flaeche
-           ueber der ersten Seite – und liesse es dort liegen. */
-        setPan(off.x - restX / z, Math.min(0, off.y - restY / z));
-      }
+      rolleUndSchiebe(-dxS, -dyS);
       pruefeLetzteLeer();
       e.preventDefault();
     }
@@ -2031,7 +2128,11 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
        setzt er mitten ins Geschriebene die Schreibmarke. */
     if (_hand && _hand.verworfen && e.cancelable) e.preventDefault();
     if (e.touches.length < 2) { _pinchDist = 0; pinchBeenden(); }
-    if (e.touches.length === 0) { _panActive = false; _hand = null; }
+    if (e.touches.length === 0) {
+      // Ein Wisch rollt nach – eine verworfene Hand nicht
+      if (_panActive && !(_hand && _hand.verworfen) && _zoom > panThreshold()) schwungStart();
+      _panActive = false; _hand = null;
+    }
     pruefeLetzteLeer();
   }, { passive: false });
 
