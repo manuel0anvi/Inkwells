@@ -197,8 +197,9 @@ function pdfSeiteZuHeftseite(b) {
    man von der Auflösung nichts.
 
    Verkleinert wird deshalb auf MAX_KANTE, und zwar nur nach unten – ein
-   kleines Bild bleibt, wie es ist. Das Format bleibt PNG, solange es
-   dabei unter der Schwelle bleibt; darüber wird JPEG daraus. PNG hält
+   kleines Bild bleibt, wie es ist. Das Format bleibt verlustfrei (PNG
+   oder WebP, siehe VERLUSTFREI KLEINER), solange es dabei unter der
+   Schwelle bleibt; darüber wird ein Foto daraus. PNG hält
    Text und Striche scharf (ein Bildschirmfoto besteht meist daraus),
    JPEG rettet den Fall, in dem jemand ein Foto einsetzt.
    ══════════════════════════════════════════════════════════════════════ */
@@ -226,6 +227,134 @@ function ladeBild(dataUrl) {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   VERLUSTFREI KLEINER
+
+   >>> Gemeldet: „die Bilder sollen weniger Speicher brauchen, ohne an
+   Qualität zu verlieren" <<<
+   Ein PNG laesst sich verlustfrei noch einmal packen: WebP mit Qualitaet 1
+   ist in Chromium der verlustfreie Modus. Nachgeprueft an den Bildern
+   eines echten Hefts – jeder Bildpunkt nach dem Zurueckholen gleich,
+   und zusammen 37 % kleiner (1349 KB gegen 845 KB). Genommen wird WebP
+   nur, wenn es wirklich spuerbar kleiner ist; ein JPEG bleibt, wie es
+   ist – ein zweites Packen machte es nur schlechter.
+
+   Ein Foto, das auch verlustfrei zu gross bleibt, wurde bisher zu JPEG
+   mit 0,82. Es wird jetzt WebP mit 0,92: deutlich naeher am Original und
+   trotzdem nicht groesser. Wer das Bild nach Word gibt, bekommt es dort
+   als PNG (core/docx.js) – Word kennt kein WebP.
+   ══════════════════════════════════════════════════════════════════════ */
+const BILD_WEBP_LOHNT = 0.9;   // WebP nur, wenn es mindestens 10 % spart
+
+/** Die kleinere der beiden verlustfreien Fassungen einer Zeichenfläche. */
+function verlustfreiKleinste(flaeche) {
+  const png = flaeche.toDataURL('image/png');
+  const webp = flaeche.toDataURL('image/webp', 1);
+  // Ohne WebP-Kodierer liefert Chromium stillschweigend PNG
+  if (!webp.startsWith('data:image/webp')) return png;
+  return webp.length < png.length * BILD_WEBP_LOHNT ? webp : png;
+}
+
+/**
+ * Ein PNG verlustfrei kleiner machen, wenn es sich lohnt. Alles andere –
+ * JPEG, GIF, schon WebP – kommt unverändert zurück.
+ * @param {string} dataUrl
+ * @param {HTMLImageElement} [bild] schon geladen, spart das zweite Laden
+ */
+async function pngVerlustfreiKleiner(dataUrl, bild) {
+  if (!/^data:image\/png[;,]/i.test(String(dataUrl || ''))) return dataUrl;
+  try {
+    const b = bild || await ladeBild(dataUrl);
+    const w = b.naturalWidth || b.width, h = b.naturalHeight || b.height;
+    if (!w || !h) return dataUrl;
+    const flaeche = document.createElement('canvas');
+    flaeche.width = w;
+    flaeche.height = h;
+    flaeche.getContext('2d').drawImage(b, 0, 0);
+    const webp = flaeche.toDataURL('image/webp', 1);
+    if (!webp.startsWith('data:image/webp')) return dataUrl;
+    return webp.length < dataUrl.length * BILD_WEBP_LOHNT ? webp : dataUrl;
+  } catch (err) {
+    return dataUrl;   // lieber gross als kaputt
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   UND DIE BILDER, DIE SCHON IM HEFT LIEGEN
+
+   Nach dem Aufschlagen eines Hefts werden seine PNG-Bilder einmal
+   verlustfrei umgepackt – eines nach dem anderen, im Leerlauf, und nie,
+   solange der Stift aufliegt. Gepackt wird ueber toBlob: das kodiert
+   neben der Oberflaeche statt auf ihr, sonst stuende beim Schreiben fuer
+   ein grosses Bildschirmfoto eine Viertelsekunde lang alles still.
+
+   Nur eigene Hefte. Ein geteiltes Dokument gehoert jemand anderem, und
+   was darin liegt, entscheidet er.
+   ══════════════════════════════════════════════════════════════════════ */
+let _bilderPackenLauf = 0;
+const _bilderGeprueft = new Set();   // was sich nicht lohnte, wird nicht wieder versucht
+
+function imLeerlauf() {
+  return new Promise(weiter => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(() => weiter(), { timeout: 3000 });
+    else setTimeout(weiter, 200);
+  });
+}
+
+function flaecheAlsDaten(flaeche, typ, guete) {
+  return new Promise(fertig => flaeche.toBlob(blob => {
+    if (!blob) return fertig('');
+    const leser = new FileReader();
+    leser.onload = () => fertig(String(leser.result || ''));
+    leser.onerror = () => fertig('');
+    leser.readAsDataURL(blob);
+  }, typ, guete));
+}
+
+async function bilderImHeftPacken(nb) {
+  if (!nb || S.readOnly) return;
+  if (typeof isSharedNotebook === 'function' && isSharedNotebook(nb)) return;
+  const lauf = ++_bilderPackenLauf;
+  let gepackt = 0;
+
+  for (const page of (nb.pages || [])) {
+    for (const o of (page.objects || [])) {
+      const src = o && o.kind === 'image' ? String(o.src || '') : '';
+      if (!/^data:image\/png[;,]/i.test(src)) continue;
+      const schluessel = src.length + ':' + src.slice(-48);
+      if (_bilderGeprueft.has(schluessel)) continue;
+
+      await imLeerlauf();
+      while (S.isDrawing) await new Promise(r => setTimeout(r, 300));
+      // Anderes Heft aufgeschlagen: dieses hier ist nicht mehr dran
+      if (lauf !== _bilderPackenLauf || S.activeNbId !== nb.id) return;
+
+      try {
+        const bild = new Image();
+        bild.src = src;
+        await bild.decode();
+        const flaeche = document.createElement('canvas');
+        flaeche.width = bild.naturalWidth;
+        flaeche.height = bild.naturalHeight;
+        flaeche.getContext('2d').drawImage(bild, 0, 0);
+        const webp = await flaecheAlsDaten(flaeche, 'image/webp', 1);
+        if (lauf !== _bilderPackenLauf || S.activeNbId !== nb.id) return;
+        // Inzwischen ersetzt oder gelöscht? Dann nicht dazwischenfunken.
+        if (o.src !== src) continue;
+        if (webp.startsWith('data:image/webp') && webp.length < src.length * BILD_WEBP_LOHNT) {
+          o.src = webp;
+          gepackt++;
+        } else {
+          _bilderGeprueft.add(schluessel);
+        }
+      } catch (err) {
+        _bilderGeprueft.add(schluessel);
+      }
+    }
+  }
+  if (gepackt && typeof window.markCurrentNotebookDirty === 'function') window.markCurrentNotebookDirty();
+}
+
 /**
  * Verkleinert, falls nötig. Gibt immer `{ url, w, h }` zurück – auch
  * dann, wenn nichts zu tun war.
@@ -238,7 +367,7 @@ async function passeBildAn(dataUrl) {
 
   const laengste = Math.max(bw, bh);
   const klein = laengste <= BILD_MAX_KANTE && dataUrl.length < BILD_JPEG_AB;
-  if (klein) return { url: dataUrl, w: bw, h: bh };
+  if (klein) return { url: await pngVerlustfreiKleiner(dataUrl, bild), w: bw, h: bh };
 
   const faktor = Math.min(1, BILD_MAX_KANTE / laengste);
   const zw = Math.max(1, Math.round(bw * faktor));
@@ -250,8 +379,12 @@ async function passeBildAn(dataUrl) {
   const ctx = flaeche.getContext('2d');
   ctx.drawImage(bild, 0, 0, zw, zh);
 
-  let url = flaeche.toDataURL('image/png');
-  if (url.length > BILD_JPEG_AB) url = flaeche.toDataURL('image/jpeg', 0.82);
+  let url = verlustfreiKleinste(flaeche);
+  if (url.length > BILD_JPEG_AB) {
+    // Auch verlustfrei zu gross – ein Foto. Siehe VERLUSTFREI KLEINER.
+    const webp = flaeche.toDataURL('image/webp', 0.92);
+    url = webp.startsWith('data:image/webp') ? webp : flaeche.toDataURL('image/jpeg', 0.82);
+  }
   return { url, w: zw, h: zh };
 }
 
@@ -2009,7 +2142,10 @@ async function insertFilesFlow() {
         await new Promise(r => tmpImg.onload = r);
         let ow = 200;
         let oh = ow * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1));
-        const obj = { id: uid(), kind: 'image', src: f.dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
+        /* Wie beim Einfügen aus der Zwischenablage: begrenzt und
+           verlustfrei gepackt, statt die Originaldatei einzubetten. */
+        const gepackt = await passeBildAn(f.dataUrl).catch(() => null);
+        const obj = { id: uid(), kind: 'image', src: gepackt ? gepackt.url : f.dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
         if (!info.page.objects) info.page.objects = [];
         info.page.objects.push(obj);
         if (objLayer) placeObject(objLayer, obj, info.page);

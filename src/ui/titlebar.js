@@ -175,7 +175,9 @@ document.addEventListener('drop', async e => {
           await new Promise(r => tmpImg.onload = r);
           let ow = 200;
           let oh = ow * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1));
-          const obj = { id: uid(), kind: 'image', src: dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
+          // Begrenzt und verlustfrei gepackt, wie beim Einfügen (core/importExport.js)
+          const gepackt = typeof passeBildAn === 'function' ? await passeBildAn(dataUrl).catch(() => null) : null;
+          const obj = { id: uid(), kind: 'image', src: gepackt ? gepackt.url : dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
           if (!info.page.objects) info.page.objects = [];
           info.page.objects.push(obj);
           placeObject(objLayer, obj, info.page);

@@ -720,6 +720,9 @@ function openNotebook(id, opts = {}) {
      bereits umgestellt. */
   normalizeNotebook(nb);
   getSections(nb);
+  /* Die Bilder darin verlustfrei kleiner packen – im Leerlauf und erst,
+     wenn das Aufschlagen vorbei ist (core/importExport.js). */
+  if (typeof bilderImHeftPacken === 'function') setTimeout(() => bilderImHeftPacken(nb), 4000);
 
   /* ── Da weitermachen, wo man aufgehört hat ──────────────────────────
      Seite und Ausschnitt stehen örtlich (core/settings.js), nicht im
