@@ -1457,11 +1457,39 @@ async function shareDocument(notebook, options = {}) {
 
   await step('Kopf schreiben', () => setDoc(doc(db, DOCS, docId), head, { merge: !isNew }));
 
-  // Beim Ersetzen zuerst alles Alte weg – auch die Stücke einer Freigabe
-  // aus der Zeit vor dem zerlegten Modell.
-  if (!isNew) await step('Alten Inhalt entfernen', () => clearDocContent(docId));
+  /* ═══════════════════════════════════════════════════════════════
+     ERST SCHREIBEN, DANN AUFRÄUMEN
 
+     >>> Hier entstand „SHARE_EMPTY“ <<<
+     Gemeldet: jemand gibt ein Heft frei, der Empfänger klickt darauf –
+     „Dokument wird geladen…“, dann „Freigabe fehlgeschlagen:
+     SHARE_EMPTY“.
+
+     Der Weg dorthin stand genau hier. Die Reihenfolge war:
+
+       1. Kopf schreiben       ← ab jetzt SIEHT der Empfänger das Heft
+       2. Alten Inhalt LÖSCHEN ← ab jetzt hat es KEINE Seiten
+       3. Inhalt schreiben     ← erst jetzt wieder
+
+     Zwischen 1 und 3 liegt ein Fenster, in dem der Kopf von einem Heft
+     erzählt, dessen Seiten es nicht gibt. Wer in diesem Augenblick
+     öffnet, liest null Seiten – und genau das heisst SHARE_EMPTY
+     (loadDocument). Kurz ist das Fenster nur bei einem kleinen Heft: das
+     Wegräumen geht über vier Untersammlungen, das Schreiben stapelweise
+     über Seiten, Handschrift und Bilder. Bei einem Heft mit Bildern sind
+     das leicht mehrere Sekunden – und genau in diese Sekunden fällt der
+     Klick, denn die Einladung kommt beim Empfänger mit Schritt 1 an.
+
+     Das Fenster war nicht nötig. Die Kennungen sind stabil (Seiten-,
+     Bogen- und Bildkennung), `set` schreibt also über den vorhandenen
+     Stand hinweg. Geschrieben wird deshalb zuerst, und weggeräumt wird
+     danach nur noch, was in der neuen Fassung nicht mehr vorkommt.
+     Dazwischen steht immer ein vollständiges Heft – entweder das alte
+     oder das neue.
+     ═══════════════════════════════════════════════════════════════ */
   await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid));
+
+  if (!isNew) await step('Alten Inhalt aufräumen', () => raeumeUebriges(docId, parts));
 
   if (linkId) await step('Link eintragen', () => writeLinkEntry(linkId, docId, me.uid));
 
@@ -1491,6 +1519,38 @@ async function writeDocParts(docId, parts, byUid) {
     if (++count >= MAX_BATCH) await flush();
   }
   await flush();
+}
+
+/**
+ * Räumt weg, was in der neuen Fassung nicht mehr vorkommt – und nur das.
+ *
+ * Der Gegenentwurf zu clearDocContent(): der löscht alles und braucht
+ * deshalb ein Schreiben davor oder danach, währenddessen das Dokument
+ * leer dasteht. Siehe der Kasten in shareDocument().
+ *
+ * Die Stücke (CHUNKS) fallen dagegen immer ganz weg: sie gehören zum
+ * Modell von vor der Zerlegung, und im zerlegten Modell hat kein einziges
+ * davon noch eine Entsprechung.
+ */
+async function raeumeUebriges(docId, parts) {
+  const bleibt = {
+    [PAGES]: new Set((parts.pages || []).map(p => String(p.id))),
+    [INK]: new Set((parts.ink || []).map(b => String(b.id))),
+    [BLOBS]: new Set((parts.blobs || []).map(b => String(b.key))),
+    [CHUNKS]: new Set()
+  };
+
+  for (const sub of [PAGES, INK, BLOBS, CHUNKS]) {
+    const vorhanden = await getDocs(collection(db, DOCS, docId, sub));
+    let batch = writeBatch(db);
+    let count = 0;
+    for (const snap of vorhanden.docs) {
+      if (bleibt[sub].has(snap.id)) continue;
+      batch.delete(snap.ref);
+      if (++count >= MAX_BATCH) { await batch.commit(); batch = writeBatch(db); count = 0; }
+    }
+    if (count > 0) await batch.commit();
+  }
 }
 
 /** Räumt Seiten, Handschrift, Bilder und alte Stücke weg. */
@@ -1796,8 +1856,9 @@ async function saveDocumentContent(docId, notebook, options = {}) {
      Besitzer, weil dabei der Kopf mit angefasst wird. */
   if (head.format !== DOC_FORMAT) {
     if (!isOwner) throw new Error('NEEDS_OWNER_UPGRADE');
-    await step('Alten Inhalt entfernen', () => clearDocContent(docId));
+    // Erst schreiben, dann aufräumen – Begründung in shareDocument()
     await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid));
+    await step('Alten Inhalt aufräumen', () => raeumeUebriges(docId, parts));
     const stempel = await besitzerStempel(true);   // hier ist es immer der Besitzer
     await step('Kopf fortschreiben', () => updateDoc(doc(db, DOCS, docId), {
       ...parts.head,
@@ -1818,8 +1879,9 @@ async function saveDocumentContent(docId, notebook, options = {}) {
      Handschrift und Bilder. Ein Teil-Schreiben wäre hier gefährlich: neue
      Seiten kämen ohne ihre Striche an. */
   if (!base) {
-    await step('Alten Inhalt entfernen', () => clearDocContent(docId));
+    // Erst schreiben, dann aufräumen – Begründung in shareDocument()
     await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid));
+    await step('Alten Inhalt aufräumen', () => raeumeUebriges(docId, parts));
     const rev = await schreibeKopfFort(docId, {
       pageOrder: parts.head.pageOrder,
       pageCount: parts.head.pageCount,
@@ -2699,13 +2761,39 @@ async function loadDocument(docId) {
   }
 
   // Drei Abfragen statt einer je Seite – und zwar gleichzeitig.
-  const [pageSnap, inkSnap, blobSnap] = await Promise.all([
+  const holeTeile = () => Promise.all([
     getDocs(collection(db, DOCS, docId, PAGES)),
     getDocs(collection(db, DOCS, docId, INK)),
     getDocs(collection(db, DOCS, docId, BLOBS))
   ]);
 
+  let [pageSnap, inkSnap, blobSnap] = await holeTeile();
+
+  /* ═══════════════════════════════════════════════════════════════
+     NOCH NICHT DA IST NICHT DASSELBE WIE NICHT VORHANDEN
+
+     Der Kopf steht vor den Seiten in der Datenbank – beim Freigeben wie
+     beim Fortschreiben. Wird genau dazwischen geöffnet, fehlen Seiten.
+     Die beiden anderen Lesewege wissen das seit je und warten einmal ab
+     (loadSharedNotebook, loadLegacyDocument); hier fehlte es, und
+     ausgerechnet hier kommt der Empfänger an: die Einladung erreicht ihn
+     mit dem Kopf, also im selben Augenblick.
+
+     Der Kopf sagt, wie viele Seiten es sein müssen (pageOrder). Damit
+     lässt sich „noch unterwegs“ von „wirklich leer“ unterscheiden,
+     statt beides SHARE_EMPTY zu nennen. Drei Anläufe mit wachsender
+     Pause: ein Heft mit Bildern braucht für seine Stapel ein paar
+     Sekunden, und länger als das ist es kein Rennen mehr, sondern
+     kaputt.
+     ═══════════════════════════════════════════════════════════════ */
+  const erwartet = (head.pageOrder && head.pageOrder.length) || head.pageCount || 0;
+  for (let versuch = 0; versuch < 3 && pageSnap.size < Math.max(1, erwartet); versuch++) {
+    await new Promise(r => setTimeout(r, 900 * (versuch + 1)));
+    [pageSnap, inkSnap, blobSnap] = await holeTeile();
+  }
+
   if (pageSnap.empty) throw new Error('SHARE_EMPTY');
+  if (erwartet && pageSnap.size < erwartet) throw new Error('SHARE_INCOMPLETE');
 
   const pageRows = pageSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
 

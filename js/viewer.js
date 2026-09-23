@@ -591,21 +591,103 @@ function buildPageElement(notebook, page, index) {
 // wiederholten Öffnen von Notizbüchern keine Listener ansammeln.
 const pageScalers = [];
 
+function rescaleOne(eintrag) {
+  const { scaler, pageEl, width, height } = eintrag;
+  if (!scaler.isConnected) return;
+  const available = scaler.parentElement ? scaler.parentElement.clientWidth : width;
+  const scale = Math.min(1, available / width);
+  // Tatsächliche Höhe verwenden, damit nichts abgeschnitten wird, falls
+  // eine Seite mehr Text enthält als ihre Sollhöhe hergibt. Eine noch
+  // nicht gezeichnete Seite hält ihren Platz in der Sollhöhe frei.
+  const realHeight = pageEl ? Math.max(height, pageEl.offsetHeight || 0) : height;
+  if (pageEl) pageEl.style.transform = `scale(${scale})`;
+  scaler.style.width = Math.round(width * scale) + 'px';
+  scaler.style.height = Math.round(realHeight * scale) + 'px';
+}
+
 function rescaleAllPages() {
-  for (const { scaler, pageEl, width, height } of pageScalers) {
-    if (!scaler.isConnected) continue;
-    const available = scaler.parentElement ? scaler.parentElement.clientWidth : width;
-    const scale = Math.min(1, available / width);
-    // Tatsächliche Höhe verwenden, damit nichts abgeschnitten wird, falls
-    // eine Seite mehr Text enthält als ihre Sollhöhe hergibt
-    const realHeight = Math.max(height, pageEl.offsetHeight || 0);
-    pageEl.style.transform = `scale(${scale})`;
-    scaler.style.width = Math.round(width * scale) + 'px';
-    scaler.style.height = Math.round(realHeight * scale) + 'px';
-  }
+  for (const eintrag of pageScalers) rescaleOne(eintrag);
 }
 
 window.addEventListener('resize', rescaleAllPages);
+
+/* ══════════════════════════════════════════════════════════════════════
+   GEZEICHNET WIRD, WAS MAN GLEICH SIEHT
+
+   >>> Gemeldet: „das Laden dauert lange – die ersten Seiten sollten
+   sofort da sein, der Rest beim Scrollen" <<<
+   Beim Öffnen wurde jede Seite auf einmal gebaut: Text, Formeln, Bilder
+   und die ganze Handschrift auf einer Zeichenfläche je Seite. Bei einem
+   Heft mit 17 vollgeschriebenen Seiten stand die Ansicht dafür eine
+   ganze Weile still, bevor irgendetwas zu sehen war.
+
+   Jetzt bekommt jede Seite sofort ihren Platz in der richtigen Grösse –
+   die Bildlaufleiste stimmt, die Seitenzahl auch –, gebaut werden aber
+   nur die ersten Seiten gleich und alle weiteren, sobald sie in die Nähe
+   des Sichtfelds kommen. Wer druckt, bekommt vorher alle gewählten Seiten
+   gebaut (renderPagesNow, js/export-ui.js).
+   ══════════════════════════════════════════════════════════════════════ */
+const SOFORT_SEITEN = 3;
+let seitenBeobachter = null;
+
+function baueEintrag(eintrag) {
+  if (eintrag.pageEl || !eintrag.build) return;
+  try {
+    const { pageEl } = eintrag.build();
+    eintrag.pageEl = pageEl;
+    eintrag.scaler.appendChild(pageEl);
+  } catch (error) {
+    console.error('Viewer render error:', error);
+  }
+  eintrag.build = null;
+  if (seitenBeobachter) seitenBeobachter.unobserve(eintrag.scaler);
+  rescaleOne(eintrag);
+}
+
+/**
+ * Seiten in den Behälter legen – gebaut werden zuerst nur die ersten.
+ * @param {object} notebook
+ * @param {Array} pages   in Heftreihenfolge
+ * @param {HTMLElement} container
+ */
+function renderPagesLazy(notebook, pages, container) {
+  if (seitenBeobachter) seitenBeobachter.disconnect();
+  seitenBeobachter = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((treffer) => {
+        for (const t of treffer) {
+          if (!t.isIntersecting) continue;
+          const eintrag = pageScalers.find(e => e.scaler === t.target);
+          if (eintrag) baueEintrag(eintrag);
+        }
+      }, { rootMargin: '1500px 0px' })
+    : null;
+
+  pages.forEach((page, index) => {
+    const width = page.w || CFG.PAGE_W;
+    const height = page.h || CFG.PAGE_H;
+    const scaler = document.createElement('div');
+    scaler.className = 'j-page-scaler';
+    scaler.style.width = '100%';
+    // Damit eine Suche die Stelle findet, auch bevor die Seite gebaut ist
+    scaler.dataset.pgid = page.id;
+    const eintrag = {
+      scaler, pageEl: null, width, height,
+      build: () => buildPageElement(notebook, page, index)
+    };
+    pageScalers.push(eintrag);
+    container.appendChild(scaler);
+    if (index < SOFORT_SEITEN || !seitenBeobachter) baueEintrag(eintrag);
+    else seitenBeobachter.observe(scaler);
+  });
+  requestAnimationFrame(rescaleAllPages);
+}
+
+/** Die gewählten (sonst alle) Seiten jetzt bauen – vor dem Drucken. */
+function renderPagesNow(auswahl) {
+  pageScalers.forEach((eintrag, index) => {
+    if (!auswahl || auswahl.has(index + 1)) baueEintrag(eintrag);
+  });
+}
 
 function wrapScaled(pageEl, width, height) {
   const scaler = document.createElement('div');

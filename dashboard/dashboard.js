@@ -156,7 +156,33 @@ function renderStorageBar(quota, ownBytes) {
   bar.style.background = percent > 90 ? '#d9534f' : percent > 75 ? '#e0a63a' : 'var(--gold)';
 }
 
-async function loadNotebooksFromCloud() {
+/* ══════════════════════════════════════════════════════════════════════
+   DIE ÜBERSICHT STEHT, BEVOR DIE HEFTE DA SIND
+
+   >>> Gemeldet: „die Dokumente laden eher lang – wahrscheinlich lädt es
+   alle auf einmal" <<<
+   Genau so war es, nur noch ungünstiger: jedes Heft wurde vollständig
+   heruntergeladen, eines nach dem anderen, und erst danach erschien die
+   erste Karte. Ein Heft voller Handschrift ist schnell mehrere Megabyte
+   groß – bei ein paar Heften wartete man auf die Summe aller.
+
+   Jetzt kommt zuerst nur die DATEILISTE, und aus ihr stehen die Karten
+   sofort da. Die Inhalte laden danach im Hintergrund, drei zugleich, das
+   zuletzt geänderte zuerst; jede Karte bekommt Farbe und Seitenzahl,
+   sobald ihr Heft angekommen ist. Wer eine Karte antippt, wartet nur auf
+   DIESES Heft – es wird sofort geholt, auch wenn es in der Reihe noch
+   nicht dran war.
+   ══════════════════════════════════════════════════════════════════════ */
+const LADE_GLEICHZEITIG = 3;
+
+/** Der Heftname aus der Dateiliste – ohne den Inhalt herunterzuladen. */
+function nameAusDatei(file) {
+  const base = String(file.name || '').replace(/\.(json|jrnl)$/i, '');
+  const idx = base.lastIndexOf('__');
+  return file.inkwellsName || (idx > 0 ? base.slice(0, idx) : base) || 'Untitled';
+}
+
+async function loadNotebookStubs() {
   const provider = getActiveProvider();
   const folders = await provider.findFolders(cloudJson);
 
@@ -171,31 +197,108 @@ async function loadNotebooksFromCloud() {
   // Doppelte IDs werden dabei übersprungen.
   for (const folderId of folders) {
     const files = await provider.listNotebookFiles(cloudJson, folderId);
-
     for (const file of files) {
-      try {
-        const json = await cloudJson(provider.downloadUrl(file.id));
-        const notebook = normalizeNotebookRecord({
-          ...file,
-          modifiedTime: file.modifiedTime,
-          notebook_json: json
-        });
-        if (!notebook) continue;
-
-        notebook.id = notebook.id || file.inkwellsId || file.id;
-        if (seenIds.has(notebook.id)) continue;
-
-        seenIds.add(notebook.id);
-        ownBytes += file.size || 0;
-        notebooks.push(notebook);
-      } catch (err) {
-        if (err.message === 'SESSION_EXPIRED') throw err;
-        console.warn('Notizbuch konnte nicht gelesen werden:', file.name, err);
-      }
+      const id = file.inkwellsId || file.id;
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      ownBytes += file.size || 0;
+      const seiten = parseInt(file.inkwellsPages, 10);
+      notebooks.push({
+        id, name: nameAusDatei(file),
+        // Von der App beim Hochladen mitgeschrieben (nur Google Drive)
+        color: /^#[0-9a-f]{3,8}$/i.test(file.inkwellsColor || '') ? file.inkwellsColor : '',
+        defaultBg: file.inkwellsBg || 'ruled',
+        __seiten: Number.isFinite(seiten) ? seiten : null,
+        updatedAt: file.modifiedTime || '', __datei: file, __laden: null, __fertig: false
+      });
     }
   }
 
+  // Das zuletzt Geänderte zuerst – OneDrive liefert keine Reihenfolge
+  notebooks.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   return { notebooks, folderFound: true, ownBytes };
+}
+
+/** Den Inhalt eines Hefts holen – einmal, auch wenn mehrere danach fragen. */
+function ladeHeft(eintrag) {
+  if (eintrag.__fertig) return Promise.resolve(eintrag);
+  if (!eintrag.__laden) {
+    eintrag.__laden = (async () => {
+      const file = eintrag.__datei;
+      const json = await cloudJson(getActiveProvider().downloadUrl(file.id));
+      const notebook = normalizeNotebookRecord({ ...file, modifiedTime: file.modifiedTime, notebook_json: json });
+      if (!notebook) throw new Error('NICHT_LESBAR');
+      notebook.id = notebook.id || file.inkwellsId || file.id;
+      // Schon vollständig aufbereitet – renderNotebook muss nicht noch einmal kopieren
+      Object.defineProperty(notebook, '__fertig', { value: true });
+      heftAngekommen(eintrag, notebook);
+      return notebook;
+    })();
+    eintrag.__laden.catch(err => {
+      if (err && err.message === 'SESSION_EXPIRED') { redirectToLogin(); return; }
+      console.warn('Notizbuch konnte nicht gelesen werden:', eintrag.__datei && eintrag.__datei.name, err);
+      heftUnlesbar(eintrag);
+    });
+  }
+  return eintrag.__laden;
+}
+
+/** Ein Heft ist da: an seine Stelle in der Liste, Karte auffrischen. */
+function heftAngekommen(eintrag, notebook) {
+  const i = allNotebooks.indexOf(eintrag);
+  // Eine alte Datei ohne Kennung im Namen: erst ihr Inhalt verrät, ob es
+  // das Heft schon gibt – früher wurde ohnehin erst nach dem Laden verglichen
+  const doppelt = allNotebooks.some((n, k) => k !== i && n.__fertig && n.id === notebook.id);
+  if (i >= 0) {
+    if (doppelt) allNotebooks.splice(i, 1);
+    else allNotebooks[i] = notebook;
+  }
+  const karte = kartenJeHeft.get(eintrag);
+  kartenJeHeft.delete(eintrag);
+  if (karte) {
+    if (doppelt) karte.remove();
+    else {
+      const neu = baueKarte(notebook);
+      karte.replaceWith(neu);
+      kartenJeHeft.set(notebook, neu);
+    }
+  }
+  planeSucheNeu();
+}
+
+function heftUnlesbar(eintrag) {
+  const i = allNotebooks.indexOf(eintrag);
+  if (i >= 0) allNotebooks.splice(i, 1);
+  const karte = kartenJeHeft.get(eintrag);
+  if (karte) karte.remove();
+  kartenJeHeft.delete(eintrag);
+}
+
+let _ladeLauf = 0;
+
+/** Alle noch fehlenden Inhalte im Hintergrund – höchstens drei zugleich. */
+function ladeAlleImHintergrund() {
+  const lauf = ++_ladeLauf;
+  const reihe = allNotebooks.filter(n => !n.__fertig);
+  const arbeiter = async () => {
+    while (reihe.length && lauf === _ladeLauf) {
+      const eintrag = reihe.shift();
+      try { await ladeHeft(eintrag); } catch (err) { /* steht schon in ladeHeft */ }
+    }
+  };
+  return Promise.all(Array.from({ length: LADE_GLEICHZEITIG }, arbeiter));
+}
+
+/* Die Suche läuft über das, was schon da ist. Kommt ein Heft nach, wird
+   eine laufende Suche nachgezogen – gebremst, damit bei zehn ankommenden
+   Heften nicht zehnmal hintereinander gesucht wird. */
+let _sucheNeuUhr = 0;
+function planeSucheNeu() {
+  clearTimeout(_sucheNeuUhr);
+  _sucheNeuUhr = setTimeout(() => {
+    const input = document.getElementById('dash-search-input');
+    if (isDashboardSearchActive() && input) renderSearchResults(runSearch(input.value));
+  }, 250);
 }
 
 /* ── Übersicht ────────────────────────────────────────────────────── */
@@ -215,7 +318,7 @@ async function showDashboard() {
   if (driveLabel) driveLabel.textContent = getActiveProvider().label;
 
   try {
-    const { notebooks, folderFound, ownBytes } = await loadNotebooksFromCloud();
+    const { notebooks, folderFound, ownBytes } = await loadNotebookStubs();
     allNotebooks = notebooks;
 
     // Erst einmal die normale Übersicht herstellen. Die frühen Ausstiege
@@ -223,8 +326,8 @@ async function showDashboard() {
     // dass die Suche das Raster ausgeblendet haben könnte.
     renderSearchResults(null);
 
-    const quota = await loadCloudQuota();
-    renderStorageBar(quota, ownBytes);
+    // Der Speicherplatz kommt nebenher – auf ihn muss keine Karte warten
+    loadCloudQuota().then(quota => renderStorageBar(quota, ownBytes)).catch(() => {});
 
     const now = new Date();
     const locale = lang === 'de' ? 'de-DE' : lang === 'it' ? 'it-IT' : 'en-GB';
@@ -246,6 +349,7 @@ async function showDashboard() {
     }
 
     renderNotebookCards(notebooks, grid);
+    ladeAlleImHintergrund();
 
     // Nach einem Neuladen (etwa Sprachwechsel) die laufende Suche mit den
     // frischen Heften wiederholen, statt veraltete Treffer stehen zu lassen.
@@ -265,42 +369,54 @@ async function showDashboard() {
 }
 
 /* Portierung von src/ui/homeGrid.js: renderHomeGrid() */
+// Welche Karte zu welchem Eintrag gehört – ein ankommendes Heft ersetzt sie
+const kartenJeHeft = new Map();
+
 function renderNotebookCards(notebooks, grid) {
   grid.innerHTML = '';
-
+  kartenJeHeft.clear();
   for (const nb of notebooks) {
-    const pageCount = getNotebookPages(nb).length;
-    const pageLabel = pageCount !== 1 ? (t('pages') || 'Seiten') : (t('page') || 'Seite');
-
-    const card = document.createElement('div');
-    card.className = 'nb-card';
-    card.style.setProperty('--nb-color', nb.color);
-
-    const spine = document.createElement('div');
-    spine.className = 'nb-card-spine';
-    spine.style.background = nb.color;
-
-    const body = document.createElement('div');
-    body.className = 'nb-card-body';
-
-    const name = document.createElement('div');
-    name.className = 'nb-card-name';
-    name.textContent = nb.name;
-
-    const bgPreview = document.createElement('div');
-    bgPreview.className = 'nb-card-bg';
-    bgPreview.style.cssText = BG_STYLE[nb.defaultBg] || BG_STYLE.ruled;
-
-    const meta = document.createElement('div');
-    meta.className = 'nb-card-meta';
-    meta.textContent = `${pageCount} ${pageLabel}`;
-
-    body.append(name, bgPreview, meta);
-    card.append(spine, body);
-
-    card.addEventListener('click', () => renderNotebook(nb));
+    const card = baueKarte(nb);
+    kartenJeHeft.set(nb, card);
     grid.appendChild(card);
   }
+}
+
+function baueKarte(nb) {
+  const laedt = !nb.__fertig;
+  const pageCount = laedt ? (nb.__seiten || 0) : getNotebookPages(nb).length;
+  const pageLabel = pageCount !== 1 ? (t('pages') || 'Seiten') : (t('page') || 'Seite');
+  const farbe = nb.color || '#c8a96e';
+
+  const card = document.createElement('div');
+  card.className = 'nb-card' + (laedt ? ' nb-card-laedt' : '');
+  card.style.setProperty('--nb-color', farbe);
+
+  const spine = document.createElement('div');
+  spine.className = 'nb-card-spine';
+  spine.style.background = farbe;
+
+  const body = document.createElement('div');
+  body.className = 'nb-card-body';
+
+  const name = document.createElement('div');
+  name.className = 'nb-card-name';
+  name.textContent = nb.name;
+
+  const bgPreview = document.createElement('div');
+  bgPreview.className = 'nb-card-bg';
+  bgPreview.style.cssText = BG_STYLE[nb.defaultBg] || BG_STYLE.ruled;
+
+  const meta = document.createElement('div');
+  meta.className = 'nb-card-meta';
+  // Solange der Inhalt unterwegs ist, gibt es noch keine Seitenzahl
+  meta.textContent = (laedt && nb.__seiten == null) ? '…' : pageCount + ' ' + pageLabel;
+
+  body.append(name, bgPreview, meta);
+  card.append(spine, body);
+
+  card.addEventListener('click', () => renderNotebook(nb));
+  return card;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -573,8 +689,31 @@ function initDashboardSearch() {
 let currentNotebook = null;
 
 
+/* Hochgezählt bei jedem Öffnen: kommt ein Heft an, nachdem inzwischen
+   ein anderes geöffnet oder die Übersicht wieder gezeigt wurde, wird es
+   nicht mehr hingestellt. */
+let _oeffnenLauf = 0;
+
 function renderNotebook(nb) {
-  const notebook = normalizeNotebookRecord(nb);
+  const lauf = ++_oeffnenLauf;
+  if (nb && nb.__datei && !nb.__fertig) {
+    zeigeHeftLaedt(nb);
+    ladeHeft(nb).then(fertig => {
+      if (lauf === _oeffnenLauf && webappViewer.style.display !== 'none') renderNotebook(fertig);
+    }).catch(() => {
+      if (lauf !== _oeffnenLauf) return;
+      viewerPages.innerHTML = '';
+      const hinweis = document.createElement('p');
+      hinweis.style.cssText = 'color:#d9534f;text-align:center;padding:40px 16px;';
+      hinweis.textContent = t('dash_err') || 'Fehler:';
+      viewerPages.appendChild(hinweis);
+    });
+    return;
+  }
+
+  // Aus der Übersicht kommt es schon aufbereitet – eine zweite tiefe Kopie
+  // eines mehrere Megabyte großen Hefts wäre nur Wartezeit
+  const notebook = (nb && nb.__fertig) ? nb : normalizeNotebookRecord(nb);
   if (!notebook) return;
 
   currentNotebook = notebook;
@@ -621,21 +760,31 @@ function renderNotebook(nb) {
     return;
   }
 
-  pages.forEach((page, index) => {
-    try {
-      const { pageEl, width, height } = buildPageElement(notebook, page, index);
-      viewerPages.appendChild(wrapScaled(pageEl, width, height));
-    } catch (error) {
-      console.error('Viewer render error:', error);
-    }
-  });
+  // Die ersten Seiten sofort, der Rest beim Hinscrollen (js/viewer.js)
+  renderPagesLazy(notebook, pages, viewerPages);
+}
 
-  requestAnimationFrame(rescaleAllPages);
+/** Der Betrachter steht schon da, das Heft ist noch unterwegs. */
+function zeigeHeftLaedt(nb) {
+  webappDashboard.style.display = 'none';
+  webappViewer.style.display = 'block';
+  window.scrollTo(0, 0);
+  const viewerTitle = document.getElementById('viewer-title');
+  viewerTitle.textContent = nb.name || 'Untitled';
+  viewerPageCountTop.textContent = '';
+  viewerPages.innerHTML = '';
+  pageScalers.length = 0;
+  const hinweis = document.createElement('p');
+  hinweis.style.cssText = 'color:var(--text-muted);text-align:center;padding:40px 16px;font-family:"Jost",sans-serif;';
+  hinweis.textContent = t('dash_loading_nb') || 'Lade…';
+  viewerPages.appendChild(hinweis);
 }
 
 /* ── Bedienelemente ───────────────────────────────────────────────── */
 
 document.getElementById('viewer-back').addEventListener('click', () => {
+  // Ein Heft, das noch ankommt, soll danach nicht mehr aufgehen
+  _oeffnenLauf++;
   webappViewer.style.display = 'none';
   webappDashboard.style.display = 'block';
   history.replaceState({}, document.title, window.location.pathname);

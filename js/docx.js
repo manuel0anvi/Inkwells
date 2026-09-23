@@ -202,6 +202,17 @@
     return bytes;
   }
 
+  /** Ein Bild beliebigen Formats als PNG – für Word (siehe build). */
+  async function alsPng(src) {
+    const img = await loadImage(src);
+    if (!img || !img.naturalWidth || !img.naturalHeight) return null;
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return c.toDataURL('image/png');
+  }
+
   function loadImage(src) {
     return new Promise((resolve) => {
       if (!src) return resolve(null);
@@ -1552,10 +1563,22 @@
         }
 
         if (!obj.src) continue;          // Formeln haben kein Bild
-        const bytes = dataUrlToBytes(obj.src);
+
+        /* ══ WORD KENNT NUR PNG UND JPEG ══════════════════════════════
+           Die Paketliste unten meldet nur diese beiden an. Ein WebP – so
+           werden Bilder seit kurzem verlustfrei gepackt
+           (core/importExport.js) – oder ein GIF landete trotzdem mit
+           eigener Endung im Paket, und Word meldete eine beschaedigte
+           Datei. Alles andere geht deshalb als PNG hinaus. */
+        let quelle = obj.src;
+        if (!/^data:image\/(png|jpe?g)[;,]/i.test(quelle)) {
+          quelle = await alsPng(quelle);
+          if (!quelle) continue;
+        }
+        const bytes = dataUrlToBytes(quelle);
         if (!bytes || !bytes.length) continue;
 
-        const endung = /^data:image\/(png|jpe?g|gif|webp|bmp)/i.exec(obj.src);
+        const endung = /^data:image\/(png|jpe?g)/i.exec(quelle);
         const dateiname = `bild${kennung}.${(endung ? endung[1] : 'png').replace('jpg', 'jpeg')}`;
         const bildRel = naechsteRel();
 

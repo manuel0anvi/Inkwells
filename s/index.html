@@ -261,16 +261,8 @@ function renderShared(notebook, meta) {
     return;
   }
 
-  pages.forEach((page, index) => {
-    try {
-      const { pageEl, width, height } = buildPageElement(notebook, page, index);
-      viewerPages.appendChild(wrapScaled(pageEl, width, height));
-    } catch (err) {
-      console.error('Viewer render error:', err);
-    }
-  });
-
-  requestAnimationFrame(rescaleAllPages);
+  // Die ersten Seiten sofort, der Rest beim Hinscrollen (js/viewer.js)
+  renderPagesLazy(notebook, pages, viewerPages);
 }
 
 /* Export: identisch zum Dashboard (js/export-ui.js). PDF läuft über den

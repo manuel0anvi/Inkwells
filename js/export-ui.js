@@ -11,9 +11,9 @@
    erste Seite, oder ein Bereich wie „1-3, 5"). Vorher gab es nur einen
    Knopf „Als PDF", der immer das ganze Heft in den Druckdialog schob.
 
-   PDF entsteht weiterhin über den Druckdialog des Browsers – die Seiten
-   liegen bereits im A4-Verhältnis im Dokument. Für eine Auswahl werden
-   die übrigen Seiten nur fürs Drucken ausgeblendet.
+   PDF entsteht weiterhin über den Druckdialog des Browsers – jedes Blatt
+   genau so gross wie seine Seite (css/notebook.css, @media print). Für
+   eine Auswahl werden die übrigen Seiten nur fürs Drucken ausgeblendet.
 
    Word entsteht über js/docx.js, dieselbe Datei wie in der App.
    ══════════════════════════════════════════════════════════════════════ */
@@ -186,6 +186,11 @@
     const previousTitle = document.title;
     document.title = (current.notebook.name || 'Inkwells').replace(/[\\/:*?"<>|]/g, '_');
 
+    /* Gebaut wird eine Seite sonst erst, wenn sie ins Bild rollt
+       (js/viewer.js, renderPagesLazy). Gedruckt wird aber auch, was noch
+       nie zu sehen war. */
+    if (typeof renderPagesNow === 'function') renderPagesNow(numbers);
+
     // Für den Druck in Originalgröße darstellen und alles ausblenden,
     // was nicht zur Auswahl gehört.
     let lastVisible = null;
@@ -196,7 +201,7 @@
       if (!wanted) return;
 
       lastVisible = scaler;
-      pageEl.style.transform = 'none';
+      if (pageEl) pageEl.style.transform = 'none';
       scaler.style.width = width + 'px';
       scaler.style.height = height + 'px';
     });
@@ -204,25 +209,62 @@
     // eine leere Seite hinterher.
     if (lastVisible) lastVisible.classList.add('print-last');
 
+    /* ══ JEDES BLATT SO GROSS WIE SEINE SEITE ═════════════════════════
+       css/notebook.css stellt das Blatt auf 794 × 1123 px, die normale
+       Heftseite. Eine Querformatfolie oder eine Bildseite ist anders
+       gross – sie bekommt eine eigene, benannte Blattgrösse, sonst würde
+       sie beschnitten oder liefe auf ein zweites Blatt über. Dasselbe
+       Vorgehen wie beim Ausdruck in der App (core/importExport.js,
+       buildPdf). */
+    const formate = new Map();
+    pageScalers.forEach(({ scaler, width, height }) => {
+      scaler.style.page = '';
+      if (scaler.classList.contains('print-skip')) return;
+      const w = Math.round(width), h = Math.round(height);
+      if (w === 794 && h === 1123) return;
+      const schluessel = w + 'x' + h;
+      if (!formate.has(schluessel)) formate.set(schluessel, 'blatt' + (formate.size + 1));
+      scaler.style.page = formate.get(schluessel);
+    });
+    let blattStil = null;
+    if (formate.size) {
+      blattStil = document.createElement('style');
+      blattStil.textContent = [...formate].map(([mass, name]) => {
+        const [w, h] = mass.split('x');
+        return `@page ${name} { size: ${w}px ${h}px; margin: 0 }`;
+      }).join('\n');
+      document.head.appendChild(blattStil);
+    }
+
     document.body.classList.add('printing');
 
     const cleanup = () => {
       document.body.classList.remove('printing');
       document.title = previousTitle;
+      if (blattStil) blattStil.remove();
       pageScalers.forEach(({ scaler }) => {
         scaler.classList.remove('print-skip', 'print-last');
+        scaler.style.page = '';
       });
       rescaleAllPages();
       window.removeEventListener('afterprint', cleanup);
     };
     window.addEventListener('afterprint', cleanup);
 
+    /* Frisch gebaute Seiten tragen Bilder, die noch dekodiert werden –
+       ohne dieses Warten fehlten sie im PDF. Höchstens drei Sekunden. */
+    const bilder = [...document.querySelectorAll('#viewer-pages .j-page-scaler:not(.print-skip) img')];
+    const bereit = Promise.race([
+      Promise.all(bilder.map(img => (img.decode ? img.decode() : Promise.resolve()).catch(() => {}))),
+      new Promise(r => setTimeout(r, 3000))
+    ]);
+
     // Kurz warten, damit das Layout vor dem Druckdialog steht
-    setTimeout(() => {
+    bereit.then(() => setTimeout(() => {
       window.print();
       // Sicherheitsnetz, falls afterprint ausbleibt (manche Browser)
       setTimeout(() => { if (document.body.classList.contains('printing')) cleanup(); }, 1000);
-    }, 60);
+    }, 60));
   }
 
   /* ── Word ─────────────────────────────────────────────────────────── */

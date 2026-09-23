@@ -247,6 +247,15 @@
   word-break: break-word;
 }
 
+/* Das Heft ist noch unterwegs (dashboard.js, ladeHeft) – die Zeile
+   darunter atmet, bis Farbe und Seitenzahl feststehen */
+.nb-card-laedt .nb-card-meta {
+  animation: nb-card-laedt 1.2s ease-in-out infinite;
+}
+@keyframes nb-card-laedt {
+  50% { opacity: .35; }
+}
+
 .nb-card-meta {
   font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
   font-size: 9px;
@@ -376,7 +385,25 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 @media print {
-  @page { size: A4; margin: 0 }
+  /* >>> Gemeldet: „Seite 6 bis 7 exportiert – dazwischen eine leere
+     weisse Seite, und oben und unten ein weisser Streifen“ <<<
+     Zwei Ursachen, beide nachgestellt:
+       · Die Titelzeile (.viewer-bar) blieb stehen. Ihre Knoepfe waren
+         ausgeblendet, sie selbst nicht – ihr unterer Rand von 24 px
+         schob die erste Seite nach unten. Das untere Stueck der Seite
+         fiel auf ein eigenes Blatt: die „leere“ Seite.
+       · A4 ist 1122,5 px hoch, eine Heftseite 1123. Der halbe Pixel, der
+         nicht passte, reichte fuer denselben Effekt.
+     Das Blatt ist deshalb jetzt genau so gross wie die Seite (andere
+     Masse bekommen ihre eigene Regel, js/export-ui.js), und eine Seite
+     wird nie mehr geteilt. */
+  @page { size: 794px 1123px; margin: 0 }
+
+  body.printing .viewer-bar,
+  /* Dasselbe auf der Freigabe-Seite (s/): der Hinweis fuer Bearbeiter */
+  body.printing #share-edit-hint {
+    display: none !important;
+  }
 
   body.printing nav,
   body.printing footer,
@@ -422,6 +449,11 @@
     margin: 0 !important;
     page-break-after: always;
     break-after: page;
+    /* Eine Seite ist ein Blatt – was nicht passt, wird abgeschnitten,
+       statt als Streifen auf ein eigenes Blatt zu rutschen */
+    break-inside: avoid;
+    page-break-inside: avoid;
+    overflow: hidden !important;
   }
   /* Die letzte gedruckte Seite darf keinen Umbruch bekommen – sonst folgt
      eine leere Seite. Bei einer Auswahl ist das nicht zwingend die letzte

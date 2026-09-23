@@ -96,7 +96,12 @@ const WebGoogleProvider = {
       .filter(f => f.name?.endsWith('.json') || f.name?.endsWith('.jrnl') || f.appProperties?.inkwellsId)
       .map(f => ({
         id: f.id, name: f.name, modifiedTime: f.modifiedTime,
-        size: Number(f.size) || 0, inkwellsId: f.appProperties?.inkwellsId || null
+        size: Number(f.size) || 0, inkwellsId: f.appProperties?.inkwellsId || null,
+        // Was die App beim Hochladen mitschreibt – für die Karte vor dem Laden
+        inkwellsName: f.appProperties?.inkwellsName || '',
+        inkwellsColor: f.appProperties?.inkwellsColor || '',
+        inkwellsBg: f.appProperties?.inkwellsBg || '',
+        inkwellsPages: f.appProperties?.inkwellsPages ?? ''
       }));
   },
 
