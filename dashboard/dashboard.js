@@ -264,6 +264,12 @@ function heftAngekommen(eintrag, notebook) {
     }
   }
   planeSucheNeu();
+
+  /* Ein Link ?nb=<id> auf eine alte Datei ohne Kennung im Namen findet
+     sein Heft erst jetzt – aber nur, wenn noch nichts anderes geöffnet
+     wurde; wer schon selbst gewählt hat, wird nicht umgeleitet. */
+  const gewuenscht = new URLSearchParams(window.location.search).get('nb');
+  if (!doppelt && gewuenscht && gewuenscht === notebook.id && _oeffnenLauf === 0) renderNotebook(notebook);
 }
 
 function heftUnlesbar(eintrag) {
