@@ -127,6 +127,21 @@
     if (!_sel) return;
     if (_sel.huelle && _sel.huelle.parentNode) _sel.huelle.remove();
     _sel = null;
+    _farbeGesichert = false;
+    meldeAuswahlAnLeiste();
+  }
+
+  /* Die Werkzeugleiste zeigt Farben und Stärken, solange Gezeichnetes
+     ausgewählt ist – auch auf dem Zeiger, wo sie sonst fehlen
+     (ui/toolbar.js, zeigeStiftWahlFuerAuswahl). */
+  function meldeAuswahlAnLeiste() {
+    if (typeof window.zeigeStiftWahlFuerAuswahl !== 'function') return;
+    const striche = (_sel && _sel.strokes) || [];
+    if (!striche.length) { window.zeigeStiftWahlFuerAuswahl(false); return; }
+    const dick = striche[0].width;
+    const einheitlich = striche.every(st => st.width === dick);
+    window.zeigeStiftWahlFuerAuswahl(true, striche[0].color || '#1a1510',
+      einheitlich ? (striche[0].isHL ? dick / 4 : dick) : null);
   }
 
   /* ── Nach einer Änderung: neu zeichnen und merken ────────────────── */
@@ -565,6 +580,7 @@
 
     zeichneHuelle();
     zeigeLeiste();
+    meldeAuswahlAnLeiste();
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -576,6 +592,17 @@
   let leiste = null;
   let farbKnopf = null;
   let dickKnoepfe = [];
+  let farbFelder = [];
+  // Ein Farbwechsel ist EIN Rückgängig-Schritt, auch wenn im Rad gezogen wird
+  let _farbeGesichert = false;
+
+  /* Dieselben Farben wie am Stift in der Werkzeugleiste – von dort
+     gelesen, damit es keine zweite Liste gibt, die auseinanderläuft. */
+  function stiftFarben() {
+    const aus = [...document.querySelectorAll('#pen-swatches .pen-sw[data-pcolor]')]
+      .map(sw => sw.dataset.pcolor).filter(Boolean);
+    return aus.length ? aus : ['#1a1510', '#2a5fa8', '#c04040', '#2e8a46'];
+  }
 
   function baueLeiste() {
     if (leiste) return leiste;
@@ -618,9 +645,30 @@
        selbst) – deshalb wird nur die Farbe gesetzt, nicht die Art.
        ══════════════════════════════════════════════════════════════════ */
 
+    /* >>> Gemeldet: „man sollte bei Gemaltem die Farbe ändern können" <<<
+       Es gab hier nur EIN Farbfeld, und das oeffnete das Farbrad – fuer
+       „mach das rot" ein Umweg ueber ein Fenster. Die Farben des Stifts
+       stehen deshalb direkt in der Leiste, ein Tipp faerbt um. Das Rad
+       bleibt dahinter fuer alles andere. */
+    farbFelder = [];
+    for (const farbe of stiftFarben()) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ink-sel-btn ink-sel-feld';
+      b.dataset.farbe = farbe;
+      b.innerHTML = '<span class="ink-sel-farbe"></span>';
+      b.firstElementChild.style.background = farbe;
+      b.title = farbe;
+      b.setAttribute('aria-label', farbe);
+      b.addEventListener('pointerdown', ev => ev.preventDefault());
+      b.addEventListener('click', ev => { ev.stopPropagation(); faerbeAuswahl(farbe, true); });
+      leiste.appendChild(b);
+      farbFelder.push(b);
+    }
+
     farbKnopf = document.createElement('button');
     farbKnopf.type = 'button';
-    farbKnopf.className = 'ink-sel-btn';
+    farbKnopf.className = 'ink-sel-btn ink-sel-rad';
     farbKnopf.innerHTML = '<span class="ink-sel-farbe"></span>';
     farbKnopf.addEventListener('pointerdown', ev => ev.preventDefault());
     farbKnopf.addEventListener('click', ev => { ev.stopPropagation(); farbeWaehlen(); });
@@ -675,12 +723,14 @@
     const zeigen = striche.length > 0 ? '' : 'none';
     farbKnopf.style.display = zeigen;
     for (const b of dickKnoepfe) b.style.display = zeigen;
+    for (const b of farbFelder) b.style.display = zeigen;
     if (!striche.length) return;
 
     const farbe = striche[0].color || '#1a1510';
     const feld = farbKnopf.firstElementChild;
     if (feld) feld.style.background = farbe;
-    farbKnopf.title = (typeof t === 'function' && t('penColor')) || 'Stiftfarbe';
+    farbKnopf.title = (typeof t === 'function' && t('customColor')) || 'Eigene Farbe';
+    markiereFarbe(farbe);
 
     /* Bei gemischten Stärken bleibt keiner hervorgehoben – sonst stünde
        dort eine Zahl, die nur für einen der Striche gilt. */
@@ -691,28 +741,55 @@
     }
   }
 
-  /** Farbe der ganzen Auswahl ändern. */
-  function farbeWaehlen() {
-    if (!_sel || !_sel.strokes.length || typeof openCustomColorPopover !== 'function') return;
-    const { pageId, strokes } = _sel;
-    const info = getPage(pageId);
-    let gesichert = false;
-
-    openCustomColorPopover('pen', farbKnopf, (farbe, endgueltig) => {
-      /* Der Verlauf bekommt EINEN Schritt, nicht einen je Bewegung im
-         Farbrad: der Rückruf läuft beim Ziehen ununterbrochen. */
-      if (!gesichert && info) { gesichert = true; pushPageHistory(info.page); }
-      for (const st of strokes) st.color = farbe;
-      const feld = farbKnopf.firstElementChild;
-      if (feld) feld.style.background = farbe;
-      notiere(pageId, endgueltig);
-      if (endgueltig) meldeStriche();
-    }, strokes[0].color || '#1a1510');
+  /** Das passende Farbfeld hervorheben – keins, wenn es eine eigene ist. */
+  function markiereFarbe(farbe) {
+    const f = String(farbe || '').toLowerCase();
+    for (const b of farbFelder) b.classList.toggle('active', b.dataset.farbe.toLowerCase() === f);
   }
 
-  /** Strichstärke der ganzen Auswahl ändern. */
+  /**
+   * Die ganze Auswahl in einer Farbe.
+   *
+   * Von hier (Farbfelder, Farbrad) und aus der Werkzeugleiste
+   * (ui/toolbar.js). Der Verlauf bekommt EINEN Schritt je Farbwechsel,
+   * nicht einen je Bewegung im Farbrad: das meldet sich beim Ziehen
+   * ununterbrochen, und erst `endgueltig` schliesst den Schritt ab.
+   *
+   * @returns {boolean} ob es etwas zu färben gab
+   */
+  function faerbeAuswahl(farbe, endgueltig) {
+    if (!_sel || !_sel.strokes.length || !farbe) return false;
+    const { pageId, strokes } = _sel;
+    const info = getPage(pageId);
+    if (!_farbeGesichert && info) { _farbeGesichert = true; pushPageHistory(info.page); }
+    for (const st of strokes) st.color = farbe;
+    const feld = farbKnopf && farbKnopf.firstElementChild;
+    if (feld) feld.style.background = farbe;
+    markiereFarbe(farbe);
+    notiere(pageId, endgueltig);
+    if (endgueltig) {
+      _farbeGesichert = false;
+      meldeStriche();
+      meldeAuswahlAnLeiste();
+    }
+    return true;
+  }
+
+  /** Farbe der ganzen Auswahl im Farbrad wählen. */
+  function farbeWaehlen() {
+    if (!_sel || !_sel.strokes.length || typeof openCustomColorPopover !== 'function') return;
+    const { strokes } = _sel;
+    openCustomColorPopover('pen', farbKnopf, (farbe, endgueltig) => faerbeAuswahl(farbe, endgueltig),
+      strokes[0].color || '#1a1510');
+  }
+
+  /**
+   * Strichstärke der ganzen Auswahl ändern – von hier und aus der
+   * Werkzeugleiste.
+   * @returns {boolean} ob es etwas zu ändern gab
+   */
   function setzeDicke(dick) {
-    if (!_sel || !_sel.strokes.length) return;
+    if (!_sel || !_sel.strokes.length || !(dick > 0)) return false;
     const { pageId, strokes } = _sel;
     const info = getPage(pageId);
     if (info) pushPageHistory(info.page);
@@ -726,9 +803,11 @@
     }
     notiere(pageId, true);
     meldeStriche();
+    meldeAuswahlAnLeiste();
     // Die Hülle sitzt an der Dicke – ein dickerer Strich braucht mehr Platz
     zeichneHuelle();
     stelleLeiste();
+    return true;
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -1083,6 +1162,35 @@
     return true;
   }
 
+  /* Was zur Auswahl gehört und sie deshalb nicht aufhebt: ihre Hülle,
+     ihre Leiste, das Farbrad – und die Werkzeugleiste samt ihren
+     Aufklappern, denn dort lässt sich die Auswahl jetzt auch färben
+     (ui/toolbar.js). Vorher hob ein Druck auf die Werkzeugleiste die
+     Auswahl auf, bevor die Farbe ankam. */
+  const GEHOERT_ZUR_STRICHAUSWAHL = '.ink-sel, .ink-sel-bar, #custom-color-pop, .toolbar, .tool-pop';
+
+  /* ══════════════════════════════════════════════════════════════════
+     MIT DER HAND WOANDERS HIN = FERTIG
+
+     >>> Gemeldet: „wenn ich mit dem Stift etwas auswähle und dann mit
+     der Hand woanders hingehe, sollte die Auswahl weggehen" <<<
+     Auf dem Zeiger tat sie das (unten, ANFASSEN). Eine Schlinge entsteht
+     aber mit dem Stift, also auf einem Zeichenwerkzeug – und dort
+     schaute niemand hin, wenn ein Finger aufsetzte. Die Hülle blieb
+     stehen, bis wieder gezeichnet wurde.
+
+     Aber nicht, solange der Stift da ist: dann ist es der Handballen,
+     der beim Verschieben aufliegt, und der soll die Auswahl nicht
+     wegnehmen, die der Stift gerade anfasst (core/state.js).
+     ══════════════════════════════════════════════════════════════════ */
+  document.addEventListener('pointerdown', e => {
+    if (!_sel || e.pointerType !== 'touch' || S.mode === 'cursor') return;
+    if (e.target.closest && e.target.closest(GEHOERT_ZUR_STRICHAUSWAHL)) return;
+    if (typeof stiftInDerNaehe === 'function' && stiftInDerNaehe()) return;
+    abwaehlen();
+    versteckeLeiste();
+  }, true);
+
   /* ══════════════════════════════════════════════════════════════════
      ANFASSEN
 
@@ -1100,8 +1208,11 @@
        gedrückter Schafttaste hiess das: radieren ging überall, nur nicht
        dort, wo wirklich etwas steht. */
     if (e.pointerType === 'pen') return;
+    /* Der Handballen, waehrend der Stift die Auswahl verschiebt, ist
+       kein Wegtippen (core/state.js) */
+    if (e.pointerType === 'touch' && typeof stiftInDerNaehe === 'function' && stiftInDerNaehe()) return;
     // Innerhalb der eigenen Bedienteile nichts tun
-    if (e.target.closest('.ink-sel, .ink-sel-bar, .obj-wrap, .j-table-bar')) return;
+    if (e.target.closest('.obj-wrap, .j-table-bar, ' + GEHOERT_ZUR_STRICHAUSWAHL)) return;
 
     const pageEl = e.target.closest && e.target.closest('.j-page');
     if (!pageEl) { abwaehlen(); versteckeLeiste(); return; }
@@ -1156,6 +1267,9 @@
 
   /* ── Global erreichbar ───────────────────────────────────────────── */
   window.deselectStroke = function () { abwaehlen(); versteckeLeiste(); };
+  // Für die Werkzeugleiste: Farbe und Stärke wirken auch auf die Auswahl
+  window.faerbeStrichAuswahl = faerbeAuswahl;
+  window.setzeStrichAuswahlDicke = setzeDicke;
   window.versucheLasso = versucheLasso;
   window.waehleEingekreiste = waehleEingekreiste;
   window.waehleStriche = waehleStriche;

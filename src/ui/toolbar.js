@@ -391,8 +391,54 @@ QA('.pen-sw[data-pcolor]').forEach(sw => {
     else if (S.mode === 'pen2') S.pen2.color = c;
     else if (S.mode === 'hl') S.hl.color = c;
     updatePenUI();
+    // Liegt eine Auswahl, bekommt sie die Farbe mit (canvas/strokeSelect.js)
+    if (typeof window.faerbeStrichAuswahl === 'function' && window.faerbeStrichAuswahl(c, true)) {
+      QA('.pen-sw[data-pcolor]').forEach(b => b.classList.toggle('active', b === sw));
+    }
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   GEZEICHNETES AUSGEWÄHLT: DIE LEISTE BIETET FARBE UND STÄRKE AN
+
+   >>> Gemeldet: „man sollte bei Gemaltem die Farbe ändern können – oben
+   in der Leiste und in der Leiste an der Auswahl" <<<
+   Auf dem Stift standen die Farben schon da, wirkten aber nur auf den
+   NÄCHSTEN Strich. Jetzt färben sie eine liegende Auswahl mit um.
+
+   Auf dem Zeiger fehlten sie ganz – dort steht das Textformat. Solange
+   Gezeichnetes ausgewählt ist, kommen die Stiftfarben dazu und gehen mit
+   der Auswahl wieder. canvas/strokeSelect.js meldet jeden Wechsel.
+   ══════════════════════════════════════════════════════════════════════ */
+let _stiftWahlFuerAuswahl = false;
+
+window.zeigeStiftWahlFuerAuswahl = function (an, farbe, dick) {
+  const opts = E('pen-opts');
+  if (!opts) return;
+  const wechsel = _stiftWahlFuerAuswahl !== !!an;
+  _stiftWahlFuerAuswahl = !!an;
+  if (S.mode === 'cursor') {
+    opts.style.display = an ? 'flex' : 'none';
+    if (wechsel && typeof window.updateToolbarOverflow === 'function') window.updateToolbarOverflow();
+  }
+  if (!an) {
+    // Auf dem Stift wieder zeigen, womit er malt
+    if (S.mode !== 'cursor') updatePenUI();
+    return;
+  }
+  const f = String(farbe || '').toLowerCase();
+  let passt = false;
+  QA('.pen-sw[data-pcolor]').forEach(sw => {
+    const ja = sw.dataset.pcolor.toLowerCase() === f;
+    sw.classList.toggle('active', ja);
+    if (ja) passt = true;
+  });
+  E('pen-color-ring')?.classList.toggle('active', !passt);
+  const punkt = E('pen-fold-dot');
+  if (punkt && farbe) punkt.style.background = farbe;
+  QA('#pen-sz-row .sz-btn').forEach(b =>
+    b.classList.toggle('active', dick != null && PEN_SIZES[+b.dataset.sz] === dick));
+};
 
 function updatePenUI() {
   const m = S.mode, pen = m === 'pen1' ? S.pen1 : m === 'pen2' ? S.pen2 : m === 'hl' ? S.hl : null;
@@ -714,8 +760,9 @@ function farbeUnterMarke() {
  *
  * @param {string} color
  * @param {boolean} applyToSelection ob der markierte Text eingefärbt wird
+ * @param {boolean} [endgueltig] ob die Wahl abgeschlossen ist (ein Rückgängig-Schritt)
  */
-function syncGlobalCustomColor(color, applyToSelection) {
+function syncGlobalCustomColor(color, applyToSelection, endgueltig) {
   const c = normalizeHexColor(color);
   if (!c) return;
 
@@ -727,9 +774,17 @@ function syncGlobalCustomColor(color, applyToSelection) {
     E('txt-custom-ring').classList.add('active');
     QA('.pen-sw[data-tcolor]').forEach(sw => sw.classList.remove('active'));
   } else {
-    const stift = activePenState();
-    stift.customColor = c;
-    stift.color = c;
+    // Eine liegende Auswahl färbt sich mit (canvas/strokeSelect.js)
+    const auswahl = typeof window.faerbeStrichAuswahl === 'function'
+      && window.faerbeStrichAuswahl(c, !!endgueltig);
+    /* Auf dem Zeiger gibt es keinen Stift, dem die Farbe gehört –
+       activePenState() fiele dort auf Stift 1 zurück, und der hätte sie
+       dann still mitbekommen. */
+    if (!(auswahl && S.mode === 'cursor')) {
+      const stift = activePenState();
+      stift.customColor = c;
+      stift.color = c;
+    }
     QA('.pen-sw[data-pcolor]').forEach(sw => sw.classList.remove('active'));
   }
 
@@ -811,7 +866,7 @@ function applyCustomColorValue(color, commitHistory) {
   if (_customColorCallback) {
     _customColorCallback(c, commitHistory);
   } else if (_customColorTarget === 'pen' || _customColorTarget === 'text') {
-    syncGlobalCustomColor(c, _customColorTarget === 'text');
+    syncGlobalCustomColor(c, _customColorTarget === 'text', commitHistory);
   } else {
     return;   // Fenster war fuer etwas anderes offen und ist schon zu
   }
@@ -1108,6 +1163,10 @@ E('custom-color-pop-close').addEventListener('click', e => {
 });
 
 QA('#pen-sz-row .sz-btn').forEach(btn => { btn.addEventListener('click', () => { const i = +btn.dataset.sz; if (S.mode === 'pen1') S.pen1.szIdx = i; else if (S.mode === 'pen2') S.pen2.szIdx = i; else if (S.mode === 'hl') S.hl.szIdx = i; QA('#pen-sz-row .sz-btn').forEach(b => b.classList.toggle('active', +b.dataset.sz === i)); }); });
+// Eine liegende Auswahl bekommt die Stärke mit (canvas/strokeSelect.js)
+QA('#pen-sz-row .sz-btn').forEach(btn => btn.addEventListener('click', () => {
+  if (typeof window.setzeStrichAuswahlDicke === 'function') window.setzeStrichAuswahlDicke(PEN_SIZES[+btn.dataset.sz]);
+}));
 QA('[data-eraser]').forEach(btn => { btn.addEventListener('click', () => { S.eraser.type = btn.dataset.eraser; QA('[data-eraser]').forEach(b => b.classList.remove('active')); btn.classList.add('active'); updateCursor(); }); });
 QA('#er-sz-row .sz-btn').forEach(btn => { btn.addEventListener('click', () => { S.eraser.szIdx = +btn.dataset.esz; QA('#er-sz-row .sz-btn').forEach(b => b.classList.toggle('active', +b.dataset.esz === S.eraser.szIdx)); updateCursor(); }); });
 
@@ -1718,6 +1777,8 @@ function switchMode(mode) {
   E('pen-opts').style.display = isPen ? 'flex' : 'none';
   E('eraser-opts').style.display = mode === 'eraser' ? 'flex' : 'none';
   E('text-opts').style.display = mode === 'cursor' ? 'flex' : 'none';
+  // Liegt noch Gezeichnetes ausgewählt, bleiben seine Farben stehen (oben)
+  if (mode === 'cursor' && _stiftWahlFuerAuswahl) E('pen-opts').style.display = 'flex';
   /* Das Formen-Fenster hing hier am Werkzeugwechsel, solange die Formen
      ein Werkzeug waren. Es hängt jetzt an seinem eigenen Knopf beim
      Einfügen. Zumachen gehört trotzdem hierher: es liegt über der

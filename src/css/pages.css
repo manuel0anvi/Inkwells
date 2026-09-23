@@ -1481,6 +1481,36 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   color: var(--gold)
 }
 
+/* Die Stiftfarben direkt in der Leiste: rund wie die Farbfelder oben in
+   der Werkzeugleiste, damit man sie als dieselben wiedererkennt. Das
+   Farbrad dahinter traegt den bunten Ring. */
+.ink-sel-feld .ink-sel-farbe {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%
+}
+
+.ink-sel-rad .ink-sel-farbe {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--sc),
+              0 0 0 4px transparent;
+  outline: 2px solid transparent;
+  background-clip: padding-box;
+  position: relative
+}
+
+.ink-sel-rad .ink-sel-farbe::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(#e04040, #e0c040, #40c060, #40a0e0, #8050d0, #e04040);
+  -webkit-mask: radial-gradient(circle, transparent 7px, #000 7.5px);
+  mask: radial-gradient(circle, transparent 7px, #000 7.5px)
+}
+
 /* Trennt das Aussehen vom Verdoppeln und Loeschen – das eine aendert
    den Strich, das andere seine Zahl. */
 .ink-sel-trenner {
