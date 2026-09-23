@@ -3,7 +3,24 @@
 /* ── WINDOW CONTROLS ── */
 E('btn-min').addEventListener('click', () => window.api?.minimize()); 
 E('btn-max').addEventListener('click', () => window.api?.maximize()); 
-E('btn-close').addEventListener('click', () => window.api?.close()); 
+E('btn-close').addEventListener('click', () => window.api?.close());
+
+/* Ein Quadrat, solange das Fenster nicht maximiert ist, zwei versetzte,
+   wenn es maximiert ist. Der Hauptprozess meldet jeden Wechsel, auch den
+   über Windows selbst (Doppelklick, Snap). */
+function zeigeFensterzustand(maximiert) {
+  const knopf = E('btn-max');
+  if (!knopf) return;
+  knopf.classList.toggle('maximiert', maximiert);
+  const titel = maximiert
+    ? ((typeof t === 'function' && t('windowRestore')) || 'Verkleinern')
+    : ((typeof t === 'function' && t('windowMaximize')) || 'Maximieren');
+  knopf.title = titel;
+  knopf.setAttribute('aria-label', titel);
+}
+// Das Fenster startet maximiert (main.js) – bis zur ersten Meldung gilt das
+zeigeFensterzustand(true);
+window.api?.onMaximizedChange?.(zeigeFensterzustand);
 
 E('btn-home').addEventListener('click', async () => { 
   // Sync first to ensure we capture the latest editor edits before check/save

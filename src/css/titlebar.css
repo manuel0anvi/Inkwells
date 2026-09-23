@@ -101,6 +101,16 @@
   color: #fff
 }
 
+/* Maximieren: ein Quadrat. Maximiert: zwei versetzte (ui/titlebar.js). */
+.wbtn .wbtn-restore-icon,
+.wbtn.maximiert .wbtn-max-icon {
+  display: none
+}
+
+.wbtn.maximiert .wbtn-restore-icon {
+  display: block
+}
+
 .titlebar-settings-btn {
   width: 34px;
   height: 28px;

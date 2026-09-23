@@ -140,7 +140,17 @@
     </button>
     <div class="window-controls-divider"></div>
     <button class="wbtn" id="btn-min">–</button>
-    <button class="wbtn" id="btn-max">□</button>
+    <!-- Ein Quadrat zum Maximieren, zwei versetzte zum Wiederherstellen –
+         wie bei jedem Windows-Fenster. Welches gilt, setzt ui/titlebar.js. -->
+    <button class="wbtn" id="btn-max">
+      <svg class="wbtn-max-icon" width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.1">
+        <rect x="1" y="1" width="9" height="9" rx="1"/>
+      </svg>
+      <svg class="wbtn-restore-icon" width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.1">
+        <rect x="1" y="3" width="7" height="7" rx="1"/>
+        <path d="M3 3V2a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H8"/>
+      </svg>
+    </button>
     <button class="wbtn x" id="btn-close">✕</button>
   </div>
 </div>

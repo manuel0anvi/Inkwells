@@ -709,11 +709,36 @@ function createWindow() {
     });
   });
 
-  // Start maximized/fullscreen
-  win.maximize();
+  /* ══ IMMER MAXIMIERT STARTEN ═════════════════════════════════════
+     Hier stand win.maximize() gleich nach dem Anlegen, also an einem
+     noch UNSICHTBAREN Fenster. Unter Windows zeigt Electron es dabei
+     schon an – und das show() aus ready-to-show traf dann ein Fenster,
+     dessen Zustand je nach Zeitpunkt noch nicht als maximiert galt. Es
+     ging dann in der normalen Groesse auf, nicht jedes Mal, aber oft
+     genug, um aufzufallen.
 
-  // Show only when fully loaded (prevents white/transparent flash)
-  win.once('ready-to-show', () => win.show());
+     Jetzt geschieht beides an derselben Stelle, wenn die Seite steht:
+     maximieren, zeigen, und falls das System es doch zurueckgenommen
+     hat, noch einmal nachfassen. */
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed()) return;
+    win.maximize();
+    if (!win.isVisible()) win.show();
+    if (!win.isMaximized()) win.maximize();
+    meldeFensterzustand();
+  });
+
+  /* Der Knopf in der eigenen Titelleiste zeigt ein Quadrat oder zwei
+     (ui/titlebar.js). Er muss es auch erfahren, wenn das Fenster ueber
+     Windows selbst maximiert wird – Doppelklick, Snap, Win+Pfeil. */
+  const meldeFensterzustand = () => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('fenster-maximiert', win.isMaximized());
+  };
+  win.on('maximize', meldeFensterzustand);
+  win.on('unmaximize', meldeFensterzustand);
+  win.on('restore', meldeFensterzustand);
+  win.webContents.on('did-finish-load', meldeFensterzustand);
 
   // Log renderer console to terminal
   win.webContents.on('console-message', (event, level, message, line, sourceId) => {

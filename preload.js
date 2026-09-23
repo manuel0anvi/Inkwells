@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   minimize:  ()  => ipcRenderer.send('win-min'),
   maximize:  ()  => ipcRenderer.send('win-max'),
+  // Maximiert oder nicht – für das Symbol am Knopf (ui/titlebar.js)
+  onMaximizedChange: (cb) => ipcRenderer.on('fenster-maximiert', (e, an) => cb(!!an)),
   close:     ()  => ipcRenderer.send('win-close'),
   pickFiles: ()  => ipcRenderer.invoke('pick-files'),
   // Eine .docx oder .pdf, aus der ein neues Heft wird (ui/homeGrid.js)
