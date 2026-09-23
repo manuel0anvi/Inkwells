@@ -85,6 +85,9 @@
 .viewer-wrap {
   padding: 100px 20px 40px;
   min-height: 100vh;
+  /* Der Hintergrund der klebenden Leiste ist 100vw breit – nicht mehr
+     als das Fenster, aber mit Bildlaufleiste ein paar Pixel darüber */
+  overflow-x: clip;
 }
 /* Der Titel gehoert in die MITTE der Seite, nicht in die Mitte des
    Platzes, der zwischen den Knoepfen uebrigbleibt.
@@ -105,6 +108,38 @@
   max-width: 1180px;
   margin: 0 auto 24px;
   gap: 12px;
+}
+
+/* ══ DIE LEISTE BLEIBT OBEN ════════════════════════════════════════════
+   >>> Gemeldet: „die Leiste mit Exportieren, Freigeben, Titel und dem
+   Knopf zum Rausgehen soll oben bleiben, wenn man runterscrollt“ <<<
+   Sie rollte mit dem Heft weg – wer auf Seite 12 exportieren wollte,
+   musste erst den ganzen Weg zurück. Jetzt klebt sie unter der
+   Navigation, am Rechner wie auf dem Handy. Die Höhe der Navigation
+   misst js/viewer.js; der Hintergrund reicht über die ganze Breite,
+   damit die Seiten beim Rollen nicht neben ihr hervorschauen.
+   Dasselbe gilt für den Kopf der Freigabe-Seite (s/). */
+.viewer-bar,
+.share-head {
+  position: sticky;
+  top: var(--nav-hoehe, 64px);
+  z-index: 90;
+  padding: 10px 0;
+}
+
+.viewer-bar::before,
+.share-head::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+  z-index: -1;
+  background: rgba(12, 14, 24, 0.97);
+  backdrop-filter: blur(8px);
+  border-bottom: 0.5px solid var(--navy-border);
 }
 .viewer-bar #viewer-back {
   width: 32px;
@@ -377,6 +412,17 @@
   .web-dialog-actions .btn-m { flex: 1; text-align: center; }
 }
 
+/* Die Handschrift als Vektor für den Druck (js/export-ui.js). Auf dem
+   Bildschirm bleibt die Zeichenfläche, und das SVG ist unsichtbar. */
+.j-ink-svg {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1100;
+  pointer-events: none
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    DRUCK / „ALS PDF SPEICHERN"
    Beim Drucken bleibt nur die Seitenansicht übrig. Die Seiten sind
@@ -398,6 +444,14 @@
      Masse bekommen ihre eigene Regel, js/export-ui.js), und eine Seite
      wird nie mehr geteilt. */
   @page { size: 794px 1123px; margin: 0 }
+
+  body.printing .j-ink-svg {
+    display: block !important;
+  }
+
+  body.printing .j-canvas.hat-vektor {
+    display: none !important;
+  }
 
   body.printing .viewer-bar,
   /* Dasselbe auf der Freigabe-Seite (s/): der Hinweis fuer Bearbeiter */

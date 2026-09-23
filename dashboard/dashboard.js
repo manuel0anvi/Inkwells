@@ -70,13 +70,13 @@ function formatBytes(bytes) {
 /* ── Cloud-Zugriff ────────────────────────────────────────────────── */
 
 /** Ruft die Cloud auf – anbieter-unabhängig, mit Token-Erneuerung. */
-async function cloudFetch(url) {
+async function cloudFetch(url, extraHeaders) {
   // Läuft das Token bald ab, wird es vorher still erneuert (siehe common.js).
   let current = await ensureFreshToken();
   if (!current) throw new Error('SESSION_EXPIRED');
 
   let res = await fetch(url, {
-    headers: { Authorization: `Bearer ${current.accessToken}` }
+    headers: { ...(extraHeaders || {}), Authorization: `Bearer ${current.accessToken}` }
   });
 
   // 401 trotz gültig geglaubtem Token: einmal erzwungen erneuern, dann aufgeben
@@ -84,7 +84,7 @@ async function cloudFetch(url) {
     current = await ensureFreshToken(Infinity);
     if (current) {
       res = await fetch(url, {
-        headers: { Authorization: `Bearer ${current.accessToken}` }
+        headers: { ...(extraHeaders || {}), Authorization: `Bearer ${current.accessToken}` }
       });
     }
   }
@@ -203,12 +203,14 @@ async function loadNotebookStubs() {
       seenIds.add(id);
       ownBytes += file.size || 0;
       const seiten = parseInt(file.inkwellsPages, 10);
+      const gemerkt = kartenMerkzettel()[file.id] || {};
       notebooks.push({
         id, name: nameAusDatei(file),
-        // Von der App beim Hochladen mitgeschrieben (nur Google Drive)
-        color: /^#[0-9a-f]{3,8}$/i.test(file.inkwellsColor || '') ? file.inkwellsColor : '',
-        defaultBg: file.inkwellsBg || 'ruled',
-        __seiten: Number.isFinite(seiten) ? seiten : null,
+        // Von der App beim Hochladen mitgeschrieben (nur Google Drive),
+        // sonst vom letzten Besuch gemerkt (kartenMerken)
+        color: istFarbe(file.inkwellsColor) ? file.inkwellsColor : (istFarbe(gemerkt.c) ? gemerkt.c : ''),
+        defaultBg: file.inkwellsBg || gemerkt.b || 'ruled',
+        __seiten: Number.isFinite(seiten) ? seiten : (Number.isFinite(gemerkt.s) ? gemerkt.s : null),
         updatedAt: file.modifiedTime || '', __datei: file, __laden: null, __fertig: false
       });
     }
@@ -217,6 +219,91 @@ async function loadNotebookStubs() {
   // Das zuletzt Geänderte zuerst – OneDrive liefert keine Reihenfolge
   notebooks.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   return { notebooks, folderFound: true, ownBytes };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE FARBE STEHT GANZ VORNE
+
+   >>> Gemeldet: „die Farben kommen erst nach drei bis fünf Sekunden" <<<
+   Die Farbe einer Karte kam erst mit dem ganzen Heft – mehrere Megabyte.
+   Mitgeschrieben wird sie beim Hochladen zwar inzwischen (Google Drive,
+   appProperties), aber nur für Hefte, die seither hochgeladen wurden,
+   und OneDrive kennt so etwas nicht.
+
+   In der Datei selbst steht sie aber ganz vorne: {"id":…,"name":…,
+   "color":…,"defaultBg":…,"pages":[…]}. Für jede Karte ohne Farbe werden
+   deshalb nur die ersten 2 KB geholt. Gesucht wird ausschliesslich VOR
+   "pages" – dahinter trägt jeder Strich ebenfalls eine Farbe.
+
+   Und gemerkt wird, was bekannt ist, im Browser: beim nächsten Besuch
+   stehen Farbe, Papier und Seitenzahl, bevor irgendetwas geladen ist.
+   ══════════════════════════════════════════════════════════════════════ */
+const KARTEN_MERKER = 'inkwells_karten';
+const istFarbe = v => /^#[0-9a-f]{3,8}$/i.test(String(v || ''));
+let _merkzettel = null;
+
+function kartenMerkzettel() {
+  if (_merkzettel) return _merkzettel;
+  try { _merkzettel = JSON.parse(localStorage.getItem(KARTEN_MERKER) || '{}') || {}; }
+  catch (e) { _merkzettel = {}; }
+  return _merkzettel;
+}
+
+function kartenMerken(fileId, werte) {
+  if (!fileId) return;
+  const zettel = kartenMerkzettel();
+  zettel[fileId] = { ...(zettel[fileId] || {}), ...werte };
+  try { localStorage.setItem(KARTEN_MERKER, JSON.stringify(zettel)); } catch (e) { /* voll oder gesperrt – egal */ }
+}
+
+async function leseKopf(eintrag) {
+  const res = await cloudFetch(getActiveProvider().downloadUrl(eintrag.__datei.id), { Range: 'bytes=0-2047' });
+  // Hält sich der Anbieter nicht an Range, wird nach dem ersten Stück abgebrochen
+  let text = '';
+  if (res.body && res.body.getReader) {
+    const leser = res.body.getReader();
+    const dekoder = new TextDecoder();
+    while (text.length < 2048) {
+      const { value, done } = await leser.read();
+      if (done) break;
+      text += dekoder.decode(value, { stream: true });
+    }
+    try { await leser.cancel(); } catch (e) { /* schon zu */ }
+  } else {
+    text = (await res.text()).slice(0, 2048);
+  }
+  const vorn = text.split('"pages"')[0];
+  const farbe = (vorn.match(/"color"\s*:\s*"(#[0-9a-fA-F]{3,8})"/) || [])[1];
+  const papier = (vorn.match(/"defaultBg"\s*:\s*"([a-z]+)"/) || [])[1];
+  return { farbe, papier };
+}
+
+/** Farbe und Papier aller Karten, die noch keine haben – sechs zugleich. */
+function leseAlleKoepfe() {
+  const reihe = allNotebooks.filter(n => !n.__fertig && !n.color && n.__datei);
+  const arbeiter = async () => {
+    while (reihe.length) {
+      const eintrag = reihe.shift();
+      if (eintrag.__fertig) continue;
+      try {
+        const { farbe, papier } = await leseKopf(eintrag);
+        if (eintrag.__fertig || !istFarbe(farbe)) continue;
+        eintrag.color = farbe;
+        if (papier) eintrag.defaultBg = papier;
+        kartenMerken(eintrag.__datei.id, { c: farbe, b: papier || undefined });
+        const karte = kartenJeHeft.get(eintrag);
+        if (karte) {
+          const neu = baueKarte(eintrag);
+          karte.replaceWith(neu);
+          kartenJeHeft.set(eintrag, neu);
+        }
+      } catch (err) {
+        if (err && err.message === 'SESSION_EXPIRED') return;
+        /* Kein Beinbruch: dann kommt die Farbe eben mit dem Heft */
+      }
+    }
+  };
+  return Promise.all(Array.from({ length: 6 }, arbeiter));
 }
 
 /** Den Inhalt eines Hefts holen – einmal, auch wenn mehrere danach fragen. */
@@ -231,6 +318,7 @@ function ladeHeft(eintrag) {
       notebook.id = notebook.id || file.inkwellsId || file.id;
       // Schon vollständig aufbereitet – renderNotebook muss nicht noch einmal kopieren
       Object.defineProperty(notebook, '__fertig', { value: true });
+      kartenMerken(file.id, { c: notebook.color, b: notebook.defaultBg, s: getNotebookPages(notebook).length });
       heftAngekommen(eintrag, notebook);
       return notebook;
     })();
@@ -355,6 +443,7 @@ async function showDashboard() {
     }
 
     renderNotebookCards(notebooks, grid);
+    leseAlleKoepfe();
     ladeAlleImHintergrund();
 
     // Nach einem Neuladen (etwa Sprachwechsel) die laufende Suche mit den

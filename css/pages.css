@@ -1494,33 +1494,17 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 }
 
 /* Die Stiftfarben direkt in der Leiste: rund wie die Farbfelder oben in
-   der Werkzeugleiste, damit man sie als dieselben wiedererkennt. Das
-   Farbrad dahinter traegt den bunten Ring. */
+   der Werkzeugleiste, damit man sie als dieselben wiedererkennt. */
 .ink-sel-feld .ink-sel-farbe {
   width: 16px;
   height: 16px;
   border-radius: 50%
 }
 
-.ink-sel-rad .ink-sel-farbe {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--sc),
-              0 0 0 4px transparent;
-  outline: 2px solid transparent;
-  background-clip: padding-box;
-  position: relative
-}
-
-.ink-sel-rad .ink-sel-farbe::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: 50%;
-  background: conic-gradient(#e04040, #e0c040, #40c060, #40a0e0, #8050d0, #e04040);
-  -webkit-mask: radial-gradient(circle, transparent 7px, #000 7.5px);
-  mask: radial-gradient(circle, transparent 7px, #000 7.5px)
+/* Das Farbrad sitzt ohne Innenabstand im Knopf – es ist selbst 26 px
+   gross, genau wie oben in der Werkzeugleiste (css/toolbar.css) */
+.ink-sel-btn.ink-sel-rad {
+  padding: 0
 }
 
 /* Trennt das Aussehen vom Verdoppeln und Loeschen – das eine aendert
@@ -1636,24 +1620,6 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   border-radius: 50%
 }
 
-/* Nativer Farbwähler in der Formen-Leiste – als Rainbow-Knopf statt
-   sieben einzelner Farbfelder. Derselbe Aufbau wie in der Werkzeugleiste:
-   ein unsichtbarer input über einem sichtbaren Anzeigefeld. */
-.obj-color-picker {
-  width: 15px;
-  height: 15px;
-  border-radius: 4px;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
-  -webkit-appearance: none;
-  appearance: none
-}
-.obj-color-picker::-webkit-color-swatch-wrapper { padding: 0 }
-.obj-color-picker::-webkit-color-swatch { border: none; border-radius: 3px }
-.obj-bar .obj-color-picker::-webkit-color-swatch { border-radius: 3px }
 
 @media (any-pointer: coarse) {
 

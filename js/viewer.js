@@ -160,7 +160,11 @@ function normalizeNotebookRecord(row) {
 
   if (!notebook || typeof notebook !== 'object') return null;
 
-  const normalized = JSON.parse(JSON.stringify(notebook));
+  /* Kommt der Inhalt als notebook_json, ist er gerade erst geladen und
+     gehört niemandem sonst – eine tiefe Kopie wäre bei einem Heft von
+     mehreren Megabyte nur Wartezeit. Ein übergebenes Heft dagegen kann
+     noch woanders in Gebrauch sein und wird kopiert. */
+  const normalized = row && row.notebook_json ? notebook : JSON.parse(JSON.stringify(notebook));
   normalized.name = normalized.name || normalized.title || normalized.notebookName || row?.title || 'Untitled';
   normalized.color = normalized.color || '#c8a96e';
   normalized.defaultBg = normalized.defaultBg || 'ruled';
@@ -611,6 +615,19 @@ function rescaleAllPages() {
 
 window.addEventListener('resize', rescaleAllPages);
 
+/* Die Navigation steht fest oben und ist je nach Breite verschieden hoch
+   (css/style.css). Die Leiste eines offenen Hefts klebt direkt darunter
+   (css/notebook.css, --nav-hoehe) – gemessen statt geraten, sonst läge
+   sie auf dem Handy halb unter der Navigation oder hinge darunter. */
+(function navHoeheMerken() {
+  const nav = document.querySelector('nav');
+  if (!nav) return;
+  const setze = () => document.documentElement.style.setProperty('--nav-hoehe', nav.offsetHeight + 'px');
+  setze();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(setze).observe(nav);
+  else window.addEventListener('resize', setze);
+})();
+
 /* ══════════════════════════════════════════════════════════════════════
    GEZEICHNET WIRD, WAS MAN GLEICH SIEHT
 
@@ -671,7 +688,7 @@ function renderPagesLazy(notebook, pages, container) {
     // Damit eine Suche die Stelle findet, auch bevor die Seite gebaut ist
     scaler.dataset.pgid = page.id;
     const eintrag = {
-      scaler, pageEl: null, width, height,
+      scaler, pageEl: null, width, height, page,
       build: () => buildPageElement(notebook, page, index)
     };
     pageScalers.push(eintrag);

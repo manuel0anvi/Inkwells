@@ -27,6 +27,9 @@
   display: none;
   padding: 100px 20px 60px;
   min-height: 100vh;
+  /* Die klebende Kopfzeile hat einen Hintergrund über die volle Breite
+     (css/notebook.css) – ohne das gäbe er eine waagerechte Bildlaufleiste */
+  overflow-x: clip;
 }
 .share-head {
   max-width: 1180px;
@@ -188,6 +191,7 @@
 <script src="../js/shapes.js"></script>
 <script src="../js/code.js"></script>
 <script src="../js/pdfSeiten.js"></script>
+<script src="../js/inkSvg.js"></script>
 <script src="../js/viewer.js"></script>
 <!-- Export als PDF oder Word – dieselben Bausteine wie im Dashboard -->
 <script src="../js/docx.js"></script>

@@ -191,6 +191,25 @@
        nie zu sehen war. */
     if (typeof renderPagesNow === 'function') renderPagesNow(numbers);
 
+    /* ══ DIE HANDSCHRIFT ALS VEKTOR ═════════════════════════════════
+       Die Zeichenfläche auf dem Bildschirm hat die Auflösung des
+       Bildschirms – auf einem Laptop die einfache. Genau so kam sie ins
+       PDF, und wer hineinzoomte, sah Treppen. Für den Druck bekommt jede
+       Seite deshalb dieselbe Handschrift als SVG (js/inkSvg.js); die
+       Zeichenfläche wird nur beim Drucken ausgeblendet
+       (css/notebook.css). */
+    if (global.InkSvg) {
+      pageScalers.forEach(({ pageEl, page, width, height }, index) => {
+        if (!numbers.has(index + 1) || !pageEl || !page) return;
+        if (pageEl.querySelector('.j-ink-svg')) return;
+        const leinwand = pageEl.querySelector('canvas.j-canvas');
+        const svg = InkSvg.svg(page.inkStrokes, width, height, { klasse: 'j-ink-svg' });
+        if (!leinwand || !svg) return;
+        leinwand.insertAdjacentHTML('afterend', svg);
+        leinwand.classList.add('hat-vektor');
+      });
+    }
+
     // Für den Druck in Originalgröße darstellen und alles ausblenden,
     // was nicht zur Auswahl gehört.
     let lastVisible = null;
