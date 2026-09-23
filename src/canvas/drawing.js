@@ -50,6 +50,30 @@ function applyStrokeStyles(ctx, s) {
   ctx.lineJoin = 'round';
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EINE ZWISCHENFLÄCHE FÜR DEN MARKER, NICHT EINE JE NEUZEICHNEN
+
+   Marker-Striche werden erst deckend auf eine eigene Fläche gemalt und
+   dann mit 38 % aufgelegt – sonst würden sich überlappende Stellen
+   dunkler. Diese Fläche entstand bei JEDEM Neuzeichnen neu, in voller
+   Seitengrösse und Bildpunktdichte: gut fünf Millionen Bildpunkte
+   anlegen und wieder wegwerfen, je Markergruppe, je Strich, je
+   Verschieben. Auf schwachen Geräten war das zu spüren. Jetzt gibt es
+   sie einmal; sie wird nur neu angelegt, wenn sich die Grösse ändert.
+   ══════════════════════════════════════════════════════════════════════ */
+let _markerFlaeche = null;
+
+function markerFlaeche(bw, bh, dpr) {
+  if (!_markerFlaeche) _markerFlaeche = document.createElement('canvas');
+  const off = _markerFlaeche;
+  if (off.width !== bw || off.height !== bh) { off.width = bw; off.height = bh; }
+  const oc = off.getContext('2d');
+  oc.setTransform(1, 0, 0, 1, 0, 0);
+  oc.clearRect(0, 0, bw, bh);
+  oc.scale(dpr, dpr);
+  return { off, oc };
+}
+
 function redrawStrokes(canvas, strokes) {
   const dpr = getCanvasDpr();
   const w = canvas.width / dpr, h = canvas.height / dpr;
@@ -60,7 +84,7 @@ function redrawStrokes(canvas, strokes) {
     if (s.isHL) {
       const hlChunk = [];
       while (i < strokes.length && strokes[i].isHL) { hlChunk.push(strokes[i]); i++; }
-      const off = document.createElement('canvas'); off.width = w * dpr; off.height = h * dpr; const oc = off.getContext('2d'); oc.scale(dpr, dpr);
+      const { off, oc } = markerFlaeche(canvas.width, canvas.height, dpr);
       hlChunk.forEach(hs => {
         applyStrokeStyles(oc, hs);
         oc.globalAlpha = 1;

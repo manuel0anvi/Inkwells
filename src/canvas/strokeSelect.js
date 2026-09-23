@@ -145,15 +145,70 @@
   }
 
   /* ── Nach einer Änderung: neu zeichnen und merken ────────────────── */
-  function notiere(pageId, mitVerlauf) {
-    const info = getPage(pageId);
-    if (!info) return;
+  /* ══════════════════════════════════════════════════════════════════
+     BEIM ZIEHEN NUR ZEICHNEN, ÜBERNOMMEN WIRD AM ENDE
+
+     >>> Gemeldet: „Auswählen, Verschieben, Farbe wählen – alles laggt“ <<<
+     Hier lief bei JEDER Bewegung das volle Programm: die ganze Seite neu
+     zeichnen, alle ihre Striche per JSON tief kopieren und das Heft als
+     geändert melden (Speichern, Live-Abgleich). Ein Stift meldet sich
+     120- bis 240-mal je Sekunde; auf einer vollgeschriebenen Seite ist
+     die Kopie allein rund ein Megabyte – je Meldung.
+
+     Ein Zwischenstand (mitVerlauf = false) wird jetzt nur noch gezeichnet,
+     und zwar einmal je Bild. In die Seite übernommen wird beim Loslassen
+     – und, falls ein Loslassen einmal ausbleibt (das Farbrad wird ohne
+     endgültige Wahl geschlossen), kurz nach der letzten Bewegung. Sonst
+     stünde in S.strokeHistory etwas anderes als in page.inkStrokes, und
+     beim nächsten Laden wäre die Änderung weg.
+     ══════════════════════════════════════════════════════════════════ */
+  const _zuZeichnen = new Set();
+  const _zuUebernehmen = new Set();
+  let _zeichenBild = 0, _nachtragUhr = 0;
+
+  function zeichneSeite(pageId) {
     const pageEl = document.querySelector('[data-pgid="' + CSS.escape(pageId) + '"]');
     const canvas = pageEl && pageEl.querySelector('.j-canvas:not(.live-canvas)');
-    if (canvas) redrawStrokes(canvas, S.strokeHistory[pageId]);
+    if (canvas) redrawStrokes(canvas, S.strokeHistory[pageId] || []);
+  }
+
+  function uebernimm(pageId) {
+    const info = getPage(pageId);
+    if (!info) return;
     info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[pageId] || []));
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-    if (mitVerlauf && typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+  }
+
+  function notiere(pageId, mitVerlauf) {
+    if (!getPage(pageId)) return;
+    if (!mitVerlauf) {
+      _zuZeichnen.add(pageId);
+      _zuUebernehmen.add(pageId);
+      if (!_zeichenBild) {
+        _zeichenBild = requestAnimationFrame(() => {
+          _zeichenBild = 0;
+          for (const id of _zuZeichnen) zeichneSeite(id);
+          _zuZeichnen.clear();
+        });
+      }
+      clearTimeout(_nachtragUhr);
+      _nachtragUhr = setTimeout(() => {
+        for (const id of _zuUebernehmen) uebernimm(id);
+        _zuUebernehmen.clear();
+      }, 400);
+      return;
+    }
+
+    // Endgültig: sofort und vollständig – samt allem, was noch aussteht
+    if (_zeichenBild) { cancelAnimationFrame(_zeichenBild); _zeichenBild = 0; }
+    clearTimeout(_nachtragUhr);
+    _zuZeichnen.add(pageId);
+    _zuUebernehmen.add(pageId);
+    for (const id of _zuZeichnen) zeichneSeite(id);
+    for (const id of _zuUebernehmen) uebernimm(id);
+    _zuZeichnen.clear();
+    _zuUebernehmen.clear();
+    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
   }
 
   /* ══════════════════════════════════════════════════════════════════

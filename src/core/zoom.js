@@ -1,7 +1,28 @@
 'use strict';
 
+/* ══════════════════════════════════════════════════════════════════════
+   WIE FEIN EINE ZEICHENFLÄCHE GERECHNET WIRD
+
+   Bildschirmdichte mal Zoom – so fein, wie man hinsehen kann. Dazu eine
+   Untergrenze, damit die Linien auch auf einem einfachen Bildschirm
+   weich geglättet sind, und eine Obergrenze gegen den Speicher.
+
+   >>> Gemeldet: „auf manchen Geräten laggt alles“ <<<
+   Die Grenzen standen bei 2,5 und 6. Eine Seite ist bei 6 knapp 4800 mal
+   6700 Bildpunkte, gut 32 Millionen – 128 MB je Fläche, und geladen sind
+   immer mehrere (core/pageCanvas.js). Auf einem Gerät mit geteiltem
+   Grafikspeicher ist das der Punkt, an dem nicht mehr nur das Zeichnen
+   stockt, sondern alles. Die Untergrenze 2,5 traf ausgerechnet die
+   schwächeren Geräte: bei Bildschirmdichte 1 bis 1,5 rechnete jede Seite
+   bis zum Vierfachen dessen, was der Schirm zeigen kann.
+
+   Jetzt 2 und 5. Auf einem einfachen Bildschirm ist 2 immer noch doppelt
+   so fein wie nötig, und ab Dichte 2 (fast jedes Tablet) ändert die
+   Untergrenze ohnehin nichts. Die Obergrenze greift erst ab gut 200 %
+   Zoom auf einem hochauflösenden Schirm.
+   ══════════════════════════════════════════════════════════════════════ */
 function getCanvasDpr() {
-  return Math.max(2.5, Math.min(6, CFG.DPR * Math.max(1, getZoom())));
+  return Math.max(2, Math.min(5, CFG.DPR * Math.max(1, getZoom())));
 }
 
 /* ══ ZOOM SYSTEM ═══════════════════════════════════════════
