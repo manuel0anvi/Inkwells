@@ -2608,7 +2608,12 @@ ${formelStil}
   .sh { padding: 6mm 18mm 3mm; font-size: 17pt; font-style: italic; color: #8a6030;
         border-bottom: 1px solid #d4c8b0; page-break-after: avoid }
 
-  .pg { position: relative; overflow: hidden; page-break-after: always; break-after: page }
+  /* Eine Seite wird nie geteilt. Chromium rundet das Blatt auf 1122,56 px,
+     die Seite ist 1123 – ohne diese Zeile darf der Rest auf ein eigenes
+     Blatt rutschen. Auf der Website ist genau das passiert (dort als leere
+     Seite zwischen zwei Seiten, website/css/notebook.css). */
+  .pg { position: relative; overflow: hidden; page-break-after: always; break-after: page;
+        page-break-inside: avoid; break-inside: avoid }
   .pg:last-child { page-break-after: auto }
 
   .pg.bg-ruled, .pg.bg-grid, .pg.bg-dots { background: #faf7f0 }

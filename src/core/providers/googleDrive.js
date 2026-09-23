@@ -332,7 +332,13 @@ const GoogleDriveProvider = {
       appProperties: {
         inkwellsId: notebook.id,
         inkwellsName: String(notebook.name || ''),
-        inkwellsUpdatedAt: notebook.updatedAt || ''
+        inkwellsUpdatedAt: notebook.updatedAt || '',
+        /* Fuer die Uebersicht der Website: sie zeigt die Karte schon aus der
+           Dateiliste, bevor das Heft selbst heruntergeladen ist – mit Farbe,
+           Papier und Seitenzahl (website/dashboard/dashboard.js). */
+        inkwellsColor: String(notebook.color || '').slice(0, 16),
+        inkwellsBg: String(notebook.defaultBg || '').slice(0, 16),
+        inkwellsPages: String(Array.isArray(notebook.pages) ? notebook.pages.length : 0)
       }
     };
     if (!existingFileId) metadata.parents = [folderId];
