@@ -377,9 +377,18 @@
   pointer-events: none
 }
 
-/* Der Farbwähler-Ring am Stift zeigt einen Regenbogen – so erkennt man
-   ihn auf den ersten Blick als das, was er ist: eine Farbauswahl. */
-#pen-color-ring .color-dot {
+/* ══ DAS FARBRAD: EIN SYMBOL FÜR „ALLE FARBEN" ═════════════════════════
+   Ein Ring mit einem Regenbogen darin – so erkennt man ihn auf den ersten
+   Blick als das, was er ist: der Weg zu allen Farben, nicht eine davon.
+
+   Es gab ihn in vier Fassungen: oben am Stift so, in der Textfarbe als
+   volle Scheibe, bei Heft und Abschnitt in anderem Mass, und an der
+   Auswahl von Gezeichnetem als bunter Rand um die aktuelle Farbe.
+   Gemeldet als „überall ein anderes Symbol". Jetzt tragen alle vier
+   denselben Aufbau – .color-ring.farbrad mit einem .color-dot darin –
+   und damit dieselben Regeln. Dass eine eigene Farbe gilt, sagt der
+   goldene Ring (.active), nicht der Knopf selbst: er bleibt bunt. */
+.color-ring.farbrad .color-dot {
   background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red) !important
 }
 

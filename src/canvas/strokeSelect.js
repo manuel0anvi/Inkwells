@@ -724,7 +724,8 @@
     farbKnopf = document.createElement('button');
     farbKnopf.type = 'button';
     farbKnopf.className = 'ink-sel-btn ink-sel-rad';
-    farbKnopf.innerHTML = '<span class="ink-sel-farbe"></span>';
+    // Dasselbe Farbrad wie oben in der Werkzeugleiste (css/toolbar.css)
+    farbKnopf.innerHTML = '<span class="color-ring farbrad"><span class="color-dot"></span></span>';
     farbKnopf.addEventListener('pointerdown', ev => ev.preventDefault());
     farbKnopf.addEventListener('click', ev => { ev.stopPropagation(); farbeWaehlen(); });
     leiste.appendChild(farbKnopf);
@@ -782,8 +783,6 @@
     if (!striche.length) return;
 
     const farbe = striche[0].color || '#1a1510';
-    const feld = farbKnopf.firstElementChild;
-    if (feld) feld.style.background = farbe;
     farbKnopf.title = (typeof t === 'function' && t('customColor')) || 'Eigene Farbe';
     markiereFarbe(farbe);
 
@@ -796,10 +795,18 @@
     }
   }
 
-  /** Das passende Farbfeld hervorheben – keins, wenn es eine eigene ist. */
+  /** Das passende Farbfeld hervorheben – bei einer eigenen das Farbrad,
+      wie oben in der Werkzeugleiste. */
   function markiereFarbe(farbe) {
     const f = String(farbe || '').toLowerCase();
-    for (const b of farbFelder) b.classList.toggle('active', b.dataset.farbe.toLowerCase() === f);
+    let passt = false;
+    for (const b of farbFelder) {
+      const ja = b.dataset.farbe.toLowerCase() === f;
+      b.classList.toggle('active', ja);
+      if (ja) passt = true;
+    }
+    const rad = farbKnopf && farbKnopf.querySelector('.color-ring');
+    if (rad) rad.classList.toggle('active', !passt);
   }
 
   /**
@@ -818,8 +825,6 @@
     const info = getPage(pageId);
     if (!_farbeGesichert && info) { _farbeGesichert = true; pushPageHistory(info.page); }
     for (const st of strokes) st.color = farbe;
-    const feld = farbKnopf && farbKnopf.firstElementChild;
-    if (feld) feld.style.background = farbe;
     markiereFarbe(farbe);
     notiere(pageId, endgueltig);
     if (endgueltig) {

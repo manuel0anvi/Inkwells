@@ -408,7 +408,7 @@
                 <button class="pen-sw" data-pcolor="#c04040" style="background:#c04040" data-i18n-title="colorRed" title="Rot"></button>
                 <button class="pen-sw" data-pcolor="#2e8a46" style="background:#2e8a46" data-i18n-title="colorGreen" title="Grün"></button>
               </div>
-              <div class="color-ring" id="pen-color-ring" data-i18n-title="customColor" title="Eigene Farbe"><div class="color-dot" id="pen-color-dot"></div><input type="color" id="pen-color-in"></div>
+              <div class="color-ring farbrad" id="pen-color-ring" data-i18n-title="customColor" title="Eigene Farbe"><div class="color-dot" id="pen-color-dot"></div><input type="color" id="pen-color-in"></div>
               <div class="v-div"></div>
               <div class="sz-row" id="pen-sz-row">
                 <button class="sz-btn active" data-sz="0">●</button><button class="sz-btn" data-sz="1">●</button>
@@ -472,8 +472,9 @@
                   <button class="pen-sw" data-tcolor="#2a5fa8" style="background:#2a5fa8" data-i18n-title="colorBlue" title="Blau"></button>
                   <button class="pen-sw" data-tcolor="#c04040" style="background:#c04040" data-i18n-title="colorRed" title="Rot"></button>
                   <button class="pen-sw" data-tcolor="#2e8a46" style="background:#2e8a46" data-i18n-title="colorGreen" title="Grün"></button>
-                  <div class="color-ring" style="width:20px;height:20px" id="txt-custom-ring">
-                    <div style="width:100%;height:100%;border-radius:50%;background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red)"></div>
+                  <!-- Dasselbe Farbrad wie am Stift (css/toolbar.css, .farbrad) -->
+                  <div class="color-ring farbrad" id="txt-custom-ring" data-i18n-title="customColor" title="Eigene Farbe">
+                    <div class="color-dot"></div>
                   </div>
                 </div>
               </div>

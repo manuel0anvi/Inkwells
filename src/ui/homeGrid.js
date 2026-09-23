@@ -537,7 +537,9 @@ function zeichneNbPalette() {
   const eigen = document.createElement('button');
   eigen.type = 'button';
   const eigeneFarbe = !!_nbColor && !NB_COLORS.includes(_nbColor);
-  eigen.className = 'cp-swatch cp-eigen' + (eigeneFarbe ? ' active' : '');
+  eigen.className = 'cp-swatch cp-eigen color-ring farbrad' + (eigeneFarbe ? ' active' : '');
+  // Dasselbe Farbrad wie in der Werkzeugleiste (css/toolbar.css)
+  eigen.innerHTML = '<span class="color-dot"></span>';
   eigen.title = t('colorOwn') || 'Eigene Farbe …';
   eigen.addEventListener('pointerdown', e => e.stopPropagation());
   eigen.addEventListener('click', () => {

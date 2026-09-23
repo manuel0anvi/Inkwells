@@ -357,27 +357,24 @@
    gewählt ist: er ist der WEG zur Farbwahl, nicht ihre Anzeige. Dass
    eine eigene Farbe gilt, sagt der goldene Ring – dieselbe Sprache, die
    die Felder daneben sprechen. */
+/* Das Farbrad (css/toolbar.css, .color-ring.farbrad) – im selben Mass
+   wie oben in der Leiste. Die Felder daneben sind 28 px gross, der Rand
+   von einem Pixel hält es mit ihnen auf einer Linie. */
 .cp-swatch.cp-eigen {
+  width: 26px;
+  height: 26px;
+  margin: 1px;
   background: transparent;
-  border-color: var(--sb2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 2px solid var(--sb2);
   padding: 0
 }
 
-.cp-swatch.cp-eigen::before {
-  content: '';
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red)
-}
-
 /* Genauer als .cp-swatch.active, sonst gewänne der Ring oben und die
-   getroffene Wahl wäre nicht zu sehen. */
+   getroffene Wahl wäre nicht zu sehen. Dieselbe Markierung wie
+   .color-ring.active in der Werkzeugleiste. */
 .cp-swatch.cp-eigen.active {
-  border-color: var(--gold)
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold)
 }
 
 /* Section manager modal */
