@@ -64,7 +64,7 @@
   <h1><span>Ink</span>wells</h1>
   <p class="hero-tagline" data-i18n="hero_tagline">Text und Handschrift vereint in einem eleganten, digitalen Notizbuch.</p>
   <div class="hero-actions">
-    <a id="hero-dl" href="#" class="btn-p" download="Inkwells-Setup.exe">
+    <a id="hero-dl" href="https://apps.microsoft.com/detail/9PNJSHB4N4JH" class="btn-p" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span data-i18n="hero_dl">Download für Windows</span>
     </a>
@@ -108,28 +108,31 @@
       <div class="pl-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg></div>
       <div class="pl-info"><strong>Windows</strong><span data-i18n="dl_info">Windows 10 / 11 · x64 · NSIS Installer</span></div>
     </div>
-    <a id="main-dl" href="#" class="btn-p" style="width:100%;justify-content:center;" download="Inkwells-Setup.exe">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span data-i18n="dl_btn">Inkwells-Setup.exe herunterladen</span>
+    <!-- DER STORE ZUERST. Der Installierer ist nicht signiert, und die
+         Intelligente App-Steuerung von Windows 11 blockiert ihn ganz – ohne
+         „Trotzdem ausführen" (main.js, smartAppControlAn). Das Store-Paket
+         signiert Microsoft selbst, es läuft überall. Die .exe bleibt als
+         zweiter Weg darunter: dort gibt es neue Fassungen oft früher. -->
+    <a id="store-dl" href="https://apps.microsoft.com/detail/9PNJSHB4N4JH" class="btn-p" style="width:100%;justify-content:center;" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+      <span data-i18n="dl_store_btn">Im Microsoft Store laden</span>
     </a>
-    <!-- Was diesen Weg vom Store unterscheidet. Der erste Satz haengt am
-         Store-Knopf: ohne ihn gaebe es nichts, wovon man frueher sein
-         koennte, und der Satz zeigte auf etwas, das die Seite gar nicht
-         anbietet. Der zweite gilt immer - der Installierer ist nicht
-         signiert, und wer das vorher weiss, erschrickt nicht. -->
-    <p class="dl-direct-note">
-      <span id="dl-earlier" style="display:none" data-i18n="dl_direct_earlier">Neue Fassungen gibt es hier oft ein paar Tage früher als im Store.</span>
-      <span data-i18n="dl_direct_note">Der Installierer ist nicht signiert – Windows meldet sich deshalb einmal. Über „Weitere Informationen“ → „Trotzdem ausführen“ geht es weiter.</span>
-    </p>
-    <!-- Weg ueber den Microsoft Store. Bleibt verborgen, solange
-         STORE_URL leer ist - ein toter Link waere schlimmer als keiner. -->
-    <div id="store-block" class="dl-store" style="display:none">
+    <p class="dl-store-note" data-i18n="dl_store_note">Ohne Warnmeldung von Windows, Updates kommen von selbst.</p>
+
+    <div class="dl-store">
       <div class="dl-or"><span data-i18n="dl_or">oder</span></div>
-      <a id="store-dl" href="#" class="btn-store" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
-        <span data-i18n="dl_store_btn">Im Microsoft Store laden</span>
+      <a id="main-dl" href="#" class="btn-store" download="Inkwells-Setup.exe">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span data-i18n="dl_btn">Inkwells-Setup.exe herunterladen</span>
       </a>
-      <p class="dl-store-note" data-i18n="dl_store_note">Ohne Warnmeldung von Windows, Updates kommen von selbst.</p>
+      <p class="dl-direct-note">
+        <span data-i18n="dl_direct_earlier">Neue Fassungen gibt es hier oft ein paar Tage früher als im Store.</span>
+        <span data-i18n="dl_direct_note">Der Installierer ist nicht signiert – Windows meldet sich deshalb einmal. Über „Weitere Informationen“ → „Trotzdem ausführen“ geht es weiter.</span>
+      </p>
+      <!-- Verlangt die SignPath Foundation für die kostenlose Signatur. Solange
+           der Antrag läuft, steht „beantragt" dabei – vorher zu behaupten, der
+           Installierer sei signiert, wäre falsch. -->
+      <p class="dl-direct-note" data-i18n="dl_signpath">Kostenlose Code-Signierung über SignPath.io, Zertifikat von der SignPath Foundation – beantragt.</p>
     </div>
 
     <!-- Was als Nächstes kommt. Steht bewusst IN der Download-Box und
@@ -288,28 +291,6 @@
 const GH_USER = 'manuel0anvi';
 const GH_REPO = 'Inkwells';
 
-/* Adresse der Store-Eintragung. Solange hier nichts steht, bleibt der
-   Store-Knopf unsichtbar - ein toter Link waere schlimmer als keiner.
-
-   Ohne Sprach- und Marktangabe (?hl=&gl=): der Store waehlt die Sprache
-   des Besuchers dann selbst, und die Seite gibt es auf Deutsch, Englisch
-   und Italienisch. */
-const STORE_URL = 'https://apps.microsoft.com/detail/9PNJSHB4N4JH';
-
-(function zeigeStore() {
-  if (!STORE_URL) return;
-  const block = document.getElementById('store-block');
-  const link = document.getElementById('store-dl');
-  if (!block || !link) return;
-  link.href = STORE_URL;
-  block.style.display = 'block';
-
-  /* „Hier oft frueher als im Store" ergibt nur einen Sinn, wenn es den
-     Store-Weg auch wirklich gibt. */
-  const frueher = document.getElementById('dl-earlier');
-  if (frueher) frueher.style.display = 'inline';
-})();
-
 let releases = [];
 let pendingDowngrade = null;
 const loginModal = document.getElementById('login-modal');
@@ -441,13 +422,10 @@ async function loadReleases(){
       const asset = releases[0].assets.find(a=>a.name.endsWith('.exe'));
       if(asset){
         const mainDl = document.getElementById('main-dl');
-        const heroDl = document.getElementById('hero-dl');
         
         mainDl.href = asset.browser_download_url;
-        heroDl.href = asset.browser_download_url;
         
         mainDl.setAttribute('download', asset.name);
-        heroDl.setAttribute('download', asset.name);
         
         updateDownloadButtonText();
       }
