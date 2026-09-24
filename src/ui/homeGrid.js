@@ -43,10 +43,12 @@ function renderHomeGrid() {
       + `<button class="nb-card-edit-btn" title="${t('edit')}">⋯</button>`
       + `<div class="nb-card-name">${nb.name}</div>`
       + `<div class="nb-card-bg" style="${BG_STYLE[nb.defaultBg]}"></div>`
-      + `<div class="nb-card-meta"><span>${pageCount} ${pageLabel}</span>`
+      + `<div class="nb-card-meta"><span>${pageCount} ${pageLabel}<span class="nb-card-groesse"></span></span>`
       + `${typeof shareMarkHTML === 'function' ? shareMarkHTML(shareMarkFor(nb), 'nb-card-share') : ''}</div>`
       + `</div>`;
     card.querySelector('.nb-card-edit-btn').addEventListener('click', e => { e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, nb.id); });
+    // Die Dateigrösse erst beim Überfahren – und jedes Mal frisch (zeigeDateigroesse)
+    card.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') zeigeDateigroesse(card, nb.id); });
     card.addEventListener('click', (e) => { if (!_dragState) openNotebook(nb.id); });
     card.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e.clientX, e.clientY, nb.id); });
     
@@ -61,6 +63,38 @@ function renderHomeGrid() {
   placeholder.className = 'nb-drop-placeholder';
   placeholder.id = 'nb-drop-placeholder';
   grid.appendChild(placeholder);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WIE GROSS IST DAS HEFT?
+
+   Steht beim Überfahren einer Karte neben der Seitenzahl – und nur dann:
+   im Alltag ist die Zahl Rauschen, gefragt ist sie, wenn der Platz knapp
+   wird oder ein Heft auffällig langsam lädt. Bis 1000 KB in KB, darüber in
+   MB, ab 1000 MB in GB (1 KB = 1024 Byte, wie im Explorer).
+
+   Gemessen wird die DATEI (main.js, file-size), nicht das Heft im
+   Speicher: nur die Datei geht in die Cloud und belegt Platz. Und jedes
+   Mal neu, denn sie ändert sich mit jedem Speichern.
+   ══════════════════════════════════════════════════════════════════════ */
+function formatDateigroesse(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  const sprache = (typeof _currentLang !== 'undefined' && _currentLang) || 'de';
+  const zahl = (v, stellen) => v.toLocaleString(sprache, { maximumFractionDigits: stellen });
+  const kb = bytes / 1024;
+  if (kb < 1000) return zahl(Math.max(1, Math.round(kb)), 0) + ' KB';
+  const mb = kb / 1024;
+  if (mb < 1000) return zahl(mb, 1) + ' MB';
+  return zahl(mb / 1024, 2) + ' GB';
+}
+
+async function zeigeDateigroesse(card, nbId) {
+  const feld = card.querySelector('.nb-card-groesse');
+  const pfad = typeof FileManager_ !== 'undefined' ? FileManager_.getNotebookFilePath(nbId) : null;
+  if (!feld || !pfad || !window.api?.fileSize) return;
+  const bytes = await window.api.fileSize(pfad).catch(() => null);
+  const text = formatDateigroesse(bytes);
+  feld.textContent = text ? ' · ' + text : '';
 }
 
 // New notebook button click handler

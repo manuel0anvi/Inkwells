@@ -539,6 +539,16 @@ body.read-only .toolbar #btn-doc-share {
   word-break: break-word
 }
 
+/* Die Dateigrösse steht nur beim Überfahren da (ui/homeGrid.js) */
+.nb-card-groesse {
+  opacity: 0;
+  transition: opacity .12s
+}
+
+.nb-card:hover .nb-card-groesse {
+  opacity: 1
+}
+
 .nb-card-meta {
   font-family: 'DM Mono', 'Consolas', 'Courier New', monospace;
   font-size: 9px;

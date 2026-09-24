@@ -2470,6 +2470,13 @@ ipcMain.handle('file-exists', async (_, filePath) => {
   return fs.existsSync(filePath);
 });
 
+// Wie gross ein Heft auf der Platte ist – für die Karte auf der Startseite
+ipcMain.handle('file-size', async (_, filePath) => {
+  if (!pfadErlaubt(filePath)) return null;
+  try { return (await fs.promises.stat(filePath)).size; }
+  catch (err) { return null; }
+});
+
 /* ══════════════════════════════════════════════════════════════════════
    GRIFFBEREIT — UNTERLAGEN NEBEN DEM HEFT
 
