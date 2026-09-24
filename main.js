@@ -4,7 +4,7 @@ const fs   = require('fs');
 const zlib = require('zlib');
 const https = require('https');
 const http = require('http');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 let releaseInfo = null;
@@ -937,9 +937,56 @@ ipcMain.handle('toggle-download-pause', () => {
   return { ok: true, paused: isDownloadPaused };
 });
 
+/* ══════════════════════════════════════════════════════════════════════
+   WINDOWS LÄSST DEN INSTALLIERER NICHT STARTEN
+
+   >>> Gemeldet: „das Update bleibt beim Hochladen in die Cloud hängen,
+   für immer – ich kann nicht aktualisieren" <<<
+   Nachgesehen auf dem Rechner, auf dem es passiert: die INTELLIGENTE
+   APP-STEUERUNG von Windows 11 (Smart App Control) ist eingeschaltet. Sie
+   startet nur signierte oder bekannte Programme, und der Installierer ist
+   nicht signiert – im Protokoll der Codeintegrität steht jeder Versuch
+   als Ereignis 3077 „blockiert". Anders als SmartScreen bietet sie kein
+   „Trotzdem ausführen".
+
+   Die App merkte davon nichts: spawn() meldet den Fehler erst danach, als
+   Ereignis, und niemand hörte zu. Stattdessen lief app.quit() los, und
+   die Anzeige „Cloud wird auf den neuesten Stand gebracht …" blieb
+   stehen.
+
+   Jetzt in drei Stufen:
+     · Ist die Steuerung an, wird gar nicht erst installiert. Die
+       Oberfläche bietet stattdessen den Microsoft Store an – dessen Paket
+       ist von Microsoft signiert und läuft (ui/update.js).
+     · Wird der Installierer trotzdem abgewiesen, wird das gemeldet und die
+       App bleibt offen, statt in der Anzeige des Beendens zu hängen.
+     · Startet er, und hält danach irgendetwas das Beenden auf, geht die
+       App nach zehn Sekunden trotzdem zu – der Installierer wartet sonst
+       auf sie.
+   ══════════════════════════════════════════════════════════════════════ */
+let _sacStand = null;
+
+function smartAppControlAn() {
+  if (process.platform !== 'win32') return false;
+  if (_sacStand !== null) return _sacStand;
+  try {
+    const aus = execFileSync('reg', ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\CI\\Policy',
+      '/v', 'VerifiedAndReputablePolicyState'], { encoding: 'utf8', windowsHide: true, timeout: 3000 });
+    // 0 = aus, 1 = an, 2 = beobachtet nur (blockiert nichts)
+    _sacStand = /VerifiedAndReputablePolicyState\s+REG_DWORD\s+0x1\b/i.test(aus);
+  } catch (err) {
+    _sacStand = false;   // Schlüssel fehlt: ältere Windows-Fassung, keine Steuerung
+  }
+  return _sacStand;
+}
+
+ipcMain.handle('update-blockiert-pruefen', () => smartAppControlAn());
+
 ipcMain.handle('install-and-restart', async () => {
   if (STOREFASSUNG) return { ok: false, err: 'Store-Fassung: Updates kommen ueber den Store' };
   if (!downloadedUpdatePath || !fs.existsSync(downloadedUpdatePath)) return { ok: false, err: 'Update file not found' };
+  // Er würde ohnehin abgewiesen – dann nicht erst beenden (siehe oben)
+  if (smartAppControlAn()) return { ok: false, err: 'SAC' };
   try {
     /* >>> Erst sichern, DANN den Installierer starten <<<
        Hier stand nur allowClose = true und app.quit() – der close-
@@ -956,10 +1003,27 @@ ipcMain.handle('install-and-restart', async () => {
       return { ok: false, err: 'QUIT_CANCELLED' };
     }
 
-    spawn(downloadedUpdatePath, ['/S', '/force-run'], { detached: true, stdio: 'ignore' }).unref();
+    // Erst sehen, ob Windows ihn überhaupt starten lässt
+    const gestartet = await new Promise((fertig) => {
+      let kind;
+      try {
+        kind = spawn(downloadedUpdatePath, ['/S', '/force-run'], { detached: true, stdio: 'ignore' });
+      } catch (err) { fertig({ ok: false, err }); return; }
+      kind.once('spawn', () => { kind.unref(); fertig({ ok: true }); });
+      kind.once('error', (err) => fertig({ ok: false, err }));
+    });
+    if (!gestartet.ok) {
+      console.warn('[Update] Installierer nicht gestartet:', gestartet.err && gestartet.err.message);
+      if (win && !win.isDestroyed()) win.webContents.send('update-blockiert');
+      return { ok: false, err: 'BLOCKED', detail: String((gestartet.err && gestartet.err.message) || gestartet.err) };
+    }
+
     // Ohne dieses Flag würde der close-Handler das Beenden abbrechen
     allowClose = true;
     app.quit();
+    // Hält danach etwas das Beenden auf, geht die App trotzdem – der Installierer wartet auf sie
+    const notausgang = setTimeout(() => app.exit(0), 10000);
+    if (notausgang.unref) notausgang.unref();
     return { ok: true };
   } catch (err) {
     return { ok: false, err: String(err) };

@@ -119,9 +119,27 @@
         }
       }
     } else if (state === 'downloaded') {
-      await window.api.installAndRestart();
+      const r = await window.api.installAndRestart();
+      if (r && !r.ok && (r.err === 'SAC' || r.err === 'BLOCKED')) zeigeStoreWeg();
     }
   });
+
+  /* ══ WENN WINDOWS DEN INSTALLIERER NICHT STARTEN LÄSST ═══════════════
+     Die Intelligente App-Steuerung startet nur signierte Programme, und
+     der Installierer ist nicht signiert (main.js, smartAppControlAn). Der
+     Microsoft Store liefert dieselbe Fassung, von Microsoft signiert – der
+     einzige Weg, der dann offensteht. */
+  const STORE_URL = 'https://apps.microsoft.com/detail/9PNJSHB4N4JH';
+
+  async function zeigeStoreWeg() {
+    // Ist die Anzeige des Beendens schon angegangen, muss sie wieder weg
+    document.getElementById('quitting')?.classList.remove('an');
+    const frage = (typeof t === 'function' && t('updateBlockiert'))
+      || 'Windows lässt das Update nicht starten (Intelligente App-Steuerung). Inkwells im Microsoft Store öffnen?';
+    const ja = typeof showConfirm === 'function' ? await showConfirm(frage) : window.confirm(frage);
+    if (ja && window.api.openExternal) window.api.openExternal(STORE_URL);
+  }
+  window.api.onUpdateBlockiert?.(() => zeigeStoreWeg());
 
   // Wire up events from main
   window.api.onUpdateAvailable?.((info) => {

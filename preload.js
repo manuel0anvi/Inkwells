@@ -58,6 +58,9 @@ contextBridge.exposeInMainWorld('api', {
   downloadUpdate:  () => ipcRenderer.invoke('download-update'),
   toggleDownloadPause: () => ipcRenderer.invoke('toggle-download-pause'),
   installAndRestart: () => ipcRenderer.invoke('install-and-restart'),
+  // Lässt Windows den Installierer nicht starten? (Intelligente App-Steuerung, main.js)
+  updateBlockiertPruefen: () => ipcRenderer.invoke('update-blockiert-pruefen'),
+  onUpdateBlockiert: (cb) => ipcRenderer.on('update-blockiert', () => cb()),
   startOAuthServer: () => ipcRenderer.invoke('start-oauth-server'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (e, info) => cb(info)),
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', (e, info) => cb(info)),
