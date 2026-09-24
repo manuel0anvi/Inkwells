@@ -412,6 +412,18 @@
   .web-dialog-actions .btn-m { flex: 1; text-align: center; }
 }
 
+/* Die Handschrift in der Ansicht – als Vektor, scharf bei jedem Zoom
+   (js/viewer.js). Dieselbe Lage und Staffelung wie die Zeichenfläche
+   (css/pages.css, .j-canvas); den Seitenkopf schneidet das SVG selbst ab. */
+.j-ink-vektor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1100;
+  display: block;
+  pointer-events: none
+}
+
 /* Die Handschrift als Vektor für den Druck (js/export-ui.js). Auf dem
    Bildschirm bleibt die Zeichenfläche, und das SVG ist unsichtbar. */
 .j-ink-svg {

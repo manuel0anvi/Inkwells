@@ -516,7 +516,18 @@ function buildPageElement(notebook, page, index) {
     div.appendChild(bgImgEl);
   }
 
-  // Handschrift
+  /* ══ HANDSCHRIFT ALS VEKTOR ═══════════════════════════════════════
+     >>> Gemeldet: „wenn man hineinzoomt, ist Gezeichnetes gepixelt" <<<
+     Hier stand eine Zeichenfläche in der Auflösung des Bildschirms. Wer
+     auf dem Handy mit zwei Fingern oder am Rechner mit Strg + hineinzoomt,
+     vergrösserte dieses Bild – und sah seine Bildpunkte. Jetzt steht die
+     Handschrift als SVG da (js/inkSvg.js, dieselbe Fassung wie im PDF):
+     jeder Strich ein Pfad, scharf bei jedem Zoom. Die Zeichenfläche
+     bleibt nur der Rückfall, falls das Modul fehlt. */
+  const vektor = (typeof InkSvg !== 'undefined' && InkSvg && (page.inkStrokes || []).length)
+    ? InkSvg.svg(page.inkStrokes, targetW, targetH, { klasse: 'j-ink-vektor' }) : '';
+  if (vektor) div.insertAdjacentHTML('beforeend', vektor);
+
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const canvas = document.createElement('canvas');
   canvas.className = 'j-canvas';
@@ -532,7 +543,7 @@ function buildPageElement(notebook, page, index) {
   ctx.scale(dpr, dpr);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  div.appendChild(canvas);
+  if (!vektor) div.appendChild(canvas);
 
   // Eingefügte Objekte: Bilder, Formen, Formeln, Code-Kästen
   const objLayer = document.createElement('div');
@@ -584,7 +595,7 @@ function buildPageElement(notebook, page, index) {
   div.appendChild(st);
   div.appendChild(textDiv);
 
-  redrawStrokes(canvas, page.inkStrokes, dpr);
+  if (!vektor) redrawStrokes(canvas, page.inkStrokes, dpr);
 
   return { pageEl: div, width: targetW, height: targetH };
 }
