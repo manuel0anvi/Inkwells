@@ -318,6 +318,7 @@ function ladeHeft(eintrag) {
       notebook.id = notebook.id || file.inkwellsId || file.id;
       // Schon vollständig aufbereitet – renderNotebook muss nicht noch einmal kopieren
       Object.defineProperty(notebook, '__fertig', { value: true });
+      Object.defineProperty(notebook, '__dateiGroesse', { value: Number(file.size) || 0 });
       kartenMerken(file.id, { c: notebook.color, b: notebook.defaultBg, s: getNotebookPages(notebook).length });
       heftAngekommen(eintrag, notebook);
       return notebook;
@@ -477,6 +478,21 @@ function renderNotebookCards(notebooks, grid) {
   }
 }
 
+/* Wie gross ist das Heft? Dieselbe Schreibweise wie auf der Karte in der
+   App (src/ui/homeGrid.js): bis 1000 KB in KB, darüber in MB, ab 1000 MB
+   in GB, 1 KB = 1024 Byte. Dort erscheint sie beim Überfahren, hier steht
+   sie immer – auf dem Handy gibt es kein Überfahren. */
+function formatHeftGroesse(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  const sprache = typeof lang === 'string' ? lang : 'de';
+  const zahl = (v, stellen) => v.toLocaleString(sprache, { maximumFractionDigits: stellen });
+  const kb = bytes / 1024;
+  if (kb < 1000) return zahl(Math.max(1, Math.round(kb)), 0) + ' KB';
+  const mb = kb / 1024;
+  if (mb < 1000) return zahl(mb, 1) + ' MB';
+  return zahl(mb / 1024, 2) + ' GB';
+}
+
 function baueKarte(nb) {
   const laedt = !nb.__fertig;
   const pageCount = laedt ? (nb.__seiten || 0) : getNotebookPages(nb).length;
@@ -505,7 +521,10 @@ function baueKarte(nb) {
   const meta = document.createElement('div');
   meta.className = 'nb-card-meta';
   // Solange der Inhalt unterwegs ist, gibt es noch keine Seitenzahl
-  meta.textContent = (laedt && nb.__seiten == null) ? '…' : pageCount + ' ' + pageLabel;
+  const seitenText = (laedt && nb.__seiten == null) ? '…' : pageCount + ' ' + pageLabel;
+  // Die Grösse steht in der Dateiliste – sie ist da, bevor das Heft geladen ist
+  const groesse = formatHeftGroesse(nb.__datei ? nb.__datei.size : nb.__dateiGroesse);
+  meta.textContent = groesse ? seitenText + ' · ' + groesse : seitenText;
 
   body.append(name, bgPreview, meta);
   card.append(spine, body);
