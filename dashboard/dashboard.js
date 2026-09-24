@@ -306,13 +306,176 @@ function leseAlleKoepfe() {
   return Promise.all(Array.from({ length: 6 }, arbeiter));
 }
 
-/** Den Inhalt eines Hefts holen – einmal, auch wenn mehrere danach fragen. */
+/* ══════════════════════════════════════════════════════════════════════
+   EIN HEFT KOMMT STÜCK FÜR STÜCK – UND NUR EINMAL
+
+   >>> Gemeldet: „kann man die Hefte schneller laden – stückweise, je
+   nachdem, welches man öffnet und auf welcher Seite man ist?" <<<
+   Ein Heft ist in der Cloud EINE Datei; eine einzelne Seite daraus lässt
+   sich nicht gezielt holen. Drei Dinge gehen trotzdem:
+
+     · SEITEN, SOBALD SIE DA SIND. Die Seiten stehen in der Datei der
+       Reihe nach. Der Download wird als Strom gelesen, und jede Seite
+       erscheint, sobald ihre schließende Klammer angekommen ist – die
+       ersten nach einem Bruchteil der Ladezeit (seitenZerleger).
+     · NUR EINMAL. Was geladen wurde, bleibt im Browser (IndexedDB), je
+       Konto und Datei. Geholt wird wieder, wenn sich Änderungsdatum oder
+       Größe in der Cloud geändert haben. Beim Abmelden wird geleert.
+     · VORRANG. Solange ein Heft offen ist, lädt der Hintergrund nichts
+       Neues – die Leitung gehört dem Heft, das man ansieht.
+   ══════════════════════════════════════════════════════════════════════ */
+let _heftDb = null;
+
+function heftDb() {
+  if (!_heftDb) {
+    _heftDb = new Promise((ok, fehler) => {
+      if (typeof indexedDB === 'undefined') { fehler(new Error('KEIN_SPEICHER')); return; }
+      const anfrage = indexedDB.open('inkwells-hefte', 1);
+      anfrage.onupgradeneeded = () => anfrage.result.createObjectStore('hefte');
+      anfrage.onsuccess = () => ok(anfrage.result);
+      anfrage.onerror = () => fehler(anfrage.error);
+    });
+    _heftDb.catch(() => { _heftDb = null; });
+  }
+  return _heftDb;
+}
+
+async function speicherTat(modus, tun) {
+  const db = await heftDb();
+  return new Promise((ok, fehler) => {
+    const tx = db.transaction('hefte', modus);
+    const anfrage = tun(tx.objectStore('hefte'));
+    tx.oncomplete = () => ok(anfrage ? anfrage.result : undefined);
+    tx.onerror = () => fehler(tx.error);
+    tx.onabort = () => fehler(tx.error);
+  });
+}
+
+const speicherSchluessel = file => ((getInkwellsSession() || {}).email || '?') + '|' + file.id;
+const speicherStand = file => String(file.modifiedTime || '') + '|' + (Number(file.size) || 0);
+
+async function heftAusSpeicher(file) {
+  try {
+    const e = await speicherTat('readonly', st => st.get(speicherSchluessel(file)));
+    return e && e.stand === speicherStand(file) ? e.text : null;
+  } catch (err) { return null; }
+}
+
+function heftInSpeicher(file, text) {
+  speicherTat('readwrite', st => st.put({ stand: speicherStand(file), text }, speicherSchluessel(file))).catch(() => {});
+}
+
+function heftSpeicherLeeren() {
+  return speicherTat('readwrite', st => st.clear()).catch(() => {});
+}
+
+/**
+ * Liest den Datenstrom eines Hefts und meldet jede Seite, sobald sie
+ * vollständig angekommen ist. Zählt nur Klammern ausserhalb von
+ * Zeichenketten; der Kopf des Hefts (Name, Farbe, Papier) steht vor
+ * "pages" und kommt mit der ersten Seite mit.
+ */
+function seitenZerleger(beiSeite) {
+  let s = '', i = 0, tiefe = 0, inText = false, escape = false;
+  let heftTiefe = 0, heftAnfang = -1, stufe = 0;   // 0 Kopf, 1 Seiten, 2 fertig
+  let seitenTiefe = 0, seitenAnfang = -1, nr = 0, kopf = {};
+
+  function dazu(stueck) {
+    s += stueck;
+    for (; i < s.length && stufe < 2; i++) {
+      const c = s[i];
+      if (inText) {
+        if (escape) escape = false;
+        else if (c === '\\') escape = true;
+        else if (c === '"') inText = false;
+        continue;
+      }
+      if (c === '"') {
+        if (stufe === 0 && heftTiefe && tiefe === heftTiefe && s.startsWith('"pages"', i)) {
+          const rest = s.slice(i + 7, i + 40);
+          const m = rest.match(/^\s*:\s*\[/);
+          if (!m && /^\s*(:\s*)?$/.test(rest)) break;   // der Rest kommt mit dem nächsten Stück
+          if (m) {
+            try { kopf = JSON.parse(s.slice(heftAnfang, i) + '"pages":[]}'); } catch (e) { kopf = {}; }
+            i += 7 + m[0].length - 1;                     // steht jetzt auf "["
+            tiefe++;
+            seitenTiefe = tiefe;
+            stufe = 1;
+            continue;
+          }
+        }
+        inText = true;
+        continue;
+      }
+      if (c === '{' || c === '[') {
+        tiefe++;
+        if (stufe === 0 && c === '{' && !heftTiefe) {
+          // Ältere Dateien stecken das Heft in {"notebooks":[{…}]}
+          heftTiefe = /^\{\s*"notebooks"/.test(s.slice(i, i + 20)) ? 3 : 1;
+        }
+        if (stufe === 0 && c === '{' && tiefe === heftTiefe && heftAnfang < 0) heftAnfang = i;
+        if (stufe === 1 && c === '{' && tiefe === seitenTiefe + 1) seitenAnfang = i;
+        continue;
+      }
+      if (c === '}' || c === ']') {
+        if (stufe === 1 && c === '}' && tiefe === seitenTiefe + 1 && seitenAnfang >= 0) {
+          let seite = null;
+          try { seite = JSON.parse(s.slice(seitenAnfang, i + 1)); } catch (e) { /* dann eben am Ende */ }
+          if (seite) beiSeite(kopf, seite, nr++);
+          seitenAnfang = -1;
+        }
+        if (stufe === 1 && c === ']' && tiefe === seitenTiefe) stufe = 2;
+        tiefe--;
+      }
+    }
+  }
+  return { dazu, text: () => s };
+}
+
+async function ladeHeftText(file, beiSeite) {
+  const gespeichert = await heftAusSpeicher(file);
+  if (gespeichert) return gespeichert;
+
+  const res = await cloudFetch(getActiveProvider().downloadUrl(file.id));
+  let text;
+  if (beiSeite && res.body && res.body.getReader) {
+    const zerleger = seitenZerleger(beiSeite);
+    const leser = res.body.getReader();
+    const dekoder = new TextDecoder();
+    for (;;) {
+      const { value, done } = await leser.read();
+      if (done) break;
+      zerleger.dazu(dekoder.decode(value, { stream: true }));
+    }
+    zerleger.dazu(dekoder.decode());
+    text = zerleger.text();
+  } else {
+    text = await res.text();
+  }
+  heftInSpeicher(file, text);
+  return text;
+}
+
+/**
+ * Den Inhalt eines Hefts holen – einmal, auch wenn mehrere danach fragen.
+ *
+ * Jeder Download meldet seine Seiten, auch der im Hintergrund: meist läuft
+ * er schon, wenn jemand die Karte antippt. Was bis dahin angekommen ist,
+ * steht in __angekommen, und wer öffnet, hängt sich über __seitenHoerer
+ * ein (renderNotebook).
+ */
 function ladeHeft(eintrag) {
   if (eintrag.__fertig) return Promise.resolve(eintrag);
   if (!eintrag.__laden) {
+    eintrag.__angekommen = [];
+    const beiSeite = (kopf, seite, index) => {
+      eintrag.__angekommen.push([kopf, seite, index]);
+      if (eintrag.__seitenHoerer) eintrag.__seitenHoerer(kopf, seite, index);
+    };
     eintrag.__laden = (async () => {
       const file = eintrag.__datei;
-      const json = await cloudJson(getActiveProvider().downloadUrl(file.id));
+      const json = JSON.parse(await ladeHeftText(file, beiSeite));
+      eintrag.__angekommen = null;
       const notebook = normalizeNotebookRecord({ ...file, modifiedTime: file.modifiedTime, notebook_json: json });
       if (!notebook) throw new Error('NICHT_LESBAR');
       notebook.id = notebook.id || file.inkwellsId || file.id;
@@ -377,6 +540,10 @@ function ladeAlleImHintergrund() {
   const reihe = allNotebooks.filter(n => !n.__fertig);
   const arbeiter = async () => {
     while (reihe.length && lauf === _ladeLauf) {
+      // Solange ein Heft offen ist, gehört ihm die Leitung
+      while (webappViewer.style.display !== 'none' && lauf === _ladeLauf) {
+        await new Promise(r => setTimeout(r, 400));
+      }
       const eintrag = reihe.shift();
       try { await ladeHeft(eintrag); } catch (err) { /* steht schon in ladeHeft */ }
     }
@@ -808,12 +975,36 @@ let currentNotebook = null;
    nicht mehr hingestellt. */
 let _oeffnenLauf = 0;
 
-function renderNotebook(nb) {
-  const lauf = ++_oeffnenLauf;
+function renderNotebook(nb, opt = {}) {
+  const lauf = opt.lauf || ++_oeffnenLauf;
   if (nb && nb.__datei && !nb.__fertig) {
     zeigeHeftLaedt(nb);
-    ladeHeft(nb).then(fertig => {
-      if (lauf === _oeffnenLauf && webappViewer.style.display !== 'none') renderNotebook(fertig);
+    /* Die Seiten, die schon angekommen sind, stehen sofort da – im Heft,
+       das dabei Seite für Seite entsteht (seitenZerleger). */
+    let entstehend = null;
+    const beiSeite = (kopf, seite, index) => {
+      if (lauf !== _oeffnenLauf || webappViewer.style.display === 'none') return;
+      if (!entstehend) {
+        entstehend = { ...kopf, pages: [] };
+        entstehend.name = entstehend.name || nb.name;
+        entstehend.color = entstehend.color || nb.color || '#c8a96e';
+        entstehend.defaultBg = entstehend.defaultBg || nb.defaultBg || 'ruled';
+        viewerPages.innerHTML = '';
+        pageScalers.length = 0;
+        renderPagesLazy(entstehend, [], viewerPages);
+      }
+      entstehend.pages.push(seite);
+      seiteAnhaengen(entstehend, seite, index, viewerPages);
+      viewerPageCountTop.textContent = (index + 1) + ' …';
+    };
+    nb.__seitenHoerer = beiSeite;
+    const laden = ladeHeft(nb);
+    // Was der Hintergrund schon geholt hat, steht sofort da
+    for (const [kopf, seite, index] of (nb.__angekommen || [])) beiSeite(kopf, seite, index);
+    laden.then(fertig => {
+      nb.__seitenHoerer = null;
+      if (lauf !== _oeffnenLauf || webappViewer.style.display === 'none') return;
+      renderNotebook(fertig, { lauf, behalteSeiten: !!entstehend });
     }).catch(() => {
       if (lauf !== _oeffnenLauf) return;
       viewerPages.innerHTML = '';
@@ -833,7 +1024,8 @@ function renderNotebook(nb) {
   currentNotebook = notebook;
   webappDashboard.style.display = 'none';
   webappViewer.style.display = 'block';
-  window.scrollTo(0, 0);
+  // Wer schon in den angekommenen Seiten liest, bleibt, wo er ist
+  if (!opt.behalteSeiten) window.scrollTo({ top: 0, behavior: 'instant' });   // ohne Gleiten – sonst baut es unterwegs jede Seite
 
   /* Freigeben darf nur der Besitzer – bei einem fremden Heft ist der Knopf
      also nicht bloß wirkungslos, sondern irreführend. Die Zeile steht hier
@@ -856,12 +1048,15 @@ function renderNotebook(nb) {
   const shareUrl = `${window.location.pathname}?nb=${encodeURIComponent(notebook.id)}`;
   history.replaceState({}, document.title, shareUrl);
 
-  viewerPages.innerHTML = '';
-  pageScalers.length = 0;
-
   const pages = getNotebookPages(notebook);
   const pageLabel = pages.length === 1 ? (t('page') || 'Seite') : (t('pages') || 'Seiten');
   viewerPageCountTop.textContent = `${pages.length} ${pageLabel}`;
+
+  // Die Seiten stehen schon da, während es lud – sie bleiben, wenn sie passen
+  if (opt.behalteSeiten && typeof seitenUebernehmen === 'function' && seitenUebernehmen(notebook, pages)) return;
+
+  viewerPages.innerHTML = '';
+  pageScalers.length = 0;
 
   if (!pages.length) {
     const empty = document.createElement('div');
@@ -882,7 +1077,7 @@ function renderNotebook(nb) {
 function zeigeHeftLaedt(nb) {
   webappDashboard.style.display = 'none';
   webappViewer.style.display = 'block';
-  window.scrollTo(0, 0);
+  window.scrollTo({ top: 0, behavior: 'instant' });   // ohne Gleiten – sonst baut es unterwegs jede Seite
   const viewerTitle = document.getElementById('viewer-title');
   viewerTitle.textContent = nb.name || 'Untitled';
   viewerPageCountTop.textContent = '';
@@ -1721,6 +1916,8 @@ function openNotebookFromUrl() {
 }
 
 document.getElementById('logout-btn').addEventListener('click', async () => {
+  // Was im Browser zwischengespeichert war, gehört niemandem mehr an diesem Gerät
+  await heftSpeicherLeeren();
   // Warten, sonst schneidet die Navigation das Abmelden ab – siehe inkwellsLogout()
   await inkwellsLogout();
   session = null;

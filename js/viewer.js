@@ -679,24 +679,49 @@ function renderPagesLazy(notebook, pages, container) {
       }, { rootMargin: '1500px 0px' })
     : null;
 
-  pages.forEach((page, index) => {
-    const width = page.w || CFG.PAGE_W;
-    const height = page.h || CFG.PAGE_H;
-    const scaler = document.createElement('div');
-    scaler.className = 'j-page-scaler';
-    scaler.style.width = '100%';
-    // Damit eine Suche die Stelle findet, auch bevor die Seite gebaut ist
-    scaler.dataset.pgid = page.id;
-    const eintrag = {
-      scaler, pageEl: null, width, height, page,
-      build: () => buildPageElement(notebook, page, index)
-    };
-    pageScalers.push(eintrag);
-    container.appendChild(scaler);
-    if (index < SOFORT_SEITEN || !seitenBeobachter) baueEintrag(eintrag);
-    else seitenBeobachter.observe(scaler);
-  });
+  pages.forEach((page, index) => seiteAnhaengen(notebook, page, index, container));
   requestAnimationFrame(rescaleAllPages);
+}
+
+/**
+ * Eine Seite ans Ende legen – auch während das Heft noch lädt
+ * (dashboard.js, ladeHeft). Eine Seite aus einem PDF wartet dann, bis das
+ * Heft ganz da ist: das PDF selbst steht in der Datei HINTER den Seiten.
+ */
+function seiteAnhaengen(notebook, page, index, container) {
+  const width = page.w || CFG.PAGE_W;
+  const height = page.h || CFG.PAGE_H;
+  const scaler = document.createElement('div');
+  scaler.className = 'j-page-scaler';
+  scaler.style.width = '100%';
+  // Damit eine Suche die Stelle findet, auch bevor die Seite gebaut ist
+  scaler.dataset.pgid = page.id;
+  const eintrag = { scaler, pageEl: null, width, height, page, notebook, wartet: false };
+  eintrag.build = () => buildPageElement(eintrag.notebook, eintrag.page, index);
+  pageScalers.push(eintrag);
+  container.appendChild(scaler);
+  if (page.pdfRef && !page.bgImg && !notebook.pdfs) { eintrag.wartet = true; rescaleOne(eintrag); return; }
+  if (index < SOFORT_SEITEN || !seitenBeobachter) baueEintrag(eintrag);
+  else seitenBeobachter.observe(scaler);
+  rescaleOne(eintrag);
+}
+
+/**
+ * Das vollständige Heft ist da: stimmen die Seiten mit den schon
+ * angehängten überein, bleiben diese stehen und bekommen nur das
+ * vollständige Heft untergeschoben. Sonst false – dann baut der Aufrufer neu.
+ */
+function seitenUebernehmen(notebook, pages) {
+  if (pages.length !== pageScalers.length) return false;
+  if (pages.some((p, k) => String(p.id) !== String(pageScalers[k].page.id))) return false;
+  pageScalers.forEach((eintrag, k) => {
+    eintrag.notebook = notebook;
+    eintrag.page = pages[k];
+    if (!eintrag.wartet) return;
+    eintrag.wartet = false;
+    if (seitenBeobachter) seitenBeobachter.observe(eintrag.scaler); else baueEintrag(eintrag);
+  });
+  return true;
 }
 
 /** Die gewählten (sonst alle) Seiten jetzt bauen – vor dem Drucken. */
