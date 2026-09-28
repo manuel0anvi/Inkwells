@@ -238,9 +238,11 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     /* Ab Stufe 5 steht im Textformat nur noch der eine Knopf – die
        Trennstriche darin hätten nichts mehr zu trennen. */
     bar.classList.toggle('tb-fmt-zu', n >= 5);
+    // Stufe 6: die letzten Pixel (css/toolbar.css)
+    bar.classList.toggle('tb-knapp', n >= 6);
   }
 
-  const HOECHSTE_STUFE = 5;
+  const HOECHSTE_STUFE = 6;
   let geplant = false;
 
   function anpassen() {

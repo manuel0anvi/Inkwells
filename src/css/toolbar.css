@@ -828,6 +828,29 @@
   display: none
 }
 
+/* ── Stufe 6: die letzten Pixel ──────────────────────────────────────
+   Hochkant mit offener Navigation (700 px) reichte auch Stufe 5 nicht –
+   es fehlten gut 20 px, und die Leiste begann zu rollen; was rechts
+   hinausstand, fand niemand (npm run test:touch).
+
+   Weggenommen wird nichts – − und + bleiben ausdrücklich stehen (app.js,
+   ZOOM). Die Trennstriche rücken zusammen, und die Knöpfe für den Finger
+   werden 30 statt 32 px breit. Die Höhe bleibt, und 30 px trifft der
+   Finger noch; ein Knopf, der hinter dem Rand liegt, trifft er nie.
+   Mit der Kennung davor, sonst gewönne die Regel für die offene
+   Navigation (css/responsive.css), die ebenfalls eine trägt. */
+.toolbar.tb-knapp .tb-sep {
+  margin: 0 1px
+}
+
+@media (any-pointer: coarse) {
+  #toolbar.toolbar.tb-knapp.tb-eng .tb-opt,
+  #toolbar.toolbar.tb-knapp.tb-eng .tb-mode,
+  #toolbar.toolbar.tb-knapp.tb-eng .sz-btn {
+    min-width: 30px
+  }
+}
+
 /* ── Das Einfuegen-Menue ──────────────────────────────────────────── */
 .insert-pop {
   position: fixed;
