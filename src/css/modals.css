@@ -2173,7 +2173,7 @@
 /* Steht das Band, ist fuer die Ansichten weniger Platz. Die Marke setzt
    core/conflicts.js beim Ein- und Ausblenden. */
 body.hat-konflikt .view {
-  height: calc(100vh - 36px - var(--konflikt-hoehe));
+  height: calc(var(--app-h, 100vh) - 36px - var(--konflikt-hoehe));
 }
 
 .conflict-bar-dot {

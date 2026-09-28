@@ -3,7 +3,10 @@
 .view {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 36px);
+  /* --app-h ist kleiner als der Schirm, solange die Bildschirmtastatur
+     draussen ist (ui/tastatur.js) - sonst schiebt Chromium die Leisten
+     aus dem Bild. */
+  height: calc(var(--app-h, 100vh) - 36px);
   overflow: hidden
 }
 
