@@ -143,6 +143,10 @@ function getFitZoom() {
 
 function getZoom() { return _wirksam; }
 
+/** Womit ein Bedienteil in der Seite malgenommen wird, damit es auf dem
+ *  Schirm so gross bleibt wie bei 100 % – siehe --zk in _applyZoom(). */
+function bedienMassstab() { return Math.min(2, BASE_ZOOM / (_wirksam || BASE_ZOOM)); }
+
 function setZoom(z) {
   const sc = E('pg-scroll');
   // Gerechnet wird mit dem Zoom, der WIRKLICH gilt – sonst springt die
@@ -212,6 +216,23 @@ function _applyZoom() {
   if (!pw) return;
   pw.style.transform = 'scale(' + z + ')';
   pw.style.transformOrigin = 'top center';
+
+  /* ══════════════════════════════════════════════════════════════════
+     BEDIENTEILE ZOOMEN NICHT MIT
+
+     Griffe, Drehgriff und die Leiste über einem Objekt liegen IN der
+     Seite und wurden deshalb mitskaliert: bei 300 % war ein Eckgriff so
+     gross wie ein Daumennagel und die Leiste halb so breit wie das Blatt.
+     Gemeldet genau so. Ein Bedienteil ist aber kein Teil des Blatts –
+     es soll auf dem Schirm immer gleich gross sein.
+
+     --zk hebt den Zoom wieder auf, bezogen auf die Grundgrösse: bei
+     100 % (BASE_ZOOM) ist er 1, dort bleibt alles, wie es war. Nach
+     oben begrenzt, sonst würde die Leiste beim weiten Herauszoomen
+     breiter als die Seite und am Rand abgeschnitten (css/pages.css).
+     Dieselbe Zahl braucht canvas/objects.js für die Griffe, deshalb
+     steht sie in bedienMassstab(). */
+  pw.style.setProperty('--zk', bedienMassstab().toFixed(4));
 
   /* ══════════════════════════════════════════════════════════════════
      UND WENN ES DOCH BREITER IST, LÄSST ES SICH ERREICHEN

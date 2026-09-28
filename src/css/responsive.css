@@ -112,15 +112,18 @@
     right: -7px
   }
 
+  /* Wie oben in css/pages.css: die Mitte 30 px unter der Kante, und
+     der Abstand schrumpft mit dem Griff */
   .obj-handle.rot {
     width: 32px;
     height: 32px;
-    bottom: -46px;
+    margin-left: -16px;
+    bottom: calc(-16px - 30px * var(--griff-k, 1));
     font-size: 16px
   }
 
   .obj-chrome:has(.obj-bar.below) .obj-handle.rot {
-    top: -46px
+    top: calc(-16px - 30px * var(--griff-k, 1))
   }
 
   /* Mit dem Finger gehören die Knöpfe der Bild-Leiste größer */

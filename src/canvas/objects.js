@@ -214,6 +214,13 @@ window.objektAuswahlNachVerlauf = function () {
   if (neu && typeof neu._waehleObjekt === 'function') neu._waehleObjekt();
 };
 
+/* Griffe und Leiste gleichen den Zoom aus (placeBar). Nach einem
+   Zoomwechsel muss das ausgewählte Ding deshalb neu messen – sonst
+   stimmen Griffgrösse und der Abstand der Leiste zum Blattrand nicht. */
+window.addEventListener('inkwells:zoom', () => {
+  if (_selObj && typeof _selObj._placeBar === 'function') _selObj._placeBar();
+});
+
 /* ══════════════════════════════════════════════════════════════════════
    EIN BILD HINTER DEM TEXT ANKLICKEN
 
@@ -884,31 +891,40 @@ function placeObject(objLayer, obj, page) {
      aneinander. Eine Linie hat keine kleinere Seite, bei ihr zaehlt die
      Laenge. Ab GRIFF_VOLL_AB gilt die volle Groesse, darunter wird
      verkleinert – nie unter die Haelfte, sonst trifft man sie nicht mehr.
-     Um den Zoom muss sich hier niemand kuemmern: Griffe und Objekt liegen
-     in derselben Seite und wachsen gemeinsam. Umgesetzt wird der Wert in
-     css/pages.css (scale: var(--griff-k)).
+
+     >>> Gemessen wird AUF DEM SCHIRM, nicht auf dem Blatt <<<
+     Hier stand, um den Zoom muesse sich niemand kuemmern, weil Griffe
+     und Objekt gemeinsam wachsen. Genau das war das Problem: bei 300 %
+     waren die Griffe riesig, bei 50 % winzig. Jetzt hebt bedienMassstab()
+     (core/zoom.js) den Zoom auf, und die Groesse des Objekts zaehlt so,
+     wie man es gerade sieht – ein kleines Ding, nah herangezoomt, hat
+     wieder volle Griffe. Umgesetzt wird der Wert in css/pages.css
+     (scale: var(--griff-k)).
 
      Aufgerufen aus placeBar(), weil das nach jeder Aenderung an Groesse,
-     Lage und Drehung ohnehin laeuft. */
-  const GRIFF_VOLL_AB = 90;
+     Lage, Drehung und Zoom ohnehin laeuft. */
+  const GRIFF_VOLL_AB = 120;
   const GRIFF_MIN_K = 0.5;
 
   function stelleGriffGroesse() {
+    const zk = typeof bedienMassstab === 'function' ? bedienMassstab() : 1;
     const mass = istLinie
       ? Math.hypot(obj.w || 0, obj.h || 0)
       : Math.min(obj.w || 0, obj.h || 0);
-    const k = Math.max(GRIFF_MIN_K, Math.min(1, mass / GRIFF_VOLL_AB));
-    chrome.style.setProperty('--griff-k', k.toFixed(3));
+    const k = Math.max(GRIFF_MIN_K, Math.min(1, mass / zk / GRIFF_VOLL_AB));
+    chrome.style.setProperty('--griff-k', (k * zk).toFixed(3));
+    return zk;
   }
 
   function placeBar() {
-    stelleGriffGroesse();
+    const zk = stelleGriffGroesse();
     const pw = (page && page.w) || (typeof CFG !== 'undefined' ? CFG.PAGE_W : 794);
-    const bh = bar.offsetHeight || 40;
-    const bw = bar.offsetWidth || 0;
+    // Die Leiste ist um --zk skaliert (css/pages.css) – auf dem Blatt also so gross
+    const bh = (bar.offsetHeight || 40) * zk;
+    const bw = (bar.offsetWidth || 0) * zk;
 
     // Senkrecht: oben, wenn oben Platz ist
-    bar.classList.toggle('below', (obj.y || 0) - bh - 12 < BAR_LUFT);
+    bar.classList.toggle('below', (obj.y || 0) - bh - 12 * zk < BAR_LUFT);
 
     /* Waagerecht: die Mitte der Form, aber nicht über den Rand hinaus.
        Ist die Leiste breiter als das Blatt, bleibt sie mittig – dann ist
@@ -918,9 +934,16 @@ function placeObject(objLayer, obj, page) {
     const rechts = pw - BAR_LUFT - bw / 2;
     const soll = links > rechts ? mitte : Math.max(links, Math.min(rechts, mitte));
 
-    bar.style.transform = 'translateX(calc(-50% + ' + Math.round(soll - mitte) + 'px)) '
-      + 'rotate(' + (-(obj.rot || 0)) + 'deg)';
+    /* Einzeln statt in einem transform: die Eigenschaften wirken in der
+       Folge translate · rotate · scale, und so bleibt die Leiste beim
+       Skalieren um ihre untere Mitte mittig über dem Objekt stehen. In
+       einem transform käme das scale (css/pages.css) erst danach und
+       schöbe sie seitlich weg. */
+    bar.style.translate = 'calc(-50% + ' + Math.round(soll - mitte) + 'px) 0';
+    bar.style.rotate = (-(obj.rot || 0)) + 'deg';
   }
+  // Beim Zoomen misst die Leiste neu – siehe inkwells:zoom unten
+  wrap._placeBar = placeBar;
 
   function turnBy(deg) {
     pushPageHistory(page);
