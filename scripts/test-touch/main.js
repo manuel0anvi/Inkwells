@@ -683,7 +683,16 @@ app.on('ready', async () => {
     abschnitt('Die Abschnitte aufziehen');
     await js(`document.getElementById('side-panel').classList.remove('open')`);
     await new Promise(r => setTimeout(r, 300));
-    const strip = await mitte('.side-strip');
+    /* Den Streifen .side-strip gibt es nicht mehr – der Knopf ist in die
+       Werkzeugzeile gezogen (Commit „Der Navigations-Knopf zieht in die
+       Werkzeugzeile"). Hier stand noch mitte('.side-strip'); das lieferte
+       null, und der ganze Rest dieser Prüfung brach an dieser Stelle ab,
+       ohne dass es als Fehler zählte. Angesetzt wird jetzt dort, wo die
+       Geste heute anfängt: knapp rechts der zugeklappten Leiste
+       (app.js, „Die Abschnitte mit dem Finger aufziehen"). */
+    const strip = await js(`(() => { const p = document.getElementById('side-panel').getBoundingClientRect();
+      const l = document.querySelector('.journal-layout').getBoundingClientRect();
+      return { x: Math.round(p.right + 4), y: Math.round(l.top + 40) }; })()`);
     await ziehe(strip.x, strip.y + 120, strip.x + 140, strip.y + 130);
     pruefe('Nach rechts wischen zieht die Leiste auf',
       (await js(`document.getElementById('side-panel').classList.contains('open')`)) === true,
