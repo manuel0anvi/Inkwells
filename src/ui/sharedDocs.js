@@ -812,9 +812,36 @@
 
     // Nur beim Wechsel melden – der erste Rückruf kommt beim Betreten
     if (now !== was) {
-      toast(now ? t('sharedOwnerOffline') : t('sharedOwnerBack'));
+      meldeBesitzerWechsel(now);
       if (!now) holeStandNach();
     }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WER SELBST OHNE NETZ IST, BEKOMMT DAS GESAGT – UND ZWAR EINMAL
+
+     >>> Gemeldet: „ohne Internet stehen im Dokument ein Haufen
+     Meldungen" <<<
+     Ohne eigene Leitung sieht man den Besitzer nicht mehr, und hier kam
+     dann „Der Besitzer ist nicht mehr da". Das stimmte nicht – weg war
+     man selbst –, und bei einer wackligen Leitung kam es mit jedem
+     Abreissen und Wiederkommen neu, im Wechsel mit „wieder da".
+
+     Jetzt: ohne eigenes Netz der Satz, der die Lage beschreibt. Und
+     innerhalb einer halben Minute wird nicht erneut gemeldet – die
+     Sperre selbst folgt weiter jedem Wechsel, nur das Reden hört auf.
+     ══════════════════════════════════════════════════════════════════ */
+  const BESITZER_RUHE_MS = 30000;
+  let _besitzerGemeldet = 0;
+
+  function meldeBesitzerWechsel(weg) {
+    const selbstOffline = (typeof navigator !== 'undefined' && navigator.onLine === false)
+      || !!(window.CloudSync_ && typeof CloudSync_.binOffline === 'function' && CloudSync_.binOffline());
+    const jetzt = Date.now();
+    if (jetzt - _besitzerGemeldet < BESITZER_RUHE_MS) return;
+    _besitzerGemeldet = jetzt;
+    if (weg) toast(selbstOffline ? t('sharedSelfOffline') : t('sharedOwnerOffline'));
+    else toast(t('sharedOwnerBack'));
   }
 
   /* ══════════════════════════════════════════════════════════════════

@@ -296,7 +296,28 @@ class CloudSyncManager {
     this._refreshPromise = (async () => {
       try {
         const tokens = await this.provider.refreshSession(refreshToken);
-        if (!tokens?.accessToken) return false;
+        if (!tokens?.accessToken) {
+          /* ══════════════════════════════════════════════════════════
+             KEINE ANTWORT IST KEIN NEIN
+
+             >>> Zum dritten Mal gemeldet: „ohne Internet kommt, dass
+             man abgemeldet wurde" <<<
+             Beide Anbieter geben null zurück, wenn der Tausch scheitert,
+             ohne dass SIE nein gesagt hätten – und das ist fast immer die
+             Leitung (core/providers). Nur ein ausdrückliches Nein kommt
+             als needsReauth geworfen. Hier wurde null trotzdem wie ein
+             Urteil behandelt: der Merker „am Netz gescheitert" blieb aus,
+             und _restoreSession und _handleExpiredToken meldeten ab.
+
+             Die Abfrage oben (navigator.onLine) hilft dabei nicht: Windows
+             meldet „online", sobald ein Netz anliegt – im WLAN ohne
+             Internet, im Hotspot ohne Guthaben, beim Start, bevor unsere
+             eigene Prüfung gelaufen ist. Deshalb wird hier wirklich
+             nachgesehen.
+             ══════════════════════════════════════════════════════════ */
+          this._erneuernScheitertAmNetz = !(await this._netzDa());
+          return false;
+        }
 
         const expiry = Date.now() + Math.max(0, tokens.expiresIn - 60) * 1000;
         await Settings.update({
@@ -433,7 +454,17 @@ class CloudSyncManager {
      geloescht (_handleExpiredToken).
      ══════════════════════════════════════════════════════════════════ */
   isAuthenticated() {
-    if (!(Settings.get('cloudAccessToken') && Settings.get('cloudUserId'))) return false;
+    /* Kein Zugriffstoken, aber noch das Refresh-Token: so stand da, wer
+       früher ohne Netz fälschlich abgemeldet wurde (siehe _refreshSession,
+       „Keine Antwort ist kein Nein"). Beim nächsten Durchlauf mit Netz holt
+       _watchSessionExpiry still ein neues Token – bis dahin ist das Konto
+       da, und ohne Netz wird ohnehin nichts gesichert. Wer sich von Hand
+       abmeldet, verliert das Refresh-Token mit, der Anbieter-Widerruf
+       ebenfalls; beide fallen hier also nicht hinein. */
+    if (!Settings.get('cloudAccessToken')) {
+      return !!Settings.get('cloudUserId') && this.sessionIsRenewable() && this.binOffline();
+    }
+    if (!Settings.get('cloudUserId')) return false;
     if (!this.isTokenExpired()) return true;
     /* Ohne Leitung ist ueber die Anmeldung nichts entschieden – siehe
        binOffline(). Sie gilt weiter, gesichert wird ohnehin nichts. */
@@ -464,6 +495,28 @@ class CloudSyncManager {
   binOffline() {
     if (this.isOnline === false) return true;
     return typeof navigator !== 'undefined' && navigator.onLine === false;
+  }
+
+  /**
+   * Ist das Netz WIRKLICH da? Gefragt, bevor irgendjemand abgemeldet wird.
+   *
+   * binOffline() kennt nur den letzten Stand, und der kann veraltet sein:
+   * beim Start ist isOnline vorbelegt, und navigator.onLine sagt nur, ob
+   * überhaupt ein Netz anliegt. Hier wird nachgesehen (main.js,
+   * check-internet). Im Zweifel – die Frage selbst scheitert – gilt: kein
+   * Netz. Lieber einmal zu viel angemeldet bleiben als fälschlich
+   * abgemeldet werden; ein echtes Nein des Anbieters kommt ohnehin.
+   */
+  async _netzDa() {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    if (!(window.api && typeof window.api.checkInternet === 'function')) return !this.binOffline();
+    try {
+      const da = (await window.api.checkInternet()) !== false;
+      if (!da && this.isOnline) { this.isOnline = false; this._notify(); }
+      return da;
+    } catch (e) {
+      return false;
+    }
   }
 
   isTokenExpired() {
@@ -1157,12 +1210,15 @@ class CloudSyncManager {
        gesagt hat – dann hat der Provider needsReauth geworfen und das
        Refresh-Token ist schon weg (siehe _refreshSession).
        ══════════════════════════════════════════════════════════════ */
-    if (this.binOffline() || (this._erneuernScheitertAmNetz && this.sessionIsRenewable())) {
+    if (this.binOffline() || (this._erneuernScheitertAmNetz && this.sessionIsRenewable())
+        || !(await this._netzDa())) {
       console.log('[CloudSync] Token abgelaufen, aber kein Netz – Sitzung bleibt');
       this._meldeOffline();
       this._notify();
       return;
     }
+    // Während des Nachsehens kann jemand anderes schon aufgeräumt haben
+    if (!Settings.get('cloudAccessToken')) return;
 
     console.warn('[CloudSync] Sitzung abgelaufen');
     this._session = null;
@@ -2861,7 +2917,7 @@ class CloudSyncManager {
         console.log('[CloudSync] Erneuern am Netz gescheitert – Anmeldung bleibt bestehen');
         this._session = null;
         return;
-      } else if (this.binOffline()) {
+      } else if (this.binOffline() || !(await this._netzDa())) {
         /* Dasselbe wie im Zweig darueber, nur ohne dass ueberhaupt
            gefragt werden konnte: bei einem Anbieter ohne Refresh-Token
            kommt _refreshSession gar nicht bis zur Netzpruefung, und

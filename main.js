@@ -2319,10 +2319,51 @@ ipcMain.handle('clipboard-image', async () => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════════════════
+   IST DAS INTERNET WIRKLICH DA?
+
+   Hier stand nur net.isOnline(). Das fragt Windows, ob ein Netz ANLIEGT –
+   im WLAN ohne Internet, im Hotspot ohne Guthaben, hinter einer
+   Anmeldeseite heisst das „ja". Auf genau diese Antwort hin wurde die
+   Anmeldung weggeworfen, weil ein gescheitertes Erneuern dann wie ein
+   Nein des Anbieters aussah (src/core/cloudSync.js, _refreshSession).
+
+   Jetzt wird bei beiden Anbietern kurz angeklopft: dieselben Adressen, mit
+   denen Windows und Android selbst ihre Verbindung prüfen. Eine Antwort
+   genügt. Das Ergebnis gilt ein paar Sekunden – mehrere Fragen kurz
+   hintereinander (Start, Erneuern, Abmelde-Prüfung) teilen sich eine.
+   ══════════════════════════════════════════════════════════════════════ */
+/* Eine Anmeldeseite antwortet auf alles mit 200 und ihrer eigenen Seite.
+   Google verlangt deshalb genau 204 – das schickt kein Hotelportal. */
+const NETZ_PROBEN = [
+  { url: 'https://www.google.com/generate_204', passt: r => r.status === 204 },
+  { url: 'https://www.msftconnecttest.com/connecttest.txt', passt: r => r.ok }
+];
+let _netzAntwort = null, _netzZeit = 0;
+
+async function internetDa() {
+  const { net } = require('electron');
+  if (!net.isOnline()) return false;
+  const klopfe = ({ url, passt }) => {
+    const halt = new AbortController();
+    const uhr = setTimeout(() => halt.abort(), 4000);
+    return net.fetch(url, { method: 'HEAD', cache: 'no-store', signal: halt.signal })
+      .then(r => { if (!passt(r)) throw new Error(String(r.status)); return true; })
+      .finally(() => clearTimeout(uhr));
+  };
+  try {
+    return await Promise.any(NETZ_PROBEN.map(klopfe));
+  } catch {
+    return false;
+  }
+}
+
 ipcMain.handle('check-internet', async () => {
   try {
-    const { net } = require('electron');
-    return net.isOnline();
+    if (_netzAntwort && Date.now() - _netzZeit < 5000) return _netzAntwort;
+    _netzZeit = Date.now();
+    _netzAntwort = internetDa();
+    return await _netzAntwort;
   } catch {
     return false;
   }

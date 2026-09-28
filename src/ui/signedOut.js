@@ -75,8 +75,19 @@
        abgefangen; die setzte es beim Start ohne Netz noch (siehe
        core/cloudSync.js, binOffline). */
     if (typeof CloudSync_.binOffline === 'function' && CloudSync_.binOffline()) return;
+    /* binOffline kennt nur, was Windows meldet – im WLAN ohne Internet
+       heisst das „online". Also wirklich nachsehen. */
+    if (typeof CloudSync_._netzDa === 'function' && !(await CloudSync_._netzDa())) return;
 
     if (!CloudSync_.sessionWasLost()) return;
+
+    /* Liegt noch ein Refresh-Token da, war die „verlorene" Sitzung
+       vielleicht nur ein früherer Fehlalarm ohne Netz. Erst still
+       erneuern – gelingt es, ist niemand abgemeldet. */
+    if (CloudSync_.sessionIsRenewable() && typeof CloudSync_._refreshSession === 'function') {
+      try { await CloudSync_._refreshSession(); } catch (e) { /* dann eben der Hinweis */ }
+      if (!CloudSync_.sessionWasLost()) return;
+    }
 
     show();
 

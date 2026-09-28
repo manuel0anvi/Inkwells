@@ -786,6 +786,7 @@ const TRANSLATIONS = {
     sharedNeedsInternet: 'Geteilte Dokumente gibt es nur mit Internet – sie liegen nicht auf diesem Gerät. Sobald die Verbindung wieder steht, erscheinen sie hier von selbst.',
     sharedOwnerOffline: 'Der Besitzer ist nicht mehr da. Solange er weg ist, kannst du nur lesen – er könnte ohne Verbindung weiterschreiben, und es entstünden zwei Fassungen derselben Seite.',
     sharedOwnerBack: 'Der Besitzer ist wieder da. Du kannst weiterarbeiten.',
+    sharedSelfOffline: 'Kein Internet – bis du wieder online bist, kannst du hier nur lesen. Dein Konto bleibt angemeldet.',
 
     // Zwei Fassungen derselben Seite
     sharedNotifyOne: '{name} hat „{title}" mit dir geteilt.',
@@ -1860,6 +1861,7 @@ const TRANSLATIONS = {
     sharedNeedsInternet: 'Shared documents need an internet connection — they are not stored on this device. They will reappear here on their own once you are back online.',
     sharedOwnerOffline: 'The owner is no longer here. While they are away you can only read — they might carry on writing without a connection, and two versions of the same page would appear.',
     sharedOwnerBack: 'The owner is back. You can carry on working.',
+    sharedSelfOffline: 'No internet — until you are back online you can only read here. You stay signed in.',
 
     // Two versions of the same page
     sharedNotifyOne: '{name} shared “{title}” with you.',
@@ -2925,6 +2927,7 @@ const TRANSLATIONS = {
     sharedNeedsInternet: 'I documenti condivisi esistono solo con una connessione a internet: non sono salvati su questo dispositivo. Torneranno qui da soli appena sarai di nuovo online.',
     sharedOwnerOffline: 'Il proprietario è assente. Finché non torna puoi solo leggere: potrebbe continuare a scrivere senza connessione e nascerebbero due versioni della stessa pagina.',
     sharedOwnerBack: 'Il proprietario è tornato. Puoi continuare a lavorare.',
+    sharedSelfOffline: 'Nessuna connessione a Internet: finché non torni online qui puoi solo leggere. Resti connesso al tuo account.',
 
     // Due versioni della stessa pagina
     sharedNotifyOne: '{name} ha condiviso «{title}» con te.',
