@@ -1036,27 +1036,24 @@ function attachInput(canvas, textDiv, objLayer, page) {
       maleLasso(S._cur);
       return;
     }
-    // Eine gerade Linie wird ganz weggenommen, nicht angeknabbert
-    if (S.mode === 'eraser' && S.eraser.type === 'pixel') geradeGanzWeg(c, page, canvas);
-    if (S.mode !== 'eraser' || S.eraser.type === 'pixel') {
+    /* Der Radierer legt keinen eigenen Strich mehr an, er zerschneidet
+       die getroffenen (siehe radiereBei). S._cur hält nur fest, wo er
+       zuletzt war und ob er etwas erwischt hat – in die Seite kommt er
+       nicht. */
+    if (S.mode === 'eraser' && S.eraser.type === 'pixel') {
+      if (!S.strokeHistory[page.id]) S.strokeHistory[page.id] = [];
+      S._cur = { isEraser: true, path: [{ x: c.x, y: c.y }], _radiert: false };
+      radiereBei(c, c, page, canvas);
+      return;
+    }
+    if (S.mode !== 'eraser') {
       if (!S.strokeHistory[page.id]) S.strokeHistory[page.id] = [];
       const stroke = buildStroke(c);
-      if (S.mode === 'eraser') {
-        stroke.isEraser = true; stroke.color = 'rgba(0,0,0,1)'; stroke.width = ERASER_SIZES[S.eraser.szIdx] * 2;
-      }
       S.strokeHistory[page.id].push(stroke); S._cur = stroke;
       _halteBei = null;
       armLineTimer(stroke, c);
-      /* Der Radierer arbeitet auf der Seite selbst – er nimmt weg
-         (destination-out), und wegnehmen kann man nur dort, wo etwas
-         liegt. Alles andere entsteht auf der Vorschau (stiftVorschau). */
-      if (stroke.isEraser) {
-        const ctx = canvas.getContext('2d'); ctx.save(); ctx.fillStyle = stroke.color;
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath(); ctx.arc(c.x, c.y, stroke.width / 2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      } else {
-        stiftVorschau(stroke);
-      }
+      // Alles entsteht auf der Vorschau (stiftVorschau)
+      stiftVorschau(stroke);
     }
   }
 
@@ -1451,8 +1448,6 @@ function attachInput(canvas, textDiv, objLayer, page) {
       return;
     }
 
-    const ctx = canvas.getContext('2d');
-
     /* Der Radierer bleibt bei EINEM Punkt je Bewegung – so war es und so
        soll es bleiben. Was er trifft, wird ganz weggenommen, und jedes
        Wegnehmen zeichnet die Seite neu und schreibt sie in page.inkStrokes
@@ -1476,9 +1471,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
     if (stroke.isEraser) {
       const ce = amLinealAusrichten(coords(e), canvas, page);
-      geradeGanzWeg(ce, page, canvas);
-      stroke.path.push({ x: ce.x, y: ce.y, p: ce.p });
-      liveDrawIncr(ctx, ce);
+      // Die ganze Strecke seit der letzten Meldung, sonst blieben bei
+      // schneller Hand Reste zwischen den Punkten stehen
+      const vorher = stroke.path[stroke.path.length - 1];
+      stroke.path = [{ x: ce.x, y: ce.y }];
+      radiereBei(vorher, ce, page, canvas);
       return;
     }
 
@@ -1535,6 +1532,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (S._cur && !S._cur._lasso) redrawStrokes(canvas, S.strokeHistory[page.id]);
 
     const finished = S._cur;
+    /* Über leeres Papier radiert: nichts geändert, also auch kein Schritt
+       zum Rückgängigmachen – sonst täte das nächste Strg+Z scheinbar
+       nichts. Hier oben gelesen: strichVerdichten weiter unten nimmt alle
+       Hilfsfelder weg, _radiert eingeschlossen. */
+    const leerRadiert = !!finished && finished.isEraser && !finished._radiert;
 
     /* ══════════════════════════════════════════════════════════════
        WAR DAS EINE SCHLINGE?
@@ -1591,9 +1593,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
     /* Was stehen bleibt, geht ohne Ballast an die anderen und in die
        Seite: gerundete Punkte, kein Druck, keine Hilfsfelder (core/data.js,
        strichVerdichten). Erst hier – die Schlinge oben liest noch _lasso. */
-    if (finished && !alsAuswahl && typeof strichVerdichten === 'function') strichVerdichten(finished);
+    if (finished && !alsAuswahl && !finished.isEraser && typeof strichVerdichten === 'function') strichVerdichten(finished);
 
-    if (alsAuswahl) {
+    if (alsAuswahl || leerRadiert) {
       redrawStrokes(canvas, S.strokeHistory[page.id]);
       if (typeof popPageHistory === 'function') popPageHistory(page.id);
     } else if (finished && !finished.isEraser && window.Collab) {
@@ -1604,7 +1606,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
 
     S._cur = null; page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
-    if (!alsAuswahl && window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    if (!alsAuswahl && !leerRadiert && window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   });
   /* ══════════════════════════════════════════════════════════════════
      ABGEBROCHEN – ABER DER STRICH IST TROTZDEM DA
@@ -1647,6 +1649,18 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
 
     if (!abgebrochen) return;
+
+    // Der Radierer hat schon auf der Seite gearbeitet – siehe radiereBei
+    if (abgebrochen.isEraser) {
+      redrawStrokes(canvas, S.strokeHistory[page.id]);
+      if (!abgebrochen._radiert) {
+        if (typeof popPageHistory === 'function') popPageHistory(page.id);
+        return;
+      }
+      page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
+      if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+      return;
+    }
 
     // Auch ein abgebrochener Strich ist am Lineal eine Linie – siehe dort
     linealStrichEindampfen(abgebrochen);
@@ -1959,6 +1973,17 @@ function cancelActiveStroke() {
 
   const pgId = S.activePgId;
   const liste = pgId ? S.strokeHistory[pgId] : null;
+
+  /* Der Radierer hat schon zerschnitten, was er traf (radiereBei). Das
+     bleibt, und damit auch sein Rückgängig-Schritt – sonst wäre das
+     Radierte beim Zoomen mit zwei Fingern nicht mehr zurückzuholen. */
+  if (stroke.isEraser && stroke._radiert) {
+    const info = pgId && typeof getPage === 'function' ? getPage(pgId) : null;
+    if (info && liste) info.page.inkStrokes = JSON.parse(JSON.stringify(liste));
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+    return;
+  }
+
   if (liste) {
     const idx = liste.indexOf(stroke);
     if (idx >= 0) liste.splice(idx, 1);
@@ -2170,32 +2195,164 @@ function istGeraderStrich(s) {
   return true;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER RADIERER ZERSCHNEIDET, WAS ER TRIFFT
+
+   >>> Wie es vorher war <<<
+   Radiert wurde mit einem eigenen Strich, der wegnahm (destination-out)
+   und in der Seite liegen blieb. Zwei Meldungen hingen daran:
+
+     · „Über leerem Papier radiert, später etwas dorthin gezeichnet –
+       man sieht, dass dort gelöscht wurde." Der Radierstrich wirkte auf
+       alles, was vor ihm in der Liste stand. Wurde ein älterer Strich
+       dorthin geschoben, eine Seite mit dem anderen abgeglichen oder
+       etwas nachgeladen, schnitt er ein Loch hinein – wie eine
+       unsichtbare Zeichnung, die mitwandert.
+     · „Der Löschkreis ist grösser als der Kreis." Nebenher wurde jeder
+       GERADE Strich ganz weggenommen, und als gerade galt schon jedes
+       handgeschriebene l, jede 1 und jeder t-Balken. Nah herangezoomt
+       sah man es deutlich: der Kreis streifte ein Ende, und der ganze
+       Strich war fort.
+
+   >>> Wie es jetzt ist <<<
+   Getroffene Striche werden an der Kante des Kreises zerschnitten; was
+   innen liegt, kommt weg, die Reste bleiben als eigene Striche mit
+   neuer Kennung. Es bleibt kein Radierstrich zurück, der später noch
+   irgendwo wirken könnte, und weggenommen wird genau, was der Kreis
+   berührt: ein Punkt der Mittellinie ist getroffen, wenn er näher als
+   Radius plus halbe Strichbreite liegt – dann reicht der Strich bis an
+   den Kreis heran.
+
+   Nur eine echte Linie (zwei Punkte: festgehalten oder am Lineal
+   gezogen) geht weiterhin ganz – sie ist ein Ding, kein Gekritzel, und
+   zwei Reste davon wollte niemand haben.
+
+   Alte Hefte können noch Radierstriche enthalten; die zeichnet
+   canvas/drawing.js weiter wie bisher.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Quadrat des Abstands von (x,y) zur Radierstrecke a–b. */
+function radierAbstand2(x, y, a, b) {
+  const d = pointToLineDistance(x, y, a.x, a.y, b.x, b.y);
+  return d * d;
+}
+
 /**
- * Nimmt eine gerade Linie GANZ weg, statt ein Loch hineinzuradieren.
+ * Welcher Teil der Strecke p–q liegt näher als R an der Radierstrecke a–b?
  *
- * Der Radierer arbeitet sonst punktweise, und das ist bei Handschrift
- * auch richtig. Eine Linie ist aber ein Ding und kein Gekritzel: ein
- * Stueck aus ihrer Mitte herauszuwischen laesst zwei Reste stehen, die
- * niemand haben wollte. Genau so wurde es gemeldet.
+ * Der Abstand zu einer Strecke ist entlang einer anderen Strecke eine
+ * konvexe Grösse – der getroffene Teil ist also immer EIN Stück. Gesucht
+ * wird erst die engste Stelle, dann von dort aus beide Ränder.
+ *
+ * @returns {[number, number]|null} Anfang und Ende als Anteil 0…1
  */
-function geradeGanzWeg(c, page, canvas) {
+function radierIntervall(p, q, a, b, R) {
+  const R2 = R * R;
+  const f = t => radierAbstand2(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t, a, b);
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+    if (f(m1) < f(m2)) hi = m2; else lo = m1;
+  }
+  const tm = (lo + hi) / 2;
+  if (f(tm) >= R2) return null;
+  const rand = (aussen, innen) => {
+    for (let i = 0; i < 40; i++) {
+      const m = (aussen + innen) / 2;
+      if (f(m) < R2) innen = m; else aussen = m;
+    }
+    return innen;
+  };
+  return [f(0) < R2 ? 0 : rand(0, tm), f(1) < R2 ? 1 : rand(1, tm)];
+}
+
+function wegStrecke(pts) {
+  let l = 0;
+  for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return l;
+}
+
+/**
+ * Zerschneidet einen Linienzug an der Radierstrecke a–b mit Radius R.
+ *
+ * @returns {Array<Array<{x,y}>>|null}  die Reste – oder null, wenn er gar
+ *   nicht getroffen wurde (dann bleibt der Strich, wie er ist)
+ */
+function zerschneide(pts, a, b, R) {
+  const R2 = R * R;
+  const drin = p => radierAbstand2(p.x, p.y, a, b) < R2;
+  if (pts.length === 1) return drin(pts[0]) ? [] : null;
+
+  // Weit weg? Dann nicht erst rechnen – die meisten Striche sind es
+  const minX = Math.min(a.x, b.x) - R, maxX = Math.max(a.x, b.x) + R;
+  const minY = Math.min(a.y, b.y) - R, maxY = Math.max(a.y, b.y) + R;
+  const zwischen = (p, q, t) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+
+  let getroffen = false;
+  const teile = [];
+  let cur;
+  if (drin(pts[0])) { getroffen = true; cur = []; } else cur = [pts[0]];
+
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i], q = pts[i + 1];
+    const weit = Math.max(p.x, q.x) < minX || Math.min(p.x, q.x) > maxX
+      || Math.max(p.y, q.y) < minY || Math.min(p.y, q.y) > maxY;
+    const iv = weit ? null : radierIntervall(p, q, a, b, R);
+    if (!iv) { cur.push(q); continue; }
+    getroffen = true;
+    if (iv[0] > 0) cur.push(zwischen(p, q, iv[0]));
+    if (cur.length >= 2) teile.push(cur);
+    cur = iv[1] < 1 ? [zwischen(p, q, iv[1]), q] : [];
+  }
+  if (cur.length >= 2) teile.push(cur);
+  if (!getroffen) return null;
+  // Ein Rest von weniger als einem halben Punkt wäre nur noch ein Klecks
+  return teile.filter(t => wegStrecke(t) >= 0.5);
+}
+
+/** Eine echte Linie: zwei Punkte und lang genug, um eine zu sein. */
+function istEchteLinie(s) {
+  const pts = s && s.path;
+  return !!pts && pts.length === 2
+    && Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) >= 12;
+}
+
+let _radierBild = 0, _radierCanvas = null, _radierSeite = null;
+
+/**
+ * Radiert entlang der Strecke a–b (Seiten-Koordinaten).
+ * Beim Aufsetzen ist a = b, dann ist es ein Kreis.
+ */
+function radiereBei(a, b, page, canvas) {
   const r = ERASER_SIZES[S.eraser.szIdx];
   const liste = S.strokeHistory[page.id] || [];
-  const bleibt = liste.filter(s => {
-    if (s === S._cur || s.isEraser || !istGeraderStrich(s)) return true;
-    const pts = s.path;
-    for (let i = 0; i < pts.length - 1; i++) {
-      if (pointToLineDistance(c.x, c.y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) < r) return false;
-    }
-    return true;
-  });
-  const formenWeg = radiereFormen(c, page, r, canvas);
+  const neu = [];
+  let geaendert = false;
 
-  if (bleibt.length === liste.length && !formenWeg) return;
-  S.strokeHistory[page.id] = bleibt;
-  redrawStrokes(canvas, bleibt);
-  page.inkStrokes = JSON.parse(JSON.stringify(bleibt));
-  if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  for (const s of liste) {
+    if (s.isEraser || !s.path || !s.path.length) { neu.push(s); continue; }
+    const R = r + (s.width || 2) / 2;
+    const teile = zerschneide(s.path, a, b, R);
+    if (!teile) { neu.push(s); continue; }
+    geaendert = true;
+    if (istEchteLinie(s)) continue;
+    for (const t of teile) neu.push({ ...s, id: strichKennung(), path: t });
+  }
+
+  const formenWeg = radiereFormen(a, b, page, r, canvas);
+  if ((geaendert || formenWeg) && S._cur) S._cur._radiert = true;
+  if (!geaendert) return;
+
+  S.strokeHistory[page.id] = neu;
+  /* Neu gezeichnet wird einmal je Bild. Der Stift meldet sich öfter, und
+     jedes Neuzeichnen malt die ganze Seite. */
+  _radierCanvas = canvas; _radierSeite = page.id;
+  if (!_radierBild) {
+    _radierBild = requestAnimationFrame(() => {
+      _radierBild = 0;
+      if (_radierCanvas) redrawStrokes(_radierCanvas, S.strokeHistory[_radierSeite] || []);
+    });
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2207,33 +2364,72 @@ function geradeGanzWeg(c, page, canvas) {
    gemeldet aus der Nutzung.
 
    >>> Warum ganz und nicht stueckweise <<<
-   Aus demselben Grund wie beim geraden Strich: eine Form ist ein
+   Aus demselben Grund wie bei der echten Linie: eine Form ist ein
    geometrisches Ding, kein Farbauftrag. Ein halb weggeriebenes Viereck
    waere kein Viereck mehr, sondern Bruch.
 
    Getroffen ist, wer den RAND beruehrt - nicht die Flaeche. Sonst
    loeschte ein Wisch quer ueber die Seite jedes Rechteck, ueber dessen
    Inneres er zufaellig lief.
+
+   >>> Der wirkliche Rand, nicht der Kasten <<<
+   Hier wurde gegen die vier Kanten des umschliessenden Kastens geprüft,
+   auch bei Ellipse, Dreieck und Linie. Eine schräge Linie hat ihren
+   Kasten aber weit neben sich, eine Ellipse ihre Ecken im Leeren – der
+   Radierer nahm Formen weg, die er sichtbar gar nicht berührt hatte.
+   Jetzt wird der Umriss so nachgerechnet, wie canvas/shapes.js ihn
+   zeichnet, samt Drehung.
    ══════════════════════════════════════════════════════════════════════ */
-function radiereFormen(c, page, radius, canvas) {
+function formUmriss(o) {
+  const strich = Number(o.strokeWidth);
+  const sw = isFinite(strich) && strich > 0 ? strich
+    : ((typeof SHAPE_DEFAULTS !== 'undefined' && SHAPE_DEFAULTS.strokeWidth) || 2);
+  const w = Math.max(1, Number(o.w) || 0), h = Math.max(1, Number(o.h) || 0);
+  const pad = sw / 2;
+  let pts;
+  switch (o.shapeType || 'rect') {
+    case 'ellipse': {
+      const cx = w / 2, cy = h / 2, rx = Math.max(0, w / 2 - pad), ry = Math.max(0, h / 2 - pad);
+      pts = [];
+      for (let i = 0; i <= 48; i++) {
+        const t = (i / 48) * Math.PI * 2;
+        pts.push({ x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) });
+      }
+      break;
+    }
+    case 'triangle':
+      pts = [{ x: w / 2, y: pad }, { x: w - pad, y: h - pad }, { x: pad, y: h - pad }, { x: w / 2, y: pad }];
+      break;
+    case 'line':
+    case 'arrow': {
+      const enden = typeof shapeEnden === 'function' ? shapeEnden(o) : { p1: { x: 0, y: 1 }, p2: { x: 1, y: 0 } };
+      const auf = (t, ganz) => pad + t * Math.max(0, ganz - pad * 2);
+      pts = [{ x: auf(enden.p1.x, w), y: auf(enden.p1.y, h) }, { x: auf(enden.p2.x, w), y: auf(enden.p2.y, h) }];
+      break;
+    }
+    default:
+      pts = [{ x: pad, y: pad }, { x: w - pad, y: pad }, { x: w - pad, y: h - pad }, { x: pad, y: h - pad }, { x: pad, y: pad }];
+  }
+  // Gedreht wird um die Mitte des Kastens (canvas/objects.js, applyRotation)
+  const rad = ((Number(o.rot) || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const ox = (Number(o.x) || 0) + w / 2, oy = (Number(o.y) || 0) + h / 2;
+  return {
+    breite: sw,
+    pts: pts.map(p => {
+      const dx = p.x - w / 2, dy = p.y - h / 2;
+      return { x: ox + dx * cos - dy * sin, y: oy + dx * sin + dy * cos };
+    })
+  };
+}
+
+function radiereFormen(a, b, page, radius, canvas) {
   const objekte = page.objects;
   if (!Array.isArray(objekte) || !objekte.length) return false;
 
   const trifftRand = (o) => {
-    const x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
-    // Weit ausserhalb des Kastens? Dann gar nicht erst rechnen.
-    if (c.x < x1 - radius || c.x > x2 + radius ||
-        c.y < y1 - radius || c.y > y2 + radius) return false;
-
-    /* Nah an einer der vier Kanten - und bei Ellipse und Dreieck ebenso,
-       denn deren Rand liegt innerhalb desselben Kastens. Genauer waere
-       schoener, aber ein Radierer ist ein grobes Werkzeug; die Kante des
-       Kastens liegt nie mehr als eine Strichbreite daneben. */
-    const nahSenkrecht = (Math.abs(c.x - x1) <= radius || Math.abs(c.x - x2) <= radius)
-      && c.y >= y1 - radius && c.y <= y2 + radius;
-    const nahWaagerecht = (Math.abs(c.y - y1) <= radius || Math.abs(c.y - y2) <= radius)
-      && c.x >= x1 - radius && c.x <= x2 + radius;
-    return nahSenkrecht || nahWaagerecht;
+    const u = formUmriss(o);
+    return zerschneide(u.pts, a, b, radius + u.breite / 2) !== null;
   };
 
   const weg = objekte.filter(o => o && o.kind === 'shape' && trifftRand(o));
@@ -2305,7 +2501,7 @@ function unterdrueckeTextTipp() {
  * teilte dadurch durch null, t wurde NaN und das Ergebnis ebenfalls. Und
  * ein Vergleich MIT NaN ist immer falsch: der Strich galt an dieser
  * Stelle als „weit weg" und liess sich weder anwaehlen (strokeSelect.js)
- * noch als ganze Linie wegnehmen (geradeGanzWeg). Ohne Fehlermeldung,
+ * noch vom Radierer treffen (radiereBei). Ohne Fehlermeldung,
  * es tat einfach nichts.
  *
  * Bei einer Strecke ohne Laenge ist der Abstand schlicht der Abstand zum
@@ -2326,12 +2522,14 @@ function strokeErase(c, page, canvas) {
     if (s.isEraser) return true;
     const pts = s.path;
     if (!pts || pts.length === 0) return true;
-    // Check all points
-    if (pts.some(pt => Math.hypot(pt.x - c.x, pt.y - c.y) < r)) return false;
-    // Also check line segments (important for straight lines with few points)
+    /* Getroffen ist, was der Kreis BERÜHRT – also bis zur halben
+       Strichbreite neben der Mittellinie, wie beim Pixelradierer. */
+    const R = r + (s.width || 2) / 2;
+    if (pts.some(pt => Math.hypot(pt.x - c.x, pt.y - c.y) < R)) return false;
+    // Auch die Strecken dazwischen – eine Linie hat nur zwei Punkte
     for (let i = 0; i < pts.length - 1; i++) {
       const dist = pointToLineDistance(c.x, c.y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
-      if (dist < r) return false;
+      if (dist < R) return false;
     }
     return true;
   });
@@ -2374,19 +2572,4 @@ function buildStroke(c) {
   if (m === 'hl')   return { ...start, color: S.hl.color,   width: HL_SIZES[S.hl.szIdx],   isHL: true };
   return { ...start, color: '#000', width: 4, isHL: false };
 }
-/* ══════════════════════════════════════════════════════════════════════
-   NUR NOCH FUER DEN RADIERER
-
-   Das neue Stueck Strich auf die Seite malen – das machte einmal jedes
-   Werkzeug, und davon wurde die duenne Linie fleckig (stiftVorschau).
-   Der Radierer braucht es weiter: er nimmt weg (destination-out), und
-   wegnehmen laesst sich nur dort, wo etwas liegt.
-
-   Die Breite kommt aus `s.width`. Hier stand `s.width * (0.5 + cur.p)`,
-   also mit dem Druck dicker und duenner – fertig gezeichnet wird aber
-   ueberall sonst gleichmaessig (canvas/drawing.js, applyStrokeStyles),
-   und ein Strich, der beim Abheben seine Form wechselt, fuehlt sich
-   falscher an als einer ohne Druckstaerke.
-   ══════════════════════════════════════════════════════════════════════ */
-function liveDrawIncr(ctx, c) { const s = S._cur; if (!s) return; const pts = s.path; if (pts.length < 2) return; const prev = pts[pts.length - 2], cur = pts[pts.length - 1]; ctx.save(); ctx.strokeStyle = s.color; ctx.lineWidth = s.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; if (s.isHL) ctx.globalAlpha = 0.38; if (s.isEraser) ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); if (pts.length >= 3) { const pp = pts[pts.length - 3]; ctx.moveTo((pp.x + prev.x) / 2, (pp.y + prev.y) / 2); ctx.quadraticCurveTo(prev.x, prev.y, (prev.x + cur.x) / 2, (prev.y + cur.y) / 2); } else { ctx.moveTo(prev.x, prev.y); ctx.lineTo(cur.x, cur.y); } ctx.stroke(); ctx.restore(); }
 

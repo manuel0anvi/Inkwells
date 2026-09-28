@@ -304,11 +304,17 @@ app.on('ready', async () => {
        der Spezifikation abgeleitet (canvas/input.js). */
     await stiftMitTaste([{ x: m.x - 100, y: m.y }, { x: m.x, y: m.y }, { x: m.x + 100, y: m.y }], 33);
 
-    const nachRadier = await js(`(() => ({
-      radierer: (S.strokeHistory[S.activePgId] || []).filter(s => s.isEraser).length,
-      modus: S.mode }))()`);
+    /* Der Radierer legt keinen eigenen Strich mehr an, er zerschneidet
+       (canvas/input.js, radiereBei). Radiert hat er also, wenn der
+       hingelegte Strich – der hat keine Kennung – nicht mehr unverändert
+       dasteht; ein Radierstrich darf dabei nicht übrig bleiben. */
+    const nachRadier = await js(`(() => { const L = S.strokeHistory[S.activePgId] || [];
+      return { radierer: L.filter(s => s.isEraser).length,
+               unveraendert: L.length === 1 && !L[0].id, modus: S.mode }; })()`);
     pruefe('Sie radiert auch, wenn der Zeiger gewählt war',
-      nachRadier.radierer === 1, 'es entstand kein Radierstrich');
+      !nachRadier.unveraendert, 'der Strich steht unverändert da');
+    pruefe('Und hinterlässt keinen Radierstrich (' + nachRadier.radierer + ')',
+      nachRadier.radierer === 0, 'es liegt ein Radierstrich in der Seite');
     pruefe('Und danach steht das Werkzeug wieder, wo es war (' + nachRadier.modus + ')',
       nachRadier.modus === 'cursor', 'es blieb auf ' + nachRadier.modus);
 
@@ -334,8 +340,9 @@ app.on('ready', async () => {
     await js(`switchMode('eraser'); true`);
     await stiftZieht([{ x: m.x - 10, y: m.y }, { x: m.x + 10, y: m.y }], 30);
     const nachKrumm = await zahl(`(S.strokeHistory[S.activePgId] || []).filter(s => !s.isEraser).length`);
-    pruefe('Gekritzel dagegen bleibt stehen', nachKrumm === 1,
-      'auch die Handschrift verschwand ganz');
+    // Zerschnitten: Reste links und rechts vom Radierer
+    pruefe('Gekritzel dagegen wird nur angeknabbert (' + nachKrumm + ' Reste)', nachKrumm >= 2,
+      nachKrumm === 0 ? 'auch die Handschrift verschwand ganz' : 'sie blieb unzerschnitten');
 
     /* ══════════════════════════════════════════════════════════════════
        HALTEN MACHT EINE GERADE – AUCH MIT ZITTERNDER HAND
