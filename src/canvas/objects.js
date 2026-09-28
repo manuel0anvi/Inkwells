@@ -199,6 +199,16 @@ document.addEventListener('keydown', e => {
    ══════════════════════════════════════════════════════════════════════ */
 window.deselectObject = deselect;
 
+/* Der Zoom, der WIRKLICH gilt (core/zoom.js, getZoom). Hier stand _zoom,
+   also der eingestellte Wunsch. Im schmalen Fenster ist das Blatt aber
+   kleiner gezoomt, als eingestellt ist – ein Bild lief dort beim
+   Schieben dem Finger davon, und beim Ziehen an einer Ecke wuchs es
+   langsamer als der Zeiger. Ohne zoom.js (Prüfstände) gilt der Wunsch. */
+function objZoom() {
+  if (typeof getZoom === 'function') return getZoom() || 1;
+  return (typeof _zoom !== 'undefined' && _zoom) || 1;
+}
+
 /* ── Nach Rückgängig: dasselbe Ding wieder in der Hand ───────────────
    Rückgängig baut die Objekte einer Seite neu auf (app.js,
    _applyPageSnapshot). _selObj zeigte danach auf einen Rahmen, der gar
@@ -461,7 +471,7 @@ function placeObject(objLayer, obj, page) {
   };
   const hideSnaps = () => { if (snapV) snapV.style.display = 'none'; if (snapH) snapH.style.display = 'none'; };
   const getSnaps = (val, list) => {
-    let best = val, minD = 8 / _zoom;
+    let best = val, minD = 8 / objZoom();
     list.forEach(v => { if (Math.abs(val - v) < minD) { minD = Math.abs(val - v); best = v; } });
     return { v: best, sn: best !== val };
   };
@@ -581,7 +591,7 @@ function placeObject(objLayer, obj, page) {
       const mv = ev => {
         if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
         hideSnaps();
-        const dx = (ev.clientX - sx) / _zoom, dy = (ev.clientY - sy) / _zoom;
+        const dx = (ev.clientX - sx) / objZoom(), dy = (ev.clientY - sy) / objZoom();
         let nw = ow, nh = oh, nx = ox, ny = oy;
 
         // Welche Kanten wandern mit? Eine Ecke bewegt zwei, eine Kante eine
@@ -756,8 +766,8 @@ function placeObject(objLayer, obj, page) {
         const mv = ev => {
           if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
 
-          let nx = beweglich.x + (ev.clientX - sx) / _zoom;
-          let ny = beweglich.y + (ev.clientY - sy) / _zoom;
+          let nx = beweglich.x + (ev.clientX - sx) / objZoom();
+          let ny = beweglich.y + (ev.clientY - sy) / objZoom();
 
           // Mit Umschalt auf 15°-Schritte – fuer waagerecht und senkrecht
           if (ev.shiftKey) {
@@ -1311,8 +1321,8 @@ function placeObject(objLayer, obj, page) {
 
       const alt = aktPgEl.getBoundingClientRect();
       const ziel = zielEl.getBoundingClientRect();
-      const nx = rohX + (alt.left - ziel.left) / _zoom;
-      const ny = rohY + (alt.top - ziel.top) / _zoom;
+      const nx = rohX + (alt.left - ziel.left) / objZoom();
+      const ny = rohY + (alt.top - ziel.top) / objZoom();
 
       aktPage.objects = (aktPage.objects || []).filter(o => o.id !== obj.id);
       (info.page.objects || (info.page.objects = [])).push(obj);
@@ -1350,7 +1360,7 @@ function placeObject(objLayer, obj, page) {
       hideSnaps();
 
       // Erst die rohe Lage, dann der Seitenwechsel: er rechnet sie um
-      let nx = ox + (ev.clientX - sx) / _zoom, ny = oy + (ev.clientY - sy) / _zoom;
+      let nx = ox + (ev.clientX - sx) / objZoom(), ny = oy + (ev.clientY - sy) / objZoom();
 
       const unterZeiger = seiteUnterZeiger(ev.clientX, ev.clientY);
       if (unterZeiger && unterZeiger !== aktPgEl) {
@@ -1461,8 +1471,8 @@ function placeObject(objLayer, obj, page) {
        Loslassen unter den Finger. */
     const alt = wrap.getBoundingClientRect();
     const ziel = zielEl.getBoundingClientRect();
-    obj.x = Math.round((alt.left - ziel.left) / _zoom);
-    obj.y = Math.round((alt.top - ziel.top) / _zoom);
+    obj.x = Math.round((alt.left - ziel.left) / objZoom());
+    obj.y = Math.round((alt.top - ziel.top) / objZoom());
     /* Losgelassen wird ueber der neuen Seite, das Bild selbst haengt aber
        noch am unteren Rand der alten: umgerechnet ergaebe das ein y weit
        oberhalb der neuen Seite. Es faengt dort also oben an. */
