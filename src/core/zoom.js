@@ -134,11 +134,45 @@ function breitesteSeite() {
   return breit;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   DAS BLATT BLEIBT STEHEN, WENN DIE UNTERLAGEN AUFGEHEN
+
+   >>> Gemeldet: „wenn man die PDF-Leiste aufruft oder die PDF aufmacht,
+   verschiebt es die Seite – sie sollte immer an derselben Stelle
+   bleiben" <<<
+   Leiste und Ansicht der Unterlagen (ui/griffbereit.js) stehen neben
+   dem Rahmen und machen ihn schmaler. Das Blatt steht mittig darin, also
+   wanderte es um die halbe Leistenbreite nach links – und wo es nicht
+   mehr hineinpasste, wurde es obendrein kleiner gezoomt. Während die
+   Leiste aufglitt, lief das Bild dabei sichtbar mit.
+
+   Ihre Breite wird deshalb herausgerechnet: gezoomt und mittig gestellt
+   wird, als wäre der Rahmen so breit wie ohne sie. Das Blatt bleibt in
+   Grösse und Lage stehen. Was dann hinter der Kante liegt, lässt sich
+   waagerecht hervorrollen (overflow-x in _applyZoom).
+
+   Gemessen wird die WIRKLICHE Breite, nicht die Zielbreite: sie gleitet
+   in 200 ms auf, und der Beobachter unten rechnet bei jedem Schritt nach.
+   Mit der Zielbreite stünde das Blatt zu Beginn schon verschoben und
+   liefe dann zurück.
+
+   Chat und Kommentare zählen nicht mit: die Kommentarkarten suchen sich
+   ihren Platz im Rand neben dem Blatt (ui/comments.js), und der muss
+   dort wirklich frei sein.
+   ══════════════════════════════════════════════════════════════════════ */
+function spaltenAusgleich() {
+  let breite = 0;
+  for (const el of document.querySelectorAll('#griff-panel .griff-panel-inner, #griff-view .griff-view-inner')) {
+    breite += el.offsetWidth || 0;
+  }
+  return breite;
+}
+
 /** Der grösste Zoom, bei dem die Seite noch ganz in den Rahmen passt. */
 function getFitZoom() {
   const sc = E('pg-scroll');
   if (!sc || !sc.clientWidth) return null;
-  return sc.clientWidth / breitesteSeite();
+  return (sc.clientWidth + spaltenAusgleich()) / breitesteSeite();
 }
 
 function getZoom() { return _wirksam; }
@@ -193,7 +227,7 @@ function isVerticalMode() {
 function getVerticalFitZoom() {
   const sc = E('pg-scroll');
   if (!sc) return null;
-  const availW = Math.max(1, sc.clientWidth - 16);
+  const availW = Math.max(1, sc.clientWidth + spaltenAusgleich() - 16);
   const fit = availW / breitesteSeite();
   return Math.max(ZOOM_MIN, Math.min(VERTICAL_MAX_ZOOM, fit));
 }
@@ -247,7 +281,16 @@ function _applyZoom() {
      ══════════════════════════════════════════════════════════════════ */
   const sc2 = E('pg-scroll');
   if (sc2) {
-    const brauchtBreite = breitesteSeite() * z > sc2.clientWidth + 1;
+    /* Die Breite der Unterlagen steht links vom Blatt wieder dazu, damit
+       es mittig bleibt, wo es ohne sie stand (siehe spaltenAusgleich).
+       Links angeschlagen, sonst ragte das breitere Band nach beiden
+       Seiten gleich weit hinaus und die Mitte bliebe, wo sie ist. */
+    const ausgleich = spaltenAusgleich();
+    pw.style.width = ausgleich ? 'calc(100% + ' + ausgleich + 'px)' : '';
+    pw.style.alignSelf = ausgleich ? 'flex-start' : '';
+    // Die rechte Kante des Blatts: Mitte des Bands plus halbe Seite
+    const rechts = (sc2.clientWidth + ausgleich) / 2 + breitesteSeite() * z / 2;
+    const brauchtBreite = rechts > sc2.clientWidth + 1;
     sc2.style.overflowX = brauchtBreite ? 'auto' : '';
   }
   // Liest offsetHeight, erzwingt also einen Umbruch – siehe _gesteLaeuft
@@ -456,11 +499,19 @@ let _querZoom = BASE_ZOOM;
   if (!sc) return;
 
   let zuletzt = sc.clientWidth;
+  let zuletztSumme = zuletzt + spaltenAusgleich();
   new ResizeObserver(() => {
     const jetzt = sc.clientWidth;
     if (!jetzt || jetzt === zuletzt) return;
     zuletzt = jetzt;
-    if (isVerticalMode()) return;
+    /* Kam die Änderung allein von den Unterlagen, bleibt die Summe gleich:
+       dann muss nur der Ausgleich nachziehen, Zoom und Stelle bleiben
+       (spaltenAusgleich). Das gilt auch im Hochformat – sonst liefe das
+       Blatt dort während des Aufgleitens mit und spränge am Ende. */
+    const summe = jetzt + spaltenAusgleich();
+    const nurUnterlagen = Math.abs(summe - zuletztSumme) < 1;
+    zuletztSumme = summe;
+    if (isVerticalMode()) { if (nurUnterlagen) _applyZoom(); return; }
     zoomNachrechnenAnDerStelle();
   }).observe(sc);
 })();
