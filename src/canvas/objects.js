@@ -199,6 +199,21 @@ document.addEventListener('keydown', e => {
    ══════════════════════════════════════════════════════════════════════ */
 window.deselectObject = deselect;
 
+/* ── Nach Rückgängig: dasselbe Ding wieder in der Hand ───────────────
+   Rückgängig baut die Objekte einer Seite neu auf (app.js,
+   _applyPageSnapshot). _selObj zeigte danach auf einen Rahmen, der gar
+   nicht mehr im Dokument steht – Entf und die Leiste griffen ins Leere.
+   Der neue Rahmen trägt dieselbe Kennung; an ihm geht die Auswahl
+   weiter, an der Stelle, an der das Ding jetzt liegt. Siehe dasselbe
+   für Gezeichnetes in canvas/strokeSelect.js (nachVerlauf). */
+window.objektAuswahlNachVerlauf = function () {
+  if (!_selObj || document.contains(_selObj)) return;
+  const id = _selObj.dataset.objid;
+  _selObj = null;
+  const neu = id && document.querySelector('.j-page .obj-wrap[data-objid="' + CSS.escape(id) + '"]');
+  if (neu && typeof neu._waehleObjekt === 'function') neu._waehleObjekt();
+};
+
 /* ══════════════════════════════════════════════════════════════════════
    EIN BILD HINTER DEM TEXT ANKLICKEN
 

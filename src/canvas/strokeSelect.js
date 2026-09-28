@@ -1325,8 +1325,44 @@
   document.addEventListener('scroll', stelleLeiste, true);
   window.addEventListener('resize', stelleLeiste, { passive: true });
 
+  /* ══════════════════════════════════════════════════════════════════
+     NACH RÜCKGÄNGIG ZIEHT DIE HÜLLE MIT
+
+     >>> Gemeldet: „Bild auswählen, verschieben, zurück – das Bild geht,
+     die Auswahl bleibt, wo es war" <<<
+     Ein Rückgängig legt ein ABBILD der Seite zurück (app.js,
+     _applyPageSnapshot): Striche und Objekte sind danach neue Dinge mit
+     denselben Kennungen. Die Hülle hielt aber die alten fest – sie stand
+     an der verlassenen Stelle, und Verschieben oder Löschen hätte dort
+     ins Leere gegriffen.
+
+     Wiedergefunden wird deshalb über die Kennung, auf welcher Seite auch
+     immer es jetzt liegt. Ein Strich ohne Kennung (aus alten Heften)
+     lässt sich nicht sicher wiederfinden – dann lieber keine Auswahl als
+     eine halbe.
+     ══════════════════════════════════════════════════════════════════ */
+  function nachVerlauf() {
+    if (!_sel) return;
+    const strichIds = new Set(_sel.strokes.map(s => s.id).filter(Boolean));
+    const objIds = new Set(_sel.objekte.map(o => String(o.id)));
+    const nb = typeof getNb === 'function' ? getNb() : null;
+
+    if (strichIds.size === _sel.strokes.length) {
+      for (const page of ((nb && nb.pages) || [])) {
+        const striche = (S.strokeHistory[page.id] || []).filter(s => s.id && strichIds.has(s.id));
+        const objekte = (page.objects || []).filter(o => objIds.has(String(o.id)));
+        if (striche.length || objekte.length) {
+          if (waehleStriche(String(page.id), striche, objekte)) return;
+        }
+      }
+    }
+    abwaehlen();
+    versteckeLeiste();
+  }
+
   /* ── Global erreichbar ───────────────────────────────────────────── */
   window.deselectStroke = function () { abwaehlen(); versteckeLeiste(); };
+  window.strichAuswahlNachVerlauf = nachVerlauf;
   // Für die Werkzeugleiste: Farbe und Stärke wirken auch auf die Auswahl
   window.faerbeStrichAuswahl = faerbeAuswahl;
   window.setzeStrichAuswahlDicke = setzeDicke;

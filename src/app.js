@@ -673,6 +673,14 @@ function _stepHistory(fromKey, toKey, emptyMsgKey) {
     }
   }
 
+  /* Die Auswahl hält noch die Dinge von vor dem Schritt – sie muss zu
+     denen, die jetzt auf dem Blatt liegen (canvas/objects.js,
+     canvas/strokeSelect.js). */
+  if (angefasst.length) {
+    if (typeof window.objektAuswahlNachVerlauf === 'function') window.objektAuswahlNachVerlauf();
+    if (typeof window.strichAuswahlNachVerlauf === 'function') window.strichAuswahlNachVerlauf();
+  }
+
   updateUndoRedoUI();
   renderSideTree();
   if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
