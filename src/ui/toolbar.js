@@ -1683,7 +1683,11 @@ function updateCursor() {
   if (S.mode === 'eraser') {
     const r = ERASER_SIZES[S.eraser.szIdx];
     const z = getZoom();
-    const size = Math.min(128, Math.max(8, Math.round(r * 2 * z)));
+    /* Keine Obergrenze. Hier stand Math.min(128, …) – beim Hineinzoomen
+       blieb der Kreis damit bei 128 Punkten stehen, radiert wurde aber
+       weiter in voller Größe: es löschte sichtbar außerhalb des Kreises.
+       Der Kreis muss genau die Fläche zeigen, die wegkommt. */
+    const size = Math.max(4, Math.round(r * 2 * z));
     if (ec) {
       ec.style.width = size + 'px';
       ec.style.height = size + 'px';
