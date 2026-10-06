@@ -172,11 +172,13 @@ function insertFormula(latex, displayMode) {
     return false;
   }
 
-  /* Auf welche Seite? Die, in der die Schreibmarke steht – sonst die
-     gerade aktive. Anders als früher braucht es die Marke nicht mehr
-     zwingend: ein Objekt kann überall liegen. */
+  /* Auf welche Seite? Die unter dem Zeiger oder der Marke
+     (canvas/objects.js, einfuegeStelle) – sonst die, in der die
+     Schreibmarke steht, sonst die gerade aktive. */
+  const ort = typeof einfuegeStelle === 'function' ? einfuegeStelle() : null;
   const textDiv = document.activeElement;
-  let pgEl = (textDiv && textDiv.closest) ? textDiv.closest('[data-pgid]') : null;
+  let pgEl = ort ? document.querySelector('.j-page[data-pgid="' + CSS.escape(ort.pgId) + '"]') : null;
+  if (!pgEl) pgEl = (textDiv && textDiv.closest) ? textDiv.closest('[data-pgid]') : null;
   if (!pgEl && S.activePgId) {
     pgEl = document.querySelector('[data-pgid="' + CSS.escape(S.activePgId) + '"]');
   }
@@ -206,6 +208,8 @@ function insertFormula(latex, displayMode) {
       y = Math.max(8, (r.bottom - pr.top) / zoom + 4);
     }
   }
+  // Unter den Seitenkopf, dort gehört nie etwas hin (core/state.js, CFG.HDR)
+  if (ort && String(ort.pgId) === String(info.page.id)) { x = Math.max(8, ort.x); y = Math.max(CFG.HDR + 8, ort.y); }
   // Nicht über den Blattrand hinaus
   const pw = info.page.w || CFG.PAGE_W;
   const ph = info.page.h || CFG.PAGE_H;

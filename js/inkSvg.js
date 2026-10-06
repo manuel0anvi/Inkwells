@@ -127,19 +127,33 @@
      Nachgemessen an drei Millionen Punkten aus echten Heften: beim
      gewöhnlichen Schreiben drückt die Hand um 0,34, neun von zehn Punkten
      liegen unter 0,5. Mit 0,5 als Mitte wäre fast alles dünner geworden,
-     als in der Leiste eingestellt ist. So hat gewöhnliche Schrift genau
-     die eingestellte Breite, leicht aufgesetzt gut die Hälfte davon und
-     kräftig gedrückt bis zum Doppelten.
+     als in der Leiste eingestellt ist. Gewöhnliche Schrift hat deshalb
+     genau die eingestellte Breite.
+
+     >>> Gemeldet: „nicht so dick – ganz leicht soll die dünnste Stufe
+     sein, und die dickste ein bisschen weniger als jetzt" <<<
+     Nach unten läuft die Kurve deshalb auf die DÜNNSTE Stiftbreite der
+     Leiste zu (core/state.js, PEN_SIZES[0]), nicht mehr auf ein Viertel
+     der eingestellten: kaum aufgesetzt ist es eine Haarlinie, egal wie
+     dick der Stift sonst ist. Nach oben ist beim Anderthalbfachen
+     Schluss statt beim Doppelten.
 
      Der Exponent unter 1 macht die Kurve unten steiler: das Ansetzen
      und Abheben – wo der Druck gegen null geht – läuft spitz aus wie
      bei Tinte. Ohne Druckwert (0,5 ist dann nur Platzhalter) wird hier
      ohnehin nicht gerechnet, siehe hatDruck. */
   const DRUCK_MITTE = 0.35;
+  const DUENNSTE = 1.2;        // PEN_SIZES[0] – die Website kennt state.js nicht
+  const DICKSTE_ANTEIL = 1.6;  // so viel mehr als eingestellt, ganz durchgedrückt
 
-  function druckFaktor(p) {
+  /** Die Breite bei diesem Druck – breite ist die in der Leiste eingestellte. */
+  function druckBreite(p, breite) {
     const q = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : DRUCK_MITTE;
-    return Math.min(2, 0.25 + 0.75 * Math.pow(q / DRUCK_MITTE, 0.85));
+    if (q <= DRUCK_MITTE) {
+      const duenn = Math.min(DUENNSTE, breite);
+      return duenn + (breite - duenn) * Math.pow(q / DRUCK_MITTE, 0.85);
+    }
+    return breite * (1 + (DICKSTE_ANTEIL - 1) * Math.pow((q - DRUCK_MITTE) / (1 - DRUCK_MITTE), 0.85));
   }
 
   function hatDruck(s) {
@@ -159,10 +173,10 @@
      Mittelpunkte, am Ende eine Strecke –, nur in kleinen Schritten
      abgelaufen. Der Druck läuft auf derselben Kurve mit, er springt
      also nicht von Punkt zu Punkt. */
-  function abtasten(pts, halb) {
+  function abtasten(pts, breite) {
     const xs = [], ys = [], rs = [];
     const dr = p => (p && Number.isFinite(p.p)) ? p.p : 0.5;
-    const nimm = (x, y, p) => { xs.push(x); ys.push(y); rs.push(Math.max(0.25, halb * druckFaktor(p))); };
+    const nimm = (x, y, p) => { xs.push(x); ys.push(y); rs.push(Math.max(0.25, druckBreite(p, breite) / 2)); };
     const n = pts.length;
     let ax = pts[0].x, ay = pts[0].y, ap = dr(pts[0]);
     nimm(ax, ay, ap);
@@ -204,7 +218,7 @@
    *   Zehntausende davon hat
    */
   function umriss(pts, breite) {
-    const { xs, ys, rs } = abtasten(pts, breite / 2);
+    const { xs, ys, rs } = abtasten(pts, breite);
     const m = xs.length;
     const vierecke = [], kreise = [];
     const kreisBei = new Uint8Array(m);
@@ -320,7 +334,7 @@
     return d;
   }
 
-  global.StrichForm = { hatDruck, fuelle, umriss, druckFaktor };
+  global.StrichForm = { hatDruck, fuelle, umriss, druckBreite, DICKSTE_ANTEIL };
 
   /* ══ RADIEREN OHNE MASKE ═════════════════════════════════════════════
      Ein Punkt eines Strichs faellt weg, wenn er naeher am Weg des

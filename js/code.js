@@ -467,7 +467,9 @@
      EINEN CODE-KASTEN AUF DIE SEITE SETZEN
      ══════════════════════════════════════════════════════════════════ */
   function insertCodeObject(code, sprache, hell) {
-    const info = (typeof getPage === 'function' && S.activePgId) ? getPage(S.activePgId) : null;
+    // Dort, wo man zuletzt war (canvas/objects.js, einfuegeStelle)
+    const ort = typeof einfuegeStelle === 'function' ? einfuegeStelle() : null;
+    const info = typeof getPage === 'function' ? getPage((ort && ort.pgId) || S.activePgId) : null;
     if (!info) return false;
     if (S.readOnly) { if (typeof toast === 'function') toast(t('sharedNoRight'), true); return false; }
 
@@ -516,6 +518,7 @@
       layer: 'front'
     };
 
+    if (ort && String(ort.pgId) === String(info.page.id)) setzeAnStelle(obj, info.page, ort);
     (info.page.objects || (info.page.objects = [])).push(obj);
 
     const objLayer = pgEl.querySelector('.j-objects');
