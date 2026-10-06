@@ -537,7 +537,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
     const pw = page.w || CFG.PAGE_W;
     const ph = page.h || CFG.PAGE_H;
     const scaleX = pw / r.width, scaleY = ph / r.height;
-    return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY, p: e.pressure > 0 ? e.pressure : 0.5 };
+    /* Druck nur vom Stift. Eine gedrückte Maustaste meldet immer 0,5, ein
+       Touchscreen je nach Treiber irgendetwas Zufälliges – als Strichbreite
+       (core/inkSvg.js, StrichForm) wäre das ein Zittern ohne Absicht. */
+    const p = (e.pointerType === 'pen' && e.pressure > 0) ? e.pressure : 0.5;
+    return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY, p };
   }
 
   /* ── Am Lineal einrasten ─────────────────────────────────────────────
@@ -820,8 +824,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
       if (p.y < y1) y1 = p.y;
       if (p.y > y2) y2 = p.y;
     }
-    // Die halbe Strichbreite plus zwei Punkte fuer die Kantenglaettung
-    const luft = (stroke.width || 2) / 2 + 2;
+    // Die halbe Strichbreite plus zwei Punkte fuer die Kantenglaettung –
+    // mit Druck kann der Strich bis zum Doppelten anschwellen (StrichForm)
+    const luft = (stroke.width || 2) + 2;
     x1 = Math.max(0, Math.floor(x1 - luft));
     y1 = Math.max(0, Math.floor(y1 - luft));
     x2 = Math.min(pw, Math.ceil(x2 + luft));
@@ -945,13 +950,22 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
      2. DER VORLETZTE PUNKT RUECKT ZU SEINEN NACHBARN. Ein leichter
         Mittelwert (1:2:1) nimmt das Zittern heraus, das jede Hand hat.
+        Der Druck wird genauso gemittelt – sonst flackerte die Breite.
+
+     3. UND EINEN PUNKT DAHINTER NOCH EINMAL. Gemeldet: „nicht so smooth
+        wie in Word". Ein einziger Durchgang liess bei langsamer Schrift
+        noch sichtbare Wellen stehen; zwei hintereinander wirken wie ein
+        Mittel über fünf Punkte (1:4:6:4:1) und kommen dem nahe, was
+        Windows Ink mit seiner Kurvenanpassung (FitToCurve) erreicht.
+        Die Spitze bleibt davon unberührt – der zweite Durchgang fasst
+        nur Punkte an, die schon zwei Meldungen alt sind.
 
      >>> Warum der VORLETZTE und nicht der letzte <<<
      Der letzte Punkt ist die Stelle, an der die Spitze GERADE steht.
      Wer den verschiebt, laesst den Strich hinter dem Stift herlaufen –
      und genau darueber wurde schon einmal geklagt. Der vorletzte liegt
      bereits fest, ihn zurechtzuruecken sieht niemand als Verzoegerung.
-     Jeder Punkt wird dabei genau einmal angefasst, nicht bei jeder
+     Jeder Punkt wird je Durchgang genau einmal angefasst, nicht bei jeder
      Bewegung erneut: sonst wanderte die Schrift mit der Zeit in sich
      zusammen.
      ══════════════════════════════════════════════════════════════════ */
@@ -968,9 +982,16 @@ function attachInput(canvas, textDiv, objLayer, page) {
   function glaetteVorletzten(pts) {
     const n = pts.length;
     if (n < 3) return;
-    const a = pts[n - 3], b = pts[n - 2], c = pts[n - 1];
+    mittle(pts[n - 3], pts[n - 2], pts[n - 1]);
+    if (n >= 4) mittle(pts[n - 4], pts[n - 3], pts[n - 2]);
+  }
+
+  function mittle(a, b, c) {
     b.x = (a.x + 2 * b.x + c.x) / 4;
     b.y = (a.y + 2 * b.y + c.y) / 4;
+    if (Number.isFinite(a.p) && Number.isFinite(b.p) && Number.isFinite(c.p)) {
+      b.p = (a.p + 2 * b.p + c.p) / 4;
+    }
   }
 
   /**
@@ -2286,7 +2307,12 @@ function zerschneide(pts, a, b, R) {
   // Weit weg? Dann nicht erst rechnen – die meisten Striche sind es
   const minX = Math.min(a.x, b.x) - R, maxX = Math.max(a.x, b.x) + R;
   const minY = Math.min(a.y, b.y) - R, maxY = Math.max(a.y, b.y) + R;
-  const zwischen = (p, q, t) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+  const zwischen = (p, q, t) => {
+    const z = { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
+    // Die Schnittkante bekommt den Druck, der dort war – sonst verdickte sie sich
+    if (Number.isFinite(p.p) && Number.isFinite(q.p)) z.p = p.p + (q.p - p.p) * t;
+    return z;
+  };
 
   let getroffen = false;
   const teile = [];
