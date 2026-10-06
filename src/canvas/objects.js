@@ -45,6 +45,40 @@ function objLayerOf(obj) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   GESPERRT: EINE UNTERLAGE ZUM DRAUFSCHREIBEN
+
+   >>> Gemeldet: „Bilder sollte man sperren können, um besser darauf zu
+   zeichnen" <<<
+   Zwei Dinge standen dem im Weg:
+     · Ein Bild VOR dem Text liegt auch vor der Handschrift (2000 gegen
+       1100). Was man darauf schrieb, verschwand darunter.
+     · In der Zeigerstellung nahm das Bild jeden Druck an – ein Stift,
+       der darauf ansetzte, schob es weg, statt zu schreiben.
+
+   Ein gesperrtes Ding (obj.gesperrt) ist deshalb eine Unterlage:
+     · Es rutscht unter die Handschrift, bleibt aber vor dem Text – ein
+       eigenes kleines Band zwischen beiden (OBJ_Z_GESPERRT). Hinter dem
+       Text lag es ohnehin schon darunter.
+     · Der Stift schreibt darauf, auch aus der Zeigerstellung heraus.
+     · Maus und Finger wählen es nur aus – damit das Schloss in der
+       Leiste erreichbar bleibt –, schieben, ziehen und drehen aber nicht.
+     · Weder Radierer noch Schlinge nehmen es mit.
+   Es ist ein Merkmal des Dings und wird mit ihm gespeichert und geteilt. */
+const OBJ_Z_GESPERRT = 1050;
+const OBJ_Z_GESPERRT_SPAN = 49;   // bis knapp unter die Handschrift
+
+function objGesperrt(obj) {
+  return !!(obj && obj.gesperrt);
+}
+
+function objZahl(obj, stelle) {
+  if (objGesperrt(obj) && objLayerOf(obj) === 'front') {
+    return OBJ_Z_GESPERRT + Math.min(stelle, OBJ_Z_GESPERRT_SPAN);
+  }
+  return OBJ_Z[objLayerOf(obj)] + Math.min(stelle, OBJ_Z_SPAN - 1);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    HAELT GERADE JEMAND ANDERES DIESES DING?
 
    Beim Text sperrt eine Zeile (ui/collab.js). Fuer ein Bild, eine Form
@@ -143,7 +177,7 @@ function restackObjects(objLayer, page) {
   }
   (page.objects || []).forEach((o, i) => {
     const body = bodies.get(String(o.id));
-    if (body) body.style.zIndex = OBJ_Z[objLayerOf(o)] + Math.min(i, OBJ_Z_SPAN - 1);
+    if (body) body.style.zIndex = objZahl(o, i);
   });
 }
 
@@ -333,6 +367,8 @@ document.addEventListener('pointerdown', e => {
 
   const wrap = backObjectAt(pageEl, e.clientX, e.clientY);
   if (!wrap) return;
+  // Auf einer gesperrten Unterlage schreibt der Stift (siehe objGesperrt)
+  if (e.pointerType === 'pen' && wrap.classList.contains('gesperrt')) return;
 
   /* Ist es schon ausgewählt, gewinnt es immer: sonst verlöre man es beim
      Verschieben, sobald der Zeiger über einem Buchstaben aufsetzt. */
@@ -434,7 +470,10 @@ const OBJ_ICONS = {
   trash: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 4.2h10.8"/><path d="M6.4 4.2V2.9h3.2v1.3"/><path d="M3.9 4.2 4.5 13a.9.9 0 0 0 .9.8h5.2a.9.9 0 0 0 .9-.8l.6-8.8"/><path d="M6.7 6.8v4.3M9.3 6.8v4.3"/></svg>',
   /* Zwei Winkel, die sich ueberkreuzen – das Zeichen fuer Zuschneiden,
      seit es Bildbearbeitung gibt. */
-  crop: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 1.6v10h10"/><path d="M1.6 4.4h10v10"/></svg>'
+  crop: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 1.6v10h10"/><path d="M1.6 4.4h10v10"/></svg>',
+  // Das Schloss zu und offen – offen ist der Bügel auf einer Seite gelöst
+  lock: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.2" width="9.6" height="6.6" rx="1.3"/><path d="M5.4 7.2V5a2.6 2.6 0 0 1 5.2 0v2.2"/></svg>',
+  unlock: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="7.2" width="9.6" height="6.6" rx="1.3"/><path d="M5.4 7.2V5a2.6 2.6 0 0 1 5.1-.6"/></svg>'
 };
 
 function placeObject(objLayer, obj, page) {
@@ -965,6 +1004,32 @@ function placeObject(objLayer, obj, page) {
     noteObjectChanged();
   }
 
+  /** Schloss auf oder zu – siehe objGesperrt ganz oben. */
+  function umsperren() {
+    pushPageHistory(page);
+    if (objGesperrt(obj)) delete obj.gesperrt;
+    else obj.gesperrt = true;
+    zeigeSperre();
+    restackObjects(objLayer, page);
+    updateUndoRedoUI();
+    noteObjectChanged();
+    if (typeof toast === 'function') {
+      toast(objGesperrt(obj)
+        ? objText('objLocked', 'Gesperrt – mit dem Stift darauf zeichnen.')
+        : objText('objUnlocked', 'Entsperrt – lässt sich wieder verschieben.'));
+    }
+  }
+
+  function zeigeSperre() {
+    const zu = objGesperrt(obj);
+    wrap.classList.toggle('gesperrt', zu);
+    btnSperre.classList.toggle('active', zu);
+    btnSperre.innerHTML = zu ? OBJ_ICONS.lock : OBJ_ICONS.unlock;
+    const titel = zu ? objText('objUnlock', 'Entsperren') : objText('objLock', 'Sperren – darauf zeichnen, nicht verschieben');
+    btnSperre.title = titel;
+    btnSperre.setAttribute('aria-label', titel);
+  }
+
   function setLayer(which) {
     if (objLayerOf(obj) === which) return;
     pushPageHistory(page);
@@ -1025,6 +1090,8 @@ function placeObject(objLayer, obj, page) {
     barBtn(OBJ_ICONS.rotR, objText('objTurnRight', 'Nach rechts drehen'), () => turnBy(90));
     barSep();
   }
+  const btnSperre = barBtn(OBJ_ICONS.lock, objText('objLock', 'Sperren – darauf zeichnen, nicht verschieben'), umsperren);
+  barSep();
   const btnFront = barBtn(OBJ_ICONS.front, objText('objInFrontOfText', 'Vor den Text'), () => setLayer('front'));
   const btnBack = barBtn(OBJ_ICONS.back, objText('objBehindText', 'Hinter den Text'), () => setLayer('back'));
   barSep();
@@ -1133,6 +1200,7 @@ function placeObject(objLayer, obj, page) {
     btnFront.classList.toggle('active', !back);
   }
   markLayerButtons();
+  zeigeSperre();
   applyRotation();
 
   chrome.appendChild(bar);
@@ -1203,6 +1271,16 @@ function placeObject(objLayer, obj, page) {
        darueber liesse es sich weiter aendern. */
     const fremd = fremdGehalten(wrap);
     if (fremd) { e.stopPropagation(); e.preventDefault(); sagWemEsGehoert(fremd); return; }
+
+    /* Gesperrt: der Stift geht durch und schreibt (canvas/input.js),
+       alles andere wählt nur aus – das Schloss muss erreichbar bleiben. */
+    if (objGesperrt(obj)) {
+      if (e.pointerType === 'pen') return;
+      e.stopPropagation(); e.preventDefault();
+      select();
+      if (typeof unterdrueckeTextTipp === 'function') unterdrueckeTextTipp();
+      return;
+    }
 
     e.stopPropagation(); e.preventDefault();
 
@@ -1575,6 +1653,12 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
 
   const wrap = _selObj;
+  /* Gesperrt: eine verirrte Rücktaste soll die Unterlage nicht wegnehmen.
+     Wer sie wirklich loswerden will, hat den Papierkorb in der Leiste. */
+  if (wrap.classList.contains('gesperrt')) {
+    if (typeof toast === 'function') toast(objText('objLockedNoDelete', 'Gesperrt – zum Löschen den Papierkorb in der Leiste nehmen.'));
+    return;
+  }
   const pgEl = wrap.closest('[data-pgid]');
   if (!pgEl) return;
   const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;

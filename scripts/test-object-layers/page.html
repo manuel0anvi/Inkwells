@@ -71,7 +71,7 @@ const zOf = (o) => bodyOf(o).style.zIndex;
 
 // Reihenfolge in der Leiste: 0 links · 1 rechts · 2 vor Text · 3 hinter Text
 //                            4 ganz vorn · 5 ganz hinten · 6 kopieren · 7 loeschen
-const BTN = { vorText: 2, hinterText: 3, ganzVorn: 4, ganzHinten: 5 };
+const BTN = { sperren: 2, vorText: 3, hinterText: 4, ganzVorn: 5, ganzHinten: 6 };
 
 function press(el, x, y) {
   el.dispatchEvent(new PointerEvent('pointerdown', {
@@ -103,13 +103,22 @@ check('B liegt weiterhin oben', oben(UX, UY), 'b');
 
 /* 3. Die Knoepfe sind erreichbar */
 const btns = barBtns(a);
-check('Acht Knoepfe in der Leiste', btns.length, 8);
+check('Neun Knoepfe in der Leiste', btns.length, 9);
 const daneben = btns.map((btn, i) => {
   const r = btn.getBoundingClientRect();
   const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return (el && btn.contains(el)) ? null : (i + ':' + (el ? el.className : 'nichts'));
 }).filter(Boolean);
 check('Jeder Knopf faengt den Zeiger', daneben, []);
+
+/* 3b. Gesperrt rutscht unter die Handschrift (1100), bleibt aber vor dem
+   Text (1000) – und entsperrt wieder dorthin, wo es war */
+btns[BTN.sperren].click();
+check('Gesperrt liegt zwischen Text und Handschrift', zOf(a), '1050');
+check('Und ist so vermerkt', a.gesperrt, true);
+check('Die Griffe sind weg', [...chromeOf(a).querySelectorAll('.obj-handle')].some(h => h.offsetParent), false);
+barBtns(a)[BTN.sperren].click();
+check('Entsperrt wieder im vorderen Band', [zOf(a), a.gesperrt], ['2000', undefined]);
 
 /* 4. "Ganz nach vorn" wirkt UNTER den Bildern */
 btns[BTN.ganzVorn].click();

@@ -2436,7 +2436,8 @@ function radiereFormen(a, b, page, radius, canvas) {
     return zerschneide(u.pts, a, b, radius + u.breite / 2) !== null;
   };
 
-  const weg = objekte.filter(o => o && o.kind === 'shape' && trifftRand(o));
+  // Eine gesperrte Form ist Unterlage, kein Gekritzel (canvas/objects.js)
+  const weg = objekte.filter(o => o && o.kind === 'shape' && !o.gesperrt && trifftRand(o));
   if (!weg.length) return false;
 
   const raus = new Set(weg.map(o => String(o.id)));

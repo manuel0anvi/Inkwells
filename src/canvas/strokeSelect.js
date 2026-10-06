@@ -1058,6 +1058,8 @@
     const info = typeof getPage === 'function' ? getPage(pageId) : null;
     const liste = (info && info.page.objects) || [];
     return liste.filter(o => {
+      // Gesperrt ist Unterlage: die Schlinge um die Schrift darauf nimmt sie nicht mit
+      if (o && o.gesperrt) return false;
       const r = objRechteck(o);
       const mx = (r.minX + r.maxX) / 2, my = (r.minY + r.maxY) / 2;
       if (!imVieleck(schlinge, mx, my)) return false;

@@ -2369,7 +2369,8 @@ function buildPdfPage(nb, sec, page, pageNo, seitenBilder, fmtKlasse) {
   for (const obj of (page.objects || [])) {
     if (!obj) continue;
     const rot = obj.rot ? `transform:rotate(${obj.rot}deg);` : '';
-    const cls = obj.layer === 'back' ? 'obj behind' : 'obj';
+    // Gesperrt heisst unter der Handschrift, aber vor dem Text (canvas/objects.js)
+    const cls = obj.layer === 'back' ? 'obj behind' : (obj.gesperrt ? 'obj gesperrt' : 'obj');
 
     /* Ein Code-Kasten ist kein Bild, sondern HTML (core/code.js). Im
        Ausdruck steht er in seiner HELLEN Fassung, auch wenn er im Heft
@@ -2782,6 +2783,7 @@ ${formelStil}
   .j-code-obj .j-tok-attr { color: #e50000 }
   .j-code-obj .j-tok-satz { color: #808080 }
   .obj.behind { z-index: 100 }
+  .obj.gesperrt { z-index: 1050 }
   .ink { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1100 }
 </style></head><body>${body}</body></html>`;
 }

@@ -1129,6 +1129,12 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   border-radius: 2px
 }
 
+/* Gesperrt (canvas/objects.js, objGesperrt): nur die Leiste mit dem
+   Schloss, keine Griffe – es lässt sich weder ziehen noch drehen. */
+.obj-wrap.gesperrt .obj-handle {
+  display: none
+}
+
 .obj-handle {
   pointer-events: auto;
   position: absolute;
