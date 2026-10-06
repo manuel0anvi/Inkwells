@@ -281,6 +281,12 @@ function _applyZoom() {
      ══════════════════════════════════════════════════════════════════ */
   const sc2 = E('pg-scroll');
   if (sc2) {
+    /* Was hier gilt, darf weiter unten nichts mehr umwerfen. Dort stand
+       `sc.style.overflow = ''` – die Kurzform setzt overflow-x mit
+       zurück, und das gerade gesetzte 'auto' war jedes Mal sofort wieder
+       weg. Weder eine hineingezoomte breite Seite noch das Stück hinter
+       der Unterlage liess sich damit je seitlich hervorrollen. */
+    sc2.style.overflow = '';
     /* Die Breite der Unterlagen steht links vom Blatt wieder dazu, damit
        es mittig bleibt, wo es ohne sie stand (siehe spaltenAusgleich).
        Links angeschlagen, sonst ragte das breitere Band nach beiden
@@ -318,7 +324,7 @@ function _applyZoom() {
     document.querySelectorAll('.j-canvas:not(.live-canvas)').forEach(c => c.style.touchAction = z > 1.21 ? 'none' : '');
   }
   const sc = E('pg-scroll');
-  if (sc) { sc.style.overflow = ''; sc.style.touchAction = ta; }
+  if (sc) sc.style.touchAction = ta;
   const prozent = Math.round((z / BASE_ZOOM) * 100) + '%';
   const lbl = E('btn-zoom-reset');
   if (lbl) lbl.textContent = prozent;
