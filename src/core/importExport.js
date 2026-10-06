@@ -425,6 +425,8 @@ function markeAufSeite(page) {
  */
 function setzeBildObjekt(page, bild, ab) {
   if (!page || !bild || !bild.url) return null;
+  // Eine Stelle mit x und y (canvas/objects.js, einfuegeStelle) statt nur einer Höhe
+  const stelle = (ab && typeof ab === 'object') ? ab : null;
 
   const nutzbar = (page.w || CFG.PAGE_W) - 160;
   let ow = Math.min(420, nutzbar);
@@ -446,6 +448,7 @@ function setzeBildObjekt(page, bild, ab) {
     x: 80, y: Math.round(y),
     w: Math.round(ow), h: Math.round(oh), rot: 0
   };
+  if (stelle && typeof setzeAnStelle === 'function') setzeAnStelle(obj, page, stelle);
 
   if (!page.objects) page.objects = [];
   page.objects.push(obj);
@@ -474,7 +477,7 @@ function setzeBildObjekt(page, bild, ab) {
  * @returns {Promise<number>} wie viele Bilder eingesetzt wurden
  */
 async function fuegeBilderAusZwischenablage(dataTransfer, page, abVorgabe) {
-  if (!dataTransfer || !page) return 0;
+  if (!dataTransfer) return 0;
   if (S.readOnly) return 0;
 
   const dateien = [];
@@ -496,8 +499,17 @@ async function fuegeBilderAusZwischenablage(dataTransfer, page, abVorgabe) {
   if (!dateien.length) return 0;
 
   /* Die Stelle JETZT messen, vor dem Einlesen: das dauert einen Moment,
-     und bis dahin kann die Marke längst woanders stehen. */
-  let ab = Number.isFinite(abVorgabe) ? abVorgabe : markeAufSeite(page);
+     und bis dahin kann der Zeiger längst woanders stehen. Steht er über
+     einer anderen Seite als der aktiven, ist DIESE gemeint
+     (canvas/objects.js, einfuegeStelle). */
+  let stelle = (abVorgabe && typeof abVorgabe === 'object') ? abVorgabe
+    : (Number.isFinite(abVorgabe) || typeof einfuegeStelle !== 'function') ? null : einfuegeStelle();
+  if (stelle && stelle.pgId && (!page || String(stelle.pgId) !== String(page.id))) {
+    const dort = typeof getPage === 'function' ? getPage(stelle.pgId) : null;
+    if (dort && dort.page) page = dort.page;
+  }
+  if (!page) return 0;
+  let ab = Number.isFinite(abVorgabe) ? abVorgabe : (stelle ? null : markeAufSeite(page));
 
   /* Der Schritt in den Verlauf steht VOR der ersten Änderung und gilt für
      alle Bilder zusammen: einmal Rückgängig nimmt das Einsetzen zurück,
@@ -510,11 +522,12 @@ async function fuegeBilderAusZwischenablage(dataTransfer, page, abVorgabe) {
       const roh = await leseBildDatei(datei);
       const bild = await passeBildAn(roh);
       bild.name = datei.name || 'Bild';
-      const obj = setzeBildObjekt(page, bild, ab);
+      const obj = setzeBildObjekt(page, bild, stelle || ab);
       if (!obj) continue;
       gesetzt++;
       // Mehrere auf einmal: das nächste kommt unter das vorige
-      ab = obj.y + obj.h + 16;
+      if (stelle) stelle = { pgId: stelle.pgId, x: obj.x, y: obj.y + obj.h + 16 };
+      else ab = obj.y + obj.h + 16;
     } catch (err) {
       console.warn('[Einfügen] Bild aus der Zwischenablage:', err?.message || err);
     }
@@ -644,7 +657,8 @@ async function bilderInDerZwischenablage() {
  * Was in der Zwischenablage liegt, auf die Seite setzen.
  *
  * @param {object} [page]  Ohne Angabe die Seite, die gerade im Bild steht
- * @param {number} [ab]    Höhe auf der Seite; sonst bei der Schreibmarke
+ * @param {number|object} [ab]  Höhe auf der Seite oder eine Stelle
+ *   (einfuegeStelle); sonst dort, wo der Zeiger ist
  * @returns {Promise<number>} wie viele Bilder eingesetzt wurden
  */
 async function fuegeAusZwischenablageEin(page, ab) {
@@ -745,7 +759,9 @@ document.addEventListener('keydown', (e) => {
       const wo = menu._wo;
       schliesse();
       if (!wo) return;
-      fuegeAusZwischenablageEin(wo.page, wo.ab)
+      // Wo der Finger lag, nicht wo das Knöpfchen steht
+      const stelle = typeof einfuegeStelle === 'function' ? einfuegeStelle({ punkt: { x: wo.x, y: wo.y } }) : null;
+      fuegeAusZwischenablageEin(wo.page, stelle || wo.ab)
         .catch(err => console.warn('[Einfügen] Langer Druck:', err?.message || err));
     });
 
@@ -2018,20 +2034,45 @@ async function insertFilesFlow() {
      örtlich – und gingen gesammelt hinaus, sobald das Recht zurückkommt
      (setCanWrite ruft syncStructure). Gleicher Riegel wie in ui/sidebar.js. */
   if (S.readOnly) { toast(t('sharedNoRight'), true); return; }
+  // Vor dem Dateiwähler: danach steht der Zeiger irgendwo im Dialog
+  const stelle = typeof einfuegeStelle === 'function' ? einfuegeStelle() : null;
   const files = await window.api.pickFiles();
   if (!files || !files.length) return;
 
   const insertType = await showInsertChoice();
   if (!insertType) return;
+  await fuegeDateienEin(files, insertType, stelle);
+}
+window.insertFilesFlow = insertFilesFlow;
 
+/**
+ * Bilder und PDFs ins Heft – als Seiten oder als Objekte.
+ *
+ * >>> Warum das von insertFilesFlow getrennt ist <<<
+ * Das Ablegen per Drag & Drop (ui/titlebar.js) hatte eine eigene Fassung
+ * desselben Ablaufs, und die war stehen geblieben: sie brach ab, sobald
+ * kein Abschnitt als Filter gewählt war – seit den Etiketten der
+ * Normalfall, Ablegen tat also meistens schlicht nichts. Ein Bild kam
+ * dort ausserdem ungepackt hinein und eine Bildseite in alter Form.
+ * Jetzt gehen beide Wege hier durch.
+ *
+ * @param {Array<{kind:'pdf'|'image', dataUrl:string, name:string}>} files
+ * @param {'page'|'object'} insertType
+ * @param {object|null} stelle  wohin (canvas/objects.js, einfuegeStelle)
+ */
+async function fuegeDateienEin(files, insertType, stelle) {
+  if (S.readOnly) { toast(t('sharedNoRight'), true); return; }
   toast(t('processingFiles'));
   const nb = getNb();
   /* Der gezeigte Ausschnitt – darf leer sein. Steht die Ansicht auf
      "alle Seiten", bekommen neue Seiten kein Etikett; frueher brach der
      Einfuegevorgang hier ab, weil immer ein Abschnitt offen sein musste. */
   const sec = activeSection(nb);
-  const info = getPage(S.activePgId);
+  // Die Seite unter der Stelle, sonst die aktive
+  const info = (stelle && stelle.pgId && getPage(stelle.pgId)) || getPage(S.activePgId);
   if (!info) return;
+  // Gilt die Stelle für eine andere Seite, ist sie hier nichts wert
+  if (stelle && String(stelle.pgId) !== String(info.page.id)) stelle = null;
 
   let addedPages = false;
   let firstNewPageId = null;
@@ -2100,6 +2141,15 @@ async function insertFilesFlow() {
             let currY = 80;
             let pageHLimit = (targetPgInfo.page.h || CFG.PAGE_H);
             let ohLimit = (pageHLimit - 120) / chunk.length - 20;
+            /* Die erste Gruppe fängt an der Stelle an – wenn darunter noch
+               Platz für sie ist. Sonst lieber von oben, als jede Seite des
+               PDFs briefmarkengroß zu machen. */
+            let linksX = 80;
+            if (start === 0 && stelle) {
+              const platz = (pageHLimit - stelle.y - 24) / chunk.length - 20;
+              if (platz >= 120) { currY = stelle.y; ohLimit = platz; }
+              linksX = stelle.x;
+            }
 
             pushPageHistory(targetPgInfo.page);
             chunk.forEach((imgObj, idx) => {
@@ -2108,6 +2158,7 @@ async function insertFilesFlow() {
               if (ow > 600) { ow = 600; oh = ow * (imgObj.h / imgObj.w); }
 
               const obj = { id: uid(), kind: 'image', src: imgObj.url, name: f.name, x: 80, y: currY, w: ow, h: oh, rot: 0 };
+              if (typeof setzeAnStelle === 'function') setzeAnStelle(obj, targetPgInfo.page, { x: linksX, y: currY });
               if (!targetPgInfo.page.objects) targetPgInfo.page.objects = [];
               targetPgInfo.page.objects.push(obj);
               if (objLayer) placeObject(objLayer, obj, targetPgInfo.page);
@@ -2146,6 +2197,11 @@ async function insertFilesFlow() {
            verlustfrei gepackt, statt die Originaldatei einzubetten. */
         const gepackt = await passeBildAn(f.dataUrl).catch(() => null);
         const obj = { id: uid(), kind: 'image', src: gepackt ? gepackt.url : f.dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
+        if (stelle && typeof setzeAnStelle === 'function') {
+          setzeAnStelle(obj, info.page, stelle);
+          // Mehrere auf einmal: das nächste unter das vorige
+          stelle = { pgId: stelle.pgId, x: obj.x, y: obj.y + obj.h + 16 };
+        }
         if (!info.page.objects) info.page.objects = [];
         info.page.objects.push(obj);
         if (objLayer) placeObject(objLayer, obj, info.page);
@@ -2187,7 +2243,7 @@ async function insertFilesFlow() {
     toast(t('insertNothing') || 'Es konnte nichts eingefügt werden.', true);
   }
 }
-window.insertFilesFlow = insertFilesFlow;
+window.fuegeDateienEin = fuegeDateienEin;
 
 /* ── SAVE / LOAD / PDF ── */
 /* Der Editor ins Datenmodell, Seite für Seite. Über ohneGriffe, sonst

@@ -79,6 +79,134 @@ function objZahl(obj, stelle) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   WO EIN NEUES DING HINKOMMT
+
+   >>> Gemeldet: „beim Einfügen – Strg+V, Drag & Drop oder irgendwie
+   anders – soll das Objekt dort hinkommen, wo der Cursor ist" <<<
+   Jeder Weg hatte seine eigene Stelle: das Bild aus der Zwischenablage
+   am linken Rand unter der Schreibmarke, das abgelegte und das aus dem
+   Dateiwähler fest bei 80/80, die Form in der Mitte des Sichtbaren, der
+   Ausschnitt aus der Unterlage in der Seitenmitte. Nirgends dort, wo man
+   gerade hinzeigte.
+
+   Jetzt fragen alle hier, und zwar in dieser Reihenfolge:
+     1. Ein PUNKT, den der Weg selbst mitbringt – wo abgelegt oder lange
+        gedrückt wurde.
+     2. Der ZEIGER, wenn er gerade über einer Seite steht – Maus oder
+        schwebender Stift. Das ist der Fall Strg+V.
+     3. Die SCHREIBMARKE, wenn zuletzt getippt statt gezeigt wurde: wer
+        schreibt, lässt die Maus irgendwo liegen und meint die Zeile.
+     4. Der letzte DRUCK auf eine Seite. Wer über die Leiste einfügt,
+        hat den Zeiger auf dem Knopf – gemeint ist die Stelle, an der er
+        vorher war. Festgehalten in Seitenkoordinaten, gilt also auch
+        nach dem Rollen noch.
+   Gibt es nichts davon, kommt null, und der Weg nimmt seine alte Stelle.
+
+   Die Stelle ist die linke obere Ecke – wie ein Klick in Word oder
+   OneNote. setzeAnStelle() hält das Ding dabei ganz auf dem Blatt.
+   ══════════════════════════════════════════════════════════════════════ */
+let _zeigerDa = null;    // { x, y, zeit } – Bildschirm, Maus oder Stift
+let _letzterDruck = null; // { pgId, x, y, zeit } – Seitenkoordinaten
+let _zuletztGetippt = 0;
+
+/** Ein Bildschirmpunkt als Stelle auf der Seite darunter – oder null. */
+function seitenStelleBei(cx, cy) {
+  const el = document.elementFromPoint(cx, cy);
+  const pgEl = el && el.closest ? el.closest('.j-page[data-pgid]') : null;
+  if (!pgEl) return null;
+  const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+  if (!info || !info.page) return null;
+  const r = pgEl.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  const pw = info.page.w || CFG.PAGE_W, ph = info.page.h || CFG.PAGE_H;
+  return {
+    pgId: String(info.page.id),
+    x: (cx - r.left) * pw / r.width,
+    y: (cy - r.top) * ph / r.height
+  };
+}
+
+document.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') return;   // ein Finger schwebt nicht
+  _zeigerDa = { x: e.clientX, y: e.clientY, zeit: performance.now() };
+}, { passive: true, capture: true });
+
+// Hat er das Fenster verlassen, zeigt er auf nichts mehr darin
+document.addEventListener('pointerout', e => { if (!e.relatedTarget) _zeigerDa = null; }, true);
+
+document.addEventListener('pointerdown', e => {
+  const stelle = seitenStelleBei(e.clientX, e.clientY);
+  if (stelle) _letzterDruck = { ...stelle, zeit: performance.now() };
+}, true);
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains('j-text')) _zuletztGetippt = performance.now();
+}, true);
+
+/** Die Schreibmarke als Stelle – nur, wenn sie wirklich im Blatt steht. */
+function stelleDerMarke() {
+  const a = document.activeElement;
+  if (!a || !a.classList || !a.classList.contains('j-text')) return null;
+  const sel = window.getSelection ? window.getSelection() : null;
+  if (!sel || !sel.rangeCount || !a.contains(sel.anchorNode)) return null;
+  const r = sel.getRangeAt(0).getBoundingClientRect();
+  if (!r || (!r.width && !r.height)) return null;
+  const pgEl = a.closest('.j-page[data-pgid]');
+  if (!pgEl) return null;
+  const info = typeof getPage === 'function' ? getPage(pgEl.dataset.pgid) : null;
+  if (!info || !info.page) return null;
+  const pr = pgEl.getBoundingClientRect();
+  if (!pr.width) return null;
+  const massstab = (info.page.w || CFG.PAGE_W) / pr.width;
+  // Unter die Zeile, nicht über sie – sonst deckte das Bild sie zu
+  return { pgId: String(info.page.id), x: (r.left - pr.left) * massstab, y: (r.bottom - pr.top) * massstab + 8 };
+}
+
+/**
+ * Wohin mit einem neuen Ding?
+ *
+ * @param {object} [opt]
+ * @param {{x:number, y:number}} [opt.punkt]  Bildschirmpunkt, den der Weg
+ *   mitbringt (Ablegen, langer Druck)
+ * @returns {{pgId:string, x:number, y:number}|null}  Seitenkoordinaten
+ */
+function einfuegeStelle(opt = {}) {
+  if (opt.punkt) {
+    const hier = seitenStelleBei(opt.punkt.x, opt.punkt.y);
+    if (hier) return hier;
+  }
+  const zeiger = _zeigerDa ? seitenStelleBei(_zeigerDa.x, _zeigerDa.y) : null;
+  const marke = stelleDerMarke();
+  if (zeiger && marke) return _zuletztGetippt > _zeigerDa.zeit ? marke : zeiger;
+  if (zeiger) return zeiger;
+  if (marke) return marke;
+  if (_letzterDruck && typeof getPage === 'function' && getPage(_letzterDruck.pgId)) {
+    return { pgId: _letzterDruck.pgId, x: _letzterDruck.x, y: _letzterDruck.y };
+  }
+  return null;
+}
+
+/**
+ * Setzt obj.x / obj.y an die Stelle – ganz auf dem Blatt, unter dem Kopf.
+ * Ein Ding, das breiter oder höher ist als der Platz, steht am Rand.
+ */
+function setzeAnStelle(obj, page, stelle) {
+  const pw = page.w || CFG.PAGE_W, ph = page.h || CFG.PAGE_H;
+  const RAND = 8;
+  const w = obj.w || 0, h = obj.h || 0;
+  const x = Math.min(stelle.x, pw - w - RAND);
+  const y = Math.min(stelle.y, ph - h - RAND);
+  obj.x = Math.round(Math.max(RAND, x));
+  obj.y = Math.round(Math.max(CFG.HDR + RAND, y));
+  return obj;
+}
+
+window.einfuegeStelle = einfuegeStelle;
+window.setzeAnStelle = setzeAnStelle;
+
+/* ══════════════════════════════════════════════════════════════════════
    HAELT GERADE JEMAND ANDERES DIESES DING?
 
    Beim Text sperrt eine Zeile (ui/collab.js). Fuer ein Bild, eine Form

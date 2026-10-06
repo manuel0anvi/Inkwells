@@ -1903,6 +1903,10 @@
   }
 
   async function schnittEinfuegen(blatt, r, ganzeSeite) {
+    /* Jetzt, vor jeder Rückfrage: die Stelle im Heft, an der man zuletzt
+       war (canvas/objects.js, einfuegeStelle). Der Zeiger selbst steht ja
+       über der Unterlage. */
+    const ort = typeof einfuegeStelle === 'function' ? einfuegeStelle() : null;
     const info = heftSeite();
     if (!info || !info.page) { toast(txt('griffSchnittKeineSeite', 'Keine Heftseite offen'), true); return; }
 
@@ -1965,6 +1969,7 @@
       y: Math.max(8, Math.round((seitenHoehe - oh) / 2) + versatz),
       w: ow, h: oh, rot: 0
     };
+    if (ort && String(ort.pgId) === String(info.page.id)) setzeAnStelle(obj, info.page, ort);
     if (typeof pushPageHistory === 'function') pushPageHistory(info.page);
     if (!info.page.objects) info.page.objects = [];
     info.page.objects.push(obj);

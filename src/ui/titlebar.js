@@ -62,145 +62,34 @@ document.addEventListener('keydown', e => {
   }
 });
 document.addEventListener('dragover', e => e.preventDefault());
+/* Abgelegte Bilder und PDFs gehen denselben Weg wie die aus dem
+   Dateiwähler (core/importExport.js, fuegeDateienEin) – und zwar an die
+   Stelle, an der sie losgelassen wurden. Was über den Unterlagen
+   abgelegt wird, gehört dorthin (ui/griffbereit.js). */
 document.addEventListener('drop', async e => {
   e.preventDefault();
-  const info = getPage(S.activePgId);
-  const nb = getNb();
-  const sec = nb?.sections?.find(s => s.id === nb.activeSecId);
-  if (!info || !sec) return;
+  if (e.target && e.target.closest && e.target.closest('#griff-panel, #griff-view')) return;
+  if (typeof S === 'undefined' || S.readOnly || !S.activePgId) return;
 
-  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
-  if (!files.length) return;
+  const roh = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+  if (!roh.length) return;
+  // Die Stelle sofort – nach der Rückfrage steht der Zeiger auf dem Dialog
+  const stelle = typeof einfuegeStelle === 'function' ? einfuegeStelle({ punkt: { x: e.clientX, y: e.clientY } }) : null;
 
   const insertType = await showInsertChoice();
   if (!insertType) return;
-  toast(t('processingFiles'));
 
-  let addedPages = false;
-  let firstNewPageId = null;
-  let addedObjects = 0;
-
-  for (const f of files) {
-    const r = new FileReader();
-    const dataUrl = await new Promise(res => { r.onload = ev => res(ev.target.result); r.readAsDataURL(f); });
-
-    if (f.type === 'application/pdf') {
-      try {
-        let pdfImageUrls = null;
-        if (insertType === 'page') {
-          /* Das PDF wandert ins Heft, die Seiten zeigen darauf
-             (core/pdfSeiten.js). Hier stand einmal dasselbe Rechnen wie
-             in insertFile, nur mit eigener Massformel – zwei Fassungen
-             derselben Sache, von denen eine falsch werden konnte. */
-          const seiten = await pdfInsHeft(nb, dataUrl, f.name);
-          // Direkt hinter die Seite, auf die abgelegt wurde – die Stelle
-          // zaehlt jetzt im HEFT, nicht im Abschnitt
-          const insertIdx = pageNumberOf(nb, info.page.id);
-          seiten.forEach((b, i) => {
-            const newPg = pdfSeiteZuHeftseite(b);
-            insertPageInto(nb, sec, newPg, insertIdx + i);
-            if (!firstNewPageId) firstNewPageId = newPg.id;
-          });
-          addedPages = true;
-          if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-        } else {
-          pdfImageUrls = await parsePdfToImages(dataUrl);
-          const pages = pagesOfSec(sec, nb);
-          let curIdx = pages.indexOf(info.page);
-          const MAX_PER_PAGE = 5;
-          for (let start = 0; start < pdfImageUrls.length; start += MAX_PER_PAGE) {
-            const chunk = pdfImageUrls.slice(start, start + MAX_PER_PAGE);
-            let targetPgInfo;
-            if (start === 0) {
-              targetPgInfo = info;
-            } else {
-              curIdx++;
-              if (curIdx < pages.length) {
-                targetPgInfo = getPage(pages[curIdx].id);
-              } else {
-                const newPg = makePage(sec?.defaultBg || nb.defaultBg || 'ruled');
-                insertPageInto(nb, sec, newPg, pageNumberOf(nb, pages[curIdx - 1]?.id));
-                targetPgInfo = { page: newPg };
-                addedPages = true;
-                if (!firstNewPageId) firstNewPageId = newPg.id;
-                pages.splice(curIdx, 0, newPg);
-              }
-            }
-
-            const objLayer = E('pg-scroll').querySelector(`[data-pgid="${targetPgInfo.page.id}"]`)?.querySelector('.j-objects');
-            let currY = 80;
-            let pageHLimit = (targetPgInfo.page.h || CFG.PAGE_H);
-            let ohLimit = (pageHLimit - 120) / chunk.length - 20;
-
-            pushPageHistory(targetPgInfo.page);
-            chunk.forEach((imgObj, idx) => {
-              let oh = Math.min(ohLimit, 400);
-              let ow = oh * (imgObj.w / imgObj.h);
-              if (ow > 600) { ow = 600; oh = ow * (imgObj.h / imgObj.w); }
-
-              const obj = { id: uid(), kind: 'image', src: imgObj.url, name: f.name, x: 80, y: currY, w: ow, h: oh, rot: 0 };
-              if (!targetPgInfo.page.objects) targetPgInfo.page.objects = [];
-              targetPgInfo.page.objects.push(obj);
-              if (objLayer) placeObject(objLayer, obj, targetPgInfo.page);
-              addedObjects++;
-              currY += oh + 20;
-            });
-          }
-          if (addedPages && window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-        }
-      } catch (err) {
-        toast(t('pdfError'), true);
-      }
-    } else {
-      if (insertType === 'page') {
-        const pages = pagesOfSec(sec, nb);
-        const curIdx = pages.indexOf(info.page);
-        const newPg = makePage('blank');
-        newPg.bgImg = dataUrl;
-        const tmpImg = new Image();
-        tmpImg.src = dataUrl;
-        await new Promise(r => tmpImg.onload = r);
-        newPg.w = CFG.PAGE_W; // normalize to standard page
-        newPg.h = Math.round(CFG.PAGE_W * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1))) + 56;
-        insertPageInto(nb, sec, newPg, pageNumberOf(nb, info.page.id));
-        if (!firstNewPageId) firstNewPageId = newPg.id;
-        addedPages = true;
-        if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-      } else {
-        const objLayer = E('pg-scroll').querySelector(`[data-pgid="${info.page.id}"]`)?.querySelector('.j-objects');
-        if (objLayer) {
-          pushPageHistory(info.page);
-          const tmpImg = new Image();
-          tmpImg.src = dataUrl;
-          await new Promise(r => tmpImg.onload = r);
-          let ow = 200;
-          let oh = ow * (tmpImg.naturalHeight / (tmpImg.naturalWidth || 1));
-          // Begrenzt und verlustfrei gepackt, wie beim Einfügen (core/importExport.js)
-          const gepackt = typeof passeBildAn === 'function' ? await passeBildAn(dataUrl).catch(() => null) : null;
-          const obj = { id: uid(), kind: 'image', src: gepackt ? gepackt.url : dataUrl, name: f.name, x: 80, y: 80, w: ow, h: oh, rot: 0 };
-          if (!info.page.objects) info.page.objects = [];
-          info.page.objects.push(obj);
-          placeObject(objLayer, obj, info.page);
-          addedObjects++;
-          if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-        }
-      }
-    }
+  const files = [];
+  for (const f of roh) {
+    const dataUrl = await new Promise((ok, fehler) => {
+      const r = new FileReader();
+      r.onload = ev => ok(ev.target.result);
+      r.onerror = () => fehler(r.error);
+      r.readAsDataURL(f);
+    }).catch(() => null);
+    if (dataUrl) files.push({ kind: f.type === 'application/pdf' ? 'pdf' : 'image', dataUrl, name: f.name });
   }
-
-  if (addedPages) {
-    renderSideTree();
-    openSection(sec, firstNewPageId);
-    toast(t('insertedAsPages'));
-  } else if (addedObjects > 0) {
-    S.mode = 'cursor';
-    applyMode();
-    QA('.tb-mode').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cursor'));
-    E('pen-opts').style.display = 'none';
-    E('eraser-opts').style.display = 'none';
-    E('text-opts').style.display = 'flex';
-    toast(addedObjects + ' ' + t('objectsInserted'));
-  }
+  if (files.length) await fuegeDateienEin(files, insertType, stelle);
 });
 
 E('pen-opts').style.display = 'none'; E('eraser-opts').style.display = 'none'; E('text-opts').style.display = 'flex';

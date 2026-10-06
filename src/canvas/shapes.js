@@ -200,7 +200,9 @@ function insertShape(type) {
     return false;
   }
 
-  const info = typeof getPage === 'function' ? getPage(S.activePgId) : null;
+  // Die Seite unter dem Zeiger, sonst die aktive (canvas/objects.js)
+  const ort = typeof einfuegeStelle === 'function' ? einfuegeStelle() : null;
+  const info = typeof getPage === 'function' ? getPage((ort && ort.pgId) || S.activePgId) : null;
   if (!info || !info.page) return false;
   const page = info.page;
   const pageEl = document.querySelector('[data-pgid="' + page.id + '"]');
@@ -214,7 +216,7 @@ function insertShape(type) {
 
   pushPageHistory(page);
 
-  const stelle = formenPlatz(page, pageEl, w, h);
+  const stelle = ort ? setzeAnStelle({ w, h }, page, ort) : formenPlatz(page, pageEl, w, h);
   const obj = {
     id: uid(),
     kind: 'shape',
