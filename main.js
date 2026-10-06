@@ -2202,15 +2202,44 @@ function pfadAbgelehnt(was, filePath) {
    ══════════════════════════════════════════════════════════════════════ */
 const _schreibReihe = new Map();   // Pfad (klein) -> Versprechen des letzten Schreibens
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN HEFT WIRD GEPACKT GESCHRIEBEN
+
+   >>> Gemeldet: „die Dokumente sind schon MB gross mit nur ein paar
+   Seiten" <<<
+   Nachgemessen an einem Matheheft mit 22 Seiten: 8,9 MB, davon 8 MB
+   Handschrift – dreihunderttausend Punkte, jeder als {"x":71.72,"y":92.78}.
+   Genau solche Wiederholung packt gzip besonders gut: 2,3 MB, ein
+   Viertel. Verloren geht dabei nichts, beim Lesen kommt Byte für Byte
+   derselbe Text heraus. Die Handschrift selbst anders abzulegen
+   (Differenzen, Ganzzahlen) hätte noch etwas mehr gebracht, aber jede
+   Stelle geändert, die Striche liest – Live-Bearbeitung, Freigabe,
+   Website. So bleibt alles innen beim Alten, nur die Datei ist kleiner.
+
+   Gelesen werden gepackte Hefte seit dem 23. 9. (heftTextAus, unten) –
+   das war der erste Schritt, und jede App seither kann sie öffnen.
+
+   >>> Warum asynchron und nicht die stärkste Stufe <<<
+   Stufe 9 braucht für dieses Heft eine ganze Sekunde und spart gegenüber
+   der üblichen Stufe 6 nicht einmal ein Prozent. Und gepackt wird im
+   Thread-Pool von Node: der Hauptprozess, der Stift und Maus weiterreicht,
+   steht dabei nicht still (siehe oben). */
+function packeHeft(jsonData) {
+  return new Promise((ok, fehler) => {
+    zlib.gzip(Buffer.from(jsonData, 'utf-8'), { level: 6 }, (err, bytes) => err ? fehler(err) : ok(bytes));
+  });
+}
+
 async function schreibeHeftDatei(filePath, jsonData) {
   const tmpPath = `${filePath}.tmp`;
   try {
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    const gepackt = await packeHeft(jsonData);
 
     // Schreiben und auf die Platte durchdrücken, bevor ersetzt wird
     const fh = await fs.promises.open(tmpPath, 'w');
     try {
-      await fh.writeFile(jsonData, 'utf-8');
+      await fh.writeFile(gepackt);
       await fh.sync();
     } finally {
       await fh.close();
@@ -2252,9 +2281,10 @@ ipcMain.handle('save-to-path', async (_, filePath, data) => {
 /* ══════════════════════════════════════════════════════════════════════
    EIN HEFT LESEN – AUCH EIN GEPACKTES
 
-   Geschrieben wird ein Heft als reines JSON (schreibeHeftDatei). Gelesen
-   wird hier aber auch eines, das mit gzip gepackt ist – erkennbar an den
-   zwei ersten Bytes 1F 8B, die JSON nie haben kann.
+   Geschrieben wird ein Heft gepackt (schreibeHeftDatei). Gelesen wird
+   beides: gzip – erkennbar an den zwei ersten Bytes 1F 8B, die JSON nie
+   haben kann – und reines JSON, wie es ältere Fassungen und der Export
+   hinterlassen.
 
    >>> Warum lesen, bevor irgendwer so schreibt <<<
    Gepackt waere ein Heft mit viel Handschrift noch einmal etwa ein
@@ -2262,7 +2292,7 @@ ipcMain.handle('save-to-path', async (_, filePath, data) => {
    nicht oeffnen – und die Hefte liegen oft in einem Ordner, den mehrere
    Geraete teilen (OneDrive). Deshalb zwei Schritte: erst lernt jede App
    das Lesen, und erst wenn diese Fassung ueberall angekommen ist, darf
-   das Schreiben folgen. Dies hier ist der erste Schritt.
+   das Schreiben folgen. Das Lesen kam am 23. 9., das Schreiben am 6. 10.
    ══════════════════════════════════════════════════════════════════════ */
 function heftTextAus(bytes) {
   if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
