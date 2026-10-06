@@ -22,6 +22,12 @@ function makeCanvas(w, h) {
 function traceStrokePath(ctx, s) {
   const pts = s.path;
   if (!pts || !pts.length) return;
+  /* Mit Druck ist der Strich eine Fläche statt einer Linie mit fester
+     Breite – warum, steht in core/inkSvg.js (StrichForm). */
+  if (window.StrichForm && StrichForm.hatDruck(s)) {
+    StrichForm.fuelle(ctx, pts, s.width);
+    return;
+  }
   if (pts.length === 1) {
     ctx.beginPath();
     ctx.arc(pts[0].x, pts[0].y, s.width / 2, 0, Math.PI * 2);

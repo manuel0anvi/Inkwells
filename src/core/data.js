@@ -200,16 +200,18 @@ const SCHEMA_VERSION = 2;
        Zoom – daher die langen Brueche. Auf ein Hundertstel eines
        Seitenpunkts gerundet ist die Abweichung selbst bei 400 % noch
        ein Zwanzigstel eines Bildpunkts. Das sieht niemand.
-     · der DRUCK `p`. Er wird mitgeschrieben, aber nirgends gezeichnet:
-       ein Strich hat ueberall dieselbe Breite (canvas/drawing.js,
-       applyStrokeStyles). Gebraucht wird er nur waehrend des Zeichnens
-       (canvas/shapeSnap.js), und dort liegt er noch vor.
+     · der DRUCK `p` – jedenfalls dort, wo er nichts sagt. Bei Maus und
+       Finger steht er überall auf demselben Wert, und gleichbleibender
+       Druck zeichnet genauso wie gar keiner. Ändert er sich aber, macht
+       er den Strich dicker und dünner (core/inkSvg.js, StrichForm) und
+       bleibt – auf zwei Stellen gerundet, mehr unterscheidet kein Auge.
      · die HILFSFELDER mit Unterstrich (`_lineTimer`, `_vorschauKasten`,
        `_lineLocked` …). Sie gehoeren dem laufenden Strich in
        canvas/input.js und hatten auf der Platte nie etwas verloren.
 
-   Die Form bleibt dieselbe – `path` ist weiterhin eine Liste aus {x, y}.
-   Ein aelterer Stand der App liest das Ergebnis ohne jede Aenderung.
+   Die Form bleibt dieselbe – `path` ist weiterhin eine Liste aus {x, y},
+   bei Strichen mit Druck {x, y, p}. Ein aelterer Stand der App liest das
+   ohne jede Aenderung; er zeichnet den Strich nur gleich breit.
 
    Verdichtet wird an drei Stellen: am fertigen Strich (canvas/input.js),
    beim Laden (normalizeNotebook, unten) und vor dem Speichern
@@ -222,15 +224,37 @@ function strichRund(v) {
   return Math.round(v * STRICH_RASTER) / STRICH_RASTER;
 }
 
+/* Dieselbe Regel wie StrichForm.hatDruck in core/inkSvg.js – hier noch
+   einmal, weil die Prüfungen data.js ohne die Zeichnerei laden. Ändert
+   sich die eine, muss die andere mit: sonst zeichnet die App einen Druck,
+   den sie beim Speichern wegwirft, oder speichert einen, den sie nicht
+   zeichnet. */
+const STRICH_DRUCK_SPANNE = 0.05;
+
+function strichHatDruck(s) {
+  if (!s || s.isHL || s.isHighlighter || s.isEraser || s.isGeometric) return false;
+  const pts = s.path;
+  if (!Array.isArray(pts) || pts.length < 2) return false;
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) {
+    if (!p || !Number.isFinite(p.p)) continue;
+    if (p.p < lo) lo = p.p;
+    if (p.p > hi) hi = p.p;
+  }
+  return hi - lo > STRICH_DRUCK_SPANNE;
+}
+
 /** Braucht dieser Strich die Kur? Liest nur, schreibt nichts. */
 function strichUnverdichtet(s) {
   if (!s || typeof s !== 'object') return false;
   for (const k in s) if (k.charCodeAt(0) === 95 /* _ */) return true;
   const pts = s.path;
   if (!Array.isArray(pts)) return false;
+  const druck = strichHatDruck(s);
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i];
-    if (!p || p.p !== undefined || strichRund(p.x) !== p.x || strichRund(p.y) !== p.y) return true;
+    if (!p || strichRund(p.x) !== p.x || strichRund(p.y) !== p.y) return true;
+    if (druck ? (!Number.isFinite(p.p) || strichRund(p.p) !== p.p) : p.p !== undefined) return true;
   }
   return false;
 }
@@ -247,10 +271,13 @@ function strichVerdichten(s) {
   if (!strichUnverdichtet(s)) return s;
   for (const k of Object.keys(s)) if (k.charCodeAt(0) === 95) delete s[k];
   if (Array.isArray(s.path)) {
-    s.path = s.path.filter(Boolean).map(p => ({
-      x: strichRund(Number(p.x) || 0),
-      y: strichRund(Number(p.y) || 0)
-    }));
+    const druck = strichHatDruck(s);
+    s.path = s.path.filter(Boolean).map(p => {
+      const q = { x: strichRund(Number(p.x) || 0), y: strichRund(Number(p.y) || 0) };
+      // Ein Punkt ohne Wert mitten in einem Strich mit Druck: der Platzhalter
+      if (druck) q.p = strichRund(Number.isFinite(p.p) ? p.p : 0.35);
+      return q;
+    });
   }
   return s;
 }
