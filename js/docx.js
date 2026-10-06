@@ -258,6 +258,13 @@
     const pts = stroke.path;
     if (!pts || !pts.length) return;
 
+    // Druck wie auf dem Bildschirm (core/inkSvg.js); fehlt die Datei, gleich breit
+    const form = global.StrichForm;
+    if (form && form.hatDruck(stroke)) {
+      form.fuelle(ctx, pts, stroke.width);
+      return;
+    }
+
     if (pts.length === 1) {
       ctx.beginPath();
       ctx.arc(pts[0].x, pts[0].y, stroke.width / 2, 0, Math.PI * 2);

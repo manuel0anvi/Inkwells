@@ -74,6 +74,254 @@
 
   const istMarker = s => !!(s.isHL || s.isHighlighter);
 
+  /* ══════════════════════════════════════════════════════════════════════
+     DRUCK MACHT DEN STRICH DICKER – WIE IN WORD
+
+     >>> Gemeldet: „nicht so smooth wie in Word, und mit Druck soll die
+     Linie stärker werden" <<<
+     Word zeichnet über Windows Ink, und das tut von Haus aus zweierlei
+     (DrawingAttributes): die Breite folgt dem Druck (IgnorePressure ist
+     aus), und der Weg wird als Kurve gelegt statt als Kette von Strecken
+     (FitToCurve). Die Kurve hatten wir schon; der Druck wurde zwar
+     gemessen, aber nirgends gezeichnet – ein Strich war überall gleich
+     dick, und genau das lässt Handschrift nach Plotter aussehen.
+
+     >>> Warum ein Umriss und nicht viele kurze Striche <<<
+     Eine Canvas-Linie hat EINE Breite. Die naheliegende Abhilfe – jedes
+     Stück einzeln mit eigener Breite – malt an jeder Naht die geglätteten
+     Randpixel zweimal, und genau davon war die dünne Schrift schon einmal
+     fleckig (canvas/input.js, stiftVorschau). Hier entsteht deshalb die
+     FLÄCHE des Strichs und wird in einem Zug gefüllt: eine Kantenglättung,
+     keine Naht.
+
+     Die Fläche ist die Vereinigung aus
+       · je Stück dem Trapez, das zwei aufeinanderfolgende Kreise berührt
+         (ein Kreis je Abtastpunkt, Radius aus dem Druck),
+       · je Naht zwei Dreiecken vom Mittelpunkt zu den Ecken beider
+         Trapeze. Biegt der Weg, gehen die Trapeze an der Aussenseite
+         auseinander wie Fächerblätter; ohne die Dreiecke blieb dort ein
+         Keil leer, und an jeder Kurve standen feine helle Haare ab,
+       · Kreisen an den Enden und überall, wo der Weg so scharf abknickt,
+         dass auch das Dreieck den Bogen nicht mehr deckt.
+     Alle Teile laufen im selben Drehsinn, die Füllregel „nonzero" legt
+     sie also ohne Löcher übereinander – auch dort, wo sich der Strich
+     selbst kreuzt oder in einer engen Schleife umkehrt. Ein Umriss aus
+     linkem und rechtem Rand, wie ihn manche Zeichenprogramme legen,
+     klappt dort auf der Innenseite um und stanzt Löcher in die Schrift.
+
+     >>> Welche Striche ihn bekommen <<<
+     Nur Stiftstriche, deren Druck sich wirklich ändert. Marker und
+     Radierer bleiben gleich breit wie in Word; Maus und Finger melden
+     keinen Druck. Ein Strich ohne Druckwerte sieht damit Punkt für Punkt
+     aus wie bisher – alte Hefte ändern sich nicht.
+
+     Dieselbe Regel steht in core/data.js (strichHatDruck): dort wird
+     entschieden, ob der Druck mitgespeichert wird. Doppelt, weil diese
+     Datei auch auf der Website läuft, wo es data.js nicht gibt.
+     ══════════════════════════════════════════════════════════════════════ */
+  const DRUCK_SPANNE = 0.05;   // darunter gilt der Druck als gleichbleibend
+  const ABTAST_SCHRITT = 3;    // Seitenpunkte zwischen zwei Kreisen höchstens
+  const KNICK = 0.3;           // Bogenmaß; darüber bekommt die Naht einen Kreis
+
+  /* >>> Warum 0,35 die Mitte ist und nicht 0,5 <<<
+     Nachgemessen an drei Millionen Punkten aus echten Heften: beim
+     gewöhnlichen Schreiben drückt die Hand um 0,34, neun von zehn Punkten
+     liegen unter 0,5. Mit 0,5 als Mitte wäre fast alles dünner geworden,
+     als in der Leiste eingestellt ist. So hat gewöhnliche Schrift genau
+     die eingestellte Breite, leicht aufgesetzt gut die Hälfte davon und
+     kräftig gedrückt bis zum Doppelten.
+
+     Der Exponent unter 1 macht die Kurve unten steiler: das Ansetzen
+     und Abheben – wo der Druck gegen null geht – läuft spitz aus wie
+     bei Tinte. Ohne Druckwert (0,5 ist dann nur Platzhalter) wird hier
+     ohnehin nicht gerechnet, siehe hatDruck. */
+  const DRUCK_MITTE = 0.35;
+
+  function druckFaktor(p) {
+    const q = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : DRUCK_MITTE;
+    return Math.min(2, 0.25 + 0.75 * Math.pow(q / DRUCK_MITTE, 0.85));
+  }
+
+  function hatDruck(s) {
+    if (!s || istMarker(s) || s.isEraser || s.isGeometric) return false;
+    const pts = s.path;
+    if (!Array.isArray(pts) || pts.length < 2) return false;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of pts) {
+      if (!p || !Number.isFinite(p.p)) continue;
+      if (p.p < lo) lo = p.p;
+      if (p.p > hi) hi = p.p;
+    }
+    return hi - lo > DRUCK_SPANNE;
+  }
+
+  /* Dieselbe Kurve wie traceStrokePath – Quadratkurven durch die
+     Mittelpunkte, am Ende eine Strecke –, nur in kleinen Schritten
+     abgelaufen. Der Druck läuft auf derselben Kurve mit, er springt
+     also nicht von Punkt zu Punkt. */
+  function abtasten(pts, halb) {
+    const xs = [], ys = [], rs = [];
+    const dr = p => (p && Number.isFinite(p.p)) ? p.p : 0.5;
+    const nimm = (x, y, p) => { xs.push(x); ys.push(y); rs.push(Math.max(0.25, halb * druckFaktor(p))); };
+    const n = pts.length;
+    let ax = pts[0].x, ay = pts[0].y, ap = dr(pts[0]);
+    nimm(ax, ay, ap);
+    for (let i = 1; i < n - 1; i++) {
+      const c = pts[i], d = pts[i + 1];
+      const cp = dr(c);
+      const bx = (c.x + d.x) / 2, by = (c.y + d.y) / 2, bp = (cp + dr(d)) / 2;
+      const lang = Math.hypot(c.x - ax, c.y - ay) + Math.hypot(bx - c.x, by - c.y);
+      const k = Math.min(16, Math.max(1, Math.ceil(lang / ABTAST_SCHRITT)));
+      for (let j = 1; j <= k; j++) {
+        const t = j / k, u = 1 - t;
+        nimm(u * u * ax + 2 * u * t * c.x + t * t * bx,
+             u * u * ay + 2 * u * t * c.y + t * t * by,
+             u * u * ap + 2 * u * t * cp + t * t * bp);
+      }
+      ax = bx; ay = by; ap = bp;
+    }
+    const z = pts[n - 1], zp = dr(z);
+    const lang = Math.hypot(z.x - ax, z.y - ay);
+    const k = Math.min(16, Math.max(1, Math.ceil(lang / ABTAST_SCHRITT)));
+    for (let j = 1; j <= k; j++) {
+      const t = j / k;
+      nimm(ax + (z.x - ax) * t, ay + (z.y - ay) * t, ap + (zp - ap) * t);
+    }
+    return { xs, ys, rs };
+  }
+
+  /** Winkel auf (-π, π] gebracht. */
+  const winkel = w => Math.atan2(Math.sin(w), Math.cos(w));
+
+  /**
+   * Die Fläche eines Strichs mit Druck.
+   *
+   * @param {Array<{x,y,p}>} pts
+   * @param {number} breite   die eingestellte Breite (bei halbem Druck)
+   * @returns {{vierecke:number[], kreise:number[]}}  je Viereck acht Zahlen
+   *   (vier Ecken; ein Dreieck wiederholt seine erste), je Kreis drei
+   *   (Mitte, Radius) – flach, weil eine Seite voller Handschrift schnell
+   *   Zehntausende davon hat
+   */
+  function umriss(pts, breite) {
+    const { xs, ys, rs } = abtasten(pts, breite / 2);
+    const m = xs.length;
+    const vierecke = [], kreise = [];
+    const kreisBei = new Uint8Array(m);
+    kreisBei[0] = 1; kreisBei[m - 1] = 1;
+
+    /* Ein Dreieck im selben Drehsinn wie alles andere – sonst höbe es
+       unter „nonzero" das Trapez auf, über dem es liegt. */
+    const dreieck = (cx, cy, ax, ay, bx, by) => {
+      if ((ax - cx) * (by - cy) - (ay - cy) * (bx - cx) >= 0) vierecke.push(cx, cy, ax, ay, bx, by, cx, cy);
+      else vierecke.push(cx, cy, bx, by, ax, ay, cx, cy);
+    };
+
+    // Je Stück: Richtung, Winkel der Tangenten und wo das Trapez endete
+    let vorPhi = null, vorA = null;
+    let vpx = 0, vpy = 0, vmx = 0, vmy = 0;
+    for (let j = 0; j < m - 1; j++) {
+      const dx = xs[j + 1] - xs[j], dy = ys[j + 1] - ys[j];
+      const d = Math.hypot(dx, dy);
+      const r1 = rs[j], r2 = rs[j + 1];
+      /* Ein Kreis liegt ganz im anderen: kein Trapez, das ihn berührt.
+         Dann tragen die beiden Kreise selbst das Stück. */
+      if (d <= Math.abs(r1 - r2) + 1e-6) {
+        kreisBei[j] = 1; kreisBei[j + 1] = 1;
+        vorPhi = null;
+        continue;
+      }
+      const ux = dx / d, uy = dy / d;
+      const nx = -uy, ny = ux;
+      const cos = (r1 - r2) / d, sin = Math.sqrt(Math.max(0, 1 - cos * cos));
+      const pX = ux * cos + nx * sin, pY = uy * cos + ny * sin;   // Tangente auf der einen Seite
+      const mX = ux * cos - nx * sin, mY = uy * cos - ny * sin;   // und auf der anderen
+      // In dieser Reihenfolge läuft das Viereck im selben Sinn wie arc()
+      vierecke.push(
+        xs[j] + r1 * mX, ys[j] + r1 * mY,
+        xs[j + 1] + r2 * mX, ys[j + 1] + r2 * mY,
+        xs[j + 1] + r2 * pX, ys[j + 1] + r2 * pY,
+        xs[j] + r1 * pX, ys[j] + r1 * pY
+      );
+      const phi = Math.atan2(dy, dx), A = Math.acos(cos);
+      if (vorPhi !== null) {
+        /* Den Keil zwischen dem vorigen Trapez und diesem decken die
+           Dreiecke bis auf ein Bogenstück. Bis KNICK ist das flacher als
+           ein Prozent des Radius; darüber kommt der Kreis dazu. */
+        dreieck(xs[j], ys[j], vpx, vpy, xs[j] + r1 * pX, ys[j] + r1 * pY);
+        dreieck(xs[j], ys[j], vmx, vmy, xs[j] + r1 * mX, ys[j] + r1 * mY);
+        const plus = winkel((phi + A) - (vorPhi + vorA));
+        const minus = winkel((phi - A) - (vorPhi - vorA));
+        if (Math.abs(plus) > KNICK || Math.abs(minus) > KNICK) kreisBei[j] = 1;
+      }
+      vorPhi = phi; vorA = A;
+      vpx = xs[j + 1] + r2 * pX; vpy = ys[j + 1] + r2 * pY;
+      vmx = xs[j + 1] + r2 * mX; vmy = ys[j + 1] + r2 * mY;
+    }
+    for (let j = 0; j < m; j++) if (kreisBei[j]) kreise.push(xs[j], ys[j], rs[j]);
+    return { vierecke, kreise };
+  }
+
+  /* ── Einmal ausrechnen, oft zeichnen ──────────────────────────────
+     Die Seite wird bei jedem Strich, jedem Radieren und jedem Blättern
+     ganz neu gezeichnet. Die Fläche auszurechnen kostet ein Mehrfaches
+     dessen, was eine Linie kostet – bei allen Strichen jedes Mal wäre
+     das auf schwachen Geräten zu spüren. Sie wird deshalb je Strich
+     gemerkt und nur neu gebaut, wenn er sich verändert hat.
+
+     Woran das zu sehen ist: Anzahl der Punkte, erster, mittlerer und
+     letzter Punkt und die Breite. Verschieben und Vergrössern bewegen den ersten mit,
+     der laufende Strich wächst, Radieren und Verdichten legen eine neue
+     Liste an – und die Liste selbst ist der Schlüssel. */
+  const _flaechen = typeof WeakMap === 'function' ? new WeakMap() : null;
+
+  function flaecheVon(pts, breite) {
+    const a = pts[0], h = pts[pts.length >> 1], z = pts[pts.length - 1];
+    const merk = _flaechen && _flaechen.get(pts);
+    if (merk && merk.n === pts.length && merk.b === breite
+      && merk.ax === a.x && merk.ay === a.y && merk.hx === h.x && merk.hy === h.y
+      && merk.zx === z.x && merk.zy === z.y) return merk.weg;
+
+    const { vierecke: v, kreise: k } = umriss(pts, breite);
+    const weg = new Path2D();
+    for (let i = 0; i < v.length; i += 8) {
+      weg.moveTo(v[i], v[i + 1]);
+      weg.lineTo(v[i + 2], v[i + 3]);
+      weg.lineTo(v[i + 4], v[i + 5]);
+      weg.lineTo(v[i + 6], v[i + 7]);
+      weg.closePath();
+    }
+    for (let i = 0; i < k.length; i += 3) {
+      weg.moveTo(k[i] + k[i + 2], k[i + 1]);
+      weg.arc(k[i], k[i + 1], k[i + 2], 0, Math.PI * 2);
+    }
+    if (_flaechen) _flaechen.set(pts, { n: pts.length, b: breite, ax: a.x, ay: a.y, hx: h.x, hy: h.y, zx: z.x, zy: z.y, weg });
+    return weg;
+  }
+
+  /** Die Fläche auf ein Canvas – fillStyle muss schon gesetzt sein. */
+  function fuelle(ctx, pts, breite) {
+    ctx.fill(flaecheVon(pts, breite), 'nonzero');
+  }
+
+  /** Dieselbe Fläche als SVG-Weg. Bogen mit sweep=1 läuft wie arc(). */
+  function umrissWeg(pts, breite) {
+    const { vierecke: v, kreise: k } = umriss(pts, breite);
+    let d = '';
+    for (let i = 0; i < v.length; i += 8) {
+      d += 'M' + zahl(v[i]) + ' ' + zahl(v[i + 1]) + 'L' + zahl(v[i + 2]) + ' ' + zahl(v[i + 3])
+        + 'L' + zahl(v[i + 4]) + ' ' + zahl(v[i + 5]) + 'L' + zahl(v[i + 6]) + ' ' + zahl(v[i + 7]) + 'Z';
+    }
+    for (let i = 0; i < k.length; i += 3) {
+      const x = k[i], y = k[i + 1], r = zahl(k[i + 2]);
+      d += 'M' + zahl(x + k[i + 2]) + ' ' + zahl(y) + 'A' + r + ' ' + r + ' 0 1 1 ' + zahl(x - k[i + 2]) + ' ' + zahl(y)
+        + 'A' + r + ' ' + r + ' 0 1 1 ' + zahl(x + k[i + 2]) + ' ' + zahl(y) + 'Z';
+    }
+    return d;
+  }
+
+  global.StrichForm = { hatDruck, fuelle, umriss, druckFaktor };
+
   /* ══ RADIEREN OHNE MASKE ═════════════════════════════════════════════
      Ein Punkt eines Strichs faellt weg, wenn er naeher am Weg des
      Radierers liegt als dessen halbe Breite plus ein Viertel der Breite
@@ -150,7 +398,13 @@
             const l = Math.hypot(b.x - a.x, b.y - a.y);
             if (l > schritt && (imKasten(a) || imKasten(b) || l > grenze)) {
               const n = Math.ceil(l / schritt);
-              for (let k = 1; k < n; k++) nimm({ x: a.x + (b.x - a.x) * k / n, y: a.y + (b.y - a.y) * k / n });
+              for (let k = 1; k < n; k++) {
+                const t = k / n;
+                const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+                // Ohne Druck wäre der eingefügte Punkt plötzlich halb gedrückt
+                if (Number.isFinite(a.p) && Number.isFinite(b.p)) q.p = a.p + (b.p - a.p) * t;
+                nimm(q);
+              }
             }
           }
           nimm(stueck[i]);
@@ -185,10 +439,15 @@
     const f = farbe(s.color);
     const alpha = Number(s.alpha);
     const op = !istMarker(s) && Number.isFinite(alpha) && alpha > 0 && alpha < 1 ? ' opacity="' + zahl(alpha) + '"' : '';
+    // Am Strich entschieden, nicht am Stück: ein Rest hinter dem Radierer
+    // gehört weiter zu einem Strich mit Druck, auch wenn er gleichmässig ist
+    const druck = hatDruck(s);
     let aus = '';
     for (const pts of teil.stuecke) {
       if (!pts.length) continue;
-      if (pts.length === 1) {
+      if (druck && pts.length > 1) {
+        aus += '<path d="' + umrissWeg(pts, b) + '" fill="' + f + '"' + op + '/>';
+      } else if (pts.length === 1) {
         aus += '<circle cx="' + zahl(pts[0].x) + '" cy="' + zahl(pts[0].y) + '" r="' + zahl(b / 2) + '" fill="' + f + '"' + op + '/>';
       } else {
         aus += '<path d="' + weg(!!s.isGeometric, pts) + '" fill="none" stroke="' + f + '" stroke-width="' + zahl(b)

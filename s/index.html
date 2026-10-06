@@ -166,6 +166,7 @@
   <p id="share-edit-hint" class="share-edit-hint" style="display:none"></p>
 
   <!-- Seiten werden 1:1 wie in der App gerendert (css/notebook.css) -->
+  <div id="viewer-abschnitte" class="viewer-abschnitte" role="toolbar" hidden></div>
   <div id="viewer-pages" class="ink viewer-pages"></div>
 </div>
 
@@ -267,6 +268,11 @@ function renderShared(notebook, meta) {
 
   // Die ersten Seiten sofort, der Rest beim Hinscrollen (js/viewer.js)
   renderPagesLazy(notebook, pages, viewerPages);
+  zeigeAbschnitte(notebook, pages, document.getElementById('viewer-abschnitte'), (sichtbar, gesamt) => {
+    parts[0] = sichtbar === gesamt ? `${gesamt} ${gesamt === 1 ? t('page') : t('pages')}`
+      : tf('view_pages_of', { n: sichtbar, total: gesamt });
+    document.getElementById('share-meta').textContent = parts.join(' · ');
+  });
 }
 
 /* Export: identisch zum Dashboard (js/export-ui.js). PDF läuft über den

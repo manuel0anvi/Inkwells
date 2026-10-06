@@ -211,6 +211,12 @@ function traceStrokePath(ctx, s) {
   const pts = s.path;
   if (!pts || !pts.length) return;
 
+  // Mit Stiftdruck dick und dünn wie in der App (js/inkSvg.js, StrichForm)
+  if (window.StrichForm && StrichForm.hatDruck(s)) {
+    StrichForm.fuelle(ctx, pts, s.width);
+    return;
+  }
+
   if (pts.length === 1) {
     ctx.beginPath();
     ctx.arc(pts[0].x, pts[0].y, s.width / 2, 0, Math.PI * 2);
@@ -342,7 +348,11 @@ function buildObjectElement(obj, index) {
      hineinpasst, wird darin geschoben (css/pages.css). Ohne Zeiger
      liess er sich hier weder nach unten noch zur Seite rollen. */
   body.style.pointerEvents = kind === 'code' ? 'auto' : 'none';
-  body.style.zIndex = OBJ_Z[obj.layer === 'back' ? 'back' : 'front'] + Math.min(index, OBJ_Z_SPAN - 1);
+  /* Gesperrt liegt vor dem Text, aber unter der Handschrift – es ist die
+     Unterlage, auf die geschrieben wurde (src/canvas/objects.js, objZahl). */
+  body.style.zIndex = (obj.gesperrt && obj.layer !== 'back')
+    ? 1050 + Math.min(index, 49)
+    : OBJ_Z[obj.layer === 'back' ? 'back' : 'front'] + Math.min(index, OBJ_Z_SPAN - 1);
   if (obj.rot) body.style.transform = 'rotate(' + (Number(obj.rot) || 0) + 'deg)';
 
   try {
@@ -710,6 +720,8 @@ function seiteAnhaengen(notebook, page, index, container) {
   const eintrag = { scaler, pageEl: null, width, height, page, notebook, wartet: false };
   eintrag.build = () => buildPageElement(eintrag.notebook, eintrag.page, index);
   pageScalers.push(eintrag);
+  // Ein gewählter Abschnitt gilt auch für Seiten, die erst noch ankommen
+  if (_abschnittSeiten && !_abschnittSeiten.has(String(page.id))) scaler.classList.add('abschnitt-aus');
   container.appendChild(scaler);
   if (page.pdfRef && !page.bgImg && !notebook.pdfs) { eintrag.wartet = true; rescaleOne(eintrag); return; }
   if (index < SOFORT_SEITEN || !seitenBeobachter) baueEintrag(eintrag);
@@ -733,6 +745,126 @@ function seitenUebernehmen(notebook, pages) {
     if (seitenBeobachter) seitenBeobachter.observe(eintrag.scaler); else baueEintrag(eintrag);
   });
   return true;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ABSCHNITTE
+
+   >>> Gemeldet: „auf der Webseite sollte man die Abschnitte auch sehen
+   und auswählen können" <<<
+   In der App schränkt ein Abschnitt die Ansicht auf seine Seiten ein
+   (src/core/data.js, visiblePages). Hier gab es nur das ganze Heft am
+   Stück. Jetzt steht über den Seiten eine Reihe: „Alle Seiten" und je
+   Abschnitt ein Knopf.
+
+   >>> Warum AUSGEBLENDET und nicht neu gebaut <<<
+   Die übrigen Seiten bleiben in pageScalers, nur unsichtbar. Der Export
+   (js/export-ui.js) zählt die Seiten über genau diese Liste – „Seite 3"
+   muss dort Seite 3 des Hefts bleiben, egal welcher Abschnitt gerade
+   gewählt ist. Aus demselben Grund behält jede Seite ihre echte Nummer.
+
+   Zugehörigkeit wie in der App: seit dem Umbau steht sie als secId an
+   der Seite, ältere Hefte führen sie in section.pgIds bzw. section.pages.
+   Ein Abschnitt, der alle Seiten umfasst (das frühere „Allgemein"), sagt
+   nichts und fehlt in der Reihe.
+   ══════════════════════════════════════════════════════════════════════ */
+let _abschnittSeiten = null;   // Set der Seitenkennungen – null heißt alle
+
+function seitenVonAbschnitt(notebook, sec) {
+  const ids = new Set();
+  for (const p of (notebook.pages || [])) {
+    if (p && p.secId != null && String(p.secId) === String(sec.id)) ids.add(String(p.id));
+  }
+  if (notebook.schemaVersion !== 2) {
+    for (const id of (sec.pgIds || [])) ids.add(String(id));
+    for (const p of (sec.pages || [])) if (p && p.id) ids.add(String(p.id));
+  }
+  return ids;
+}
+
+function abschnitteVon(notebook, pages) {
+  const sections = Array.isArray(notebook && notebook.sections) ? notebook.sections : [];
+  const vorhanden = new Set(pages.map(p => String(p.id)));
+  return sections
+    .filter(sec => sec && sec.id != null)
+    .map(sec => {
+      const ids = new Set([...seitenVonAbschnitt(notebook, sec)].filter(id => vorhanden.has(id)));
+      return { sec, ids };
+    })
+    .filter(a => a.ids.size > 0 && a.ids.size < pages.length);
+}
+
+/**
+ * Die Reihe der Abschnitte über den Seiten.
+ *
+ * @param {object} notebook
+ * @param {Array} pages       in Heftreihenfolge (getNotebookPages)
+ * @param {HTMLElement} leiste
+ * @param {function(number, number)} [beiWechsel]  (sichtbar, gesamt)
+ */
+function zeigeAbschnitte(notebook, pages, leiste, beiWechsel) {
+  if (!leiste) return;
+  const liste = abschnitteVon(notebook, pages);
+  leiste.innerHTML = '';
+  leiste.hidden = !liste.length;
+
+  // Ein Abschnitt aus der Adresse (geteilter Link), sonst alle Seiten
+  const gewuenscht = new URLSearchParams(location.search).get('sec');
+  const start = liste.find(a => String(a.sec.id) === gewuenscht) || null;
+
+  const knopf = (text, farbe, anzahl, wahl) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'abschnitt-knopf';
+    if (farbe) {
+      const punkt = document.createElement('span');
+      punkt.className = 'abschnitt-punkt';
+      punkt.style.background = farbe;
+      b.appendChild(punkt);
+    }
+    b.appendChild(document.createTextNode(text));
+    const zahl = document.createElement('span');
+    zahl.className = 'abschnitt-zahl';
+    zahl.textContent = anzahl;
+    b.appendChild(zahl);
+    b.addEventListener('click', () => waehle(wahl, b));
+    leiste.appendChild(b);
+    return b;
+  };
+
+  function waehle(eintrag, b) {
+    _abschnittSeiten = eintrag ? eintrag.ids : null;
+    for (const k of leiste.querySelectorAll('.abschnitt-knopf')) {
+      const an = k === b;
+      k.classList.toggle('aktiv', an);
+      k.setAttribute('aria-pressed', an ? 'true' : 'false');
+    }
+    for (const e of pageScalers) {
+      const aus = !!_abschnittSeiten && !!e.page && !_abschnittSeiten.has(String(e.page.id));
+      e.scaler.classList.toggle('abschnitt-aus', aus);
+    }
+    // Die Adresse merkt sich den Abschnitt – ein geteilter Link zeigt ihn mit
+    const adresse = new URL(location.href);
+    if (eintrag) adresse.searchParams.set('sec', String(eintrag.sec.id));
+    else adresse.searchParams.delete('sec');
+    history.replaceState(history.state, document.title, adresse.pathname + adresse.search + adresse.hash);
+    requestAnimationFrame(rescaleAllPages);
+    if (typeof beiWechsel === 'function') beiWechsel(_abschnittSeiten ? _abschnittSeiten.size : pages.length, pages.length);
+  }
+
+  _abschnittSeiten = null;
+  if (!liste.length) {
+    if (typeof beiWechsel === 'function') beiWechsel(pages.length, pages.length);
+    return;
+  }
+  leiste.setAttribute('aria-label', t('view_sections') || 'Abschnitte');
+  const alle = knopf(t('view_all_pages') || 'Alle Seiten', null, pages.length, null);
+  let startKnopf = alle;
+  for (const a of liste) {
+    const b = knopf(a.sec.name || '—', a.sec.color || null, a.ids.size, a);
+    if (a === start) startKnopf = b;
+  }
+  waehle(start, startKnopf);
 }
 
 /** Die gewählten (sonst alle) Seiten jetzt bauen – vor dem Drucken. */

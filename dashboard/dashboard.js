@@ -1045,7 +1045,10 @@ function renderNotebook(nb, opt = {}) {
   viewerTitle.style.display = 'inline-block';
 
   // Adresszeile mitführen, damit der Teilen-Link zum offenen Heft passt
-  const shareUrl = `${window.location.pathname}?nb=${encodeURIComponent(notebook.id)}`;
+  // Ein gewählter Abschnitt bleibt in der Adresse stehen (js/viewer.js, zeigeAbschnitte)
+  const sec = new URLSearchParams(window.location.search).get('sec');
+  const shareUrl = `${window.location.pathname}?nb=${encodeURIComponent(notebook.id)}`
+    + (sec ? `&sec=${encodeURIComponent(sec)}` : '');
   history.replaceState({}, document.title, shareUrl);
 
   const pages = getNotebookPages(notebook);
@@ -1053,10 +1056,14 @@ function renderNotebook(nb, opt = {}) {
   viewerPageCountTop.textContent = `${pages.length} ${pageLabel}`;
 
   // Die Seiten stehen schon da, während es lud – sie bleiben, wenn sie passen
-  if (opt.behalteSeiten && typeof seitenUebernehmen === 'function' && seitenUebernehmen(notebook, pages)) return;
+  if (opt.behalteSeiten && typeof seitenUebernehmen === 'function' && seitenUebernehmen(notebook, pages)) {
+    zeigeAbschnitteImBetrachter(notebook, pages);
+    return;
+  }
 
   viewerPages.innerHTML = '';
   pageScalers.length = 0;
+  zeigeAbschnitteImBetrachter(notebook, []);
 
   if (!pages.length) {
     const empty = document.createElement('div');
@@ -1071,6 +1078,17 @@ function renderNotebook(nb, opt = {}) {
 
   // Die ersten Seiten sofort, der Rest beim Hinscrollen (js/viewer.js)
   renderPagesLazy(notebook, pages, viewerPages);
+  zeigeAbschnitteImBetrachter(notebook, pages);
+}
+
+/** Die Abschnitte über den Seiten, samt Zähler oben rechts (js/viewer.js). */
+function zeigeAbschnitteImBetrachter(notebook, pages) {
+  zeigeAbschnitte(notebook, pages, document.getElementById('viewer-abschnitte'), (sichtbar, gesamt) => {
+    if (!gesamt) return;
+    viewerPageCountTop.textContent = sichtbar === gesamt
+      ? `${gesamt} ${gesamt === 1 ? (t('page') || 'Seite') : (t('pages') || 'Seiten')}`
+      : tf('view_pages_of', { n: sichtbar, total: gesamt });
+  });
 }
 
 /** Der Betrachter steht schon da, das Heft ist noch unterwegs. */
@@ -1081,6 +1099,8 @@ function zeigeHeftLaedt(nb) {
   const viewerTitle = document.getElementById('viewer-title');
   viewerTitle.textContent = nb.name || 'Untitled';
   viewerPageCountTop.textContent = '';
+  // Die Abschnitte des vorigen Hefts gehören nicht über dieses
+  zeigeAbschnitte({ sections: [] }, [], document.getElementById('viewer-abschnitte'));
   viewerPages.innerHTML = '';
   pageScalers.length = 0;
   const hinweis = document.createElement('p');

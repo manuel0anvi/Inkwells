@@ -1115,9 +1115,10 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   inset: 0;
   transform-origin: 50% 50%;
   pointer-events: none;
-  outline: 1.5px solid var(--gold);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(200, 169, 110, .14)
+  /* Der Rahmen bleibt beim Zoomen gleich dünn – siehe --zk in core/zoom.js */
+  outline: calc(1.5px * var(--zk, 1)) solid var(--gold);
+  outline-offset: calc(2px * var(--zk, 1));
+  box-shadow: 0 0 0 calc(4px * var(--zk, 1)) rgba(200, 169, 110, .14)
 }
 
 /* ══ DER RAHMEN BESTIMMT, NICHT DAS BILD ═══════════════════════════════
@@ -1138,6 +1139,12 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   height: 100%;
   object-fit: fill;
   border-radius: 2px
+}
+
+/* Gesperrt (canvas/objects.js, objGesperrt): nur die Leiste mit dem
+   Schloss, keine Griffe – es lässt sich weder ziehen noch drehen. */
+.obj-wrap.gesperrt .obj-handle {
+  display: none
 }
 
 .obj-handle {
@@ -1258,11 +1265,17 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   right: -4px
 }
 
+/* ── Der Drehgriff ───────────────────────────────────────────────────
+   Mittig über margin statt über translateX(-50%): das transform käme
+   NACH dem scale der Griffe (--griff-k) und schöbe den Griff beim
+   Verkleinern zur Seite. Sein Abstand zum Objekt wächst und schrumpft
+   mit ihm – sonst hinge ein kleiner Griff weit weg im Leeren. Die Mitte
+   liegt 23 px unter der Kante: 11 halbe Griffbreite plus 12 Luft. */
 .obj-handle.rot {
   top: auto;
-  bottom: -34px;
+  bottom: calc(-11px - 23px * var(--griff-k, 1));
   left: 50%;
-  transform: translateX(-50%);
+  margin-left: -11px;
   background: var(--gold);
   border-color: var(--gb);
   color: #241b10;
@@ -1278,26 +1291,29 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 }
 
 .obj-handle.rot:hover {
-  transform: translateX(-50%) scale(1.12)
+  transform: scale(1.12)
 }
 
 /* Steht die Leiste ausnahmsweise unten, muss der Drehgriff nach oben –
    sonst liegen beide übereinander. */
 .obj-chrome:has(.obj-bar.below) .obj-handle.rot {
-  top: -34px;
+  top: calc(-11px - 23px * var(--griff-k, 1));
   bottom: auto
 }
 
 /* ── Schwebende Leiste über dem ausgewählten Bild ───────────────────
    Sie hängt am Bild, dreht sich aber nicht mit: canvas/objects.js setzt
-   die Gegendrehung auf transform. Deshalb steht hier KEIN transform,
-   das dort nicht auch wieder gesetzt wird. */
+   Verschiebung und Gegendrehung (translate, rotate). Hier steht nur das
+   scale, das den Zoom aufhebt – die Leiste ist auf dem Schirm immer
+   gleich gross (--zk, core/zoom.js). Kein transform: es käme nach dem
+   scale und schöbe die Leiste zur Seite. */
 .obj-bar {
   pointer-events: auto;
   position: absolute;
-  bottom: calc(100% + 12px);
+  bottom: calc(100% + 12px * var(--zk, 1));
   left: 50%;
-  transform: translateX(-50%);
+  translate: -50% 0;
+  scale: var(--zk, 1);
   transform-origin: 50% 100%;
   display: flex;
   align-items: center;
@@ -1315,7 +1331,7 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 /* Am Seitenanfang ist über dem Bild kein Platz – dann darunter */
 .obj-bar.below {
   bottom: auto;
-  top: calc(100% + 12px);
+  top: calc(100% + 12px * var(--zk, 1));
   transform-origin: 50% 0
 }
 
@@ -1371,7 +1387,8 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 .ink-sel {
   position: absolute;
   z-index: 1210;
-  border: 1.5px dashed var(--gold, #c9a227);
+  /* Beim Zoomen gleich dünn – siehe --zk in core/zoom.js */
+  border: calc(1.5px * var(--zk, 1)) dashed var(--gold, #c9a227);
   border-radius: 3px;
   background: rgba(201, 162, 39, .07);
   cursor: move;
@@ -1398,7 +1415,9 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
   cursor: move;
   touch-action: none;
-  transition: transform .1s ease
+  transition: transform .1s ease;
+  /* Auf dem Schirm immer gleich gross, wie die Griffe an Objekten */
+  scale: var(--zk, 1)
 }
 
 .ink-sel-end:hover {
@@ -1420,7 +1439,8 @@ body.touch-input .obj-body[data-kind="shape"]::after {
   border: 1.5px solid #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
   touch-action: none;
-  transition: transform .1s ease
+  transition: transform .1s ease;
+  scale: var(--zk, 1)
 }
 
 .ink-sel-ecke.nw { cursor: nwse-resize }
