@@ -1021,6 +1021,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
     S._drawPointerId = e.pointerId;
     // Ein Strich der Hand wird verworfen, sobald der Stift kommt (app.js)
     S._drawPointerTyp = e.pointerType;
+    // Wer den Strich beendet, wenn das Abheben anderswo ankommt (unten)
+    S._strichAbheben = strichAbheben;
     _strichAnfang = performance.now();
     /* Eine Auswahl aus einer vorigen Schlinge gilt nur, bis wieder
        gezeichnet wird – sonst bliebe ihr Rahmen als Fremdkörper stehen,
@@ -1454,6 +1456,13 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
     e.preventDefault();
 
+    // Die Spitze ist oben, das Abheben aber nie angekommen – siehe unten
+    if (keinKontaktMehr(e)) { S._strichAbheben(e); return; }
+    /* Der Strich gehört einer anderen Seite: dorthin kommen seine Punkte
+       nur, solange sie den Zeiger fängt. Hier wären es die Koordinaten
+       des falschen Blatts. */
+    if (S._strichAbheben && S._strichAbheben !== strichAbheben) return;
+
     const gesammelt = (typeof e.getCoalescedEvents === 'function')
       ? e.getCoalescedEvents() : null;
     const meldungen = (gesammelt && gesammelt.length) ? gesammelt : [e];
@@ -1531,10 +1540,15 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (gewachsen && !stroke._shapeDetected) planeVorschau(stroke, vorhergesagtePunkte(e, stroke));
   }, { passive: false });
 
-  div.addEventListener('pointerup', e => {
+  div.addEventListener('pointerup', strichAbheben);
+
+  function strichAbheben(e) {
     if (!S.isDrawing || e.pointerId !== S._drawPointerId) return;
+    // Begonnen auf einer anderen Seite: die beendet ihn auch
+    if (S._strichAbheben && S._strichAbheben !== strichAbheben) { S._strichAbheben(e); return; }
     S.isDrawing = false;
     S._drawPointerId = null;
+    S._strichAbheben = null;
     S._rulerKlebt = false;    // der nächste Strich fängt frei an
     beendeFormZug();
     stopLineTimer(S._cur);
@@ -1628,7 +1642,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
 
     S._cur = null; page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id] || []));
     if (!alsAuswahl && !leerRadiert && window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
-  });
+  }
   /* ══════════════════════════════════════════════════════════════════
      ABGEBROCHEN – ABER DER STRICH IST TROTZDEM DA
 
@@ -1656,7 +1670,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
     stopLineTimer(S._cur);
     stopVorschau();
     const abgebrochen = S._cur;
-    S.isDrawing = false; S._cur = null; S._drawPointerId = null;
+    S.isDrawing = false; S._cur = null; S._drawPointerId = null; S._strichAbheben = null;
     S._rulerKlebt = false;
     clearLiveCanvas();
     if (S.mode === 'eraser' && S._restoreMode) { switchMode(S._restoreMode); S._restoreMode = null; }
@@ -1987,6 +2001,7 @@ function cancelActiveStroke() {
   const stroke = S._cur;
   S.isDrawing = false;
   S._drawPointerId = null;
+  S._strichAbheben = null;
   S._cur = null;
   clearLiveCanvas();
   if (!stroke) return;
@@ -2104,6 +2119,49 @@ function setLiveOpacity(wert) {
    true` in der Konsole, dann meldet jeder Druck seinen Code.
    ══════════════════════════════════════════════════════════════════════ */
 window.stiftTastenZeigen = false;
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER STIFT SCHREIBT NICHT, WENN ER NUR SCHWEBT
+
+   >>> Gemeldet: „manchmal schreibt es schon, bevor ich aufsetze – beim
+   Hovern. App zu, zehn Minuten später geht es wieder" <<<
+   Ein Strich endete nur, wenn das Abheben (pointerup) bei der Seite
+   ankam, auf der er begonnen hatte. Gefangen wird der Zeiger dort mit
+   setPointerCapture – aber der Fang geht verloren, sobald die Seite
+   während des Schreibens neu aufgebaut wird (Abgleich, Blättern, eine
+   Meldung der Live-Bearbeitung) oder das System dazwischengeht. Dann
+   landete das Abheben woanders, S.isDrawing blieb stehen, und weil ein
+   Stift unter Windows seine Kennung behält, galt jede spätere Bewegung
+   – auch die schwebende – als Fortsetzung des Strichs. Bis zum
+   Neustart.
+
+   Deshalb zwei Sicherungen:
+     · Jede Bewegung sagt in `buttons`, ob die Spitze aufliegt. Tut sie
+       es nicht mehr, ist der Strich zu Ende, egal wo das Abheben blieb.
+     · Ein Abheben, das bei keiner Seite ankommt, fängt das Dokument auf.
+   Beendet wird jeweils von der Seite, auf der der Strich begann
+   (S._strichAbheben) – nicht von der, über der der Stift gerade ist.
+   ══════════════════════════════════════════════════════════════════════ */
+function keinKontaktMehr(e) {
+  if (e.pointerType === 'touch') return false;   // ohne Kontakt keine Bewegung
+  if (e.pointerType === 'pen') {
+    // Spitze (1) oder Radierer-Ende (32); bei der Schlinge die Taste (2)
+    const halt = (S._cur && S._cur._lasso) ? (1 | 2 | 32) : (1 | 32);
+    return (e.buttons & halt) === 0;
+  }
+  return e.buttons === 0;
+}
+
+document.addEventListener('pointermove', e => {
+  if (!S.isDrawing || e.pointerId !== S._drawPointerId || !S._strichAbheben) return;
+  if (keinKontaktMehr(e)) S._strichAbheben(e);
+});
+for (const art of ['pointerup', 'pointercancel']) {
+  document.addEventListener(art, e => {
+    if (!S.isDrawing || e.pointerId !== S._drawPointerId || !S._strichAbheben) return;
+    S._strichAbheben(e);
+  });
+}
 
 function istRadierTaste(e) {
   // Beim Stift das Radierer-Zeichen, bei der Maus die rechte Taste
