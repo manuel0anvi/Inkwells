@@ -540,7 +540,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
     /* Druck nur vom Stift. Eine gedrückte Maustaste meldet immer 0,5, ein
        Touchscreen je nach Treiber irgendetwas Zufälliges – als Strichbreite
        (core/inkSvg.js, StrichForm) wäre das ein Zittern ohne Absicht. */
-    const p = (e.pointerType === 'pen' && e.pressure > 0) ? e.pressure : 0.5;
+    const druck = typeof stiftDruckAn !== 'function' || stiftDruckAn();
+    const p = (druck && e.pointerType === 'pen' && e.pressure > 0) ? e.pressure : 0.5;
     return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY, p };
   }
 
@@ -825,7 +826,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
       if (p.y > y2) y2 = p.y;
     }
     // Die halbe Strichbreite plus zwei Punkte fuer die Kantenglaettung –
-    // mit Druck kann der Strich bis zum Doppelten anschwellen (StrichForm)
+    // mit Druck kann der Strich anschwellen (StrichForm, DICKSTE_ANTEIL)
     const luft = (stroke.width || 2) + 2;
     x1 = Math.max(0, Math.floor(x1 - luft));
     y1 = Math.max(0, Math.floor(y1 - luft));

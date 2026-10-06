@@ -385,6 +385,40 @@ function updateTouchDrawUI() {
   document.body.classList.toggle('touch-draw', touchDrawActive());
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   STIFTDRUCK AN UND AUS
+
+   >>> Gemeldet: „man sollte das an- und ausschalten können" <<<
+   Der Druck macht die Linie dicker und dünner (core/inkSvg.js). Wer
+   lieber gleich breit schreibt, schaltet ihn hier ab. Das gilt für das,
+   was ab jetzt geschrieben wird – canvas/input.js nimmt den Druck dann
+   gar nicht erst auf. Was schon steht, bleibt, wie es geschrieben wurde.
+   ══════════════════════════════════════════════════════════════════════ */
+function stiftDruckAn() {
+  return !(typeof Settings !== 'undefined' && Settings.get && Settings.get('stiftDruckAus'));
+}
+
+function zeigeDruckSchalter() {
+  const btn = E('btn-stiftdruck');
+  if (!btn) return;
+  btn.classList.toggle('active', stiftDruckAn());
+  // Der Marker ist immer gleich breit – dort wäre der Schalter ohne Wirkung
+  btn.style.display = (S.mode === 'pen1' || S.mode === 'pen2') ? '' : 'none';
+}
+
+(function () {
+  const btn = E('btn-stiftdruck');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const an = !stiftDruckAn();
+    if (typeof Settings !== 'undefined' && Settings.set) Settings.set('stiftDruckAus', !an);
+    zeigeDruckSchalter();
+    toast(an ? t('penPressureOn') : t('penPressureOff'));
+  });
+  if (typeof Settings !== 'undefined' && Settings.onChange) Settings.onChange(zeigeDruckSchalter);
+  zeigeDruckSchalter();
+})();
+
 /* Pen color presets */
 QA('.pen-sw[data-pcolor]').forEach(sw => {
   sw.addEventListener('click', () => {
@@ -1781,6 +1815,7 @@ function switchMode(mode) {
   QA('.tb-mode[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   const isPen = mode === 'pen1' || mode === 'pen2' || mode === 'hl';
   E('pen-opts').style.display = isPen ? 'flex' : 'none';
+  if (typeof zeigeDruckSchalter === 'function') zeigeDruckSchalter();
   E('eraser-opts').style.display = mode === 'eraser' ? 'flex' : 'none';
   E('text-opts').style.display = mode === 'cursor' ? 'flex' : 'none';
   // Liegt noch Gezeichnetes ausgewählt, bleiben seine Farben stehen (oben)

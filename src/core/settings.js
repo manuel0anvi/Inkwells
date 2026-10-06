@@ -20,6 +20,12 @@ const DEFAULT_SETTINGS = {
      der Werkzeugleiste weiterhin ab; DIESE Entscheidung steht hier.
      Der alte Wert wird beim Laden weggeräumt (STALE_SETTINGS). */
   touchDrawOff: false,
+  /* ── Macht der Stiftdruck die Linie dicker? ───────────────────────
+     Ja, solange nichts anderes gesagt wird (core/inkSvg.js, StrichForm).
+     Wer lieber gleich breit schreibt, schaltet es bei den Stiftbreiten
+     ab. Wie beim Finger steht hier das ABSCHALTEN: eine Datei aus der
+     Zeit davor kennt den Wert nicht, und dort war der Druck schon an. */
+  stiftDruckAus: false,
   /* ── Meldet Windows eine Chat-Nachricht? ──────────────────────────
      Ja, solange nichts anderes gesagt wird – und deshalb steht hier das
      ABSCHALTEN und nicht das Anschalten. Eine Einstellungsdatei aus der

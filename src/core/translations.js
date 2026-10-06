@@ -449,6 +449,10 @@ const TRANSLATIONS = {
     touchDraw: 'Mit dem Finger zeichnen',
     touchDrawOn: 'Der Finger zeichnet jetzt. Zwei Finger bewegen die Seite.',
     touchDrawOff: 'Der Finger bewegt die Seite wieder.',
+    penPressure: 'Druck',
+    penPressureTip: 'Stiftdruck: fester drücken macht die Linie dicker',
+    penPressureOn: 'Stiftdruck an – fester drücken, dickere Linie.',
+    penPressureOff: 'Stiftdruck aus – die Linie bleibt gleich breit.',
     dragToReorder: 'Ziehen, um die Reihenfolge zu ändern',
     done: 'Fertig',
     
@@ -1533,6 +1537,10 @@ const TRANSLATIONS = {
     touchDraw: 'Draw with your finger',
     touchDrawOn: 'Your finger draws now. Two fingers move the page.',
     touchDrawOff: 'Your finger moves the page again.',
+    penPressure: 'Pressure',
+    penPressureTip: 'Pen pressure: pressing harder makes the line thicker',
+    penPressureOn: 'Pen pressure on – press harder for a thicker line.',
+    penPressureOff: 'Pen pressure off – the line keeps one width.',
     dragToReorder: 'Drag to reorder',
     done: 'Done',
     
@@ -2604,6 +2612,10 @@ const TRANSLATIONS = {
     touchDraw: 'Disegna con il dito',
     touchDrawOn: 'Ora il dito disegna. Due dita spostano la pagina.',
     touchDrawOff: 'Il dito sposta di nuovo la pagina.',
+    penPressure: 'Pressione',
+    penPressureTip: 'Pressione della penna: premendo di più la linea si ingrossa',
+    penPressureOn: 'Pressione attiva – premi di più per una linea più spessa.',
+    penPressureOff: 'Pressione disattivata – la linea resta uguale.',
     dragToReorder: 'Trascina per riordinare',
     done: 'Fatto',
     
