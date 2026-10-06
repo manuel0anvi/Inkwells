@@ -2248,93 +2248,13 @@ function istGeraderStrich(s) {
    gezogen) geht weiterhin ganz – sie ist ein Ding, kein Gekritzel, und
    zwei Reste davon wollte niemand haben.
 
-   Alte Hefte können noch Radierstriche enthalten; die zeichnet
-   canvas/drawing.js weiter wie bisher.
+   Alte Hefte können noch Radierstriche enthalten. Sie werden beim Laden
+   auf dieselbe Weise eingerechnet (core/data.js, radierstricheEinrechnen)
+   und verschwinden dabei.
    ══════════════════════════════════════════════════════════════════════ */
 
-/** Quadrat des Abstands von (x,y) zur Radierstrecke a–b. */
-function radierAbstand2(x, y, a, b) {
-  const d = pointToLineDistance(x, y, a.x, a.y, b.x, b.y);
-  return d * d;
-}
-
-/**
- * Welcher Teil der Strecke p–q liegt näher als R an der Radierstrecke a–b?
- *
- * Der Abstand zu einer Strecke ist entlang einer anderen Strecke eine
- * konvexe Grösse – der getroffene Teil ist also immer EIN Stück. Gesucht
- * wird erst die engste Stelle, dann von dort aus beide Ränder.
- *
- * @returns {[number, number]|null} Anfang und Ende als Anteil 0…1
- */
-function radierIntervall(p, q, a, b, R) {
-  const R2 = R * R;
-  const f = t => radierAbstand2(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t, a, b);
-  let lo = 0, hi = 1;
-  for (let i = 0; i < 40; i++) {
-    const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
-    if (f(m1) < f(m2)) hi = m2; else lo = m1;
-  }
-  const tm = (lo + hi) / 2;
-  if (f(tm) >= R2) return null;
-  const rand = (aussen, innen) => {
-    for (let i = 0; i < 40; i++) {
-      const m = (aussen + innen) / 2;
-      if (f(m) < R2) innen = m; else aussen = m;
-    }
-    return innen;
-  };
-  return [f(0) < R2 ? 0 : rand(0, tm), f(1) < R2 ? 1 : rand(1, tm)];
-}
-
-function wegStrecke(pts) {
-  let l = 0;
-  for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  return l;
-}
-
-/**
- * Zerschneidet einen Linienzug an der Radierstrecke a–b mit Radius R.
- *
- * @returns {Array<Array<{x,y}>>|null}  die Reste – oder null, wenn er gar
- *   nicht getroffen wurde (dann bleibt der Strich, wie er ist)
- */
-function zerschneide(pts, a, b, R) {
-  const R2 = R * R;
-  const drin = p => radierAbstand2(p.x, p.y, a, b) < R2;
-  if (pts.length === 1) return drin(pts[0]) ? [] : null;
-
-  // Weit weg? Dann nicht erst rechnen – die meisten Striche sind es
-  const minX = Math.min(a.x, b.x) - R, maxX = Math.max(a.x, b.x) + R;
-  const minY = Math.min(a.y, b.y) - R, maxY = Math.max(a.y, b.y) + R;
-  const zwischen = (p, q, t) => {
-    const z = { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
-    // Die Schnittkante bekommt den Druck, der dort war – sonst verdickte sie sich
-    if (Number.isFinite(p.p) && Number.isFinite(q.p)) z.p = p.p + (q.p - p.p) * t;
-    return z;
-  };
-
-  let getroffen = false;
-  const teile = [];
-  let cur;
-  if (drin(pts[0])) { getroffen = true; cur = []; } else cur = [pts[0]];
-
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p = pts[i], q = pts[i + 1];
-    const weit = Math.max(p.x, q.x) < minX || Math.min(p.x, q.x) > maxX
-      || Math.max(p.y, q.y) < minY || Math.min(p.y, q.y) > maxY;
-    const iv = weit ? null : radierIntervall(p, q, a, b, R);
-    if (!iv) { cur.push(q); continue; }
-    getroffen = true;
-    if (iv[0] > 0) cur.push(zwischen(p, q, iv[0]));
-    if (cur.length >= 2) teile.push(cur);
-    cur = iv[1] < 1 ? [zwischen(p, q, iv[1]), q] : [];
-  }
-  if (cur.length >= 2) teile.push(cur);
-  if (!getroffen) return null;
-  // Ein Rest von weniger als einem halben Punkt wäre nur noch ein Klecks
-  return teile.filter(t => wegStrecke(t) >= 0.5);
-}
+/* Wie zerschnitten wird (zerschneide, radierIntervall) steht in
+   core/data.js – dort braucht es auch das Laden alter Hefte. */
 
 /** Eine echte Linie: zwei Punkte und lang genug, um eine zu sein. */
 function istEchteLinie(s) {
