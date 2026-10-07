@@ -3,6 +3,12 @@
 An diesem Projekt arbeiten zwei Leute gleichzeitig, jeder mit Claude Code.
 Die Regeln hier sorgen dafür, dass sich das nicht in die Quere kommt.
 
+## Offene Fehler
+
+`BUGS.md` listet bekannte, noch nicht behobene Fehler mit Datei und Zeile.
+Wer nach Fehlern gefragt wird oder „mach die Bugs“ hört: dort anfangen. Einen
+behobenen Eintrag im selben Commit aus `BUGS.md` löschen.
+
 ## Git — vor und nach jeder Aufgabe
 
 **Vor dem Anfangen:** `git pull`. Sonst wird auf einem veralteten Stand
