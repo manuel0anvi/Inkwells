@@ -430,6 +430,8 @@
 }
 
 .griff-view-inner {
+  /* Die Rollleisten richten sich an diesem Kasten aus (ui/rollleiste.js) */
+  position: relative;
   width: 0;
   overflow: hidden;
   flex-shrink: 0;
@@ -500,18 +502,10 @@
   /* Derselbe dunkle Grund wie der Rollbereich des Hefts: die Blätter
      sollen darin liegen wie die Heftseiten daneben. */
   background: #1a1a24;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sb2) transparent
-}
-
-.griff-view-body::-webkit-scrollbar {
-  width: 6px;
-  height: 6px
-}
-
-.griff-view-body::-webkit-scrollbar-thumb {
-  background: var(--sb2);
-  border-radius: 3px
+  /* Der Balken des Browsers ist aus – es steht dieselbe eigene
+     Rollleiste darauf wie auf der Blattspalte (ui/rollleiste.js), damit
+     beide gleich aussehen und die Hand beim Schreiben nichts wegrollt. */
+  scrollbar-width: none
 }
 
 /* ══ EIN STAPEL JE UNTERLAGE ═════════════════════════════════════════

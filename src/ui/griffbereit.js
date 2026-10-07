@@ -1345,8 +1345,9 @@
        nach rechts kleiner gezogen. Ohne diese Zeile war genau das ein
        Wisch nach rechts: wer die Datei schmaler machen wollte, hatte sie
        zugemacht. Dasselbe gilt für das ✕ – wer daneben trifft und die
-       Hand wegzieht, soll nichts anderes auslösen. */
-    const aufKnopf = (ziel) => !!(ziel && ziel.closest && ziel.closest('button'));
+       Hand wegzieht, soll nichts anderes auslösen. Und für die
+       Rollleisten: wer die waagerechte nach rechts zieht, will rollen. */
+    const aufKnopf = (ziel) => !!(ziel && ziel.closest && ziel.closest('button, .rollleiste'));
 
     /* >>> Zugezoomt gibt es nichts zu wischen <<<
        Ist die Seite breiter als die Spalte, schiebt ein Finger nach
@@ -1841,7 +1842,8 @@
     if (!kaesten.length) return;
 
     const spalte = Math.min(grenze(), Math.max(MIN_BREITE, d.breite || VORGABE_BREITE));
-    const breite = Math.max(80, Math.round((spalte - 22) * (d.zoom || 1)));
+    // 20 = Innenabstand links und rechts; einen Balken des Browsers gibt es nicht
+    const breite = Math.max(80, Math.round((spalte - 20) * (d.zoom || 1)));
 
     const erste = Math.max(0, Math.min(kaesten.length - 1,
       Math.round((d.stelle || 0) * (kaesten.length - 1))));
@@ -1993,6 +1995,23 @@
     if (leisteOffen()) { setzeLeiste(false); return; }
     if (ansichtOffen()) schliesse();
   });
+
+  /* ══ DIESELBE ROLLLEISTE WIE AM HEFT ═════════════════════════════
+     Die Masse des Kastens ändern sich mit jedem Satz, der dazukommt, mit
+     jeder Seite, die ihr Seitenverhältnis bekommt, und mit dem Zoom –
+     gemessen wird deshalb jeder Satz, nicht nur der Kasten. */
+  (function rollleisten() {
+    const k = kasten();
+    if (!k || typeof rollleisteAnbringen !== 'function') return;
+    const stelle = rollleisteAnbringen(k);
+    if (typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(stelle);
+    for (const satz of k.children) ro.observe(satz);
+    new MutationObserver((aenderungen) => {
+      for (const a of aenderungen) for (const n of a.addedNodes) if (n.nodeType === 1) ro.observe(n);
+      stelle();
+    }).observe(k, { childList: true });
+  })();
 
   /* Das Fenster wird schmaler: die halbe Breite ist eine andere geworden,
      und die Seiten müssen in der neuen Breite noch einmal entstehen. */

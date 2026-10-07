@@ -25,14 +25,33 @@
 
    Zwei Leisten, eine Rechnung: senkrecht immer, waagerecht nur, wenn die
    Seite breiter ist als die Spalte (core/zoom.js schaltet overflow-x).
+
+   >>> Dieselbe Leiste in der Unterlage <<<
+   Gemeldet: „bei der PDF-Leiste ist die Scrollbar nicht die gleiche wie
+   beim Heft". Dort stand noch der Balken des Browsers – anders im
+   Aussehen und blind für die Hand, genau wie oben beschrieben. Deshalb
+   ist das Bauen hier eine Funktion (rollleisteAnbringen), und die
+   Unterlage (ui/griffbereit.js) holt sich dieselbe.
    ══════════════════════════════════════════════════════════════════════ */
 
-(function () {
-  const sc = E('pg-scroll');
-  const spalte = sc && sc.parentElement;
-  if (!sc || !spalte) return;
+const MIN_GRIFF = 32;   // kleiner wird der Griff nicht, sonst trifft ihn keiner
 
-  const MIN_GRIFF = 32;   // kleiner wird der Griff nicht, sonst trifft ihn keiner
+/**
+ * Eine senkrechte und eine waagerechte Leiste an einen Rollbereich hängen.
+ *
+ * @param {HTMLElement} sc       der Rollbereich – sein eigener Balken muss
+ *                               per CSS aus sein (scrollbar-width: none)
+ * @param {object} [wie]
+ * @param {function} [wie.querErlaubt] ob waagerecht überhaupt gerollt
+ *                               werden darf; ohne sie genügt Überbreite
+ * @param {HTMLElement[]} [wie.beobachte] was sonst noch die Rollmasse
+ *                               ändert und deshalb mitgemessen wird
+ * @returns {function} stellt beide Leisten neu
+ */
+function rollleisteAnbringen(sc, wie) {
+  const spalte = sc && sc.parentElement;
+  if (!sc || !spalte) return () => {};
+  const querErlaubt = (wie && wie.querErlaubt) || (() => true);
 
   /** Die Hand liegt auf – der Stift ist da oder war es gerade eben. */
   function istHand(e) {
@@ -59,8 +78,7 @@
     /** Lage und Grösse an Spalte und Rollstand anpassen. */
     function stelle() {
       const gesamt = sc[A.gesamt], sicht = sc[A.sicht];
-      const noetig = gesamt > sicht + 1
-        && (senkrecht || sc.style.overflowX === 'auto');
+      const noetig = gesamt > sicht + 1 && (senkrecht || querErlaubt());
       leiste.style.display = noetig ? '' : 'none';
       if (!noetig) return;
 
@@ -158,23 +176,33 @@
 
   sc.addEventListener('scroll', planeStellen, { passive: true });
   window.addEventListener('resize', planeStellen, { passive: true });
-  window.addEventListener('inkwells:zoom', planeStellen);
   if (typeof ResizeObserver === 'function') {
     const ro = new ResizeObserver(planeStellen);
     ro.observe(sc);
-    const pw = E('pages-wrap');
-    if (pw) ro.observe(pw);
+    for (const el of (wie && wie.beobachte) || []) ro.observe(el);
   }
+  planeStellen();
+  return planeStellen;
+}
+
+(function () {
+  const sc = E('pg-scroll');
+  if (!sc) return;
+  const pw = E('pages-wrap');
+  const stelle = rollleisteAnbringen(sc, {
+    querErlaubt: () => sc.style.overflowX === 'auto',
+    beobachte: pw ? [pw] : []
+  });
+
+  window.addEventListener('inkwells:zoom', stelle);
   /* Die Rollhoehe haengt am unteren Rand von #pages-wrap (core/zoom.js,
      passeRollhoeheAn) und an overflow-x der Spalte. Beides steht im
      style-Attribut, und das meldet kein ResizeObserver. */
   if (typeof MutationObserver === 'function') {
-    const mo = new MutationObserver(planeStellen);
+    const mo = new MutationObserver(stelle);
     mo.observe(sc, { attributes: true, attributeFilter: ['style'] });
-    const pw = E('pages-wrap');
     if (pw) mo.observe(pw, { attributes: true, attributeFilter: ['style'], childList: true });
   }
-  planeStellen();
 
-  window.stelleRollleiste = planeStellen;
+  window.stelleRollleiste = stelle;
 })();
