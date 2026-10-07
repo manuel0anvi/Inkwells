@@ -851,6 +851,26 @@
   }
 }
 
+/* ── Stufe 7: in eine zweite Zeile ───────────────────────────────────
+   Neben einer breit gezogenen Unterlage reicht auch Stufe 6 nicht, und
+   seitlich gerollt lag der Zoom unsichtbar hinter der Kante (ui/toolbar.js).
+   Umgebrochen wird zwischen den Gruppen, nie mitten in einer: − 100 % +
+   bleibt beisammen. Die rechte Zone behält margin-left: auto und steht
+   damit auch in der zweiten Zeile rechts. */
+.toolbar.tb-umbruch,
+.toolbar.tb-umbruch .tb-zone {
+  flex-wrap: wrap;
+  row-gap: 2px
+}
+
+/* Eine Zone ist sonst so breit wie ihr ganzer Inhalt in einer Zeile und
+   ragt als Ganzes hinaus – umbrechen kann sie erst, wenn sie schmaler
+   werden darf als der. */
+.toolbar.tb-umbruch .tb-zone {
+  flex-shrink: 1;
+  max-width: 100%
+}
+
 /* ── Das Einfuegen-Menue ──────────────────────────────────────────── */
 .insert-pop {
   position: fixed;

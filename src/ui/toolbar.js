@@ -133,9 +133,17 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
               aufgeklappter Navigation, gemessen rund 500 px für die
               ganze Leiste.
 
-   Reicht auch das nicht, rollt die Leiste seitlich wie eh und je
-   (css/toolbar.css). Das ist der Notnagel und kein Entwurf – aber
-   immer noch besser als ein Knopf, hinter dem sich etwas versteckt.
+     Stufe 7  In eine zweite Zeile umbrechen
+              Was rechts nicht mehr hinpasst, rutscht darunter.
+
+   >>> Warum nicht mehr seitlich gerollt wird <<<
+   Das war der Notnagel nach Stufe 6. Gemeldet: „wenn ich die PDF-Leiste
+   ziehe, rutscht der Zoom dahinter". Neben einer breit gezogenen
+   Unterlage bleiben für die Leiste gut 400 px – zu wenig für jede Stufe,
+   und was rechts hinausstand, lag unsichtbar hinter der Kante: der
+   Balken zum Rollen ist ausgeblendet, niemand ahnt, dass dort noch
+   etwas kommt. Eine zweite Zeile kostet etwas Höhe, aber jedes Werkzeug
+   bleibt zu sehen.
 
    >>> Warum gemessen und nicht nach Fensterbreite <<<
    Eng wird es auf drei Wegen: schmales Fenster, aufgeklappte
@@ -267,9 +275,11 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     bar.classList.toggle('tb-fmt-zu', n >= 5);
     // Stufe 6: die letzten Pixel (css/toolbar.css)
     bar.classList.toggle('tb-knapp', n >= 6);
+    // Stufe 7: in eine zweite Zeile umbrechen (css/toolbar.css)
+    bar.classList.toggle('tb-umbruch', n >= 7);
   }
 
-  const HOECHSTE_STUFE = 6;
+  const HOECHSTE_STUFE = 7;
   let geplant = false;
 
   function anpassen() {
@@ -282,8 +292,9 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
       setzeStufe(n);
       if (!zuEng()) return;
     }
-    /* Auch die letzte Stufe reicht nicht – dann bleibt sie stehen und die
-       Leiste rollt. Etwas wegzunehmen wäre hier die schlechtere Wahl. */
+    /* Auch die letzte Stufe reicht nicht (eine einzelne Gruppe breiter
+       als die Leiste) – dann bleibt sie stehen und die Leiste rollt.
+       Etwas wegzunehmen wäre hier die schlechtere Wahl. */
   }
 
   function planen() {
