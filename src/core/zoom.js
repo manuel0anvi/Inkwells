@@ -92,6 +92,13 @@ let _wirksam = _zoom;
    ══════════════════════════════════════════════════════════════════════ */
 let _gesteLaeuft = false;
 
+/* Die aufgeschlagene Unterlage gleitet auf oder wird an der Kante
+   gezogen: das Blatt passt sich in jedem Bild neu ein. Das Neuzeichnen
+   aller Flächen in jedem Bild liesse es stocken – es wartet, bis die
+   Breite eine Weile stillsteht. */
+let _unterlageBewegtSich = false;
+let _unterlageTimer = null;
+
 /** Eine Zoom-Geste fängt an: ab jetzt nur noch das Nötigste. */
 function beginneZoomGeste() { _gesteLaeuft = true; }
 
@@ -342,8 +349,10 @@ function _applyZoom() {
   const lbl = E('btn-zoom-reset');
   if (lbl) lbl.textContent = prozent;
   if (z <= 1.21 && typeof window.resetPan === 'function') window.resetPan();
-  /* Das Teure: neue Auflösung und alle Striche neu. Erst beim Loslassen. */
-  if (!_gesteLaeuft) {
+  /* Das Teure: neue Auflösung und alle Striche neu. Erst beim Loslassen –
+     und während die Unterlage gleitet oder gezogen wird, erst danach
+     (siehe beobachteRahmen). */
+  if (!_gesteLaeuft && !_unterlageBewegtSich) {
     rerenderCanvasesForZoom();
     if (typeof updateCursor === 'function') updateCursor();
   }
@@ -402,14 +411,27 @@ function rerenderCanvasesForZoom() {
   });
 }
 
+/* Gerechnet wird vom SICHTBAREN Zoom aus, nicht vom gewünschten. Neben
+   einer offenen Unterlage ist das Blatt eingepasst (gewünscht 1,2,
+   sichtbar vielleicht 0,9): „−“ ergab dann 0,96 – immer noch über dem
+   Einpassen, also geschah nichts –, und „+“ sprang von 75 auf 125 %.
+
+   >>> Und „+“ muss über das Einpassen hinaus <<<
+   Im Querformat bleibt das Blatt bis panThreshold() eingepasst, gleich
+   was gewünscht ist. Ein Schritt, der darunter landet, sähe genauso aus
+   wie vorher – „+“ täte nichts, bei jedem Klick wieder. Dann geht es
+   gleich auf die erste Stufe, die man sieht. */
 function zoomIn() {
   if (isVerticalMode()) _verticalAutoFit = false;
-  setZoom(_zoom * 1.25);
+  let z = _wirksam * 1.25;
+  const passt = getFitZoom();
+  if (!isVerticalMode() && passt && z > passt && z <= panThreshold()) z = panThreshold() + 0.01;
+  setZoom(z);
 }
 
 function zoomOut() {
   if (isVerticalMode()) _verticalAutoFit = false;
-  setZoom(_zoom / 1.25);
+  setZoom(_wirksam / 1.25);
 }
 
 function zoomReset() {
@@ -532,7 +554,13 @@ let _querZoom = BASE_ZOOM;
     if (unterlage !== zuletztUnterlage) {
       zuletztUnterlage = unterlage;
       zuletztSumme = jetzt + spaltenAusgleich();
+      _unterlageBewegtSich = true;
       zoomNachrechnenAnDerStelle();
+      clearTimeout(_unterlageTimer);
+      _unterlageTimer = setTimeout(() => {
+        _unterlageBewegtSich = false;
+        _applyZoom();   // jetzt das Aufgeschobene: scharf zeichnen
+      }, 150);
       return;
     }
     /* Kam die Änderung allein von den Unterlagen, bleibt die Summe gleich:

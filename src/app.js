@@ -2045,7 +2045,8 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
          waehrend Finger zwei die Seite groesser zieht. */
       if (S.isDrawing && typeof cancelActiveStroke === 'function') cancelActiveStroke();
       _pinchDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
-      _pinchZoom = _zoom;
+      // Vom sichtbaren Zoom aus, sonst springt es neben einer Unterlage (core/zoom.js, zoomIn)
+      _pinchZoom = typeof getZoom === 'function' ? getZoom() : _zoom;
       _pinchGezogen = false;
       const m = mitte(e); _pinchMidX = m.x; _pinchMidY = m.y;
       _panActive = false;
