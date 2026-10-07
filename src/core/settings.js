@@ -20,6 +20,11 @@ const DEFAULT_SETTINGS = {
      der Werkzeugleiste weiterhin ab; DIESE Entscheidung steht hier.
      Der alte Wert wird beim Laden weggeräumt (STALE_SETTINGS). */
   touchDrawOff: false,
+  /* Ist über den Finger schon entschieden – von Hand am Schalter oder
+     vom ersten Stift auf der Seite, der ihn aufs Blättern stellt
+     (ui/toolbar.js, DER STIFT IST DA)? Danach stellt nichts mehr von
+     selbst um, die getroffene Wahl gilt. */
+  touchDrawGewaehlt: false,
   /* ── Macht der Stiftdruck die Linie dicker? ───────────────────────
      Ja, solange nichts anderes gesagt wird (core/inkSvg.js, StrichForm).
      Wer lieber gleich breit schreibt, schaltet es bei den Stiftbreiten

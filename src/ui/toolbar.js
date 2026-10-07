@@ -39,8 +39,35 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
     S.touchDraw = !S.touchDraw;
     updateTouchDrawUI();
     toast(S.touchDraw ? t('touchDrawOn') : t('touchDrawOff'));
-    if (typeof Settings !== 'undefined' && Settings.set) Settings.set('touchDrawOff', !S.touchDraw);
+    if (typeof Settings !== 'undefined' && Settings.update) {
+      Settings.update({ touchDrawOff: !S.touchDraw, touchDrawGewaehlt: true });
+    }
   });
+
+  /* ══ DER STIFT IST DA ═════════════════════════════════════════════
+     >>> Gemeldet: „wenn ich mit dem Stift schreibe und dann mit dem
+     Finger scrollen möchte, zeichnet es statt zu scrollen" <<<
+     Der Finger zeichnet von Haus aus, weil sonst niemand ohne Stift
+     überhaupt malen konnte. Wer aber einen Stift hat, schreibt damit und
+     nimmt den Finger zum Blättern – so halten es auch andere
+     Notizprogramme. Der erste Stift auf einer Seite stellt deshalb den
+     Finger aufs Blättern um, einmal und mit Hinweis.
+
+     Nur solange niemand den Schalter selbst angefasst hat: wer danach
+     den Finger wieder malen lässt, hat das so gewollt, und dabei bleibt
+     es (touchDrawGewaehlt). */
+  const selbstGewaehlt = () => typeof Settings !== 'undefined' && Settings.get
+    && !!Settings.get('touchDrawGewaehlt');
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'pen' || !S.touchDraw || selbstGewaehlt()) return;
+    if (!(e.target && e.target.closest && e.target.closest('#pg-scroll'))) return;
+    S.touchDraw = false;
+    updateTouchDrawUI();
+    toast(t('touchDrawStift'));
+    if (typeof Settings !== 'undefined' && Settings.update) {
+      Settings.update({ touchDrawOff: true, touchDrawGewaehlt: true });
+    }
+  }, { capture: true, passive: true });
 
   // Die Einstellung wird erst nach dem Laden der Datei richtig bekannt
   if (typeof Settings !== 'undefined' && Settings.onChange) {
