@@ -159,13 +159,26 @@ function breitesteSeite() {
    Chat und Kommentare zählen nicht mit: die Kommentarkarten suchen sich
    ihren Platz im Rand neben dem Blatt (ui/comments.js), und der muss
    dort wirklich frei sein.
+
+   >>> Die aufgeschlagene Unterlage zählt nicht mehr mit <<<
+   Gemeldet: „wenn man die Leiste breiter zieht, soll die Seite kleiner
+   werden und nicht überlappt werden". Neben einer offenen Unterlage wird
+   oft lange geschrieben – ein Blatt, das zur Hälfte dahinter liegt und
+   erst hervorgerollt werden muss, ist dafür nichts. Das Blatt passt sich
+   deshalb in den freien Platz ein, während die Kante gezogen wird; die
+   Stelle, an der man liest, hält zoomNachrechnenAnDerStelle() fest.
+   Nur die Leiste zum Ordnen bleibt herausgerechnet: sie ist kurz offen,
+   und dafür soll das Blatt nicht jedes Mal kleiner werden.
    ══════════════════════════════════════════════════════════════════════ */
 function spaltenAusgleich() {
-  let breite = 0;
-  for (const el of document.querySelectorAll('#griff-panel .griff-panel-inner, #griff-view .griff-view-inner')) {
-    breite += el.offsetWidth || 0;
-  }
-  return breite;
+  const el = document.querySelector('#griff-panel .griff-panel-inner');
+  return (el && el.offsetWidth) || 0;
+}
+
+/** Wie breit die aufgeschlagene Unterlage gerade wirklich ist. */
+function unterlagenBreite() {
+  const el = document.querySelector('#griff-view .griff-view-inner');
+  return (el && el.offsetWidth) || 0;
 }
 
 /** Der grösste Zoom, bei dem die Seite noch ganz in den Rahmen passt. */
@@ -506,10 +519,22 @@ let _querZoom = BASE_ZOOM;
 
   let zuletzt = sc.clientWidth;
   let zuletztSumme = zuletzt + spaltenAusgleich();
+  let zuletztUnterlage = unterlagenBreite();
   new ResizeObserver(() => {
     const jetzt = sc.clientWidth;
     if (!jetzt || jetzt === zuletzt) return;
     zuletzt = jetzt;
+    /* Die aufgeschlagene Unterlage hat sich bewegt: das Blatt passt sich
+       ein – auch im Hochformat, wo sonst nur das resize-Ereignis
+       nachrechnet. Für die Kommentarkarten gilt das dort Gesagte nicht,
+       die Unterlage schliesst Kommentare ohnehin aus. */
+    const unterlage = unterlagenBreite();
+    if (unterlage !== zuletztUnterlage) {
+      zuletztUnterlage = unterlage;
+      zuletztSumme = jetzt + spaltenAusgleich();
+      zoomNachrechnenAnDerStelle();
+      return;
+    }
     /* Kam die Änderung allein von den Unterlagen, bleibt die Summe gleich:
        dann muss nur der Ausgleich nachziehen, Zoom und Stelle bleiben
        (spaltenAusgleich). Das gilt auch im Hochformat – sonst liefe das
