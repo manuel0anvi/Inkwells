@@ -312,10 +312,19 @@ class CloudSyncManager {
              Die Abfrage oben (navigator.onLine) hilft dabei nicht: Windows
              meldet „online", sobald ein Netz anliegt – im WLAN ohne
              Internet, im Hotspot ohne Guthaben, beim Start, bevor unsere
-             eigene Prüfung gelaufen ist. Deshalb wird hier wirklich
-             nachgesehen.
-             ══════════════════════════════════════════════════════════ */
-          this._erneuernScheitertAmNetz = !(await this._netzDa());
+             eigene Prüfung gelaufen ist.
+
+             >>> Zum vierten Mal: nicht hinterher nachsehen <<<
+             Hier stand `!(await this._netzDa())` – geprüft wurde also, ob
+             das Netz JETZT da ist, nicht ob es beim Erneuern da war. Beim
+             Aufwachen aus dem Ruhezustand oder beim Start, während das
+             WLAN noch verbindet, scheitert das Erneuern an der Leitung,
+             und eine Sekunde später steht sie: das galt dann als Nein,
+             und man war abgemeldet. Ein echtes Nein kommt aber IMMER als
+             needsReauth (unten im catch) – seit main.js den Fehlercode
+             mitschickt, auch bei Google. Alles andere ist kein Urteil,
+             und es wird später wieder versucht. */
+          this._erneuernScheitertAmNetz = true;
           return false;
         }
 
@@ -323,7 +332,9 @@ class CloudSyncManager {
         await Settings.update({
           cloudAccessToken: tokens.accessToken,
           cloudRefreshToken: tokens.refreshToken || refreshToken,
-          cloudTokenExpiry: expiry
+          cloudTokenExpiry: expiry,
+          // Wer still wieder hineinkommt, ist nicht abgemeldet worden
+          cloudSessionLost: false
         });
         if (this._session) {
           this._session.accessToken = tokens.accessToken;
@@ -2829,7 +2840,10 @@ class CloudSyncManager {
        Hochladen, Papierkorb, Abgleich – liefe in ein 401. Der Merker
        aus der Offline-Zeit wird hier ausdruecklich abgeraeumt. */
     this._erneuernScheitertAmNetz = false;
-    if (this.isTokenExpired() && this.sessionIsRenewable()) {
+    /* Auch ohne Zugriffstoken: isTokenExpired() sagt bei Ablauf 0 nein,
+       und bis _watchSessionExpiry nach bis zu 20 s zuschlug, stand man
+       mit rotem Kopf als abgemeldet da. */
+    if ((!Settings.get('cloudAccessToken') || this.isTokenExpired()) && this.sessionIsRenewable()) {
       await this._refreshSession();
     }
 

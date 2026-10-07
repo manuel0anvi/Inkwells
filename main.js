@@ -1288,7 +1288,14 @@ async function handleTokenRequest(url, bodyObj) {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg = data?.error_description || data?.error || `HTTP ${res.status}`;
+      /* Der Fehlercode gehört in die Meldung. Google schreibt in
+         error_description nur „Token has been expired or revoked." – das
+         „invalid_grant", an dem die Anbieter ein endgültiges Nein
+         erkennen (core/providers), stand allein in error und ging hier
+         verloren. Ein widerrufenes Konto galt dadurch nie als widerrufen. */
+      const code = data?.error || '';
+      const text = data?.error_description || '';
+      const msg = [code, text].filter(Boolean).join(': ') || `HTTP ${res.status}`;
       console.error('[Auth] Token-Anfrage abgelehnt:', parsed.hostname, msg);
       return { ok: false, error: msg };
     }
