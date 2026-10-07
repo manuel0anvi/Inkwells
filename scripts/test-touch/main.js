@@ -378,6 +378,13 @@ app.on('ready', async () => {
     win.setContentSize(800, 1200);
     await new Promise(r => setTimeout(r, 500));
 
+    /* Weiter oben hat der Stift schon angetippt – und der erste Stift
+       stellt den Finger aufs Blaettern (ui/toolbar.js, DER STIFT IST DA).
+       Geprueft wird hier aber der Fall ohne Stift: wieder einschalten. */
+    pruefe('Der Stift auf der Seite stellt den Finger aufs Blaettern',
+      (await js('S.touchDraw')) === false,
+      'nach dem Stift zeichnet der Finger weiter – er sollte rollen');
+    await js(`S.touchDraw = true; updateTouchDrawUI()`);
     await js(`switchMode('pen1')`);
     await new Promise(r => setTimeout(r, 200));
     pruefe('Mit Zeichenwerkzeug gehoert die Bewegung dem Strich',
