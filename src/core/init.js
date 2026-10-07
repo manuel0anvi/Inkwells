@@ -55,6 +55,14 @@
        weil es in den Einstellungen steht, und vor dem Heft, damit die
        erste Seite schon mit der richtigen Schrift aufgebaut wird. */
     if (typeof window.stelleWerkzeugeHer === 'function') window.stelleWerkzeugeHer();
+    /* Dasselbe für den Finger: ui/toolbar.js las touchDrawOff, als es nur
+       die Vorgabe gab, und load() meldet keine Änderung. Ohne diese Zeile
+       zeichnete der Finger nach jedem Neustart wieder, bis irgendetwas
+       zufällig speicherte – auch wenn „blättern“ gewählt war. */
+    if (typeof updateTouchDrawUI === 'function') {
+      S.touchDraw = !Settings.get('touchDrawOff');
+      updateTouchDrawUI();
+    }
   } catch (err) {
     console.error('[Init] ✗ Settings init failed:', err);
   }

@@ -55,12 +55,19 @@ QA('.tb-mode[data-mode]').forEach(btn => { btn.addEventListener('click', () => s
 
      Nur solange niemand den Schalter selbst angefasst hat: wer danach
      den Finger wieder malen lässt, hat das so gewollt, und dabei bleibt
-     es (touchDrawGewaehlt). */
+     es (touchDrawGewaehlt).
+
+     >>> Nur wo der Stift wirklich schreibt <<<
+     Auf dem Seitenkopf oder in einem Dokument ohne Schreibrecht tippt er
+     nur an. Dort umzustellen hiesse, eine dauerhafte Wahl aus einem
+     Antippen abzuleiten – und der Hinweis zeigte auf einen Knopf, der in
+     der Zeigerstellung gar nicht zu sehen ist. */
   const selbstGewaehlt = () => typeof Settings !== 'undefined' && Settings.get
     && !!Settings.get('touchDrawGewaehlt');
   document.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'pen' || !S.touchDraw || selbstGewaehlt()) return;
-    if (!(e.target && e.target.closest && e.target.closest('#pg-scroll'))) return;
+    if (e.pointerType !== 'pen' || !S.touchDraw || S.readOnly || selbstGewaehlt()) return;
+    const ziel = e.target && e.target.closest ? e.target : null;
+    if (!ziel || !ziel.closest('#pg-scroll .j-page') || ziel.closest('.j-page-hdr')) return;
     S.touchDraw = false;
     updateTouchDrawUI();
     toast(t('touchDrawStift'));
