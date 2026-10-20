@@ -533,6 +533,16 @@
     peopleSection.style.display = signedIn ? '' : 'none';
     if (!signedIn) { showMicrosoftLink(true); return; }
 
+    // Noch beim Hochladen von vorhin: abwarten, dann steht alles da
+    const laeuft = laufendeFreigaben.get(String(nb.id));
+    if (laeuft) {
+      statusEl.textContent = t('shareWorking');
+      const docId = await laeuft;
+      if (!shareNb || shareNb.id !== nb.id || overlay.style.display === 'none') return;
+      if (docId) { await loadHead(docId); return; }
+      statusEl.textContent = '';
+    }
+
     if (entry?.docId) { await loadHead(entry.docId); return; }
 
     /* Kein Merkzettel heißt nicht „nicht freigegeben": wurde das Heft im
@@ -738,6 +748,46 @@
     if (head) return true;
     if (!shareNb) return false;
 
+    /* Läuft das Anlegen schon (Fenster zu und wieder auf, zweiter Klick)?
+       Dann darauf warten, statt ein zweites Mal anzufangen – siehe
+       laufendeFreigaben. */
+    const laeuft = laufendeFreigaben.get(String(shareNb.id));
+    if (laeuft) {
+      statusEl.textContent = t('shareWorking');
+      const nbId = shareNb.id;
+      const docId = await laeuft.catch(() => null);
+      if (!shareNb || shareNb.id !== nbId || !docId) return false;
+      await loadHead(docId);
+      return !!head;
+    }
+
+    const nbIdJetzt = String(shareNb.id);
+    const arbeit = legeDokumentAn();
+    // Die Kennung aus dem Merkzettel, nicht aus head – das Fenster kann längst zu sein
+    laufendeFreigaben.set(nbIdJetzt,
+      arbeit.then(() => shareFor(nbIdJetzt)?.docId || null).catch(() => null));
+    try {
+      return await arbeit;
+    } finally {
+      laufendeFreigaben.delete(nbIdJetzt);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WAS GERADE HOCHGELADEN WIRD
+
+     >>> Gemeldet: „sagt Heft schon freigegeben, aber ich kann in den
+     Freigabe-Einstellungen nichts ändern“ <<<
+     Der Kopf des Dokuments geht als Erstes hinauf, der Inhalt danach.
+     Wer das Fenster während des Hochladens schloss und wieder öffnete,
+     fand den Kopf und bekam „bereits freigegeben“ – jede Änderung reihte
+     sich dann aber hinter dem noch laufenden Hochladen ein und schien
+     nichts zu tun. Jetzt weiss das Fenster, dass noch hochgeladen wird,
+     zeigt das an und macht erst danach weiter.
+     ══════════════════════════════════════════════════════════════════ */
+  const laufendeFreigaben = new Map();   // nbId -> Promise<docId|null>
+
+  async function legeDokumentAn() {
     const entry = shareFor(shareNb.id);
     if (entry?.docId) {
       await loadHead(entry.docId);
@@ -769,7 +819,23 @@
        ══════════════════════════════════════════════════════════════ */
     if (window.Melden_ && !await window.Melden_.darfIch('selbstTeilen')) return null;
 
-    const result = await api.shareDocument(shareNb, { linkMode: 'off' });
+    const nbId = shareNb.id;
+    const result = await api.shareDocument(shareNb, {
+      linkMode: 'off',
+      // Bei einem Heft mit Bildern dauert das – dann soll man sehen, dass es vorangeht
+      fortschritt: (fertig, gesamt) => {
+        if (!shareNb || shareNb.id !== nbId || !gesamt) return;
+        const p = Math.max(1, Math.min(99, Math.round(fertig / gesamt * 100)));
+        statusEl.textContent = t('shareUploading').replace('{p}', String(p));
+      }
+    });
+    // Inzwischen zugemacht? Das Dokument gibt es trotzdem – merken
+    if (!shareNb || shareNb.id !== nbId) {
+      await remember(nbId, {
+        docId: result.docId, linkId: result.linkId, url: result.url, linkMode: result.linkMode
+      });
+      return false;
+    }
 
     await remember(shareNb.id, {
       docId: result.docId,
