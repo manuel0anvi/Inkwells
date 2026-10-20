@@ -137,7 +137,11 @@ function mitEigener(version, stand = FORMAT_STAND) {
     check('Auch andersherum', (await rueck({ formatStand: 1, appVersion: '1.4.0' })).ok, true);
   }
 
-  console.log('\nVerschiedener Stand – zu, egal welche Richtung');
+  /* Bis Stand 2 sperrte jeder Unterschied in BEIDE Richtungen. Seit dem
+     kompakten Strich (core/share.js, EIN STRICH IST EINE ZEILE) liest die
+     neuere Fassung das ältere Format mit und schreibt dort nur dessen
+     Form – sie darf also herein. Die ältere bleibt draussen. */
+  console.log('\nVerschiedener Stand – die ältere Fassung bleibt draussen, die neuere darf herein');
   {
     // Das Dokument ist weiter als ich: ich bin der Aeltere
     const alt = mitEigener('1.1.2', 1);
@@ -150,8 +154,8 @@ function mitEigener(version, stand = FORMAT_STAND) {
     // Und der Gegenfall: das Dokument ist zurueck, ich bin weiter
     const neu = mitEigener('1.2.0', 2);
     const u2 = await neu({ formatStand: 1, appVersion: '1.1.2' });
-    check('Ich bin neuer: trotzdem gesperrt', u2.ok, false);
-    check('Und der Satz meint den Besitzer', u2.wer, 'besitzer');
+    check('Ich bin neuer: herein', u2.ok, true);
+    check('Und niemand wird als der Ältere benannt', u2.wer, '');
   }
 
   console.log('\nWo NICHT gesperrt wird');

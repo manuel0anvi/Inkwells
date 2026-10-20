@@ -57,14 +57,17 @@ const NAMES = [
   // scheitert der Aufbau mit „kurzhash is not defined".
   'kurzhash', 'inkSignatureOf',
   // Kommentare reisen mit der Seite; splitNotebook haengt daran
-  'commentsForPage'
+  'commentsForPage',
+  // Seit Formatstand 2 kommt die Handschrift kompakt aus Firestore
+  'strichKompakt', 'strichLesbar'
 ];
 
-const sandbox = { INK_SHEET_LIMIT: 600000, CHUNK_SIZE: 700000, console };
+const sandbox = { INK_SHEET_LIMIT: 600000, CHUNK_SIZE: 700000, console,
+  PUNKT_FELDER: new Set(['x', 'y', 'p']) };
 vm.createContext(sandbox);
 vm.runInContext(NAMES.map(extract).join('\n\n'), sandbox);
 
-const { splitNotebook, assembleNotebook, fingerprintNotebook } = sandbox;
+const { splitNotebook, assembleNotebook, fingerprintNotebook, strichKompakt } = sandbox;
 
 /* ── Ein Heft, das alles enthält, was schiefgehen kann ──────────────── */
 
@@ -147,6 +150,24 @@ check('Leere Striche Seite 2', back.pages[1].inkStrokes, []);
 
 check('Externe Bildadresse bleibt', back.pages[2].objects[0].src, 'https://example.com/extern.png');
 check('Striche Seite 3', back.pages[2].inkStrokes, notebook.pages[2].inkStrokes);
+
+/* Seit Formatstand 2 liegen die Bögen in Firestore kompakt (core/share.js,
+   EIN STRICH IST EINE ZEILE). Was so hinaufging, muss als dasselbe Heft
+   zurückkommen – und ein Dokument, in dem beide Formen gemischt stehen
+   (Stand 1 begonnen, Stand 2 fortgeschrieben), ebenso. */
+console.log('\nRundlauf mit kompakter Handschrift');
+{
+  const kompakteBoegen = parts.ink.map(b => ({ ...b, strokes: b.strokes.map(strichKompakt) }));
+  const k = assembleNotebook({ ...parts.head, notebookId: notebook.id }, parts.pages, kompakteBoegen, parts.blobs);
+  check('Striche Seite 1 (kompakt)', k.pages[0].inkStrokes, notebook.pages[0].inkStrokes);
+  check('Striche Seite 3 (kompakt)', k.pages[2].inkStrokes, notebook.pages[2].inkStrokes);
+  check('Der Merkzettel sieht keinen Unterschied',
+    fingerprintNotebook(k), fingerprintNotebook(back));
+
+  const gemischt = parts.ink.map((b, i) => i % 2 ? { ...b, strokes: b.strokes.map(strichKompakt) } : b);
+  const m = assembleNotebook({ ...parts.head, notebookId: notebook.id }, parts.pages, gemischt, parts.blobs);
+  check('Gemischte Bögen', m.pages.map(p => p.inkStrokes), notebook.pages.map(p => p.inkStrokes || []));
+}
 
 console.log('\nBilder liegen außerhalb der Seiten');
 check('Keine Bilddaten im Seitendokument',
