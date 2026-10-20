@@ -1505,39 +1505,105 @@ async function shareDocument(notebook, options = {}) {
    ══════════════════════════════════════════════════════════════════════ */
 const MAX_BATCH_BYTES = 4 * 1024 * 1024;
 
-/** Ungefähres Gewicht eines Eintrags – reicht, um unter der Grenze zu bleiben. */
-function gewichtVon(data) {
-  try { return JSON.stringify(data).length + 200; } catch (e) { return 1000; }
+/* ══════════════════════════════════════════════════════════════════════
+   GEWOGEN WIRD, WAS WIRKLICH ÜBER DIE LEITUNG GEHT
+
+   >>> Gemeldet: „Request payload size exceeds the limit“ beim Freigeben <<<
+   Gewogen wurde mit JSON.stringify. Firestore verschickt aber nicht das
+   JSON des Eintrags, sondern jeden Wert eingepackt: aus 123 wird
+   {"integerValue":"123"}, aus jedem Punkt einer Handschrift ein mapValue
+   mit drei solchen Feldern. Bei Handschrift ist die Anfrage dadurch ein
+   Vielfaches dessen, was JSON.stringify zählt – vier „geschätzte“ MB
+   wurden zu deutlich über zehn echten, und Firestore wies den Stapel ab.
+
+   Jetzt wird die Verpackung mitgezählt. Grob, aber nach oben gerundet:
+   lieber ein Stapel mehr als einer zu viel.
+   ══════════════════════════════════════════════════════════════════════ */
+function gewichtVon(wert) {
+  if (wert === null || wert === undefined) return 20;
+  switch (typeof wert) {
+    case 'string': {
+      // Umlaute und Ähnliches kommen als mehrere Bytes oder \u-Folge
+      let extra = 0;
+      for (let i = 0; i < wert.length; i++) if (wert.charCodeAt(i) > 127) extra += 5;
+      return wert.length + extra + 20;
+    }
+    case 'number': return 40;
+    case 'boolean': return 25;
+    case 'object': {
+      if (Array.isArray(wert)) {
+        let g = 40;
+        for (const el of wert) g += gewichtVon(el) + 2;
+        return g;
+      }
+      // serverTimestamp() und andere Feldwerte: kein einfaches Objekt
+      if (Object.getPrototypeOf(wert) !== Object.prototype) return 60;
+      let g = 40;
+      for (const k in wert) g += k.length + 10 + gewichtVon(wert[k]);
+      return g;
+    }
+    default: return 40;
+  }
+}
+
+/** Hat Firestore den Stapel wegen seiner Grösse abgewiesen? */
+function istZuGross(err) {
+  return /exceeds|payload size|too (big|large)|maximum allowed size/i
+    .test(String((err && err.message) || err || ''));
+}
+
+/**
+ * Schickt die Schritte ab – und teilt sie, wenn Firestore sie als zu
+ * gross abweist. Die Schätzung oben bleibt eine Schätzung; dieser Weg
+ * fängt ab, was sie trotzdem verfehlt, statt das Freigeben scheitern zu
+ * lassen. Nur ein einzelner Eintrag, der allein zu gross ist, scheitert
+ * weiterhin – den kann kein Teilen retten.
+ */
+async function schreibeSchritte(schritte) {
+  const b = writeBatch(db);
+  for (const s of schritte) {
+    if (s.loeschen) b.delete(s.ref);
+    else if (s.optionen) b.set(s.ref, s.data, s.optionen);
+    else b.set(s.ref, s.data);
+  }
+  try {
+    await b.commit();
+  } catch (err) {
+    if (schritte.length < 2 || !istZuGross(err)) throw err;
+    const mitte = schritte.length >> 1;
+    await schreibeSchritte(schritte.slice(0, mitte));
+    await schreibeSchritte(schritte.slice(mitte));
+  }
 }
 
 /**
  * Ein Stapel, der sich selbst abschickt, bevor er zu voll wird.
  *
  * @param {(fertig: number) => void} [nachCommit] bekommt die bisher
- *   geschriebene Menge in Zeichen – für die Fortschrittsanzeige
+ *   geschriebene Menge (geschätzt) – für die Fortschrittsanzeige
  */
 function stapel(nachCommit) {
-  let batch = writeBatch(db);
-  let count = 0, bytes = 0, fertig = 0;
+  let schritte = [];
+  let bytes = 0, fertig = 0;
   const flush = async () => {
-    if (!count) return;
-    const b = batch, gewicht = bytes;
-    batch = writeBatch(db); count = 0; bytes = 0;
-    await b.commit();
+    if (!schritte.length) return;
+    const jetzt = schritte, gewicht = bytes;
+    schritte = []; bytes = 0;
+    await schreibeSchritte(jetzt);
     fertig += gewicht;
     if (nachCommit) nachCommit(fertig);
   };
   return {
-    async set(ref, data) {
+    async set(ref, data, optionen) {
       const g = gewichtVon(data);
-      if (count && (count >= MAX_BATCH || bytes + g > MAX_BATCH_BYTES)) await flush();
-      batch.set(ref, data);
-      count++; bytes += g;
+      if (schritte.length && (schritte.length >= MAX_BATCH || bytes + g > MAX_BATCH_BYTES)) await flush();
+      schritte.push({ ref, data, optionen });
+      bytes += g;
     },
     async delete(ref) {
-      if (count >= MAX_BATCH) await flush();
-      batch.delete(ref);
-      count++; bytes += 200;
+      if (schritte.length >= MAX_BATCH) await flush();
+      schritte.push({ ref, loeschen: true });
+      bytes += 200;
     },
     flush
   };
@@ -1946,14 +2012,18 @@ async function saveDocumentContent(docId, notebook, options = {}) {
   for (const page of changedPages) {
     const blobs = parts.blobs.filter(b => b.pageId === page.id);
     await step('Seite schreiben', async () => {
-      const batch = writeBatch(db);
+      /* Nach Gewicht gestapelt (siehe EIN STAPEL HAT AUCH EIN GEWICHT):
+         eine Seite mit grossem Bild sind schnell zwanzig Stücke à 700 KB.
+         Die Bilder zuerst, die Seite zuletzt – so verweist sie nie auf
+         ein Stück, das noch nicht oben ist. */
+      const s = stapel();
+      for (const blob of blobs) await s.set(doc(db, DOCS, docId, BLOBS, blob.key), blob);
       // merge, damit der CRDT-Stand (ycrdt) stehen bleibt – der gehört
       // der Live-Bearbeitung und wird hier nicht angefasst.
-      batch.set(doc(db, DOCS, docId, PAGES, page.id), {
+      await s.set(doc(db, DOCS, docId, PAGES, page.id), {
         ...page, by: me.uid, updatedAt: serverTimestamp()
       }, { merge: true });
-      for (const blob of blobs) batch.set(doc(db, DOCS, docId, BLOBS, blob.key), blob);
-      await batch.commit();
+      await s.flush();
     });
     written++;
   }
