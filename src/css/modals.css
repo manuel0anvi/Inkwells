@@ -1917,6 +1917,32 @@
    überholen sich zwei Schreibvorgänge in Firestore. */
 .share-section.busy { opacity: .55; pointer-events: none; }
 
+/* Der Kreisel vor der Statuszeile, solange ein Schritt läuft
+   (ui/share.js, MAN SIEHT, DASS ETWAS LÄUFT). Dreht sich mit busy-spin
+   aus css/layout.css – derselbe wie im Papierkorb und im Kontofenster. */
+#share-status.share-laedt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Gesperrt, solange etwas läuft – und das soll man ihm ansehen */
+#share-revoke:disabled {
+  opacity: .45;
+  cursor: default
+}
+
+#share-status.share-laedt::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border: 2px solid var(--sb2);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: busy-spin .7s linear infinite
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    Sync-Status-Anzeige im Konto-Modal
    ══════════════════════════════════════════════════════════════════════ */

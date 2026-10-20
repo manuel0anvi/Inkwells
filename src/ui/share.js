@@ -389,6 +389,47 @@
     }
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     MAN SIEHT, DASS ETWAS LÄUFT
+
+     >>> Gemeldet: „beim Aufheben, beim Entfernen einer Person und beim
+     Einschalten soll das Fenster zeigen, dass es lädt“ <<<
+     Jeder dieser Schritte geht über Firestore und dauert einen Moment –
+     das Einschalten bei einem grossen Heft auch länger. Bis dahin stand
+     das Fenster still da, und nichts verriet, ob der Klick angekommen
+     war. Wer nochmal klickte, löste denselben Schritt ein zweites Mal aus.
+
+     Solange etwas läuft: ein Kreisel vor der Statuszeile, ein Satz, was
+     gerade geschieht, und „Freigabe aufheben“ ist gesperrt. Gezählt
+     wird, weil sich zwei Schritte überlappen können (Einschalten, dann
+     gleich jemanden einladen) – erst wenn der letzte fertig ist, geht der
+     Kreisel weg.
+     ══════════════════════════════════════════════════════════════════ */
+  let _laeuft = 0;
+
+  function ladeAn() {
+    _laeuft++;
+    statusEl.classList.add('share-laedt');
+    revokeBtn.disabled = true;
+  }
+
+  function ladeAus() {
+    _laeuft = Math.max(0, _laeuft - 1);
+    if (_laeuft) return;
+    statusEl.classList.remove('share-laedt');
+    revokeBtn.disabled = false;
+  }
+
+  async function mitLaden(text, arbeit) {
+    ladeAn();
+    if (text) statusEl.textContent = text;
+    try {
+      return await arbeit();
+    } finally {
+      ladeAus();
+    }
+  }
+
   /* ── Dialog ───────────────────────────────────────────────────────── */
 
   /**
@@ -489,7 +530,10 @@
     if (isOffline()) { ohneNetz(); return; }
 
     statusEl.textContent = t('shareCheckingAccount');
-    if (!(await netzErreichbar())) {
+    ladeAn();
+    let erreichbar;
+    try { erreichbar = await netzErreichbar(); } finally { if (!erreichbar) ladeAus(); }
+    if (!erreichbar) {
       if (shareNb && shareNb.id === nb.id) ohneNetz();
       return;
     }
@@ -517,6 +561,7 @@
       statusEl.textContent = describeError(err);
     }
     if (statusEl.textContent === t('shareCheckingAccount')) statusEl.textContent = '';
+    ladeAus();
 
     // Inzwischen zugemacht oder ein anderes Heft im Fenster?
     if (!shareNb || shareNb.id !== nb.id || overlay.style.display === 'none') return;
@@ -555,8 +600,10 @@
   async function adoptExistingShare() {
     const nbId = shareNb?.id;
     if (!nbId) return;
+    return mitLaden(t('shareChecking'), () => sucheBestehende(nbId));
+  }
 
-    statusEl.textContent = t('shareChecking');
+  async function sucheBestehende(nbId) {
     try {
       const api = await whenShareReady();
       const found = await api.findOwnedDocForNotebook(nbId);
@@ -584,6 +631,10 @@
   }
 
   async function loadHead(docId) {
+    return mitLaden(null, () => ladeKopf(docId));
+  }
+
+  async function ladeKopf(docId) {
     try {
       const api = await whenShareReady();
       head = await api.loadDocumentHead(docId);
@@ -879,9 +930,11 @@
   async function pruefeImFenster() {
     if (!shareNb || !head || schonGeprueft.has(String(head.docId))) return;
     const nb = shareNb, docId = head.docId;
+    let laedt = false;
     try {
       const nachgeladen = await vervollstaendige(nb, docId, false, (fertig, gesamt) => {
         if (!shareNb || shareNb.id !== nb.id || !gesamt) return;
+        if (!laedt) { laedt = true; ladeAn(); }
         const p = Math.max(1, Math.min(99, Math.round(fertig / gesamt * 100)));
         statusEl.textContent = t('shareRepairing').replace('{p}', String(p));
       });
@@ -892,6 +945,8 @@
     } catch (err) {
       console.warn('[Share] Nachladen der Freigabe fehlgeschlagen:', err?.message || err);
       if (shareNb && shareNb.id === nb.id) statusEl.textContent = describeError(err);
+    } finally {
+      if (laedt) ladeAus();
     }
   }
 
@@ -1000,6 +1055,7 @@
     const wanted = selectedLinkMode();
     setBusy(true);
 
+    await mitLaden(head ? t('shareSaving') : t('shareWorking'), async () => {
     try {
       if (!await ensureDocument()) return;
       if (wanted === head.linkMode) { statusEl.textContent = t('shareActive'); return; }
@@ -1018,12 +1074,14 @@
     } finally {
       setBusy(false);
     }
+    });
   }
 
   async function renewLink() {
     if (!head || !head.linkId) return;
     if (!await showConfirm(t('shareRenewConfirm'))) return;
 
+    await mitLaden(t('shareSaving'), async () => {
     try {
       const api = await whenShareReady();
       const result = await api.rotateLink(head.docId);
@@ -1035,6 +1093,7 @@
       console.error('[Share] Link erneuern fehlgeschlagen:', err);
       statusEl.textContent = describeError(err);
     }
+    });
   }
 
   async function addPerson() {
@@ -1043,6 +1102,7 @@
     const role = inviteRole.value === 'edit' ? 'edit' : 'view';
 
     setBusy(true);
+    await mitLaden(head ? t('shareInviting') : t('shareWorking'), async () => {
     try {
       // Die Adresse zuerst prüfen: sonst entstünde für einen Tippfehler
       // ein leeres geteiltes Dokument, das niemand je zu sehen bekäme.
@@ -1063,11 +1123,13 @@
     } finally {
       setBusy(false);
     }
+    });
   }
 
   async function changeRole(email, role) {
     if (!head) return;
     setBusy(true);
+    await mitLaden(t('shareSaving'), async () => {
     try {
       const api = await whenShareReady();
       await api.setMember(head.docId, email, role);
@@ -1079,11 +1141,14 @@
     } finally {
       setBusy(false);
     }
+    });
   }
 
   async function removePerson(email) {
     if (!head) return;
     if (!await showConfirm(t('shareRemoveConfirm').replace('{mail}', email))) return;
+    setBusy(true);
+    await mitLaden(t('shareRemoving').replace('{mail}', email), async () => {
     try {
       const api = await whenShareReady();
       await api.removeMember(head.docId, email);
@@ -1091,7 +1156,10 @@
       statusEl.textContent = t('shareRemoved').replace('{mail}', email);
     } catch (err) {
       statusEl.textContent = describeError(err);
+    } finally {
+      setBusy(false);
     }
+    });
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -1107,6 +1175,8 @@
      ══════════════════════════════════════════════════════════════════ */
   async function unblock(email) {
     if (!head) return;
+    setBusy(true);
+    await mitLaden(t('shareSaving'), async () => {
     try {
       const api = await whenShareReady();
       const plan = await api.unblockMember(head.docId, email);
@@ -1124,14 +1194,18 @@
         : t('shareUnblocked')).replace('{mail}', email);
     } catch (err) {
       statusEl.textContent = describeError(err);
+    } finally {
+      setBusy(false);
     }
+    });
   }
 
   async function revokeShare() {
     if (!shareNb || !head) return;
     if (!await showConfirm(t('shareRevokeConfirm'))) return;
 
-    revokeBtn.disabled = true;
+    setBusy(true);
+    await mitLaden(t('shareRevoking'), async () => {
     try {
       const api = await whenShareReady();
       await api.unshareDocument(head.docId);
@@ -1150,8 +1224,9 @@
       console.error('[Share] Aufheben fehlgeschlagen:', err);
       statusEl.textContent = describeError(err);
     } finally {
-      revokeBtn.disabled = false;
+      setBusy(false);
     }
+    });
   }
 
   /** Die alte, eingefrorene Lesekopie aufheben. */
