@@ -2380,6 +2380,27 @@ function escapeAttr(value) {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Schreibt einer frei gesetzten Tabelle ihre Lage als left/top an.
+ *
+ * Gespeichert ist sie nur in den Attributen x und y – ein style überlebt
+ * die Bereinigung nicht (core/tables.js, EINE FREI GESETZTE TABELLE). In
+ * der App überträgt stelleTabellenAus() sie nach jedem Aufbau; das
+ * Druckdokument hat kein Skript, also geschieht es hier vorher.
+ */
+function mitTabellenLage(html) {
+  if (!html || html.indexOf('j-table') === -1 || typeof document === 'undefined') return html;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const frei = tpl.content.querySelectorAll('table.j-table[x]');
+  if (!frei.length) return html;
+  frei.forEach(tab => {
+    tab.style.left = (parseInt(tab.getAttribute('x'), 10) || 0) + 'px';
+    tab.style.top = (parseInt(tab.getAttribute('y'), 10) || 0) + 'px';
+  });
+  return tpl.innerHTML;
+}
+
 /** @param {number} pageNo Seitenzahl des HEFTS (1-basiert), nicht des Abschnitts */
 function buildPdfPage(nb, sec, page, pageNo, seitenBilder, fmtKlasse) {
   const bgId = page.bg || sec?.defaultBg || nb.defaultBg || 'ruled';
@@ -2409,7 +2430,7 @@ function buildPdfPage(nb, sec, page, pageNo, seitenBilder, fmtKlasse) {
      preload und damit kein window.api, koennte aber immer noch nach
      aussen funken – ein fremdes Heft zu exportieren darf nichts
      ausloesen. */
-  const exportText = sanitizePageHtml(page.textContent);
+  const exportText = mitTabellenLage(sanitizePageHtml(page.textContent));
   if (exportText) {
     /* --lh muss mit: die Tabellenzellen halten darüber ihre Mindesthöhe
        auf genau eine Zeile (siehe die Regeln im Kopf von buildPdf). Ohne
@@ -2708,6 +2729,28 @@ ${formelStil}
         font-family: 'Crimson Pro', Georgia, serif; font-size: 17px; color: #1a1510;
         white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word }
   .tx * { line-height: inherit }
+
+  /* ── Was neben dem Textfluss steht ──────────────────────────────────
+     Gemeldet: oben Text, darunter Gezeichnetes – und im PDF lag beides
+     übereinander. Diese drei Regeln fehlten hier, standen aber in
+     css/pages.css:
+
+       p.j-frei          der Absatz, der mit einem Klick auf freie Fläche
+                         entsteht. Ohne position: absolute rutschte er in
+                         den Fluss nach oben und schob alles darunter mit.
+       table.j-table[x]  die verschobene Tabelle (Lage aus mitTabellenLage)
+       .j-folie          die unsichtbare Textebene einer Folie. Im Fluss
+                         nahm ihr durchsichtiger Text Zeilen ein und
+                         drückte den sichtbaren Text nach unten.
+
+     Werte wie in css/pages.css; wer dort etwas ändert, ändert es hier mit. */
+  .tx p.j-frei { position: absolute; margin: 0; min-width: 1px }
+  .tx table.j-table[x] { position: absolute; z-index: 2; background: #faf7f0;
+        box-shadow: inset 1px 1px 0 0 rgba(28,20,10,.72), 0 1px 8px rgba(28,20,10,.12) }
+  .tx .j-folie { position: absolute; left: -72px; top: -64px; right: -32px; bottom: -24px; z-index: 1 }
+  .tx .j-folie .j-folie-z { position: absolute; white-space: pre; color: transparent;
+        line-height: 1; font-family: 'Crimson Pro', Georgia, serif; transform-origin: left top }
+
   .tx h1, .tx p.j-title-1 { font-family: 'Cormorant Garamond', 'Crimson Pro', serif; font-weight: 400;
         font-style: italic; color: #2a1f14; border-bottom: 1px solid #e2dbd0; display: block }
   .tx h2, .tx p.j-title-2 { font-weight: 600; color: #2a1f14; display: block }
