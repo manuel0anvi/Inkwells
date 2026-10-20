@@ -576,6 +576,7 @@
       head = found;
       renderFromHead();
       await noteAccess();
+      pruefeImFenster();
     } catch (err) {
       console.warn('[Share] Bestehende Freigabe nicht abfragbar:', err?.message || err);
       statusEl.textContent = '';
@@ -588,6 +589,7 @@
       head = await api.loadDocumentHead(docId);
       renderFromHead();
       await noteAccess();
+      pruefeImFenster();
     } catch (err) {
       // Dokument gibt es nicht mehr (auf einem anderen Gerät aufgehoben)
       if (err?.message === 'SHARE_NOT_FOUND') {
@@ -786,6 +788,97 @@
      zeigt das an und macht erst danach weiter.
      ══════════════════════════════════════════════════════════════════ */
   const laufendeFreigaben = new Map();   // nbId -> Promise<docId|null>
+
+  /* ══════════════════════════════════════════════════════════════════
+     HALB HOCHGELADEN HEISST NICHT FREIGEGEBEN
+
+     >>> Gemeldet: „ein Heft, das mit mir geteilt wurde, geht nicht
+     auf“ <<<
+     Bevor nach Gewicht gestapelt wurde, kam bei viel Handschrift oft nur
+     der Kopf hinauf (core/share.js, OBEN STEHT EIN KOPF OHNE INHALT).
+     Das heilte nie von selbst, und reparieren kann es nur der Besitzer –
+     nur er hat das ganze Heft.
+
+     Geprüft wird an zwei Stellen:
+       · im Freigabe-Fenster, sobald die Freigabe dasteht. Dort genügt
+         jede Lücke: der Besitzer sieht hin, und das Fenster sagt, was
+         geschieht.
+       · nach dem Start, für jede eigene Freigabe – aber nur beim
+         eindeutigen Schadensbild (eine ganze Art fehlt oben). Damit wird
+         ein Dokument heil, ohne dass der Besitzer davon wissen muss.
+     Je Dokument einmal je Sitzung: das Zählen kostet wenig, aber nicht
+     nichts.
+     ══════════════════════════════════════════════════════════════════ */
+  const schonGeprueft = new Set();   // docIds
+
+  /**
+   * @param {boolean} nurWennLeer  nur beim eindeutigen Schadensbild
+   * @returns {Promise<boolean>} ob nachgeladen wurde
+   */
+  async function vervollstaendige(nb, docId, nurWennLeer, fortschritt) {
+    if (!nb || !docId) return false;
+    schonGeprueft.add(String(docId));
+    const api = await whenShareReady();
+    if (typeof api.inhaltUnvollstaendig !== 'function') return false;
+
+    const fehlt = await api.inhaltUnvollstaendig(docId, nb);
+    if (!fehlt || (nurWennLeer && !fehlt.leer)) return false;
+    if (laufendeFreigaben.has(String(nb.id))) return false;
+
+    console.warn('[Share] Freigabe unvollständig – lade nach:', nb.name, JSON.stringify(fehlt));
+    // Der Editor-Stand zuerst ins Datenmodell, wie beim ersten Freigeben
+    if (S.activeNbId === nb.id && typeof syncAll === 'function') {
+      try { syncAll(); } catch (e) { /* dann der letzte gespeicherte Stand */ }
+    }
+    const kopf = await api.loadDocumentHead(docId);
+    const arbeit = api.shareDocument(nb, { docId, linkMode: kopf.linkMode, fortschritt });
+    laufendeFreigaben.set(String(nb.id), arbeit.then(r => r.docId).catch(() => null));
+    try {
+      await arbeit;
+    } finally {
+      laufendeFreigaben.delete(String(nb.id));
+    }
+    return true;
+  }
+
+  /** Im Fenster: der Besitzer sieht hin – jede Lücke zählt. */
+  async function pruefeImFenster() {
+    if (!shareNb || !head || schonGeprueft.has(String(head.docId))) return;
+    const nb = shareNb, docId = head.docId;
+    try {
+      const nachgeladen = await vervollstaendige(nb, docId, false, (fertig, gesamt) => {
+        if (!shareNb || shareNb.id !== nb.id || !gesamt) return;
+        const p = Math.max(1, Math.min(99, Math.round(fertig / gesamt * 100)));
+        statusEl.textContent = t('shareRepairing').replace('{p}', String(p));
+      });
+      if (nachgeladen && shareNb && shareNb.id === nb.id) {
+        await loadHead(docId);
+        statusEl.textContent = t('shareRepaired');
+      }
+    } catch (err) {
+      console.warn('[Share] Nachladen der Freigabe fehlgeschlagen:', err?.message || err);
+      if (shareNb && shareNb.id === nb.id) statusEl.textContent = describeError(err);
+    }
+  }
+
+  /** Nach dem Start: jede eigene Freigabe, still und nur bei klarem Schaden. */
+  async function pruefeEigeneFreigaben() {
+    let api;
+    try { api = await whenShareReady(); } catch (e) { return; }
+    if (!api.hasRealIdentity || !api.hasRealIdentity()) return;
+    for (const [nbId, entry] of Object.entries(registry())) {
+      if (!entry?.docId || schonGeprueft.has(String(entry.docId))) continue;
+      const nb = getNb(nbId);
+      if (!nb || !Array.isArray(nb.pages) || !nb.pages.length) continue;
+      try {
+        if (await vervollstaendige(nb, entry.docId, true)) {
+          toast(t('shareRepairedToast').replace('{name}', nb.name || ''));
+        }
+      } catch (err) {
+        console.warn('[Share] Freigabe von „' + (nb.name || nbId) + '“ nicht geprüft:', err?.message || err);
+      }
+    }
+  }
 
   async function legeDokumentAn() {
     const entry = shareFor(shareNb.id);
@@ -1087,8 +1180,16 @@
       if (payload.status !== 'ready') return;
       clearTimeout(republishTimer);
       republishTimer = setTimeout(() => republishLiveShares().catch(() => {}), 3000);
+      // Eigene Freigaben, die beim Hochladen hängen geblieben sind, heilen
+      setTimeout(() => pruefeEigeneFreigaben().catch(() => {}), 6000);
     });
   }
+  /* Auch ohne Cloud-Sicherung: sobald Firebase weiss, wer man ist. Doppelt
+     schadet nicht – schonGeprueft lässt jedes Dokument nur einmal durch. */
+  whenShareReady()
+    .then(api => api.whenIdentityReady && api.whenIdentityReady())
+    .then(() => setTimeout(() => pruefeEigeneFreigaben().catch(() => {}), 8000))
+    .catch(() => { /* ohne Netz: beim nächsten Start */ });
 
   /* ── Verdrahtung ──────────────────────────────────────────────────── */
 

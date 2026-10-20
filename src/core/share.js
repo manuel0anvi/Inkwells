@@ -33,7 +33,7 @@ import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebase
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion,
-  arrayRemove, deleteField, FieldPath
+  arrayRemove, deleteField, FieldPath, getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
@@ -1631,6 +1631,68 @@ async function writeDocParts(docId, parts, byUid, fortschritt) {
   const s = stapel(fortschritt ? (fertig => fortschritt(Math.min(fertig, gesamt), gesamt)) : null);
   for (const [ref, data] of eintraege) await s.set(ref, data);
   await s.flush();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   OBEN STEHT EIN KOPF OHNE INHALT
+
+   >>> Gemeldet: „ein Heft, das mit mir geteilt wurde, geht nicht auf –
+   anscheinend zu groß“ <<<
+   Der Kopf geht beim Freigeben als Erstes hinauf, der Inhalt danach. Bis
+   der Inhalt nach Gewicht gestapelt wurde (EIN STAPEL HAT AUCH EIN
+   GEWICHT), wies Firestore bei viel Handschrift den Stapel ab – oft den
+   einzigen, also kam gar nichts an. Oben stand ein Dokument, das von
+   sechsundzwanzig Seiten erzählt und keine hat. Der Empfänger konnte es
+   nie öffnen, der Besitzer sah „bereits freigegeben“, und von selbst
+   heilte es nicht: neu hochgeladen wird nur, was sich ändert.
+
+   Der Besitzer hat das Heft aber vollständig bei sich. Verglichen wird
+   deshalb, was oben liegen müsste, mit dem, was oben liegt – gezählt,
+   nicht geladen (getCountFromServer: ein Lesevorgang je tausend).
+
+   Seiten und Bildstücke werden genau verglichen: ihre Kennungen stehen
+   fest. Die Bögen der Handschrift nicht – die Live-Bearbeitung packt sie
+   anders als splitNotebook, die Zahl darf also abweichen. Sie zählen nur,
+   wenn deutlich zu wenige oben sind; sonst lüde jeder Start alles neu.
+
+   @returns {Promise<object|null>} null, wenn nichts fehlt – sonst die
+     Zahlen [oben, erwartet] je Art, für die Meldung
+   ══════════════════════════════════════════════════════════════════════ */
+async function anzahlOben(ref) {
+  try {
+    return (await getCountFromServer(ref)).data().count;
+  } catch (err) {
+    // Ohne Zählabfrage eben über die Liste – teurer, aber es geht
+    return (await getDocs(ref)).size;
+  }
+}
+
+async function inhaltUnvollstaendig(docId, notebook) {
+  if (!docId || !notebook) return null;
+  const parts = splitNotebook(notebook);
+  // Ohne Seiten hier gibt es nichts, womit sich oben etwas ergänzen liesse
+  if (!parts.pages.length) return null;
+  const [seiten, boegen, bilder] = await Promise.all([
+    anzahlOben(collection(db, DOCS, docId, PAGES)),
+    anzahlOben(collection(db, DOCS, docId, INK)),
+    anzahlOben(collection(db, DOCS, docId, BLOBS))
+  ]);
+  const fehlt = seiten < parts.pages.length
+    || bilder < parts.blobs.length
+    || (parts.ink.length > 0 && boegen < Math.ceil(parts.ink.length * 0.75));
+  if (!fehlt) return null;
+  return {
+    /* Das eindeutige Bild eines abgewiesenen Hochladens: eine ganze Art
+       fehlt. Nur dann darf ohne Zutun neu hochgeladen werden – eine
+       kleine Abweichung kann auch heissen, dass jemand anderes oben eine
+       Seite gelöscht hat, und die käme sonst zurück. */
+    leer: seiten === 0
+      || (parts.ink.length > 0 && boegen === 0)
+      || (parts.blobs.length > 0 && bilder === 0),
+    seiten: [seiten, parts.pages.length],
+    boegen: [boegen, parts.ink.length],
+    bilder: [bilder, parts.blobs.length]
+  };
 }
 
 /**
@@ -4908,6 +4970,7 @@ const InkwellsShare = {
   saveDocumentContent,
   unshareDocument,
   loadDocumentHead,
+  inhaltUnvollstaendig,
   setLinkMode,
   rotateLink,
   setMember,
@@ -4983,7 +5046,7 @@ export {
   microsoftWartetAufGoogle, linkMicrosoftWithGoogle,
   signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
-  shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
+  shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead, inhaltUnvollstaendig,
   setLinkMode, rotateLink,
   setMember, removeMember, leaveDocument, unblockMember, listMembers,
   listSharedDocs, watchSharedDocs, watchDocument, resolveLink, joinViaLink,

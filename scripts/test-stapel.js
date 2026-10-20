@@ -151,6 +151,38 @@ function strich(n) {
       sandbox.istZuGross(new Error('Request payload size exceeds the limit: 11534336 bytes.')));
   }
 
+  /* ── Ein Kopf ohne Inhalt wird erkannt ─────────────────────────────
+     inhaltUnvollstaendig() vergleicht, was oben liegen müsste, mit dem,
+     was oben liegt. Firestore und splitNotebook sind hier nachgebaut:
+     es geht um die Entscheidung, nicht um das Zählen. */
+  console.log('\nEin Kopf ohne Inhalt wird erkannt');
+  {
+    let oben = {};
+    let lokal = { pages: [], ink: [], blobs: [] };
+    const box = {
+      db: {}, DOCS: 'docs', PAGES: 'pages', INK: 'ink', BLOBS: 'blobs', Math,
+      collection: (_db, _d, _id, art) => art,
+      getCountFromServer: async (art) => ({ data: () => ({ count: oben[art] || 0 }) }),
+      getDocs: async () => { throw new Error('nicht gebraucht'); },
+      splitNotebook: () => lokal
+    };
+    vm.createContext(box);
+    vm.runInContext([extract('anzahlOben'), extract('inhaltUnvollstaendig'),
+      'this.pruefe = inhaltUnvollstaendig;'].join('\n'), box);
+    const n = (k) => Array.from({ length: k }, (_, i) => i);
+    const fall = async (o, l) => { oben = o; lokal = { pages: n(l[0]), ink: n(l[1]), blobs: n(l[2]) }; return box.pruefe('d', {}); };
+
+    check('Alles oben: nichts zu tun', (await fall({ pages: 26, ink: 40, blobs: 13 }, [26, 40, 13])) === null);
+    const leer = await fall({ pages: 0, ink: 0, blobs: 0 }, [26, 40, 13]);
+    check('Nur der Kopf oben: erkannt, und eindeutig', !!leer && leer.leer === true);
+    const ohneTinte = await fall({ pages: 26, ink: 0, blobs: 13 }, [26, 40, 13]);
+    check('Seiten da, Handschrift fehlt ganz: eindeutig', !!ohneTinte && ohneTinte.leer === true);
+    check('Bögen etwas anders gepackt: kein Alarm', (await fall({ pages: 26, ink: 36, blobs: 13 }, [26, 40, 13])) === null);
+    const eineSeite = await fall({ pages: 25, ink: 40, blobs: 13 }, [26, 40, 13]);
+    check('Eine Seite weniger: gemeldet, aber nicht eindeutig (nur im Fenster)', !!eineSeite && eineSeite.leer === false);
+    check('Leeres Heft hier: nie nachladen', (await fall({ pages: 0, ink: 0, blobs: 0 }, [0, 0, 0])) === null);
+  }
+
   if (failed) { console.error(`${failed} Pruefung(en) fehlgeschlagen.`); process.exit(1); }
   console.log('Alle Pruefungen bestanden.');
 })();
