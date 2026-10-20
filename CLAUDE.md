@@ -119,7 +119,6 @@ Behoben am 20. 10. 2026:
 | Website/Safari: nach Verlassen abgemeldet | Google gibt der Website nur 1 h ohne Refresh-Token. Konto bleibt gemerkt, Knopf „Wieder verbinden“ | `isInkwellsKnown`, `erneuereMitKlick`; `website/dashboard/dashboard.js` |
 | Website: farbige Abschnittslinie fehlt | `has-sec` und `--sec-color` am Seitenkopf | `website/js/viewer.js` |
 | Website: Spalt über der klebenden Heftleiste | Navigationshöhe genau gemessen, Leiste 1 px darunter | `website/js/viewer.js`, `website/css/notebook.css` |
-
 | Freigeben und Öffnen großer Hefte dauert 1–2 Minuten | Firestore verpackt jeden Punkt einzeln (26 MB für 7,8 MB Handschrift). Seit **Formatstand 2** steht ein Strich-Pfad als Zeichenkette in Firestore (~4,5× kleiner); Pakete laufen zu dritt parallel | `strichKompakt`/`strichLesbar`, `FORMAT_STAND`, `versionPasst`, `src/core/share.js`; Tests `test-ink-kompakt.js`, `test-doc-split.js` |
 
 **Formatstand 2 (20. 10. 2026):** Eine App mit Stand 1 kann Dokumente mit
