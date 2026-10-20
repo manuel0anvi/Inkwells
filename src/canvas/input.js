@@ -1595,6 +1595,11 @@ function attachInput(canvas, textDiv, objLayer, page) {
     let c = null;
     let gewachsen = false;
     for (const ev of meldungen) {
+      /* Ein Stiftpunkt ohne Druck liegt nicht auf dem Glas (siehe OHNE
+         DRUCK KEIN STRICH). Bis keinKontaktMehr den Strich beendet,
+         vergehen ein paar Meldungen – ohne diese Zeile zogen sie einen
+         kurzen Schwanz vom letzten echten Punkt zur schwebenden Spitze. */
+      if (ev.pointerType === 'pen' && ev.pressure === 0) continue;
       c = amLinealAusrichten(coords(ev), canvas, page);
       // Fuers Eindampfen beim Abheben – siehe linealStrichEindampfen
       if (S._rulerKlebt) stroke._amLineal = true;
