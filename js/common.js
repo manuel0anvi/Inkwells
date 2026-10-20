@@ -99,6 +99,64 @@ function isInkwellsLoggedIn() {
   return !!getInkwellsSession();
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ANGEMELDET BLEIBT, WER SICH NICHT ABGEMELDET HAT
+
+   >>> Gemeldet: „auf dem iPhone in Safari: anmelden, Safari verlassen,
+   wiederkommen – abgemeldet“ <<<
+   Google gibt einer Website nur ein Zugriffstoken für eine Stunde und
+   kein Erneuerungs-Token – das gibt es nur gegen das Client-Secret, und
+   das darf in keiner öffentlichen Seite stehen. Erneuert wurde deshalb
+   still über den Identity-Dienst, und der öffnet dafür ein kleines
+   Fenster. Safari lässt ein Fenster ohne Tipp nicht zu: die Erneuerung
+   scheiterte, und das Dashboard schickte zur Anmeldung zurück.
+
+   Jetzt gilt als angemeldet, wessen Konto die Seite kennt – bis zum
+   ausdrücklichen Abmelden, das die gemerkte Adresse löscht. Ist nur das
+   Token abgelaufen, bleibt man im Dashboard, und ein Knopf verbindet
+   wieder (erneuereMitKlick): sein Tipp darf das Fenster öffnen.
+   ══════════════════════════════════════════════════════════════════════ */
+function isInkwellsKnown() {
+  return isInkwellsLoggedIn() || !!getRememberedEmail();
+}
+
+/** Lädt den Identity-Dienst vorab – der Klick darf auf nichts mehr warten. */
+function bereiteKlickErneuerungVor() {
+  if (getActiveProviderId() === 'google') getTokenClient().catch(() => {});
+}
+
+/**
+ * Erneuert das Token auf einen Tipp hin. MUSS direkt im Klick aufgerufen
+ * werden: das Fenster des Identity-Dienstes geht nur auf, solange der
+ * Tipp frisch ist. Klappt es nicht (Fenster blockiert, Zustimmung
+ * nötig), geht es über die gewöhnliche Anmeldung mit Rückkehr hierher.
+ *
+ * @param {string} returnTo  wohin die Anmeldung zurückführt
+ * @returns {Promise<object|null>} die neue Sitzung, oder null bei Weiterleitung
+ */
+function erneuereMitKlick(returnTo) {
+  const providerId = getActiveProviderId();
+  const umweg = () => { startCloudLogin(returnTo, providerId); return null; };
+
+  if (providerId === 'google' && _tokenClient) {
+    return requestToken(_tokenClient, '', getRememberedEmail())
+      .then(response => applyTokens('google', {
+        accessToken: response.access_token,
+        expiresIn: parseInt(response.expires_in || '3600', 10)
+      }))
+      .catch(err => {
+        console.warn('[Auth] Wieder verbinden über das Fenster nicht möglich:', err?.message || err);
+        return umweg();
+      });
+  }
+
+  // Microsoft erneuert über das Refresh-Token ohnehin still; bleibt nur der Umweg
+  if (providerId !== 'google') {
+    return ensureFreshToken(Infinity).then(s => s || umweg());
+  }
+  return Promise.resolve(umweg());
+}
+
 /* ── Stille Token-Erneuerung ──────────────────────────────────────────
    Ein Zugriffstoken ist nur etwa eine Stunde gültig. Ohne Erneuerung
    wirkt das wie ein zufälliges Abmelden.
@@ -207,10 +265,57 @@ async function applyTokens(providerId, { accessToken, refreshToken, expiresIn, i
   // Dieselbe Anmeldung auch gegenüber Firebase gültig machen. Bewusst ohne
   // await: schlägt es fehl, funktioniert das Dashboard ganz normal weiter,
   // nur eben ohne geteilte Dokumente.
-  if (idToken) linkFirebaseIdentity(providerId, idToken, rawNonce);
+  if (idToken) {
+    if (seiteHatFreigabeModul()) linkFirebaseIdentity(providerId, idToken, rawNonce);
+    else merkeKennungFuerSpaeter(providerId, idToken, rawNonce);
+  }
 
   return session;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   DER NACHWEIS FÜR FIREBASE REIST MIT INS DASHBOARD
+
+   >>> Gemeldet: „auf dem iPhone kann ich Hefte nicht freigeben, obwohl
+   ich mit Google angemeldet bin“ <<<
+   Google leitet nach der Anmeldung auf die STARTSEITE zurück, und dort
+   ist js/share.js gar nicht eingebunden. linkFirebaseIdentity() wartete
+   also auf ein Modul, das nie kam – und die Seite sprang ohnehin sofort
+   ins Dashboard weiter. Firebase lernte den Nutzer nie kennen, und das
+   Freigabe-Fenster sagte „melde dich an“, obwohl man es war. Das galt
+   in jedem Browser; aufgefallen ist es auf dem iPhone, wo keine ältere
+   Firebase-Sitzung von früher mehr herumlag.
+
+   Das ID-Token wird deshalb für den Seitenwechsel aufgehoben und auf der
+   ersten Seite eingelöst, die das Modul hat. sessionStorage, weil es
+   nur diesen einen Wechsel überleben soll – Google lässt es ohnehin nach
+   einer Stunde verfallen.
+   ══════════════════════════════════════════════════════════════════════ */
+const INKWELLS_PENDING_ID_KEY = 'inkwells_pending_identity';
+let _kennungWirdHergestellt = null;
+
+function seiteHatFreigabeModul() {
+  return !!document.querySelector('script[src*="share.js"]');
+}
+
+function merkeKennungFuerSpaeter(providerId, idToken, rawNonce) {
+  try {
+    sessionStorage.setItem(INKWELLS_PENDING_ID_KEY,
+      JSON.stringify({ providerId, idToken, rawNonce: rawNonce || '' }));
+  } catch (e) { /* ohne Speicher: dann eben ohne geteilte Dokumente */ }
+}
+
+function loeseGemerkteKennungEin() {
+  if (!seiteHatFreigabeModul()) return;
+  let wartend = null;
+  try { wartend = JSON.parse(sessionStorage.getItem(INKWELLS_PENDING_ID_KEY) || 'null'); }
+  catch (e) { wartend = null; }
+  try { sessionStorage.removeItem(INKWELLS_PENDING_ID_KEY); } catch (e) { /* egal */ }
+  if (!wartend || !wartend.idToken) return;
+  _kennungWirdHergestellt = linkFirebaseIdentity(wartend.providerId, wartend.idToken, wartend.rawNonce);
+}
+
+document.addEventListener('DOMContentLoaded', loeseGemerkteKennungEin);
 
 /* ── Firebase-Kennung ─────────────────────────────────────────────────
    js/share.js ist ein ES-Modul und meldet sich über das Ereignis
@@ -259,6 +364,8 @@ async function linkFirebaseIdentity(providerId, idToken, rawNonce) {
  */
 async function inkwellsIdentityReady() {
   try {
+    // Wird der Nachweis von der Anmeldung gerade eingelöst? Erst abwarten
+    if (_kennungWirdHergestellt) await _kennungWirdHergestellt;
     const api = await whenInkwellsShareReady(8000);
     await api.whenIdentityReady();
     if (!api.hasRealIdentity()) return null;
@@ -588,7 +695,8 @@ document.addEventListener('click', (event) => {
 
 // Zustand des Login-/Dashboard-Buttons in der Navigationsleiste
 function checkCommonAuth(isLandingPage = false, relativePathToRoot = './') {
-  const loggedIn = isInkwellsLoggedIn();
+  // Ein abgelaufenes Token ist kein Abmelden – siehe isInkwellsKnown
+  const loggedIn = isInkwellsKnown();
   const isDashboard = window.location.pathname.includes('/dashboard/');
 
   const btnOpenLogin = document.getElementById('btn-open-login');

@@ -19,6 +19,13 @@ let session = null;
    ist nicht "nicht angemeldet", sondern wurde abgemeldet – die Startseite
    sagt das dann auch, statt wortlos das Login-Fenster zu zeigen. */
 function redirectToLogin() {
+  /* Ist das Konto bekannt und nur das Token abgelaufen, bleibt man hier
+     und verbindet mit einem Tipp wieder – siehe js/common.js,
+     ANGEMELDET BLEIBT, WER SICH NICHT ABGEMELDET HAT. */
+  if (typeof isInkwellsKnown === 'function' && isInkwellsKnown()) {
+    zeigeWiederVerbinden();
+    return;
+  }
   const wasSignedIn = typeof getRememberedEmail === 'function' && !!getRememberedEmail();
   window.location.replace('../?login=true' + (wasSignedIn ? '&expired=1' : ''));
 }
@@ -39,10 +46,57 @@ async function requireSession() {
   session = await ensureFreshToken();
   if (!session) {
     redirectToLogin();
-    clearInkwellsSession();
     return false;
   }
   return true;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WIEDER VERBINDEN STATT ABMELDEN
+
+   Ein Streifen am unteren Rand, solange das Token fehlt. Er steht über
+   Übersicht UND geöffnetem Heft – ablaufen kann es mitten im Lesen. Die
+   geteilten Dokumente laufen davon unberührt weiter: sie hängen an der
+   Firebase-Anmeldung, und die erneuert sich selbst.
+   ══════════════════════════════════════════════════════════════════════ */
+function zeigeWiederVerbinden() {
+  if (typeof bereiteKlickErneuerungVor === 'function') bereiteKlickErneuerungVor();
+  let leiste = document.getElementById('wieder-verbinden');
+  if (!leiste) {
+    leiste = document.createElement('div');
+    leiste.id = 'wieder-verbinden';
+    leiste.style.cssText = 'position:fixed; left:50%; bottom:max(16px, env(safe-area-inset-bottom));'
+      + 'transform:translateX(-50%); z-index:5000; width:min(560px, calc(100% - 32px));'
+      + 'display:flex; gap:12px; align-items:center; padding:12px 14px; border-radius:10px;'
+      + 'background:var(--navy-2, #141a2a); border:0.5px solid var(--gold-light, #e0a63a);'
+      + 'box-shadow:0 10px 30px rgba(0,0,0,.45); font-family:Jost,sans-serif;';
+    const text = document.createElement('span');
+    text.className = 'wieder-verbinden-text';
+    text.style.cssText = 'flex:1; font-size:12.5px; line-height:1.5; color:var(--text-body, #ddd);';
+    const knopf = document.createElement('button');
+    knopf.className = 'btn-m';
+    knopf.style.cssText = 'white-space:nowrap; padding:8px 14px; font-size:12px;';
+    knopf.addEventListener('click', () => {
+      knopf.disabled = true;
+      // Direkt im Tipp – sonst blockiert Safari das Fenster
+      erneuereMitKlick('dashboard/' + window.location.search).then(neu => {
+        knopf.disabled = false;
+        if (!neu) return;   // geht über die Anmeldeseite, kommt hierher zurück
+        session = neu;
+        leiste.remove();
+        if (webappViewer.style.display !== 'block') showDashboard();
+      });
+    });
+    leiste.append(text, knopf);
+    document.body.appendChild(leiste);
+  }
+  leiste.querySelector('.wieder-verbinden-text').textContent =
+    (t('dash_reconnect_text') || 'Die Verbindung ist abgelaufen.').replace('{provider}', getActiveProvider().label);
+  leiste.querySelector('button').textContent = t('dash_reconnect_btn') || 'Wieder verbinden';
+
+  // Die Übersicht wartet sonst ewig auf „Lade Notizbücher…“
+  const grid = document.getElementById('dashboard-grid');
+  if (grid && grid.textContent.trim() === (t('dash_loading') || 'Lade Notizbücher…')) grid.innerHTML = '';
 }
 
 const webappDashboard = document.getElementById('webapp-dashboard');
@@ -90,7 +144,8 @@ async function cloudFetch(url, extraHeaders) {
   }
 
   if (res.status === 401) {
-    clearInkwellsSession();
+    // Nur das Token weg – das Konto bleibt bekannt, siehe zeigeWiederVerbinden
+    expireInkwellsToken();
     throw new Error('SESSION_EXPIRED');
   }
 
@@ -1284,6 +1339,7 @@ async function openShareDialog() {
     if (renderMicrosoftLinkButton(needs, () => openShareDialog())) {
       needs.textContent = t('share_microsoft_step');
     }
+    renderGoogleLinkButton(needs);
     return;
   }
 
@@ -1782,6 +1838,36 @@ function renderMicrosoftLinkButton(hint, danach) {
   return btn;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   UND BEI GOOGLE: EINMAL DURCH DIE ANMELDUNG
+
+   Wer mit Google angemeldet ist, aber Firebase unbekannt blieb (siehe
+   js/common.js, DER NACHWEIS FÜR FIREBASE REIST MIT), las bisher nur
+   „melde dich an“ – ohne Knopf, obwohl man angemeldet war. Der Nachweis
+   kommt allein mit der Anmeldung bei Google; sie führt danach genau
+   hierher zurück, mit dem Heft wieder offen.
+   ══════════════════════════════════════════════════════════════════════ */
+function renderGoogleLinkButton(hint) {
+  if (!hint) return;
+  if (typeof getActiveProviderId !== 'function' || getActiveProviderId() !== 'google') return;
+  if (typeof isInkwellsKnown === 'function' ? !isInkwellsKnown() : !isInkwellsLoggedIn()) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'btn-m ms-link-btn';
+  btn.style.cssText = 'padding:8px 18px; font-size:12px; margin:0 0 16px;'
+    + 'background:var(--gold-dim); border-color:var(--gold-light); color:var(--gold-light);';
+  btn.textContent = t('share_confirm_google') || 'Mit Google bestätigen';
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    const zurueck = currentNotebook && currentNotebook.id
+      ? 'dashboard/?nb=' + encodeURIComponent(currentNotebook.id)
+      : 'dashboard/';
+    startCloudLogin(zurueck, 'google');
+  });
+  hint.insertAdjacentElement('afterend', btn);
+  return btn;
+}
+
 /** Raeumt einen zuvor gesetzten Knopf weg – er steht direkt hinter dem Hinweis. */
 function removeMicrosoftLinkButton(hint) {
   const dahinter = hint?.nextElementSibling;
@@ -1809,7 +1895,7 @@ function renderSharedDocs() {
   const api = window.InkwellsShare;
   if (!api || !api.hasRealIdentity()) {
     hint.textContent = t('shared_needs_account');
-    renderMicrosoftLinkButton(hint);
+    if (!renderMicrosoftLinkButton(hint)) renderGoogleLinkButton(hint);
     return;
   }
 

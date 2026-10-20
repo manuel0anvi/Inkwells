@@ -45,7 +45,7 @@ import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebase
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion,
-  arrayRemove, deleteField, FieldPath
+  arrayRemove, deleteField, FieldPath, getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
@@ -765,16 +765,14 @@ async function publishNotebook(notebook, options = {}) {
   // Reste einer früheren, längeren Fassung wegräumen
   if (options.shareId) await step('Alte Stücke entfernen', () => deleteChunks(shareId));
 
-  let batch = writeBatch(db);
-  let count = 0;
-  for (let i = 0; i < chunks.length; i++) {
-    batch.set(doc(db, SHARES, shareId, CHUNKS, String(i)), { i, data: chunks[i] });
-    if (++count >= MAX_BATCH) {
-      const b = batch; await step('Stücke schreiben', () => b.commit());
-      batch = writeBatch(db); count = 0;
+  // Nach Gewicht gestapelt – siehe EIN STAPEL HAT AUCH EIN GEWICHT
+  await step('Stücke schreiben', async () => {
+    const s = stapel();
+    for (let i = 0; i < chunks.length; i++) {
+      await s.set(doc(db, SHARES, shareId, CHUNKS, String(i)), { i, data: chunks[i] });
     }
-  }
-  if (count > 0) { const b = batch; await step('Stücke schreiben', () => b.commit()); }
+    await s.flush();
+  });
 
   return {
     shareId,
@@ -1487,7 +1485,7 @@ async function shareDocument(notebook, options = {}) {
      Dazwischen steht immer ein vollständiges Heft – entweder das alte
      oder das neue.
      ═══════════════════════════════════════════════════════════════ */
-  await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid));
+  await step('Inhalt schreiben', () => writeDocParts(docId, parts, me.uid, options.fortschritt));
 
   if (!isNew) await step('Alten Inhalt aufräumen', () => raeumeUebriges(docId, parts));
 
@@ -1496,29 +1494,217 @@ async function shareDocument(notebook, options = {}) {
   return { docId, linkId, url: linkId ? docUrlFor(linkId) : '', linkMode };
 }
 
-/** Schreibt Seiten, Handschrift und Bilder stapelweise. */
-async function writeDocParts(docId, parts, byUid) {
-  let batch = writeBatch(db);
-  let count = 0;
-  const flush = async () => {
-    if (!count) return;
-    const b = batch; batch = writeBatch(db); count = 0;
-    await b.commit();
-  };
+/* ══════════════════════════════════════════════════════════════════════
+   EIN STAPEL HAT AUCH EIN GEWICHT, NICHT NUR EINE ANZAHL
 
+   >>> Gemeldet: „Freigabe aktivieren braucht ewig oder lädt für immer“ <<<
+   Gestapelt wurde nur nach Anzahl: bis zu MAX_BATCH (450) Schreibvorgänge
+   in einem Commit. Ein Bildstück wiegt aber bis zu CHUNK_SIZE (700 KB),
+   und eine PDF-Seite wird beim Freigeben als Bild beigelegt – zwanzig
+   Seiten ergeben so leicht hundert Stücke, also siebzig MB in EINER
+   Anfrage. Firestore nimmt höchstens 10 MiB je Anfrage an. Darüber
+   versucht der Client es immer wieder, und das Fenster stand mit
+   „Wird freigegeben…“ da, bis man aufgab.
+
+   Und weil Firestore die Schreibvorgänge eines Clients der Reihe nach
+   abarbeitet, stand danach auch alles andere: der Kopf war schon
+   geschrieben („Dieses Heft ist bereits freigegeben“), aber jede
+   Änderung an den Einstellungen wartete hinter dem festgefahrenen Stapel.
+
+   Jetzt wird ein Stapel auch dann abgeschickt, wenn er MAX_BATCH_BYTES
+   erreicht – weit genug unter der Grenze, dass Feldnamen und Kodierung
+   nicht mehr ins Gewicht fallen.
+   ══════════════════════════════════════════════════════════════════════ */
+const MAX_BATCH_BYTES = 4 * 1024 * 1024;
+
+/* ══════════════════════════════════════════════════════════════════════
+   GEWOGEN WIRD, WAS WIRKLICH ÜBER DIE LEITUNG GEHT
+
+   >>> Gemeldet: „Request payload size exceeds the limit“ beim Freigeben <<<
+   Gewogen wurde mit JSON.stringify. Firestore verschickt aber nicht das
+   JSON des Eintrags, sondern jeden Wert eingepackt: aus 123 wird
+   {"integerValue":"123"}, aus jedem Punkt einer Handschrift ein mapValue
+   mit drei solchen Feldern. Bei Handschrift ist die Anfrage dadurch ein
+   Vielfaches dessen, was JSON.stringify zählt – vier „geschätzte“ MB
+   wurden zu deutlich über zehn echten, und Firestore wies den Stapel ab.
+
+   Jetzt wird die Verpackung mitgezählt. Grob, aber nach oben gerundet:
+   lieber ein Stapel mehr als einer zu viel.
+   ══════════════════════════════════════════════════════════════════════ */
+function gewichtVon(wert) {
+  if (wert === null || wert === undefined) return 20;
+  switch (typeof wert) {
+    case 'string': {
+      // Umlaute und Ähnliches kommen als mehrere Bytes oder \u-Folge
+      let extra = 0;
+      for (let i = 0; i < wert.length; i++) if (wert.charCodeAt(i) > 127) extra += 5;
+      return wert.length + extra + 20;
+    }
+    case 'number': return 40;
+    case 'boolean': return 25;
+    case 'object': {
+      if (Array.isArray(wert)) {
+        let g = 40;
+        for (const el of wert) g += gewichtVon(el) + 2;
+        return g;
+      }
+      // serverTimestamp() und andere Feldwerte: kein einfaches Objekt
+      if (Object.getPrototypeOf(wert) !== Object.prototype) return 60;
+      let g = 40;
+      for (const k in wert) g += k.length + 10 + gewichtVon(wert[k]);
+      return g;
+    }
+    default: return 40;
+  }
+}
+
+/** Hat Firestore den Stapel wegen seiner Grösse abgewiesen? */
+function istZuGross(err) {
+  return /exceeds|payload size|too (big|large)|maximum allowed size/i
+    .test(String((err && err.message) || err || ''));
+}
+
+/**
+ * Schickt die Schritte ab – und teilt sie, wenn Firestore sie als zu
+ * gross abweist. Die Schätzung oben bleibt eine Schätzung; dieser Weg
+ * fängt ab, was sie trotzdem verfehlt, statt das Freigeben scheitern zu
+ * lassen. Nur ein einzelner Eintrag, der allein zu gross ist, scheitert
+ * weiterhin – den kann kein Teilen retten.
+ */
+async function schreibeSchritte(schritte) {
+  const b = writeBatch(db);
+  for (const s of schritte) {
+    if (s.loeschen) b.delete(s.ref);
+    else if (s.optionen) b.set(s.ref, s.data, s.optionen);
+    else b.set(s.ref, s.data);
+  }
+  try {
+    await b.commit();
+  } catch (err) {
+    if (schritte.length < 2 || !istZuGross(err)) throw err;
+    const mitte = schritte.length >> 1;
+    await schreibeSchritte(schritte.slice(0, mitte));
+    await schreibeSchritte(schritte.slice(mitte));
+  }
+}
+
+/**
+ * Ein Stapel, der sich selbst abschickt, bevor er zu voll wird.
+ *
+ * @param {(fertig: number) => void} [nachCommit] bekommt die bisher
+ *   geschriebene Menge (geschätzt) – für die Fortschrittsanzeige
+ */
+function stapel(nachCommit) {
+  let schritte = [];
+  let bytes = 0, fertig = 0;
+  const flush = async () => {
+    if (!schritte.length) return;
+    const jetzt = schritte, gewicht = bytes;
+    schritte = []; bytes = 0;
+    await schreibeSchritte(jetzt);
+    fertig += gewicht;
+    if (nachCommit) nachCommit(fertig);
+  };
+  return {
+    async set(ref, data, optionen) {
+      const g = gewichtVon(data);
+      if (schritte.length && (schritte.length >= MAX_BATCH || bytes + g > MAX_BATCH_BYTES)) await flush();
+      schritte.push({ ref, data, optionen });
+      bytes += g;
+    },
+    async delete(ref) {
+      if (schritte.length >= MAX_BATCH) await flush();
+      schritte.push({ ref, loeschen: true });
+      bytes += 200;
+    },
+    flush
+  };
+}
+
+/**
+ * Schreibt Seiten, Handschrift und Bilder stapelweise.
+ *
+ * @param {(fertig: number, gesamt: number) => void} [fortschritt]
+ */
+async function writeDocParts(docId, parts, byUid, fortschritt) {
+  const eintraege = [];
   for (const page of parts.pages) {
-    batch.set(doc(db, DOCS, docId, PAGES, page.id), { ...page, by: byUid, updatedAt: serverTimestamp() });
-    if (++count >= MAX_BATCH) await flush();
+    eintraege.push([doc(db, DOCS, docId, PAGES, page.id), { ...page, by: byUid, updatedAt: serverTimestamp() }]);
   }
   for (const sheet of parts.ink) {
-    batch.set(doc(db, DOCS, docId, INK, sheet.id), { ...sheet, by: byUid });
-    if (++count >= MAX_BATCH) await flush();
+    eintraege.push([doc(db, DOCS, docId, INK, sheet.id), { ...sheet, by: byUid }]);
   }
   for (const blob of parts.blobs) {
-    batch.set(doc(db, DOCS, docId, BLOBS, blob.key), blob);
-    if (++count >= MAX_BATCH) await flush();
+    eintraege.push([doc(db, DOCS, docId, BLOBS, blob.key), blob]);
   }
-  await flush();
+
+  let gesamt = 0;
+  if (fortschritt) for (const [, data] of eintraege) gesamt += gewichtVon(data);
+  const s = stapel(fortschritt ? (fertig => fortschritt(Math.min(fertig, gesamt), gesamt)) : null);
+  for (const [ref, data] of eintraege) await s.set(ref, data);
+  await s.flush();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   OBEN STEHT EIN KOPF OHNE INHALT
+
+   >>> Gemeldet: „ein Heft, das mit mir geteilt wurde, geht nicht auf –
+   anscheinend zu groß“ <<<
+   Der Kopf geht beim Freigeben als Erstes hinauf, der Inhalt danach. Bis
+   der Inhalt nach Gewicht gestapelt wurde (EIN STAPEL HAT AUCH EIN
+   GEWICHT), wies Firestore bei viel Handschrift den Stapel ab – oft den
+   einzigen, also kam gar nichts an. Oben stand ein Dokument, das von
+   sechsundzwanzig Seiten erzählt und keine hat. Der Empfänger konnte es
+   nie öffnen, der Besitzer sah „bereits freigegeben“, und von selbst
+   heilte es nicht: neu hochgeladen wird nur, was sich ändert.
+
+   Der Besitzer hat das Heft aber vollständig bei sich. Verglichen wird
+   deshalb, was oben liegen müsste, mit dem, was oben liegt – gezählt,
+   nicht geladen (getCountFromServer: ein Lesevorgang je tausend).
+
+   Seiten und Bildstücke werden genau verglichen: ihre Kennungen stehen
+   fest. Die Bögen der Handschrift nicht – die Live-Bearbeitung packt sie
+   anders als splitNotebook, die Zahl darf also abweichen. Sie zählen nur,
+   wenn deutlich zu wenige oben sind; sonst lüde jeder Start alles neu.
+
+   @returns {Promise<object|null>} null, wenn nichts fehlt – sonst die
+     Zahlen [oben, erwartet] je Art, für die Meldung
+   ══════════════════════════════════════════════════════════════════════ */
+async function anzahlOben(ref) {
+  try {
+    return (await getCountFromServer(ref)).data().count;
+  } catch (err) {
+    // Ohne Zählabfrage eben über die Liste – teurer, aber es geht
+    return (await getDocs(ref)).size;
+  }
+}
+
+async function inhaltUnvollstaendig(docId, notebook) {
+  if (!docId || !notebook) return null;
+  const parts = splitNotebook(notebook);
+  // Ohne Seiten hier gibt es nichts, womit sich oben etwas ergänzen liesse
+  if (!parts.pages.length) return null;
+  const [seiten, boegen, bilder] = await Promise.all([
+    anzahlOben(collection(db, DOCS, docId, PAGES)),
+    anzahlOben(collection(db, DOCS, docId, INK)),
+    anzahlOben(collection(db, DOCS, docId, BLOBS))
+  ]);
+  const fehlt = seiten < parts.pages.length
+    || bilder < parts.blobs.length
+    || (parts.ink.length > 0 && boegen < Math.ceil(parts.ink.length * 0.75));
+  if (!fehlt) return null;
+  return {
+    /* Das eindeutige Bild eines abgewiesenen Hochladens: eine ganze Art
+       fehlt. Nur dann darf ohne Zutun neu hochgeladen werden – eine
+       kleine Abweichung kann auch heissen, dass jemand anderes oben eine
+       Seite gelöscht hat, und die käme sonst zurück. */
+    leer: seiten === 0
+      || (parts.ink.length > 0 && boegen === 0)
+      || (parts.blobs.length > 0 && bilder === 0),
+    seiten: [seiten, parts.pages.length],
+    boegen: [boegen, parts.ink.length],
+    bilder: [bilder, parts.blobs.length]
+  };
 }
 
 /**
@@ -1900,14 +2086,18 @@ async function saveDocumentContent(docId, notebook, options = {}) {
   for (const page of changedPages) {
     const blobs = parts.blobs.filter(b => b.pageId === page.id);
     await step('Seite schreiben', async () => {
-      const batch = writeBatch(db);
+      /* Nach Gewicht gestapelt (siehe EIN STAPEL HAT AUCH EIN GEWICHT):
+         eine Seite mit grossem Bild sind schnell zwanzig Stücke à 700 KB.
+         Die Bilder zuerst, die Seite zuletzt – so verweist sie nie auf
+         ein Stück, das noch nicht oben ist. */
+      const s = stapel();
+      for (const blob of blobs) await s.set(doc(db, DOCS, docId, BLOBS, blob.key), blob);
       // merge, damit der CRDT-Stand (ycrdt) stehen bleibt – der gehört
       // der Live-Bearbeitung und wird hier nicht angefasst.
-      batch.set(doc(db, DOCS, docId, PAGES, page.id), {
+      await s.set(doc(db, DOCS, docId, PAGES, page.id), {
         ...page, by: me.uid, updatedAt: serverTimestamp()
       }, { merge: true });
-      for (const blob of blobs) batch.set(doc(db, DOCS, docId, BLOBS, blob.key), blob);
-      await batch.commit();
+      await s.flush();
     });
     written++;
   }
@@ -2112,23 +2302,20 @@ async function rewritePageInk(docId, pageId, strokes, byUid, bekannt) {
   // Was der andere gezeichnet hat, ohne dass es hier ankam – siehe oben
   const strokesOut = strokes.concat(fremdeStricheRetten(remote, strokes, bekannt));
 
-  let batch = writeBatch(db);
-  let count = 0;
-  for (const snap of sheets.docs) {
-    batch.delete(snap.ref);
-    if (++count >= MAX_BATCH) { await batch.commit(); batch = writeBatch(db); count = 0; }
-  }
-
+  /* Erst die Bögen zusammenstellen, dann schreiben. Ein Stapel fasste
+     vorher Löschen und Schreiben aller Bögen auf einmal – bei einer
+     dicht beschriebenen Seite über der Grenze von 10 MiB (siehe EIN
+     STAPEL HAT AUCH EIN GEWICHT). Jetzt nach Gewicht gestapelt, und
+     zuerst geschrieben: die Kennungen sind dieselben, set überschreibt
+     also. Gelöscht wird danach nur, was übrig bleibt – dazwischen steht
+     nie eine Seite ohne Handschrift da. */
+  const neu = [];
   let sheet = [];
   let bytes = 0;
-  let no = 0;
   const put = () => {
     if (!sheet.length) return;
-    batch.set(doc(db, DOCS, docId, INK, `${pageId}__${no}`), {
-      pageId, no, strokes: sheet, by: byUid
-    });
-    count++;
-    no++;
+    const no = neu.length;
+    neu.push({ id: `${pageId}__${no}`, data: { pageId, no, strokes: sheet, by: byUid } });
     sheet = [];
     bytes = 0;
   };
@@ -2141,7 +2328,15 @@ async function rewritePageInk(docId, pageId, strokes, byUid, bekannt) {
   }
   put();
 
-  await step('Handschrift neu schreiben', () => batch.commit());
+  const bleibt = new Set(neu.map(b => b.id));
+  await step('Handschrift neu schreiben', async () => {
+    const s = stapel();
+    for (const b of neu) await s.set(doc(db, DOCS, docId, INK, b.id), b.data);
+    for (const snap of sheets.docs) {
+      if (!bleibt.has(snap.id)) await s.delete(snap.ref);
+    }
+    await s.flush();
+  });
 }
 
 /**
@@ -4787,6 +4982,7 @@ const InkwellsShare = {
   saveDocumentContent,
   unshareDocument,
   loadDocumentHead,
+  inhaltUnvollstaendig,
   setLinkMode,
   rotateLink,
   setMember,
@@ -4862,7 +5058,7 @@ export {
   microsoftWartetAufGoogle, linkMicrosoftWithGoogle,
   signOutIdentity, currentIdentity, hasRealIdentity,
   onIdentityChanged, whenIdentityReady, claimOwnShares,
-  shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead,
+  shareDocument, saveDocumentContent, unshareDocument, loadDocumentHead, inhaltUnvollstaendig,
   setLinkMode, rotateLink,
   setMember, removeMember, leaveDocument, unblockMember, listMembers,
   listSharedDocs, watchSharedDocs, watchDocument, resolveLink, joinViaLink,

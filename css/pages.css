@@ -514,6 +514,45 @@ body.touch-draw .j-canvas {
   }
 }
 
+/* Der Knopf neben der Tabelle, der die Leiste holt (core/tables.js).
+   Klein und rund, damit er nicht nach einem Teil der Tabelle aussieht –
+   und knapp unter der Leiste, damit die ihn überdeckt, wenn sie kommt. */
+.j-table-knopf {
+  position: fixed;
+  z-index: 1259;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--sb2);
+  background: var(--sc);
+  color: var(--md);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none
+}
+
+.j-table-knopf svg {
+  width: 100%;
+  height: 100%
+}
+
+.j-table-knopf:hover {
+  color: var(--hi);
+  background: var(--sh2)
+}
+
+@media (any-pointer: coarse) {
+  .j-table-knopf {
+    width: 36px;
+    height: 36px;
+    padding: 7px
+  }
+}
+
 /* ── Mathematische Formeln (KaTeX) ────────────────────────────────── */
 
 /* Inline-Formel: fließt im Text mit, etwas vergrößert für Lesbarkeit.

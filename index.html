@@ -584,7 +584,7 @@ function openLoginModal(reason) {
 }
 
 btnOpenLogin.addEventListener('click', () => {
-  if (!isInkwellsLoggedIn()) openLoginModal();
+  if (!isInkwellsKnown()) openLoginModal();
 });
 
 // Google leitet auf die Startseite zurück – Callback zuerst behandeln.
@@ -616,14 +616,11 @@ btnOpenLogin.addEventListener('click', () => {
     return;
   }
 
-  // Sonst: angemeldete Nutzer direkt ins Dashboard. Ist das Token gerade
-  // abgelaufen, wird vorher still erneuert, damit man nicht grundlos
-  // wieder auf der Startseite landet.
-  const active = isInkwellsLoggedIn()
-    ? getInkwellsSession()
-    : (getRememberedEmail() ? await ensureFreshToken() : null);
-
-  if (active) window.location.replace('dashboard/');
+  // Sonst: angemeldete Nutzer direkt ins Dashboard – auch mit abgelaufenem
+  // Token. Dort wird erneuert oder auf einen Tipp hin wieder verbunden
+  // (js/common.js, ANGEMELDET BLEIBT). Hier still zu erneuern scheiterte
+  // in Safari am blockierten Fenster, und man stand auf der Startseite.
+  if (isInkwellsKnown()) window.location.replace('dashboard/');
 })();
 
 document.getElementById('login-google-btn').addEventListener('click', () => {

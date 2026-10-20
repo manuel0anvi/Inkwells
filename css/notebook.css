@@ -119,10 +119,13 @@
    misst js/viewer.js; der Hintergrund reicht über die ganze Breite,
    damit die Seiten beim Rollen nicht neben ihr hervorschauen.
    Dasselbe gilt für den Kopf der Freigabe-Seite (s/). */
+/* Einen Pixel UNTER die Navigation: die liegt darüber (z-index 100 gegen
+   90) und deckt ihn zu. Ohne diese Überlappung blieb je nach Rundung ein
+   Haarspalt, durch den die Seiten beim Rollen schienen (js/viewer.js). */
 .viewer-bar,
 .share-head {
   position: sticky;
-  top: var(--nav-hoehe, 64px);
+  top: calc(var(--nav-hoehe, 64px) - 1px);
   z-index: 90;
   padding: 10px 0;
 }

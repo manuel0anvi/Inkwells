@@ -503,6 +503,14 @@ function buildPageElement(notebook, page, index) {
   date.className = 'j-page-date';
   date.textContent = fmtPageDate(page.date);
   hdr.append(num, date);
+  /* Der Farbstreifen des Abschnitts unter dem Kopf – wie in der App
+     (src/app.js, has-sec). Die Regel dazu steht in css/pages.css, die
+     aus der App kommt; es fehlte nur, sie hier auch einzuschalten. */
+  const sec = abschnittDerSeite(notebook, page);
+  if (sec) {
+    div.style.setProperty('--sec-color', abschnittsFarbe(sec));
+    hdr.classList.add('has-sec');
+  }
   div.appendChild(hdr);
 
   // Hintergrundbild: importierte PDF-Seite, als Bild oder als Verweis
@@ -643,7 +651,13 @@ window.addEventListener('resize', rescaleAllPages);
 (function navHoeheMerken() {
   const nav = document.querySelector('nav');
   if (!nav) return;
-  const setze = () => document.documentElement.style.setProperty('--nav-hoehe', nav.offsetHeight + 'px');
+  /* getBoundingClientRect und nicht offsetHeight: die Navigation hat einen
+     Rand von einem halben Pixel und ist damit krumm hoch. offsetHeight
+     rundet – auf dem iPhone oft nach oben, und zwischen Navigation und
+     Leiste blieb ein Spalt, durch den die Seiten schienen. Gemeldet
+     genau so. Den letzten Bruchteil deckt css/notebook.css ab. */
+  const setze = () => document.documentElement.style.setProperty('--nav-hoehe',
+    nav.getBoundingClientRect().height + 'px');
   setze();
   if (typeof ResizeObserver === 'function') new ResizeObserver(setze).observe(nav);
   else window.addEventListener('resize', setze);
@@ -782,6 +796,32 @@ function seitenVonAbschnitt(notebook, sec) {
   return ids;
 }
 
+/* Dieselbe Rechnung wie colorForSection() in der App (src/core/data.js):
+   die gewählte Farbe, sonst eine feste aus der Kennung. Sonst hätten
+   Streifen und Punkt hier eine andere Farbe als dort. */
+const ABSCHNITT_FARBEN = ['#c04040', '#c87a2a', '#2e8a46', '#2a5fa8', '#7a3aaa', '#8a5030', '#2a8a88', '#606060'];
+
+function abschnittsFarbe(sec) {
+  if (sec && sec.color) return sec.color;
+  const key = String(sec && sec.id != null ? sec.id : '');
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return ABSCHNITT_FARBEN[hash % ABSCHNITT_FARBEN.length];
+}
+
+/** Der Abschnitt einer Seite – über secId, bei älteren Heften über die Listen. */
+function abschnittDerSeite(notebook, page) {
+  const sections = Array.isArray(notebook && notebook.sections) ? notebook.sections : [];
+  if (!page) return null;
+  if (page.secId != null && page.secId !== '') {
+    return sections.find(s => String(s.id) === String(page.secId)) || null;
+  }
+  if (notebook.schemaVersion === 2) return null;
+  return sections.find(s =>
+    (Array.isArray(s.pgIds) && s.pgIds.map(String).includes(String(page.id)))
+    || (Array.isArray(s.pages) && s.pages.some(p => p && String(p.id) === String(page.id)))) || null;
+}
+
 function abschnitteVon(notebook, pages) {
   const sections = Array.isArray(notebook && notebook.sections) ? notebook.sections : [];
   const vorhanden = new Set(pages.map(p => String(p.id)));
@@ -861,7 +901,7 @@ function zeigeAbschnitte(notebook, pages, leiste, beiWechsel) {
   const alle = knopf(t('view_all_pages') || 'Alle Seiten', null, pages.length, null);
   let startKnopf = alle;
   for (const a of liste) {
-    const b = knopf(a.sec.name || '—', a.sec.color || null, a.ids.size, a);
+    const b = knopf(a.sec.name || '—', abschnittsFarbe(a.sec), a.ids.size, a);
     if (a === start) startKnopf = b;
   }
   waehle(start, startKnopf);
