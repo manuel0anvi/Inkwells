@@ -273,6 +273,22 @@ async function loadNotebookStubs() {
 
   // Das zuletzt Geänderte zuerst – OneDrive liefert keine Reihenfolge
   notebooks.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+
+  /* Wurde in der App sortiert, gilt diese Reihenfolge – dieselbe wie dort
+     (src/ui/homeGrid.js, DIE GEZOGENE REIHENFOLGE BLEIBT). Was darin
+     nicht vorkommt, bleibt nach Datum dahinter. */
+  let reihenfolge = null;
+  for (const folderId of folders) {
+    if (typeof provider.ladeReihenfolge !== 'function') break;
+    reihenfolge = await provider.ladeReihenfolge(cloudJson, folderId);
+    if (reihenfolge) break;
+  }
+  if (reihenfolge && reihenfolge.length) {
+    const rang = new Map(reihenfolge.map((id, i) => [id, i]));
+    const schluessel = new Map(notebooks.map((nb, i) =>
+      [nb, rang.has(String(nb.id)) ? rang.get(String(nb.id)) : rang.size + i]));
+    notebooks.sort((a, b) => schluessel.get(a) - schluessel.get(b));
+  }
   return { notebooks, folderFound: true, ownBytes };
 }
 
@@ -1393,9 +1409,15 @@ async function loadShareHead(docId) {
     renderShareHead();
   } catch (err) {
     if (err?.message === 'SHARE_NOT_FOUND') {
+      /* Woanders aufgehoben (App, anderes Gerät). Das Heft ist da, es
+         ist nur nicht mehr geteilt – „gibt es nicht mehr" las sich wie ein
+         verlorenes Heft. Gegenstück: src/ui/share.js, vergissAufgehobene. */
       shareHead = null;
       forgetShare(currentNotebook.id, ['docId', 'linkId', 'url', 'linkMode']);
-      status.textContent = t('shared_gone');
+      shareEl('share-dlg-revoke').style.display = 'none';
+      shareEl('share-dlg-link-row').style.display = 'none';
+      showLinkMode('off');
+      status.textContent = t('share_ended') || t('shared_gone');
       return;
     }
     status.textContent = describeShareError(err);
@@ -1519,7 +1541,9 @@ async function ensureShareDocument() {
   const entry = shareFor(currentNotebook.id);
   if (entry?.docId) {
     await loadShareHead(entry.docId);
-    return !!shareHead;
+    if (shareHead) return true;
+    // Woanders aufgehoben: dann jetzt neu freigeben, statt stumm aufzugeben
+    if (shareFor(currentNotebook.id)?.docId) return false;
   }
 
   /* Erst nachsehen, dann anlegen: sonst entstünde eine ZWEITE Freigabe

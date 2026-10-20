@@ -105,6 +105,22 @@ const WebGoogleProvider = {
       }));
   },
 
+  /* Die Reihenfolge der Übersicht, wie sie in der App gezogen wurde
+     (src/core/cloudSync.js, DIE REIHENFOLGE DER HEFTE). null, wenn es
+     sie nicht gibt – dann bleibt es beim Datum. */
+  async ladeReihenfolge(http, folderId) {
+    try {
+      const q = encodeURIComponent(`'${folderId}' in parents and name='inkwells-reihenfolge.json' and trashed=false`);
+      const data = await http(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`);
+      const id = data.files?.[0]?.id;
+      if (!id) return null;
+      const json = await http(this.downloadUrl(id));
+      return Array.isArray(json?.order) ? json.order.map(String) : null;
+    } catch (err) {
+      return null;
+    }
+  },
+
   downloadUrl(fileId) {
     return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
   },
@@ -319,6 +335,16 @@ const WebMicrosoftProvider = {
       url = data['@odata.nextLink'] || null;
     }
     return out;
+  },
+
+  // Siehe beim Google-Anbieter
+  async ladeReihenfolge(http, folderId) {
+    try {
+      const json = await http(`${MICROSOFT_GRAPH}/me/drive/items/${folderId}:/inkwells-reihenfolge.json:/content`);
+      return Array.isArray(json?.order) ? json.order.map(String) : null;
+    } catch (err) {
+      return null;
+    }
   },
 
   downloadUrl(fileId) {
