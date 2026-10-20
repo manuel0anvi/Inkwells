@@ -120,6 +120,10 @@ Behoben am 20. 10. 2026:
 | Website: farbige Abschnittslinie fehlt | `has-sec` und `--sec-color` am Seitenkopf | `website/js/viewer.js` |
 | Website: Spalt über der klebenden Heftleiste | Navigationshöhe genau gemessen, Leiste 1 px darunter | `website/js/viewer.js`, `website/css/notebook.css` |
 | Freigeben und Öffnen großer Hefte dauert 1–2 Minuten | Firestore verpackt jeden Punkt einzeln (26 MB für 7,8 MB Handschrift). Seit **Formatstand 2** steht ein Strich-Pfad als Zeichenkette in Firestore (~4,5× kleiner); Pakete laufen zu dritt parallel | `strichKompakt`/`strichLesbar`, `FORMAT_STAND`, `versionPasst`, `src/core/share.js`; Tests `test-ink-kompakt.js`, `test-doc-split.js` |
+| Hefte umsortiert, nach Neustart wieder alte Reihenfolge; Website anders | Reihenfolge geht in die Registry und als `inkwells-reihenfolge.json` in den Cloud-Ordner; der jüngere Stand gewinnt; die Website sortiert danach | `merkeHeftReihenfolge`, `gleicheHeftReihenfolgeAb`, `src/ui/homeGrid.js`; `Registry.ordne`; `loadOrderIndex`, `src/core/cloudSync.js`; `ladeReihenfolge`, `website/js/providers.js` |
+| Freigabe aufgehoben, Auge bleibt, Fenster sagt „gibt es nicht mehr“ | Woanders aufgehoben: Merkzettel wird beim Start und im Fenster geprüft und geleert; Meldung „Freigabe aufgehoben“; Neu-Freigeben geht sofort | `vergissAufgehobene`, `src/ui/share.js`; `loadShareHead`, `website/dashboard/dashboard.js` |
+| Stift zieht beim Schweben einen kurzen Schwanz | Stiftpunkte ohne Druck werden nie gezeichnet | `src/canvas/input.js` (pointermove) |
+| Geteilte Dokumente: „niemand hat etwas geteilt“ beim Laden; Link mit Microsoft fragt „anmelden?“; ohne Netz „Live-Datenbank blockiert“ | Ladezustand, fehlender zweiter Schritt samt Knopf, „Kein Internet“ | `src/ui/sharedDocs.js`, `src/ui/collab.js` |
 
 **Formatstand 2 (20. 10. 2026):** Eine App mit Stand 1 kann Dokumente mit
 Stand 2 nicht öffnen und wird zum Aktualisieren aufgefordert. Die neuere
@@ -133,6 +137,11 @@ Noch **nicht** gelöst: „neben offener PDF-Ansicht verschwinden Zoomwert,
 − und + aus der Werkzeugleiste“. Ließ sich nicht nachstellen. Versucht
 und verworfen: `overflow: clip` an `.journal-layout` / `.editor-col` —
 bricht `test:stift`, `test:lasso` und `test:touch`.
+
+Freigeben gegen echtes Firebase testen: Emulatoren brauchen Java (nicht installiert –
+ein portables Temurin-JRE genügt) und laufen mit `npx -y firebase-tools@13 emulators:exec`.
+Am 20. 10. so geprüft: Freigeben, Öffnen, gemeinsam Zeichnen/Radieren, Link, Rechte,
+Aufheben, halb hochgeladen, Formatstand 1 – alles mit dem echten mathe-Heft.
 
 Electron-Tests aus Claude Code heraus: `ELECTRON_RUN_AS_NODE` ist dort
 gesetzt, also `env -u ELECTRON_RUN_AS_NODE npm run test:…`.
