@@ -303,6 +303,48 @@ function attachInput(canvas, textDiv, objLayer, page) {
     return Math.hypot(b.x - a.x, b.y - a.y) >= LINIE_MIN_SPANNE;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     NUR WAS WIE EINE GERADE AUSSIEHT, WIRD ZUR GERADEN
+
+     >>> Gemeldet: „halte ich beim Schreiben, wird es eine gerade Linie“ <<<
+     Lang genug war bisher das einzige Maß. Ein Wort in Schreibschrift,
+     eine Welle, ein Pfeil mit Haken – alles kommt über die Grenze, und
+     wer am Ende kurz absetzt, verlor das Gezeichnete an eine Strecke
+     zwischen Anfang und Ende.
+
+     Zwei Fragen entscheiden jetzt:
+       - Umweg: wie viel länger ist der gelaufene Weg als die Spanne?
+         Schrift läuft auf und ab und kommt leicht aufs Dreifache, eine
+         zittrige Gerade kaum über ein Zehntel.
+       - Abweichung: wie weit entfernt sich der Strich höchstens von der
+         Verbindung zwischen Anfang und Ende? Ein Bogen hält den Umweg
+         klein, entfernt sich aber weit.
+     Die Abweichung wächst mit der Länge mit – eine lange Gerade aus der
+     freien Hand schwankt mehr als eine kurze –, hat aber ein Mindestmaß,
+     sonst wäre bei einer kurzen schon ein Zittern zu viel.
+     ══════════════════════════════════════════════════════════════════ */
+  const LINIE_MAX_UMWEG = 1.25;        // Weg ÷ Spanne
+  const LINIE_MAX_ABWEICHUNG = 0.1;    // Anteil der Spanne
+  const LINIE_MIN_ABWEICHUNG = 6;      // Seiten-Pixel
+
+  function siehtWieGeradeAus(stroke) {
+    const pts = stroke && stroke.path;
+    if (!pts || pts.length < 2) return false;
+    const a = pts[0], b = pts[pts.length - 1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const spanne = Math.hypot(dx, dy);
+    if (spanne < LINIE_MIN_SPANNE) return false;
+
+    let weg = 0, abw = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (i > 0) weg += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      const d = Math.abs(dx * (pts[i].y - a.y) - dy * (pts[i].x - a.x)) / spanne;
+      if (d > abw) abw = d;
+    }
+    if (weg > spanne * LINIE_MAX_UMWEG) return false;
+    return abw <= Math.max(LINIE_MIN_ABWEICHUNG, spanne * LINIE_MAX_ABWEICHUNG);
+  }
+
   function armLineTimer(stroke, punkt) {
     if (!stroke || stroke.isEraser || stroke._lasso) return;
 
@@ -376,7 +418,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
          aus) – wer weiterzieht und die Runde wieder öffnet, bekommt
          seine Gerade danach trotzdem.
          ═════════════════════════════════════════════════════════════ */
-      if (istGeschlossen(stroke)) {
+      /* Dasselbe gilt für alles, was offen, aber nicht gerade ist:
+         Schrift, Bögen, Wellen bleiben, wie sie gezeichnet wurden. */
+      if (istGeschlossen(stroke) || !siehtWieGeradeAus(stroke)) {
         stroke._lineLocked = false;
         _halteBei = null;
         stroke._lineTimer = null;

@@ -61,11 +61,15 @@ vm.createContext(sandbox);
 vm.runInContext([
   extractConst('LINIE_MIN_WEG'),
   extractConst('LINIE_MIN_SPANNE'),
+  extractConst('LINIE_MAX_UMWEG'),
+  extractConst('LINIE_MAX_ABWEICHUNG'),
+  extractConst('LINIE_MIN_ABWEICHUNG'),
   extract('istGeschlossen'),
-  extract('langGenugFuerLinie')
+  extract('langGenugFuerLinie'),
+  extract('siehtWieGeradeAus')
 ].join('\n'), sandbox);
 
-const { langGenugFuerLinie, istGeschlossen } = sandbox;
+const { langGenugFuerLinie, istGeschlossen, siehtWieGeradeAus } = sandbox;
 
 let failed = 0;
 function check(label, actual, expected) {
@@ -206,6 +210,60 @@ console.log('\nWas eine Runde ist, wird als Runde erkannt');
 
   check('Ohne Pfad gar nichts', istGeschlossen({}), false);
   check('Ein einzelner Punkt ist keine Runde', istGeschlossen(strich([[50, 50]])), false);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   NUR WAS GERADE AUSSIEHT, WIRD ZUR GERADEN
+
+   Gemeldet: „wenn ich schreibe oder zeichne und gedrückt halte, wird es
+   eine gerade Linie“ – auch wenn das Gezeichnete gar nicht danach
+   aussah. siehtWieGeradeAus() ist die Frage, die der Zeitgeber vor dem
+   Zusammenfallen stellt.
+   ═══════════════════════════════════════════════════════════════════ */
+
+console.log('\nNur was gerade aussieht, wird zur Geraden');
+
+{
+  check('Eine saubere Strecke', siehtWieGeradeAus(strecke(50, 50, 300, 50)), true);
+  check('Auch schraeg', siehtWieGeradeAus(strecke(50, 50, 200, 180)), true);
+
+  // Eine Gerade aus der freien Hand: leicht zittrig, leicht durchgebogen
+  const zittrig = [];
+  for (let i = 0; i <= 40; i++) {
+    zittrig.push([50 + i * 6, 100 + Math.sin(i * 1.7) * 1.5 + Math.sin(i / 40 * Math.PI) * 8]);
+  }
+  check('Eine zittrige Gerade aus der Hand', siehtWieGeradeAus(strich(zittrig)), true);
+  check('Ein leichter Bogen', siehtWieGeradeAus(strich([
+    [50, 100], [110, 92], [170, 88], [230, 92], [290, 100]
+  ])), true);
+
+  // Schreibschrift: läuft auf und ab, die Enden liegen weit auseinander
+  const schrift = [];
+  for (let i = 0; i <= 80; i++) {
+    schrift.push([50 + i * 3, 100 - Math.abs(Math.sin(i * 0.5)) * 14]);
+  }
+  check('Ein Wort in Schreibschrift', siehtWieGeradeAus(strich(schrift)), false);
+
+  // Ein deutlicher Bogen: kaum Umweg, aber weit weg von der Sehne
+  const bogen = [];
+  for (let i = 0; i <= 30; i++) {
+    const w = Math.PI * (i / 30);
+    bogen.push([200 - Math.cos(w) * 100, 200 - Math.sin(w) * 45]);
+  }
+  check('Ein deutlicher Bogen', siehtWieGeradeAus(strich(bogen)), false);
+
+  // Eine Welle
+  const welle = [];
+  for (let i = 0; i <= 60; i++) welle.push([50 + i * 5, 100 + Math.sin(i * 0.3) * 20]);
+  check('Eine Welle', siehtWieGeradeAus(strich(welle)), false);
+
+  // Ein Haken: erst geradeaus, dann scharf ab
+  check('Ein Haken am Ende', siehtWieGeradeAus(strich([
+    [50, 100], [150, 100], [250, 100], [230, 140], [210, 180]
+  ])), false);
+
+  check('Zu kurz', siehtWieGeradeAus(strecke(0, 0, 20, 0)), false);
+  check('Ohne Pfad', siehtWieGeradeAus({}), false);
 }
 
 if (failed) {
