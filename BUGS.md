@@ -116,7 +116,6 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
   (`homeGrid.js:243-246, 277-282`, `importExport.js:1477, 1514`, `dialogs.js:220-225`); PDF als Bild
   meldet gar keinen Fortschritt (`importExport.js:844`).
 - [ ] ✔ Sprachänderung bleibt, obwohl Einstellungen mit ✕ geschlossen (`settings.js:228, 35-49`).
-- [ ] ✔ Fehlender Übersetzungsschlüssel `tableMove` (`tables.js:532`) – Tooltip zeigt „tableMove“.
 - [ ] ✔ `transferAll` doppelt in `translations.js` (350/458, 1361/1841, 2437/2917) – Knopf zeigt nur „Alle“.
 - [ ] ✔ Fest eingebautes Deutsch: `index.html:183, 1014, 1380-1384`, `contextMenu.js:204`, `app.js:955`,
   `state.js:18`, `dialogs.js:247`, `shortcuts.js:103-112`, `homeGrid.js:652`. `btn-min`/`btn-close` ohne Tooltip.

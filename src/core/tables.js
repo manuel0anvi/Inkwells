@@ -408,6 +408,7 @@ const TBL_ICONS = {
   zeileMinus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="2" y="3" width="12" height="4" rx="1"/><path d="M6 12h4"/></svg>',
   spaltePlus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="2" width="4" height="12" rx="1"/><path d="M12 6v4M10 8h4"/></svg>',
   spalteMinus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="2" width="4" height="12" rx="1"/><path d="M10 8h4"/></svg>',
+  tabelle: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="2" y="3" width="12" height="10" rx="1.2"/><path d="M2 6.6h12M2 9.8h12M6.5 3v10"/></svg>',
   weg: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2.6 4.2h10.8M6.4 4.2V2.9h3.2v1.3M3.9 4.2 4.5 13a.9.9 0 0 0 .9.8h5.2a.9.9 0 0 0 .9-.8l.6-8.8"/></svg>'
 };
 
@@ -615,6 +616,8 @@ function positionTableBar(cell) {
   const links = Math.max(8, Math.min(window.innerWidth - b - 8, r.left));
   bar.style.left = Math.round(links) + 'px';
   bar.style.top = Math.round(oben > 60 ? oben : r.bottom + 6) + 'px';
+  // Die Leiste steht – der Knopf, der sie holt, hat seine Arbeit getan
+  if (knopfTabelle === table) versteckeTabellenKnopf();
 }
 
 function versteckeTableBar() {
@@ -761,6 +764,7 @@ function starteTabelleVerschieben(table, pos, startEv) {
   textDiv.style.touchAction = 'none';
   textDiv.contentEditable = 'false';
   document.body.classList.add('j-tbl-zieht');
+  versteckeTabellenKnopf();
 
   const zieh = ev => {
     if (ev.cancelable) ev.preventDefault();
@@ -1253,6 +1257,144 @@ window.addEventListener('resize', () => {
   }
 }, { passive: true });
 
+/* ══════════════════════════════════════════════════════════════════════
+   DER KNOPF NEBEN DER TABELLE
+
+   >>> Gemeldet: „Tabelle verschoben, Leiste weg – und danach lässt sie
+   sich nicht mehr auswählen“ <<<
+   Die Leiste hing allein an der Schreibmarke: nur wer sie in eine Zelle
+   brachte, bekam sie zu sehen. Bei einer frei gesetzten Tabelle trifft
+   ein Klick aber oft nicht in die Zelle, sondern setzt die Marke in den
+   Text darunter – und mit dem Finger, wo jedes Antippen die Tastatur
+   hochholt, will man die Marke dort gar nicht haben. Damit gab es
+   schlicht keinen Weg mehr zur Leiste.
+
+   Jetzt steht neben der Tabelle ein kleiner Knopf, der sie holt:
+     · mit der Maus, sobald der Zeiger in die Nähe der Tabelle kommt,
+     · mit Finger oder Stift, sobald man die Tabelle antippt.
+   Er braucht keine Schreibmarke – die Leiste arbeitet dann an der ersten
+   Zelle, und jeder ihrer Knöpfe setzt die Marke selbst.
+   ══════════════════════════════════════════════════════════════════════ */
+const KNOPF_NAEHE = 48;   // Bildschirm-Pixel um die Tabelle herum
+let tblKnopf = null;
+let knopfTabelle = null;
+
+function tabellenKnopf() {
+  if (tblKnopf) return tblKnopf;
+  tblKnopf = document.createElement('button');
+  tblKnopf.type = 'button';
+  tblKnopf.className = 'j-table-knopf';
+  tblKnopf.style.display = 'none';
+  tblKnopf.innerHTML = TBL_ICONS.tabelle;
+  // Weder Marke noch Fokus dürfen beim Druck wandern
+  tblKnopf.addEventListener('mousedown', ev => ev.preventDefault());
+  tblKnopf.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); });
+  tblKnopf.addEventListener('click', ev => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const table = knopfTabelle;
+    versteckeTabellenKnopf();
+    if (!table || !table.isConnected) return;
+    const zelle = table.querySelector('th, td');
+    if (zelle) positionTableBar(zelle);
+  });
+  document.body.appendChild(tblKnopf);
+  return tblKnopf;
+}
+
+function zeigeTabellenKnopf(table) {
+  if (!table || !table.isConnected || (typeof S !== 'undefined' && S.readOnly)
+      || document.body.classList.contains('j-tbl-zieht')) {
+    versteckeTabellenKnopf();
+    return;
+  }
+  // Steht die Leiste schon an dieser Tabelle, braucht es den Knopf nicht
+  if (tblBar && tblBar.style.display !== 'none' && tblBar._zelle
+      && tblBar._zelle.closest('table') === table) {
+    versteckeTabellenKnopf();
+    return;
+  }
+  const r = table.getBoundingClientRect();
+  if (!r.width && !r.height) { versteckeTabellenKnopf(); return; }
+
+  const k = tabellenKnopf();
+  const titel = (typeof t === 'function' && t('tableEdit')) || 'Tabelle bearbeiten';
+  k.title = titel;
+  k.setAttribute('aria-label', titel);
+  k.style.display = 'flex';
+  const g = k.offsetWidth || 28;
+
+  /* Links neben die obere Ecke; reicht der Platz dort nicht, rechts
+     daneben. Nicht unter die Werkzeugleiste: die Oberkante des
+     Seitenbereichs ist die Grenze, nicht die des Fensters. */
+  let links = r.left - g - 6;
+  if (links < 8) links = Math.min(window.innerWidth - g - 8, r.right + 6);
+  const sc = document.getElementById('pg-scroll');
+  const decke = sc ? sc.getBoundingClientRect().top + 6 : 8;
+  const oben = Math.min(Math.max(r.top, decke), r.bottom - g);
+  k.style.left = Math.round(links) + 'px';
+  k.style.top = Math.round(oben) + 'px';
+  knopfTabelle = table;
+}
+
+function versteckeTabellenKnopf() {
+  if (tblKnopf) tblKnopf.style.display = 'none';
+  knopfTabelle = null;
+}
+
+/** Die Tabelle, der die Stelle am nächsten ist – innerhalb von KNOPF_NAEHE. */
+function tabelleNahe(x, y) {
+  let beste = null, kuerzeste = Infinity;
+  document.querySelectorAll('.j-text table.j-table').forEach(table => {
+    const r = table.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    const d = Math.max(dx, dy);
+    if (d <= KNOPF_NAEHE && d < kuerzeste) { kuerzeste = d; beste = table; }
+  });
+  return beste;
+}
+
+/* Die Maus: einmal je Bild nachsehen, nicht bei jeder Meldung */
+let _knopfPunkt = null, _knopfPlan = 0;
+document.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse') return;
+  _knopfPunkt = { x: e.clientX, y: e.clientY, ziel: e.target };
+  if (_knopfPlan) return;
+  _knopfPlan = requestAnimationFrame(() => {
+    _knopfPlan = 0;
+    const p = _knopfPunkt;
+    if (!p) return;
+    // Auf dem Knopf selbst: stehen lassen
+    if (tblKnopf && p.ziel && tblKnopf.contains(p.ziel)) return;
+    // Nur am Zeiger – beim Zeichnen wäre er ein Störenfried
+    if (typeof S !== 'undefined' && S.mode !== 'cursor') { versteckeTabellenKnopf(); return; }
+    // Über der Leiste oder einem Menü zählt die Tabelle darunter nicht
+    const ueberSeite = p.ziel && p.ziel.closest && p.ziel.closest('#pg-scroll');
+    const table = ueberSeite ? tabelleNahe(p.x, p.y) : null;
+    if (table) zeigeTabellenKnopf(table);
+    else versteckeTabellenKnopf();
+  });
+}, { passive: true });
+
+/* Finger und Stift: wer die Tabelle antippt, bekommt den Knopf; wer
+   woanders hin tippt, ist mit ihr fertig. */
+document.addEventListener('pointerup', e => {
+  if (e.pointerType === 'mouse') return;
+  if (tblKnopf && tblKnopf.contains(e.target)) return;
+  if (typeof S !== 'undefined' && S.mode !== 'cursor') return;
+  const table = e.target && e.target.closest && e.target.closest('.j-text table.j-table');
+  if (table) zeigeTabellenKnopf(table);
+  else versteckeTabellenKnopf();
+}, true);
+
+document.addEventListener('scroll', () => {
+  if (knopfTabelle) zeigeTabellenKnopf(knopfTabelle);
+}, true);
+
+window.versteckeTabellenKnopf = versteckeTabellenKnopf;
+
 /* Wird die Seite neu aufgebaut (Abgleich, Seitenwechsel, Heftwechsel),
    zeigt _zelle auf eine Zelle, die es nicht mehr gibt. Die Leiste bliebe
    sonst stehen und haenge an einem Leichnam. */
@@ -1263,6 +1405,7 @@ window.versteckeTableBar = versteckeTableBar;
 
 window.versteckeTableBarWennWeg = function () {
   if (tblBar && tblBar._zelle && !tblBar._zelle.isConnected) versteckeTableBar();
+  if (knopfTabelle && !knopfTabelle.isConnected) versteckeTabellenKnopf();
 };
 
 if (typeof module !== 'undefined' && module.exports) {

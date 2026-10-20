@@ -419,6 +419,8 @@ const TRANSLATIONS = {
     tableColAdd: 'Spalte rechts einfügen',
     tableColDel: 'Spalte löschen',
     tableDelete: 'Tabelle löschen',
+    tableMove: 'Tabelle verschieben',
+    tableEdit: 'Tabelle bearbeiten',
     
     // Colors
     colorBlack: 'Schwarz',
@@ -1508,6 +1510,8 @@ const TRANSLATIONS = {
     tableColAdd: 'Insert column right',
     tableColDel: 'Delete column',
     tableDelete: 'Delete table',
+    tableMove: 'Move table',
+    tableEdit: 'Edit table',
     
     // Colors
     colorBlack: 'Black',
@@ -2584,6 +2588,8 @@ const TRANSLATIONS = {
     tableColAdd: 'Inserisci colonna a destra',
     tableColDel: 'Elimina colonna',
     tableDelete: 'Elimina tabella',
+    tableMove: 'Sposta tabella',
+    tableEdit: 'Modifica tabella',
     
     // Colors
     colorBlack: 'Nero',
