@@ -153,8 +153,89 @@ const DOC_FORMAT = 'pages';
 
    Im Zweifel hochzählen. Ein zu strenger Riegel kostet einen Klick auf
    „Aktualisieren"; ein zu lascher kostet Arbeit, und zwar erst Tage
-   später und ohne dass jemand weiss, warum. */
-const FORMAT_STAND = 1;
+   später und ohne dass jemand weiss, warum.
+
+   >>> Stand 2: die Handschrift steht kompakt in Firestore <<<
+   Siehe EIN STRICH IST EINE ZEILE weiter unten. Eine Fassung mit Stand 1
+   läse einen solchen Strich als Pfad ohne Punkte – sie muss draussen
+   bleiben. */
+const FORMAT_STAND = 2;
+
+/* ══════════════════════════════════════════════════════════════════════
+   EIN STRICH IST EINE ZEILE
+
+   >>> Gemeldet: „Freigeben dauert ein bis zwei Minuten, Öffnen auch“ <<<
+   Firestore verpackt jeden Wert einzeln: ein Punkt {x, y} geht als
+   mapValue mit zwei doubleValue über die Leitung, gut achtzig Zeichen für
+   zwei Zahlen. Ein Heft mit 26 Seiten Mathe – 317 000 Punkte – war damit
+   26 MB schwer, beim Hochladen wie beim Öffnen, obwohl die Handschrift
+   darin nur 7,8 MB ausmacht.
+
+   Ab Stand 2 steht der Pfad eines Strichs deshalb als EINE Zeichenkette
+   in Firestore: „x,y x,y,p …“ – Punkte durch Leerzeichen getrennt, die
+   Zahlen durch Kommas, der Druck als dritte Zahl, wo es ihn gibt. Dasselbe
+   Heft ist so 5,6 MB schwer.
+
+   Verlustfrei: String(zahl) und parseFloat ergeben in JavaScript genau
+   dieselbe Zahl zurück. Alles andere am Strich (Farbe, Breite, Marker …)
+   bleibt, wie es ist.
+
+   Nur in Firestore. Im Heft, in der Datei und im Live-Kanal bleibt der
+   Pfad eine Liste von Punkten – kompakt wird beim Schreiben, aufgelöst
+   beim Lesen, und dazwischen sieht ihn niemand.
+
+   Geschrieben wird kompakt nur in ein Dokument mit Stand 2 (standVon).
+   In ein älteres Dokument, in dem noch jemand mit Stand 1 arbeiten kann,
+   geht weiter die Liste. Gelesen wird beides.
+   ══════════════════════════════════════════════════════════════════════ */
+const PUNKT_FELDER = new Set(['x', 'y', 'p']);
+
+function strichKompakt(strich) {
+  if (!strich || !Array.isArray(strich.path)) return strich;
+  const teile = [];
+  for (const pt of strich.path) {
+    if (!pt || typeof pt !== 'object') return strich;
+    // Ein Punkt mit anderen Feldern bleibt, wie er ist – nichts geht verloren
+    for (const k in pt) if (!PUNKT_FELDER.has(k)) return strich;
+    if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return strich;
+    if (pt.p === undefined) teile.push(pt.x + ',' + pt.y);
+    else if (Number.isFinite(pt.p)) teile.push(pt.x + ',' + pt.y + ',' + pt.p);
+    else return strich;
+  }
+  return { ...strich, path: teile.join(' ') };
+}
+
+function strichLesbar(strich) {
+  if (!strich || typeof strich.path !== 'string') return strich;
+  const path = [];
+  if (strich.path) {
+    for (const teil of strich.path.split(' ')) {
+      const z = teil.split(',');
+      const pt = { x: parseFloat(z[0]), y: parseFloat(z[1]) };
+      if (z.length > 2) pt.p = parseFloat(z[2]);
+      path.push(pt);
+    }
+  }
+  return { ...strich, path };
+}
+
+/* Welcher Stand gilt für ein Dokument? Gemerkt aus jedem gelesenen oder
+   selbst geschriebenen Kopf (describeDoc, shareDocument, besitzerStempel);
+   sonst einmal nachgesehen. */
+const _standJeDok = new Map();
+
+async function schreibtKompakt(docId) {
+  if (!_standJeDok.has(docId)) {
+    try {
+      const snap = await getDoc(doc(db, DOCS, docId));
+      const st = snap.exists() ? (snap.data() || {}).formatStand : 0;
+      _standJeDok.set(docId, Number.isInteger(st) ? st : 0);
+    } catch (err) {
+      return false;   // im Zweifel die Form, die jeder lesen kann
+    }
+  }
+  return _standJeDok.get(docId) >= 2;
+}
 
 // Rollen. 'off' gibt es nur für linkMode: dann führt kein Link mehr hin.
 const ROLES = ['view', 'edit'];
@@ -947,6 +1028,14 @@ async function versionPasst(head) {
     ? head.formatStand : 0;
   if (!ihrStand || ihrStand === FORMAT_STAND) return { ok: true, meine, ihre, wer: '' };
 
+  /* >>> Ein älteres Dokument darf die neuere Fassung öffnen <<<
+     Bis Stand 2 sperrte jeder Unterschied in beide Richtungen. Seit Stand
+     2 liest die neuere Fassung das ältere Format mit und schreibt in ein
+     Dokument mit Stand 1 auch nur dessen Form (siehe EIN STRICH IST EINE
+     ZEILE, schreibtKompakt). Wer nachzieht, sperrte sonst sich selbst
+     aus allen Freigaben aus, deren Besitzer noch nicht so weit ist. */
+  if (ihrStand < FORMAT_STAND) return { ok: true, meine, ihre, wer: '' };
+
   /* Wer ist älter? Das sagt die Zahl unmittelbar – ein Vergleich der
      Fassungsnummern ist dafür nicht mehr nötig. Traegt das Dokument den
      hoeheren Stand, ist die eigene Seite die aeltere. */
@@ -969,6 +1058,8 @@ function normalizeLinkMode(mode) {
 
 /** Kopf eines Dokuments in eine Form bringen, mit der die Oberfläche arbeitet. */
 function describeDoc(docId, data) {
+  // Für schreibtKompakt: welcher Stand gilt hier
+  if (docId) _standJeDok.set(docId, Number.isInteger(data.formatStand) ? data.formatStand : 0);
   const members = (data.members && typeof data.members === 'object') ? data.members : {};
   const via = (data.memberVia && typeof data.memberVia === 'object') ? data.memberVia : {};
   const toDate = (value) => (value && typeof value.toDate === 'function') ? value.toDate() : null;
@@ -1304,7 +1395,8 @@ function assembleNotebook(head, pages = [], ink = [], blobs = []) {
   const strokesByPage = new Map();
   for (const sheet of ink.slice().sort((a, b) => (a.no || 0) - (b.no || 0))) {
     if (!strokesByPage.has(sheet.pageId)) strokesByPage.set(sheet.pageId, []);
-    strokesByPage.get(sheet.pageId).push(...(sheet.strokes || []));
+    // Kompakt oder als Liste – siehe EIN STRICH IST EINE ZEILE
+    strokesByPage.get(sheet.pageId).push(...(sheet.strokes || []).map(strichLesbar));
   }
 
   const order = Array.isArray(head.pageOrder) ? head.pageOrder : [];
@@ -1454,6 +1546,7 @@ async function shareDocument(notebook, options = {}) {
   }
 
   await step('Kopf schreiben', () => setDoc(doc(db, DOCS, docId), head, { merge: !isNew }));
+  _standJeDok.set(docId, FORMAT_STAND);
 
   /* ═══════════════════════════════════════════════════════════════
      ERST SCHREIBEN, DANN AUFRÄUMEN
@@ -1655,8 +1748,10 @@ async function writeDocParts(docId, parts, byUid, fortschritt) {
   for (const page of parts.pages) {
     eintraege.push([doc(db, DOCS, docId, PAGES, page.id), { ...page, by: byUid, updatedAt: serverTimestamp() }]);
   }
+  const kompakt = await schreibtKompakt(docId);
   for (const sheet of parts.ink) {
-    eintraege.push([doc(db, DOCS, docId, INK, sheet.id), { ...sheet, by: byUid }]);
+    const strokes = kompakt ? sheet.strokes.map(strichKompakt) : sheet.strokes;
+    eintraege.push([doc(db, DOCS, docId, INK, sheet.id), { ...sheet, strokes, by: byUid }]);
   }
   for (const blob of parts.blobs) {
     eintraege.push([doc(db, DOCS, docId, BLOBS, blob.key), blob]);
@@ -2163,6 +2258,8 @@ async function saveDocumentContent(docId, notebook, options = {}) {
     ...(isOwner && notebook.textFluss ? { textFluss: notebook.textFluss } : {}),
     ...(await besitzerStempel(isOwner))
   }, head.revision + 1);
+  // Der Stempel hat den Stand hochgesetzt – ab jetzt kompakt (schreibtKompakt)
+  if (isOwner) _standJeDok.set(docId, FORMAT_STAND);
 
   return { revision, fingerprint, written };
 }
@@ -2206,8 +2303,11 @@ async function appendStrokes(docId, pageId, strokes, byUid) {
   let last = rows[rows.length - 1] || null;
   let bytes = last ? JSON.stringify(last.strokes || []).length : 0;
   let nextNo = last ? (last.no || 0) + 1 : 0;
+  const kompakt = await schreibtKompakt(docId);
 
-  for (const stroke of strokes) {
+  for (const roh of strokes) {
+    // Gewogen und geschrieben in der Form, die wirklich hinaufgeht
+    const stroke = kompakt ? strichKompakt(roh) : roh;
     const size = JSON.stringify(stroke).length;
 
     if (!last || bytes + size > INK_SHEET_LIMIT) {
@@ -2321,7 +2421,7 @@ async function rewritePageInk(docId, pageId, strokes, byUid, bekannt) {
     .sort((a, b) => (a.no || 0) - (b.no || 0));
 
   const remote = [];
-  for (const row of rows) remote.push(...(row.strokes || []));
+  for (const row of rows) remote.push(...(row.strokes || []).map(strichLesbar));
 
   // Was der andere gezeichnet hat, ohne dass es hier ankam – siehe oben
   const strokesOut = strokes.concat(fremdeStricheRetten(remote, strokes, bekannt));
@@ -2353,9 +2453,13 @@ async function rewritePageInk(docId, pageId, strokes, byUid, bekannt) {
   put();
 
   const bleibt = new Set(neu.map(b => b.id));
+  const kompakt = await schreibtKompakt(docId);
   await step('Handschrift neu schreiben', async () => {
     const s = stapel();
-    for (const b of neu) await s.set(doc(db, DOCS, docId, INK, b.id), b.data);
+    for (const b of neu) {
+      const data = kompakt ? { ...b.data, strokes: b.data.strokes.map(strichKompakt) } : b.data;
+      await s.set(doc(db, DOCS, docId, INK, b.id), data);
+    }
     for (const snap of sheets.docs) {
       if (!bleibt.has(snap.id)) await s.delete(snap.ref);
     }
