@@ -2006,6 +2006,42 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
     _schwung.bild = requestAnimationFrame(schritt);
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WER DEN FINGER FÄNGT, DEM GEHÖRT ER
+
+     >>> Gemeldet: „verschiebe ich etwas mit dem Finger, scrollt die
+     Seite mit“ <<<
+     Vergrössert rollt nicht der Browser, sondern touchmove hier unten.
+     Ausgenommen war nur, was isTouchUiTarget kennt – eine Strichauswahl,
+     ein Tabellengriff, das Lineal kannte es nicht. Das Ding folgte dem
+     Finger, und das Blatt lief unter ihm zugleich mit.
+
+     Jede Liste wäre beim nächsten neuen Griff wieder unvollständig. Was
+     einen Finger verschiebt, fängt ihn aber immer (setPointerCapture) –
+     daran wird es erkannt, egal wer es ist. Ein Finger, den ein Zug
+     gefangen hat, rollt nichts: weder hier noch im Browser, denn auch
+     dessen Rollen hält preventDefault auf touchmove an. */
+  const _fingerIds = new Set();
+  const _gefangen = new Set();
+  const _fangen = Element.prototype.setPointerCapture;
+  Element.prototype.setPointerCapture = function (id) {
+    _fangen.call(this, id);
+    _gefangen.add(id);
+  };
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch') _fingerIds.add(e.pointerId);
+  }, { capture: true, passive: true });
+  for (const art of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    document.addEventListener(art, e => {
+      _gefangen.delete(e.pointerId);
+      if (art !== 'lostpointercapture') _fingerIds.delete(e.pointerId);
+    }, { capture: true, passive: true });
+  }
+  function fingerGefangen() {
+    for (const id of _gefangen) if (_fingerIds.has(id)) return true;
+    return false;
+  }
+
   // Stift und Maus halten den Nachlauf an, das Mausrad ebenso
   document.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch') schwungStopp(); },
     { capture: true, passive: true });
@@ -2067,6 +2103,12 @@ E('btn-zoom-reset')?.addEventListener('click', zoomReset);
 
   sc.addEventListener('touchmove', e => {
     if (penIsActive()) { e.preventDefault(); return; }
+    // Ein Ding wird verschoben – siehe WER DEN FINGER FÄNGT
+    if (e.touches.length === 1 && fingerGefangen()) {
+      _panActive = false; _zugProben = [];
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
     if (_hand && _hand.verworfen) { e.preventDefault(); return; }
 
     // Ein zeichnender Finger scrollt nicht mit
