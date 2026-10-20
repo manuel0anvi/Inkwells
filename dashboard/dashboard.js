@@ -1530,7 +1530,16 @@ async function ensureShareDocument() {
   shareEl('share-dlg-status').textContent = t('share_working');
 
   const api = await whenShareReady();
-  const result = await api.shareDocument(currentNotebook, { linkMode: 'off' });
+  // Bei viel Handschrift dauert das – dann soll man sehen, dass es vorangeht
+  const nbId = currentNotebook.id;
+  const result = await api.shareDocument(currentNotebook, {
+    linkMode: 'off',
+    fortschritt: (fertig, gesamt) => {
+      if (!gesamt || !currentNotebook || currentNotebook.id !== nbId) return;
+      const p = Math.max(1, Math.min(99, Math.round(fertig / gesamt * 100)));
+      shareEl('share-dlg-status').textContent = (t('share_uploading') || 'Wird hochgeladen … {p} %').replace('{p}', String(p));
+    }
+  });
 
   rememberShare(currentNotebook.id, {
     docId: result.docId,
