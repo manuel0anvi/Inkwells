@@ -96,3 +96,36 @@ Bei einer kleinen Nachbesserung direkt im Anschluss an eine bereits geprüfte
 Änderung (z. B. nur noch eine Farbe oder ein Hover-Zustand) reicht ein Blick
 in den Code — dafür keinen eigenen lokalen Server mehr starten und keine neuen
 Screenshots machen.
+
+## Schon behobene Meldungen
+
+Wird einer dieser Fehler erneut gemeldet, ist er **nicht** neu: erst
+nachsehen, ob die Behebung noch im Code steht (Commit bzw. Stelle unten),
+und dann nach einer *anderen* Ursache suchen — nicht dieselbe Lösung ein
+zweites Mal bauen.
+
+Behoben am 20. 10. 2026:
+
+| Meldung | Ursache und Behebung | Wo |
+| --- | --- | --- |
+| Halten beim Schreiben macht alles zur Geraden | Nur noch, wenn der Strich wie eine Gerade aussieht (Umweg, Abweichung) | `siehtWieGeradeAus`, `src/canvas/input.js`; Test `test-linie-halten.js` |
+| Stift schreibt schon beim Schweben, nach Neustart wieder gut | Aufsetzen mit Druck 0 beginnt keinen Strich, anhaltender Druck 0 beendet ihn | `stiftOhneDruck`, `keinKontaktMehr`, `src/canvas/input.js` |
+| Objekt mit dem Finger verschieben rollt die Seite mit | Hat ein Zug den Finger gefangen (`setPointerCapture`), rollt `app.js` nicht | „WER DEN FINGER FÄNGT“, `src/app.js` |
+| Tabelle nach Verschieben nicht mehr auswählbar | Kleiner Knopf neben der Tabelle (Maus in der Nähe / Antippen) holt die Leiste | „DER KNOPF NEBEN DER TABELLE“, `src/core/tables.js` |
+| Freigabe aktivieren lädt ewig / „schon freigegeben“, aber nichts änderbar | Stapel nach Gewicht (≤ 4 MB) statt nur nach Anzahl; laufendes Hochladen wird abgewartet | `stapel()`, `src/core/share.js`; `laufendeFreigaben`, `src/ui/share.js` |
+| PDF-Export legt Text und Gezeichnetes übereinander | Druck-CSS kannte `p.j-frei`, `table.j-table[x]` und `.j-folie` nicht | `buildPdf`, `mitTabellenLage`, `src/core/importExport.js` |
+| Website/iPhone: Freigeben geht nicht trotz Google-Anmeldung | ID-Token wird über den Seitenwechsel ins Dashboard mitgenommen | `website/js/common.js` (`loeseGemerkteKennungEin`) |
+| Website/Safari: nach Verlassen abgemeldet | Google gibt der Website nur 1 h ohne Refresh-Token. Konto bleibt gemerkt, Knopf „Wieder verbinden“ | `isInkwellsKnown`, `erneuereMitKlick`; `website/dashboard/dashboard.js` |
+| Website: farbige Abschnittslinie fehlt | `has-sec` und `--sec-color` am Seitenkopf | `website/js/viewer.js` |
+| Website: Spalt über der klebenden Heftleiste | Navigationshöhe genau gemessen, Leiste 1 px darunter | `website/js/viewer.js`, `website/css/notebook.css` |
+
+Die Website-Zeilen gelten erst, wenn `npm run deploy-web` gelaufen ist —
+`website/` reist nicht über Git.
+
+Noch **nicht** gelöst: „neben offener PDF-Ansicht verschwinden Zoomwert,
+− und + aus der Werkzeugleiste“. Ließ sich nicht nachstellen. Versucht
+und verworfen: `overflow: clip` an `.journal-layout` / `.editor-col` —
+bricht `test:stift`, `test:lasso` und `test:touch`.
+
+Electron-Tests aus Claude Code heraus: `ELECTRON_RUN_AS_NODE` ist dort
+gesetzt, also `env -u ELECTRON_RUN_AS_NODE npm run test:…`.
