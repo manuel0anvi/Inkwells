@@ -95,18 +95,12 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
   `src/core/cloudSync.js:177-178, 1930-1945` verwirft nach 3 Netzfehlern; `_onConnectivityChange(true)`
   glaubt dem `online`-Ereignis ungeprüft; `_request` wirft „401 – Sitzung abgelaufen“ (`:1303`) auch,
   wenn die Sitzung offline behalten wurde.
-- [ ] ✔ **Geteiltes Dokument ohne Netz: „Verbindung zur Live-Datenbank blockiert“ statt „Kein Internet“.**
-  `src/ui/collab.js:78-81, 101`, `src/core/share.js:3418`.
-- [ ] ~ **Eigenes Netz weg → „Der Besitzer ist nicht mehr da“** – `src/ui/sharedDocs.js:837-845`.
 - [ ] ~ **„Melden“ und Freigabe-Dialog ohne Netz hängen mit gesperrtem Knopf** – `src/ui/melden.js:132-139`,
   `share.js:4502` (`addDoc` ohne Zeitgrenze).
-- [ ] ✔ **Einladungslink mit Microsoft-Konto fragt „Jetzt anmelden?“, obwohl angemeldet** –
-  `sharedDocs.js:1629-1636`.
 - [ ] ✔ **„Wieder online – „X“ und 0 weitere …“** bei genau einem Heft – `cloudSync.js:2848-2851`.
 - [ ] ~ **„Offline-Änderungen wurden hochgeladen“ beim Start, ohne offline gewesen zu sein** – `cloudSync.js:1371, 1966-1974`.
 - [ ] ? **Nach Offline-Start bleibt Teilen bis zum Neustart tot** (Firebase-Modul lädt nie nach; `share.js:32-42`).
 - [ ] ? **Abmelden bei offenem fremdem Dokument beendet die Live-Sitzung nicht** – `sharedDocs.js:1673, 1690`.
-- [ ] ~ **„Geteilte Dokumente“ sagt „niemand hat etwas geteilt“, während noch geladen wird** – `sharedDocs.js:323-331`.
 
 ## 5. Kleineres
 

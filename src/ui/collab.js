@@ -77,7 +77,7 @@
          den Streifen, und zwar solange es anhaelt. */
       if (verbindungSteht === false) {
         el.style.display = 'inline';
-        el.textContent = t('collabOffline') + ' — ' + t('collabBlocked');
+        el.textContent = t('collabOffline') + ' — ' + (selbstOhneNetz() ? t('collabNoInternet') : t('collabBlocked'));
         el.title = '';
         return;
       }
@@ -102,9 +102,18 @@
    * Ein blockierter Zugang zur Datenbank sieht dann genauso aus wie ein
    * Besitzer, der das Heft noch nicht offen hat.
    */
+  /* >>> Gemeldet: „ohne Netz steht ‚Verbindung zur Live-Datenbank
+     blockiert‘ statt ‚Kein Internet‘“ <<<
+     Beides sieht von hier gleich aus: die Datenbank antwortet nicht.
+     Blockiert ist sie aber nur, wenn die eigene Leitung steht. */
+  function selbstOhneNetz() {
+    return (typeof navigator !== 'undefined' && navigator.onLine === false)
+      || !!(window.CloudSync_ && typeof CloudSync_.binOffline === 'function' && CloudSync_.binOffline());
+  }
+
   function grundText() {
     if (!lastError) return '';
-    if (/RTDB_UNREACHABLE/.test(lastError)) return ' — ' + t('collabBlocked');
+    if (/RTDB_UNREACHABLE/.test(lastError)) return ' — ' + (selbstOhneNetz() ? t('collabNoInternet') : t('collabBlocked'));
     if (/ROOM_NOT_ADMITTED/.test(lastError)) return ' — ' + t('collabWaitingOwner');
     if (/ROOM_OWNER_MISMATCH/.test(lastError)) return ' — ' + t('collabOwnerMismatch');
     if (/PERMISSION_DENIED|permission_denied/i.test(lastError)) return ' — ' + t('collabDenied');

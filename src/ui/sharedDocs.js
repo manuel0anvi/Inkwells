@@ -39,6 +39,9 @@
 
   // Zuletzt bekannter Stand der Liste
   let docs = [];
+  /* Ob die Liste schon einmal geantwortet hat. Bis dahin heisst „leer“
+     nur „noch unterwegs“ – siehe renderShared. */
+  let listeDa = false;
   let unwatchList = null;
   let unwatchOpen = null;
   let activeTab = 'own';
@@ -320,6 +323,15 @@
       return;
     }
 
+    /* >>> Gemeldet: „‚Es hat noch niemand etwas mit dir geteilt‘, während
+       noch geladen wird“ <<<
+       Die Beobachtung braucht einen Augenblick bis zur ersten Antwort.
+       Bis dahin ist die Liste nicht leer, sondern unbekannt. */
+    if (!docs.length && !listeDa && !listError) {
+      sharedHint.textContent = t('sharedListLoading');
+      return;
+    }
+
     if (!docs.length) {
       /* Die Adresse mit dazu. Eingeladen wird auf die Adresse genau –
          wer sich auf diesem Gerät mit einem anderen Konto angemeldet hat
@@ -492,6 +504,7 @@
 
     docs = [];
     listError = '';
+    listeDa = false;
     /* Zurücksetzen, damit die nächste Anmeldung wieder einmal sagen darf,
        was inzwischen dazugekommen ist. */
     announced = false;
@@ -538,6 +551,7 @@
     if (!cloudAngemeldet()) { stopWatching(); return; }
 
     listError = '';
+    listeDa = false;
     unwatchList = api.watchSharedDocs(
       api.currentIdentity().email,
       (list) => {
@@ -548,6 +562,7 @@
 
         listError = '';
         retryDelay = 2000;
+        listeDa = true;
         docs = list.sort((a, b) => (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0));
         renderBadge();
         announceNew();
@@ -1626,6 +1641,30 @@
          Nur-Lesen ohne Konto gibt es weiterhin – auf der Website
          (website/js/share.js), wofür sie gemacht ist.
          ═════════════════════════════════════════════════════════════ */
+      /* Erst nachholen, was sich still nachholen lässt – wie die Liste in
+         startWatching(). Wer vor dem ID-Token angemeldet war, hat sonst
+         keine Firebase-Kennung, obwohl er in der App angemeldet ist. */
+      if (!api.hasRealIdentity() && window.CloudSync_?.ensureFirebaseIdentity) {
+        try { await CloudSync_.ensureFirebaseIdentity(); } catch (e) { /* unten entschieden */ }
+      }
+
+      /* >>> Gemeldet: „mit Microsoft fragt der Link ‚Jetzt anmelden?‘,
+         obwohl ich angemeldet bin“ <<<
+         Bei Microsoft fehlt dann nicht die Anmeldung, sondern ihr zweiter
+         Schritt bei Firebase, und der braucht einen Klick (ui/share.js,
+         microsoftLinkButton). „Melde dich an“ war die falsche Auskunft –
+         jetzt steht da, was wirklich fehlt, und der Reiter mit dem Knopf
+         geht auf. */
+      if (!api.hasRealIdentity() && window.CloudSync_?.isAuthenticated?.()) {
+        const warum = typeof window.describeShareIdentityProblem === 'function'
+          ? window.describeShareIdentityProblem() : t('shareMicrosoftUnsupported');
+        if (typeof showAlert === 'function') await showAlert(warum);
+        else toast(warum, true);
+        if (typeof showHome === 'function') showHome();
+        switchTab('shared');
+        return;
+      }
+
       if (!api.hasRealIdentity()) {
         const jetzt = (typeof showConfirm === 'function')
           ? await showConfirm(t('sharedLinkNeedsAccount'))
