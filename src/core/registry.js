@@ -93,6 +93,29 @@ const Registry = {
     return this._entries;
   },
 
+  /**
+   * Bringt die Einträge in die Reihenfolge dieser Kennungen und speichert.
+   *
+   * Aus der Registry baut init.js beim Start die Übersicht auf – ihre
+   * Reihenfolge IST die Reihenfolge der Hefte. Gezogen wurde bisher nur
+   * in S.notebooks, und das stand nach dem Neustart wieder wie vorher.
+   * Was nicht in der Liste steht (gerade erst dazugekommen), bleibt in
+   * seiner bisherigen Folge dahinter.
+   *
+   * @param {string[]} ids
+   * @returns {Promise<boolean>} ob sich etwas geändert hat
+   */
+  async ordne(ids) {
+    const rang = new Map((ids || []).map((id, i) => [String(id), i]));
+    const vorher = this._entries.map(e => String(e.id));
+    const schluessel = new Map(this._entries.map((e, i) =>
+      [e, rang.has(String(e.id)) ? rang.get(String(e.id)) : rang.size + i]));
+    this._entries.sort((a, b) => schluessel.get(a) - schluessel.get(b));
+    const geaendert = this._entries.some((e, i) => String(e.id) !== vorher[i]);
+    if (geaendert) await this.save();
+    return geaendert;
+  },
+
   find(id) {
     return this._entries.find(e => e.id === id);
   },

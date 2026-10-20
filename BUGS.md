@@ -77,8 +77,6 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
 - [ ] ✔ **Speicherplatz-Balken unsichtbar, Avatare ohne Kreis** – `--accent`, `--bg`, `--text`,
   `--text-muted` sind nirgends definiert (`index.html:132, 1900, 1941, 1952`, `auth.js:296`,
   `layout.css:170, 230`, `pages.css:2876`).
-- [ ] ✔ **Reihenfolge der Hefte nach dem Ziehen geht beim Neustart verloren** – `homeGrid.js:451-456`;
-  Marker hinter der letzten Karte fehlt (`:421`), `targetIdx` falsch mit geteilten Dokumenten (`:420`).
 - [ ] ✔ **Textfarben-Menü markiert den Regenbogen statt der gewählten Farbe** – `toolbar.js:1674-1679`.
 - [ ] ~ **„Eigene Farbe“-Fenster springt beim Rollen in die Ecke** – `toolbar.js:1314` (Anker unsichtbar).
 - [ ] ✔ **„⋯“ an Seite/Heftkarte schließt das Menü nicht, es geht sofort wieder auf** –

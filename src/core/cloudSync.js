@@ -22,6 +22,8 @@ const CLOUD_TRASH_FOLDER = 'Papierkorb';
 
 // Gemeinsame Liste der gelöschten Hefte
 const TRASH_INDEX_NAME = 'inkwells-papierkorb.json';
+// Die Reihenfolge der Übersicht – siehe loadOrderIndex
+const ORDER_INDEX_NAME = 'inkwells-reihenfolge.json';
 
 // So lange vor Ablauf wird ein erneuerbares Token still ausgetauscht.
 // Großzügig gewählt, damit ein einzelner fehlgeschlagener Versuch (kurz
@@ -2717,6 +2719,53 @@ class CloudSyncManager {
       return true;
     } catch (err) {
       console.warn('[CloudSync] Papierkorb-Liste nicht speicherbar:', err.message);
+      return false;
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     DIE REIHENFOLGE DER HEFTE
+
+     Neben der Papierkorb-Liste eine zweite kleine Datei im Ordner: in
+     welcher Reihenfolge die Hefte in der Übersicht stehen. Gelesen von
+     der App auf jedem Gerät und von der Website (dashboard.js) – damit
+     überall dieselbe Ordnung gilt, die jemand einmal gezogen hat.
+
+     Eine eigene Datei statt eines Feldes in jedem Heft: sonst müsste
+     jedes Umsortieren JEDES Heft neu hochladen, auch das mit 30 MB.
+     ══════════════════════════════════════════════════════════════════ */
+  async loadOrderIndex() {
+    if (!this._canSync() || !this.isOnline) return null;
+    try {
+      const folderId = await this._getFolder();
+      const fileId = await this.provider.findIndexFile(this._http, folderId, ORDER_INDEX_NAME);
+      if (!fileId) return { order: [], updatedAt: '', exists: false };
+      const json = await this.provider.downloadFile(this._http, fileId);
+      return {
+        order: Array.isArray(json?.order) ? json.order.map(String) : [],
+        updatedAt: String(json?.updatedAt || ''),
+        exists: true
+      };
+    } catch (err) {
+      console.warn('[CloudSync] Reihenfolge nicht lesbar:', err.message);
+      return null;
+    }
+  }
+
+  async saveOrderIndex(order, updatedAt) {
+    if (!this._canSync() || !this.isOnline) return false;
+    try {
+      const folderId = await this._getFolder();
+      const existingId = await this.provider.findIndexFile(this._http, folderId, ORDER_INDEX_NAME);
+      await this.provider.saveIndexFile(this._http, {
+        folderId,
+        existingId,
+        name: ORDER_INDEX_NAME,
+        payload: { updatedAt: updatedAt || new Date().toISOString(), order: (order || []).map(String) }
+      });
+      return true;
+    } catch (err) {
+      console.warn('[CloudSync] Reihenfolge nicht speicherbar:', err.message);
       return false;
     }
   }

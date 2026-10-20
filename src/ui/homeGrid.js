@@ -427,6 +427,12 @@ function updateDropTarget(x, y) {
   if (insertBefore && placeholder) {
     placeholder.style.display = 'block';
     grid.insertBefore(placeholder, insertBefore);
+  } else if (placeholder) {
+    /* Hinter der letzten Karte: einen „Hinzufügen"-Knopf, vor den er
+       gehört, gibt es nicht. Ohne das stand beim Ziehen ans Ende gar kein
+       Marker da, und es sah aus, als ginge es dort nicht. */
+    placeholder.style.display = 'block';
+    grid.appendChild(placeholder);
   }
 }
 
@@ -453,9 +459,87 @@ function finishDrag() {
     const [removed] = S.notebooks.splice(startIdx, 1);
     S.notebooks.splice(actualTarget, 0, removed);
     renderHomeGrid();
+    merkeHeftReihenfolge();
   }
-  
+
   _dragState = null;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DIE GEZOGENE REIHENFOLGE BLEIBT – AUCH AUF DER WEBSITE
+
+   >>> Gemeldet: „Hefte angeordnet, App zu und wieder auf – die Anordnung
+   ist weg. Auf der Website sollte sie dieselbe sein“ <<<
+   Gezogen wurde nur in S.notebooks. Beim Start baut init.js die Liste
+   aber aus der Registry auf, und deren Folge blieb, wie sie war.
+
+   Jetzt geht die Reihenfolge an zwei Orte:
+     · in die Registry (Registry.ordne) – für den nächsten Start hier,
+     · als inkwells-reihenfolge.json in den Cloud-Ordner
+       (CloudSync_.saveOrderIndex) – für die anderen Geräte und die
+       Website, die ihre Karten danach sortiert.
+
+   Wer zuletzt gezogen hat, gewinnt: beide Seiten tragen einen Zeitstempel,
+   und der Abgleich (gleicheHeftReihenfolgeAb) nimmt den jüngeren.
+   ══════════════════════════════════════════════════════════════════════ */
+function eigeneHeftIds() {
+  return (typeof ownNotebooks === 'function' ? ownNotebooks() : S.notebooks).map(nb => String(nb.id));
+}
+
+async function merkeHeftReihenfolge() {
+  const ids = eigeneHeftIds();
+  const stand = new Date().toISOString();
+  try {
+    if (typeof Registry !== 'undefined' && Registry.ordne) await Registry.ordne(ids);
+    if (typeof Settings !== 'undefined') await Settings.update({ heftReihenfolgeStand: stand });
+  } catch (err) {
+    console.warn('[HomeGrid] Reihenfolge nicht gespeichert:', err?.message || err);
+  }
+  // Ohne Netz geht es beim nächsten Abgleich hinaus – siehe unten
+  if (window.CloudSync_?.saveOrderIndex) CloudSync_.saveOrderIndex(ids, stand).catch(() => {});
+}
+
+/** Bringt S.notebooks (nur die eigenen) in die Folge dieser Kennungen. */
+function ordneHefteNach(ids) {
+  const rang = new Map(ids.map((id, i) => [String(id), i]));
+  const eigene = typeof ownNotebooks === 'function' ? new Set(ownNotebooks()) : null;
+  const sortierbar = S.notebooks.filter(nb => !eigene || eigene.has(nb));
+  const rest = S.notebooks.filter(nb => eigene && !eigene.has(nb));
+  const schluessel = new Map(sortierbar.map((nb, i) =>
+    [nb, rang.has(String(nb.id)) ? rang.get(String(nb.id)) : rang.size + i]));
+  sortierbar.sort((a, b) => schluessel.get(a) - schluessel.get(b));
+  const vorher = S.notebooks.map(nb => nb.id).join('|');
+  S.notebooks.splice(0, S.notebooks.length, ...sortierbar, ...rest);
+  return S.notebooks.map(nb => nb.id).join('|') !== vorher;
+}
+
+let _reihenfolgeZuletzt = 0;
+async function gleicheHeftReihenfolgeAb() {
+  if (!window.CloudSync_?.loadOrderIndex) return;
+  // Der Abgleich meldet „ready" nach jedem Durchgang – einmal je Minute genügt
+  if (Date.now() - _reihenfolgeZuletzt < 60000) return;
+  _reihenfolgeZuletzt = Date.now();
+
+  const oben = await CloudSync_.loadOrderIndex();
+  if (!oben) return;   // ohne Netz oder nicht angemeldet
+  const hier = (typeof Settings !== 'undefined' && Settings.get('heftReihenfolgeStand')) || '';
+
+  if (oben.exists && oben.updatedAt > hier) {
+    // Woanders zuletzt gezogen: übernehmen
+    const geaendert = ordneHefteNach(oben.order);
+    if (typeof Registry !== 'undefined' && Registry.ordne) await Registry.ordne(oben.order);
+    if (typeof Settings !== 'undefined') await Settings.update({ heftReihenfolgeStand: oben.updatedAt });
+    if (geaendert && E('view-home')?.style.display !== 'none') renderHomeGrid();
+  } else if (hier && hier > (oben.updatedAt || '')) {
+    // Hier gezogen, als es nicht hinausging: jetzt nachreichen
+    await CloudSync_.saveOrderIndex(eigeneHeftIds(), hier);
+  }
+}
+
+if (window.CloudSync_ && typeof CloudSync_.onChange === 'function') {
+  CloudSync_.onChange((payload) => {
+    if (payload && payload.status === 'ready') gleicheHeftReihenfolgeAb().catch(() => {});
+  });
 }
 
 /* ── CTX MENU ── */
