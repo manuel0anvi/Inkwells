@@ -593,10 +593,16 @@
     } catch (err) {
       // Dokument gibt es nicht mehr (auf einem anderen Gerät aufgehoben)
       if (err?.message === 'SHARE_NOT_FOUND') {
+        /* „Dieses Dokument gibt es nicht mehr" las sich wie ein verlorenes
+           Heft. Gemeint ist nur: die Freigabe wurde aufgehoben. Das Heft
+           ist da, es ist eben nicht mehr geteilt – und kann gleich wieder
+           freigegeben werden. */
         head = null;
-        await forget(shareNb.id, ['docId', 'linkId', 'url', 'linkMode', 'access']);
-        markPagesChanged();
-        statusEl.textContent = t('sharedGone');
+        await vergissAufgehobene(shareNb.id);
+        revokeBtn.style.display = 'none';
+        linkRow.style.display = 'none';
+        showLinkMode('off');
+        statusEl.textContent = t('shareEnded');
         return;
       }
       statusEl.textContent = describeError(err);
@@ -821,6 +827,18 @@
     const api = await whenShareReady();
     if (typeof api.inhaltUnvollstaendig !== 'function') return false;
 
+    /* Zuerst der Kopf. Ist er weg, wurde die Freigabe aufgehoben – hier
+       oder woanders (Website, anderes Gerät). Dann ist das Heft nicht
+       mehr geteilt; nachgeladen werden darf auf keinen Fall, das legte
+       die Freigabe neu an. */
+    let kopf;
+    try {
+      kopf = await api.loadDocumentHead(docId);
+    } catch (err) {
+      if (err?.message === 'SHARE_NOT_FOUND') { await vergissAufgehobene(nb.id); return false; }
+      throw err;
+    }
+
     const fehlt = await api.inhaltUnvollstaendig(docId, nb);
     if (!fehlt || (nurWennLeer && !fehlt.leer)) return false;
     if (laufendeFreigaben.has(String(nb.id))) return false;
@@ -830,7 +848,6 @@
     if (S.activeNbId === nb.id && typeof syncAll === 'function') {
       try { syncAll(); } catch (e) { /* dann der letzte gespeicherte Stand */ }
     }
-    const kopf = await api.loadDocumentHead(docId);
     const arbeit = api.shareDocument(nb, { docId, linkMode: kopf.linkMode, fortschritt });
     laufendeFreigaben.set(String(nb.id), arbeit.then(r => r.docId).catch(() => null));
     try {
@@ -839,6 +856,23 @@
       laufendeFreigaben.delete(String(nb.id));
     }
     return true;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     WOANDERS AUFGEHOBEN IST AUFGEHOBEN
+
+     >>> Gemeldet: „Freigabe aufgelöst, in der Übersicht steht immer noch
+     das Auge, und das Fenster sagt ‚Dieses Dokument gibt es nicht
+     mehr‘“ <<<
+     Das Zeichen hängt am Merkzettel hier (shareFor), und der weiss nichts
+     davon, wenn die Freigabe auf der Website oder einem anderen Gerät
+     aufgehoben wird. Jetzt wird nachgesehen – nach dem Start und beim
+     Öffnen des Fensters –, und was oben nicht mehr steht, fällt auch
+     hier weg. Mit Auge und allem.
+     ══════════════════════════════════════════════════════════════════ */
+  async function vergissAufgehobene(nbId) {
+    await forget(nbId, ['docId', 'linkId', 'url', 'linkMode', 'access']);
+    markPagesChanged();
   }
 
   /** Im Fenster: der Besitzer sieht hin – jede Lücke zählt. */
@@ -884,7 +918,12 @@
     const entry = shareFor(shareNb.id);
     if (entry?.docId) {
       await loadHead(entry.docId);
-      return !!head;
+      if (head) return true;
+      /* Nicht gefunden heisst: woanders aufgehoben – loadHead hat den
+         Merkzettel schon geleert. Dann wird jetzt neu freigegeben, statt
+         dass der Schalter stumm zurückspringt. Ein anderer Fehler (kein
+         Netz) bleibt ein Fehler. */
+      if (!shareNb || shareFor(shareNb.id)?.docId) return false;
     }
 
     /* Erst nachsehen, dann anlegen: sonst entstünde eine ZWEITE Freigabe
