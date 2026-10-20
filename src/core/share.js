@@ -1582,26 +1582,50 @@ async function schreibeSchritte(schritte) {
  * @param {(fertig: number) => void} [nachCommit] bekommt die bisher
  *   geschriebene Menge (geschätzt) – für die Fortschrittsanzeige
  */
+/* ── Mehrere Stapel zugleich unterwegs ────────────────────────────────
+   Gemeldet: „Freigeben bleibt minutenlang auf ‚Veröffentlichen…‘“. Jeder
+   Stapel wartete, bis der vorige bestätigt war – je Stapel ein voller
+   Hin- und Rückweg, in dem die Leitung stillstand. Firestore arbeitet die
+   Schreibvorgänge eines Clients ohnehin der Reihe nach ab; es darf also
+   schon der nächste unterwegs sein, solange der vorige läuft. Höchstens
+   UNTERWEGS_MAX, damit nicht das ganze Heft auf einmal im Speicher der
+   Leitung hängt. */
+const UNTERWEGS_MAX = 3;
+
 function stapel(nachCommit) {
   let schritte = [];
   let bytes = 0, fertig = 0;
-  const flush = async () => {
+  const unterwegs = new Set();
+
+  const schicke = async () => {
     if (!schritte.length) return;
     const jetzt = schritte, gewicht = bytes;
     schritte = []; bytes = 0;
-    await schreibeSchritte(jetzt);
-    fertig += gewicht;
-    if (nachCommit) nachCommit(fertig);
+    const lauf = schreibeSchritte(jetzt).then(() => {
+      fertig += gewicht;
+      if (nachCommit) nachCommit(fertig);
+    });
+    unterwegs.add(lauf);
+    lauf.then(() => unterwegs.delete(lauf), () => unterwegs.delete(lauf));
+    // Ein Fehlschlag kommt hier heraus – beim nächsten Schicken oder in flush()
+    while (unterwegs.size >= UNTERWEGS_MAX) await Promise.race(unterwegs);
   };
+
+  /** Den Rest abschicken und warten, bis ALLES bestätigt ist. */
+  const flush = async () => {
+    await schicke();
+    await Promise.all([...unterwegs]);
+  };
+
   return {
     async set(ref, data, optionen) {
       const g = gewichtVon(data);
-      if (schritte.length && (schritte.length >= MAX_BATCH || bytes + g > MAX_BATCH_BYTES)) await flush();
+      if (schritte.length && (schritte.length >= MAX_BATCH || bytes + g > MAX_BATCH_BYTES)) await schicke();
       schritte.push({ ref, data, optionen });
       bytes += g;
     },
     async delete(ref) {
-      if (schritte.length >= MAX_BATCH) await flush();
+      if (schritte.length >= MAX_BATCH) await schicke();
       schritte.push({ ref, loeschen: true });
       bytes += 200;
     },

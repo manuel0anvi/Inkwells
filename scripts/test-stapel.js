@@ -78,11 +78,12 @@ function writeBatch() {
   };
 }
 
-const sandbox = { writeBatch, db: {}, console, Object, Math, String, Array, JSON };
+const sandbox = { writeBatch, db: {}, console, Object, Math, String, Array, JSON, Promise, Set };
 vm.createContext(sandbox);
 vm.runInContext([
   extractConst('MAX_BATCH'),
   extractConst('MAX_BATCH_BYTES'),
+  extractConst('UNTERWEGS_MAX'),
   extract('gewichtVon'),
   extract('istZuGross'),
   extract('schreibeSchritte'),
@@ -146,6 +147,21 @@ function strich(n) {
 
   console.log('\nEin anderer Fehler wird nicht verschluckt');
   {
+    // Auch wenn mehrere Stapel zugleich unterwegs sind, kommt er heraus
+    const echtesCommit = sandbox.writeBatch;
+    sandbox.writeBatch = () => ({ set() {}, delete() {},
+      async commit() { throw new Error('Missing or insufficient permissions.'); } });
+    vm.runInContext('writeBatch = this.writeBatch;', sandbox);
+    const s = sandbox.stapel();
+    let fehler = null;
+    try {
+      for (let i = 0; i < 10; i++) await s.set('x/' + i, { data: 'C'.repeat(700000) });
+      await s.flush();
+    } catch (e) { fehler = e; }
+    check('Fehlende Berechtigung kommt beim Aufrufer an', !!fehler && /permissions/.test(fehler.message),
+      fehler ? fehler.message : 'kein Fehler');
+    sandbox.writeBatch = echtesCommit;
+    vm.runInContext('writeBatch = this.writeBatch;', sandbox);
     check('„permission-denied“ ist kein Grössenproblem', !sandbox.istZuGross(new Error('Missing or insufficient permissions.')));
     check('Der Wortlaut von Firestore wird erkannt',
       sandbox.istZuGross(new Error('Request payload size exceeds the limit: 11534336 bytes.')));
