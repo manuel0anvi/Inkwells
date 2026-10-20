@@ -1291,10 +1291,28 @@ function showLinkMode(mode) {
 /* Solange in Firestore geschrieben wird, keine zweite Änderung annehmen.
    Ohne diese Bremse konnten sich zwei Schreibvorgänge überholen, und am
    Ende stand die ältere Rolle im Dokument. */
+/* >>> Und man sieht, dass etwas läuft <<<
+   Gemeldet: „beim Aufheben, beim Entfernen einer Person und beim
+   Einschalten soll das Fenster zeigen, dass es lädt". Solange ein Schritt
+   läuft, dreht sich ein Kreisel vor der Statuszeile und „Freigabe
+   aufheben" ist gesperrt. Gezählt, weil sich Schritte überlappen können
+   (Gegenstück: src/ui/share.js, MAN SIEHT, DASS ETWAS LÄUFT). */
+let _shareLaeuft = 0;
+
 function setShareBusy(busy) {
+  _shareLaeuft = Math.max(0, _shareLaeuft + (busy ? 1 : -1));
+  const an = _shareLaeuft > 0;
   for (const id of ['share-dlg-link-section', 'share-dlg-people-section']) {
-    shareEl(id)?.classList.toggle('busy', !!busy);
+    shareEl(id)?.classList.toggle('busy', an);
   }
+  shareEl('share-dlg-status')?.classList.toggle('share-laedt', an);
+  const aufheben = shareEl('share-dlg-revoke');
+  if (aufheben) aufheben.disabled = an;
+}
+
+function shareStatus(text) {
+  const el = shareEl('share-dlg-status');
+  if (el && text) el.textContent = text;
 }
 
 /* Ohne Verbindung geht weder das Freigeben (jeder Schritt schreibt nach
@@ -1588,6 +1606,7 @@ async function applyShareLinkMode() {
   const wanted = selectedLinkMode();
   const status = shareEl('share-dlg-status');
   setShareBusy(true);
+  shareStatus(shareHead ? t('share_saving') : t('share_working'));
 
   try {
     if (!await ensureShareDocument()) return;
@@ -1612,6 +1631,8 @@ async function renewShareLink() {
   if (!shareHead || !shareHead.linkId) return;
   if (!window.confirm(t('share_renew_confirm'))) return;
 
+  setShareBusy(true);
+  shareStatus(t('share_saving'));
   try {
     const api = await whenShareReady();
     const result = await api.rotateLink(shareHead.docId);
@@ -1620,6 +1641,8 @@ async function renewShareLink() {
     shareEl('share-dlg-status').textContent = t('share_renewed');
   } catch (err) {
     shareEl('share-dlg-status').textContent = describeShareError(err);
+  } finally {
+    setShareBusy(false);
   }
 }
 
@@ -1630,6 +1653,7 @@ async function addSharePerson() {
   const role = shareEl('share-dlg-role').value === 'edit' ? 'edit' : 'view';
 
   setShareBusy(true);
+  shareStatus(shareHead ? t('share_inviting') : t('share_working'));
   try {
     // Die Adresse zuerst prüfen: sonst entstünde für einen Tippfehler ein
     // leeres geteiltes Dokument, das niemand je zu sehen bekäme.
@@ -1653,6 +1677,7 @@ async function addSharePerson() {
 async function changeShareRole(email, role) {
   if (!shareHead) return;
   setShareBusy(true);
+  shareStatus(t('share_saving'));
   try {
     const api = await whenShareReady();
     await api.setMember(shareHead.docId, email, role);
@@ -1669,6 +1694,8 @@ async function changeShareRole(email, role) {
 async function removeSharePerson(email) {
   if (!shareHead) return;
   if (!window.confirm(tf('share_remove_confirm', { mail: email }))) return;
+  setShareBusy(true);
+  shareStatus(tf('share_removing', { mail: email }));
   try {
     const api = await whenShareReady();
     await api.removeMember(shareHead.docId, email);
@@ -1676,17 +1703,23 @@ async function removeSharePerson(email) {
     shareEl('share-dlg-status').textContent = tf('share_removed', { mail: email });
   } catch (err) {
     shareEl('share-dlg-status').textContent = describeShareError(err);
+  } finally {
+    setShareBusy(false);
   }
 }
 
 async function unblockSharePerson(email) {
   if (!shareHead) return;
+  setShareBusy(true);
+  shareStatus(t('share_saving'));
   try {
     const api = await whenShareReady();
     await api.unblockMember(shareHead.docId, email);
     await loadShareHead(shareHead.docId);
   } catch (err) {
     shareEl('share-dlg-status').textContent = describeShareError(err);
+  } finally {
+    setShareBusy(false);
   }
 }
 
@@ -1695,6 +1728,8 @@ async function revokeCurrentShare() {
   if (!window.confirm(t('share_revoke_confirm'))) return;
 
   const status = shareEl('share-dlg-status');
+  setShareBusy(true);
+  shareStatus(t('share_revoking'));
   try {
     const api = await whenShareReady();
     await api.unshareDocument(shareHead.docId);
@@ -1710,6 +1745,8 @@ async function revokeCurrentShare() {
   } catch (err) {
     console.error('[Share]', err);
     status.textContent = describeShareError(err);
+  } finally {
+    setShareBusy(false);
   }
 }
 

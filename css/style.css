@@ -241,6 +241,11 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
    überholen sich zwei Schreibvorgänge in Firestore. */
 #share-dlg-link-section.busy,
 #share-dlg-people-section.busy{opacity:.55;pointer-events:none}
+/* Der Kreisel vor der Statuszeile, solange ein Schritt läuft (dashboard.js, setShareBusy) */
+#share-dlg-status.share-laedt{display:flex;align-items:center;gap:8px}
+#share-dlg-status.share-laedt::before{content:'';width:13px;height:13px;flex-shrink:0;border:2px solid var(--navy-border);border-top-color:var(--gold-light);border-radius:50%;animation:share-dreh .7s linear infinite}
+@keyframes share-dreh{to{transform:rotate(360deg)}}
+#share-dlg-revoke:disabled{opacity:.45;cursor:default}
 
 /* General layouts for other subpages (Community & Datenschutz) */
 .page-container{
