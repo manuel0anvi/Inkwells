@@ -1089,6 +1089,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
     S._rulerKlebt = false;
     const c = amLinealAusrichten(coords(e), canvas, page);
     S.isDrawing = true;
+    _ohneDruckSeit = null;    // eine Frist vom vorigen Strich gilt nicht weiter
     // Zustand vor dem Strich sichern – ein Strich ist ein Rückgängig-Schritt
     pushPageHistory(page);
     /* ══════════════════════════════════════════════════════════════
@@ -1408,11 +1409,14 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (e.pointerType === 'pen') {
       const radiert = istRadierTaste(e), lasso = istLassoTaste(e);
       if (e.button !== 0 && !radiert && !lasso) return;
-      /* Zur Zeigerstellung gehört keine Zeichenfläche: der Stift landet
-         dort auf dem Textfeld. Deshalb steht die Abfrage auf .j-text
-         erst unter diesem Zweig – für Maus und Finger gilt sie weiter. */
-      if (!isDrawMode(S.mode) && !radiert && !lasso) switchMode(letztesZeichenwerkzeug());
-      handleDrawStart(e);
+      /* Aufgesetzt ohne jeden Druck – siehe stiftOhneDruck unten. Die
+         Spitze bekommt erst einen Strich, wenn sie wirklich drückt. */
+      if (!radiert && !lasso && e.pressure === 0) {
+        e.preventDefault();
+        S._stiftOhneDruck = e.pointerId;
+        return;
+      }
+      stiftSetztAuf(e, radiert, lasso);
       return;
     }
 
@@ -1458,6 +1462,40 @@ function attachInput(canvas, textDiv, objLayer, page) {
     }
     // sonst bleibt der Finger fuers Scrollen und Zoomen (app.js)
   });
+
+  /* Zur Zeigerstellung gehört keine Zeichenfläche: der Stift landet
+     dort auf dem Textfeld. Deshalb steht die Abfrage auf .j-text im
+     Verteiler erst unter dem Stift-Zweig – für Maus und Finger gilt sie
+     weiter. */
+  function stiftSetztAuf(e, radiert, lasso) {
+    if (!isDrawMode(S.mode) && !radiert && !lasso) switchMode(letztesZeichenwerkzeug());
+    handleDrawStart(e);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     OHNE DRUCK KEIN STRICH
+
+     >>> Gemeldet: „manchmal schreibt es schon beim Hovern, bevor ich
+     aufsetze“ <<<
+     Die Spitze gilt als aufgesetzt, sobald der Treiber das sagt
+     (buttons & 1). Gerät der Stifttreiber durcheinander – oder meldet
+     eine abgenutzte Spitze Kontakt, wo keiner ist –, kommt genau das
+     auch knapp über dem Glas: „aufgesetzt“, aber mit Druck 0. Ein Stift,
+     der Druck kennt, meldet beim echten Aufliegen nie 0; einer ohne
+     meldet nach der Pointer-Events-Regel 0,5.
+
+     Ein solches Aufsetzen beginnt deshalb keinen Strich. Kommt danach
+     echter Druck, fängt der Strich dort an – nichts geht verloren. Das
+     Ende eines Strichs bei anhaltendem Druck 0 regelt keinKontaktMehr.
+     ══════════════════════════════════════════════════════════════════ */
+  div.addEventListener('pointermove', e => {
+    if (S._stiftOhneDruck !== e.pointerId || S.isDrawing) return;
+    if (e.pointerType !== 'pen' || !(e.buttons & 1)) { S._stiftOhneDruck = null; return; }
+    if (!(e.pressure > 0)) return;
+    if (e.target.closest('.j-page-hdr') || e.target.closest('.obj-handle') || e.target.closest('.obj-bar')) return;
+    S._stiftOhneDruck = null;
+    stiftSetztAuf(e, istRadierTaste(e), false);
+  }, { passive: false });
 
   /** Ein Finger, der ohne zu zeichnen aufgesetzt hat – siehe oben. */
   div.addEventListener('pointerup', e => {
@@ -2186,13 +2224,32 @@ window.stiftTastenZeigen = false;
      · Ein Abheben, das bei keiner Seite ankommt, fängt das Dokument auf.
    Beendet wird jeweils von der Seite, auf der der Strich begann
    (S._strichAbheben) – nicht von der, über der der Stift gerade ist.
+
+   >>> Und es kam trotzdem wieder <<<
+   Beide Sicherungen glauben `buttons`. Hängt der Zustand im Stifttreiber
+   selbst, meldet er auch beim Schweben „Spitze unten“ – nur der Druck
+   verrät es, der ist dann 0. Steht er eine Weile lang auf 0, gilt der
+   Strich als abgehoben. Nicht schon bei der ersten Meldung: mitten im
+   Strich darf ein einzelner Messwert ausreißen, ohne dass der Rest des
+   Strichs verloren geht. Über die Zeit statt über einen Zähler, weil
+   dieselbe Meldung hier zweimal ankommt (Seite und Dokument).
    ══════════════════════════════════════════════════════════════════════ */
+const OHNE_DRUCK_MS = 40;
+let _ohneDruckSeit = null;
+
 function keinKontaktMehr(e) {
   if (e.pointerType === 'touch') return false;   // ohne Kontakt keine Bewegung
   if (e.pointerType === 'pen') {
     // Spitze (1) oder Radierer-Ende (32); bei der Schlinge die Taste (2)
-    const halt = (S._cur && S._cur._lasso) ? (1 | 2 | 32) : (1 | 32);
-    return (e.buttons & halt) === 0;
+    const lasso = !!(S._cur && S._cur._lasso);
+    const halt = lasso ? (1 | 2 | 32) : (1 | 32);
+    if ((e.buttons & halt) === 0) { _ohneDruckSeit = null; return true; }
+    // Die Schlinge an der Taste darf schweben – sie hat nie Druck
+    if (lasso || e.pressure > 0) { _ohneDruckSeit = null; return false; }
+    if (_ohneDruckSeit === null || e.timeStamp < _ohneDruckSeit) _ohneDruckSeit = e.timeStamp;
+    if (e.timeStamp - _ohneDruckSeit < OHNE_DRUCK_MS) return false;
+    _ohneDruckSeit = null;
+    return true;
   }
   return e.buttons === 0;
 }
@@ -2203,6 +2260,7 @@ document.addEventListener('pointermove', e => {
 });
 for (const art of ['pointerup', 'pointercancel']) {
   document.addEventListener(art, e => {
+    if (e.pointerId === S._stiftOhneDruck) S._stiftOhneDruck = null;
     if (!S.isDrawing || e.pointerId !== S._drawPointerId || !S._strichAbheben) return;
     S._strichAbheben(e);
   });
