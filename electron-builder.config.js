@@ -141,6 +141,17 @@ module.exports = {
      ausliefern will, nimmt die Zeile unten wieder hinein – die App
      laeuft dann weiter, nur eben mit stuendlicher Neuanmeldung.
      ══════════════════════════════════════════════════════════════════ */
+  /* ── Was das ausgelieferte Programm nicht mehr kann ─────────────────
+     Mit diesen Schaltern liesse sich die signierte oder installierte
+     Inkwells.exe als beliebiger Node-Interpreter benutzen oder von aussen
+     einsehen. Die App selbst braucht nichts davon; die Prüfstände laufen über
+     das ungepackte Electron und sind davon nicht betroffen. */
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    onlyLoadAppFromAsar: true
+  },
   files: [
     'main.js',
     'preload.js',

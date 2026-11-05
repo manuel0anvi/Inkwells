@@ -1755,7 +1755,9 @@ if (PROFILE) {
     }
     app.setAsDefaultProtocolClient('inkwells', process.execPath, args);
   }
-} else {
+} else if (!process.env.INKWELLS_KEIN_PROTOKOLL) {
+  // Der Schalter ist für Probeläufe des gepackten Programms: sie sollen die
+  // Verknüpfung nicht auf ihre Kopie umbiegen
   app.setAsDefaultProtocolClient('inkwells');
 }
 
