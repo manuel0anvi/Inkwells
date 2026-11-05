@@ -1230,6 +1230,13 @@ function commentsForPage(notebook, pageId) {
    selbst aus den Abschnitten zusammen. */
 function pagesInOrder(notebook) {
   const pages = Array.isArray(notebook?.pages) ? notebook.pages : [];
+
+  /* >>> Gemeldet: „auf der Website stehen die Seiten nach Abschnitten sortiert“ <<<
+     Seit Abschnitte Etiketten sind, IST notebook.pages die Reihenfolge, und
+     die pgIds sind nur noch abgeleitet. Ueber sie zu gehen, riss gemischte
+     Hefte beim Teilen auseinander – bei allen Beteiligten. Gegenstueck:
+     notebookPages() in core/data.js. */
+  if (notebook?.schemaVersion === 2) return pages;
   const byId = new Map(pages.map(p => [String(p.id), p]));
   const out = [];
   const seen = new Set();
