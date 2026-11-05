@@ -11,17 +11,6 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
 
 ## 2. Rückgängig macht das Falsche
 
-- [ ] ✔ **Strg+Z nimmt den Schritt einer anderen Seite zurück und springt dorthin; „Wiederholen“ geht verloren.**
-  `src/app.js:478-483` (`popPageHistory`) lässt die ID in `_schrittFolge` stehen; `pushPageHistory`
-  (`:442-461`) leert Redo schon vorher. Aufrufer: `src/canvas/input.js:1636, 1682, 1693, 2032`.
-- [ ] ✔ **Bild/Auswahl auf andere Seite ziehen, dann Strg+Z: auf beiden Seiten weg.**
-  `src/canvas/objects.js:1526, 1565, 1673`, `src/canvas/strokeSelect.js:468, 533` – zwei getrennte
-  Schritte. Lösung: gemeinsame `gruppe` (gibt es in `app.js:424-428`).
-- [ ] ✔ **Strich-Radierer: Antippen löscht nichts, legt aber einen leeren Rückgängig-Schritt an.**
-  `src/canvas/input.js:1049, 1067-1081, 1487-1491, 1575`. Formen erwischt er gar nicht.
-- [ ] ✔ **Bloßes Antippen der Strichauswahl legt einen Rückgängig-Schritt an.**
-  `src/canvas/strokeSelect.js:281, 408, 468` – erst bei echter Bewegung sichern (`_hasMutated` wie objects.js).
-  Endgriff einer Geraden ohne `pointercancel` (`:426-433`).
 
 ## 3. Deutlich sichtbar
 

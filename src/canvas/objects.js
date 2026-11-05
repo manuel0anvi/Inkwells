@@ -1517,13 +1517,16 @@ function placeObject(objLayer, obj, page) {
      * (Seite A → Seite B). Geklemmt wird danach wie bei jeder anderen
      * Bewegung auch – für die Anzeige, nicht für den Bezugspunkt.
      */
+    let _zugGruppe;   // der Rückgängig-Schritt dieses Zugs, auch über Seiten hinweg
     function wechsleSeite(zielEl, ev, rohX, rohY) {
       const info = getPage(zielEl.dataset.pgid);
       const zielLayer = zielEl.querySelector('.j-objects');
       if (!info || !zielLayer || info.page === aktPage || !aktPgEl) return null;
 
-      // Beide Seiten aendern sich – beide brauchen ihren Rueckgaengig-Schritt
-      pushPageHistory(info.page);
+      /* Beide Seiten aendern sich – und ein Strg+Z muss beide zurueckholen.
+         Zwei getrennte Schritte liessen das Bild nach dem ersten auf beiden
+         Seiten verschwinden. */
+      pushPageHistory(info.page, _zugGruppe);
 
       const alt = aktPgEl.getBoundingClientRect();
       const ziel = zielEl.getBoundingClientRect();
@@ -1562,7 +1565,7 @@ function placeObject(objLayer, obj, page) {
 
     let _hasMutated = false;
     const mv = ev => {
-      if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
+      if (!_hasMutated) { _hasMutated = true; _zugGruppe = pushPageHistory(page); }
       hideSnaps();
 
       // Erst die rohe Lage, dann der Seitenwechsel: er rechnet sie um
@@ -1617,7 +1620,7 @@ function placeObject(objLayer, obj, page) {
       /* Losgelassen ueber einer anderen Seite, ohne dass der Zeiger je
          darin stand – etwa in der Luecke dazwischen. Dann entscheidet
          wie bisher die Stelle des Loslassens. */
-      const gewandert = ev.type === 'pointerup' && moveToPageAt(ev.clientX, ev.clientY);
+      const gewandert = ev.type === 'pointerup' && moveToPageAt(_zugGruppe, ev.clientX, ev.clientY);
       if (_hasMutated && !gewandert) noteObjectChanged();
     };
     body.addEventListener('pointermove', mv);
@@ -1661,7 +1664,7 @@ function placeObject(objLayer, obj, page) {
    *
    * @returns {boolean} ob es umgezogen ist
    */
-  function moveToPageAt(clientX, clientY) {
+  function moveToPageAt(gruppe, clientX, clientY) {
     const zielEl = pageElAt(clientX, clientY);
     if (!zielEl || zielEl === wrap.closest('.j-page')) return false;
 
@@ -1669,8 +1672,8 @@ function placeObject(objLayer, obj, page) {
     const zielLayer = zielEl.querySelector('.j-objects');
     if (!info || !zielLayer) return false;
 
-    // Beide Seiten aendern sich – beide brauchen ihren Rueckgaengig-Schritt
-    pushPageHistory(info.page);
+    // Beide Seiten aendern sich – ein Strg+Z holt beide zurück (siehe oben)
+    pushPageHistory(info.page, gruppe);
 
     /* Die neue Lage aus dem Bildschirm zurueckrechnen. Ueber die Ecke des
        Rahmens, nicht ueber den Zeiger: sonst spraenge das Bild beim

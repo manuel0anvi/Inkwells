@@ -2081,6 +2081,63 @@ app.on('ready', async () => {
        Die Bruecke 'open-external' liegt in main.js und ist von der
        Oberflaeche aus nicht zu befragen. Geprueft wird deshalb hier, im
        Hauptprozess: welche Schemata stehen dort auf der Liste. */
+    abschnitt('Rückgängig nimmt das Richtige');
+    {
+      const r = await js(`(async () => {
+        const a = makePage('ruled'), b = makePage('ruled');
+        const nb = { id: 'verlauf', name: 'Verlauf', color: '#c8a96e', defaultBg: 'ruled',
+                     pages: [a, b], sections: [], schemaVersion: 2, created: Date.now() };
+        const vorher = S.notebooks;
+        S.notebooks = [nb];
+        openNotebook('verlauf');
+        await new Promise(res => setTimeout(res, 300));
+        const aus = {};
+
+        // Ein Schritt, der doch nicht stattfand, zeigt nirgends hin
+        a.textContent = '<p>eins</p>';
+        pushPageHistory(a); a.textContent = '<p>zwei</p>';
+        pushPageHistory(b); popPageHistory(b.id);
+        undoPage();
+        aus.richtigeSeite = a.textContent === '<p>eins</p>';
+
+        // Und nimmt „Wiederholen“ nicht mit
+        pushPageHistory(b); popPageHistory(b.id);
+        redoPage();
+        aus.wiederholen = a.textContent === '<p>zwei</p>';
+
+        // Über zwei Seiten gezogen: ein Strg+Z holt beide zurück
+        a.objects = [{ id: 'bild', kind: 'shape', shapeType: 'rect', x: 1, y: 1, w: 20, h: 20 }];
+        b.objects = [];
+        const g = pushPageHistory(a);
+        pushPageHistory(b, g);
+        b.objects = a.objects; a.objects = [];
+        undoPage();
+        aus.aufEinerSeite = a.objects.length === 1 && b.objects.length === 0;
+
+        // Der Strich-Radierer trifft auch Formen und wirkt beim Aufsetzen
+        const leinwand = document.querySelector('.j-page[data-pgid="' + a.id + '"] canvas.j-canvas')
+          || document.querySelector('.j-page canvas');
+        S.eraser.type = 'stroke';
+        S.strokeHistory[a.id] = [];
+        strokeErase({ x: 5, y: 5 }, a, leinwand);
+        aus.formWeg = (a.objects || []).length === 0;
+        a.objects = [{ id: 'fest', kind: 'shape', shapeType: 'rect', gesperrt: true, x: 1, y: 1, w: 20, h: 20 }];
+        strokeErase({ x: 5, y: 5 }, a, leinwand);
+        aus.gesperrtBleibt = a.objects.length === 1;
+
+        S.notebooks = vorher;
+        openNotebook(vorher[0].id);
+        return aus;
+      })()`);
+      await warte(300);
+      await js('window.__fehler.splice(0)');
+      pruefe('Ein zurückgenommener Schritt springt nicht auf eine andere Seite', r.richtigeSeite === true, JSON.stringify(r));
+      pruefe('Und „Wiederholen“ bleibt erhalten', r.wiederholen === true, JSON.stringify(r));
+      pruefe('Über zwei Seiten gezogen kommt alles zurück', r.aufEinerSeite === true, JSON.stringify(r));
+      pruefe('Der Strich-Radierer nimmt eine Form mit', r.formWeg === true, JSON.stringify(r));
+      pruefe('Eine gesperrte Form bleibt liegen', r.gesperrtBleibt === true, JSON.stringify(r));
+    }
+
     abschnitt('Fremde Namen führen nichts aus');
     {
       /* Name, Farbe, Abschnitt und Anhang stammen aus einer fremden Datei oder

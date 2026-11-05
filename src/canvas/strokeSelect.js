@@ -277,8 +277,10 @@
 
         const lage = holeLage();
         const { pageId, pageEl } = lage;
+        /* Erst bei der ersten Bewegung sichern: blosses Antippen ändert nichts
+           und hinterliesse sonst einen leeren Rückgängig-Schritt. */
         const info = getPage(pageId);
-        if (info) pushPageHistory(info.page);
+        let gesichert = false;
 
         const strokes = _sel.strokes, objekte = _sel.objekte;
         const box = rohRechteck(strokes, objekte);
@@ -303,6 +305,7 @@
         const rect = pageEl.getBoundingClientRect();
 
         const mv = ev => {
+          if (!gesichert) { gesichert = true; if (info) pushPageHistory(info.page); }
           // Zeigerstelle in Seiten-Pixeln
           const px = (ev.clientX - rect.left) / zoom;
           const py = (ev.clientY - rect.top) / zoom;
@@ -405,7 +408,7 @@
           g.setPointerCapture(e.pointerId);
 
           const info = getPage(pageId);
-          if (info) pushPageHistory(info.page);
+          let gesichert = false;
 
           const sx = e.clientX, sy = e.clientY;
           const start = { x: stroke.path[nr].x, y: stroke.path[nr].y };
@@ -413,6 +416,7 @@
           const zoom = typeof getZoom === 'function' ? getZoom() : 1;
 
           const mv = ev => {
+            if (!gesichert) { gesichert = true; if (info) pushPageHistory(info.page); }
             let nx = start.x + (ev.clientX - sx) / zoom;
             let ny = start.y + (ev.clientY - sy) / zoom;
 
@@ -443,10 +447,13 @@
             try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
             g.removeEventListener('pointermove', mv);
             g.removeEventListener('pointerup', up);
+            g.removeEventListener('pointercancel', up);
             notiere(pageId, true);
           };
           g.addEventListener('pointermove', mv);
           g.addEventListener('pointerup', up);
+          // Nimmt das System den Zeiger an sich, bliebe der Griff sonst am Zeiger hängen
+          g.addEventListener('pointercancel', up);
         });
       });
     }
@@ -465,7 +472,8 @@
 
       let aktId = _sel.pageId, aktEl = _sel.pageEl;
       const info = getPage(aktId);
-      if (info) pushPageHistory(info.page);
+      let gesichert = false;   // erst bei der ersten Bewegung, siehe die Griffe
+      let zugGruppe;
 
       let sx = e.clientX, sy = e.clientY;
       let anfang = strokes.map(s => s.path.map(p => ({ x: p.x, y: p.y })));
@@ -529,8 +537,8 @@
         const zielLayer = zielEl.querySelector('.j-objects');
         if (!ziel || !zielLayer) return false;
 
-        // Beide Seiten ändern sich – beide brauchen ihren Schritt zurück
-        pushPageHistory(ziel.page);
+        // Beide Seiten ändern sich – ein Strg+Z holt beide zurück
+        pushPageHistory(ziel.page, zugGruppe);
 
         /* Der Bezug wird umgerechnet, nicht neu gemessen: der Rahmen auf
            dem Schirm hinkt bei einem schnellen Zug ein Bild hinterher,
@@ -589,6 +597,7 @@
       }
 
       const mv = ev => {
+        if (!gesichert) { gesichert = true; if (info) zugGruppe = pushPageHistory(info.page); }
         let dx = (ev.clientX - sx) / zoom, dy = (ev.clientY - sy) / zoom;
 
         const drunter = seiteUnterZeiger(ev.clientX, ev.clientY);

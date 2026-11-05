@@ -430,6 +430,7 @@ window.wendeTextFlussAn = function wendeTextFlussAn() {
 let _schrittZaehler = 0;
 const _schrittFolge = [];   // pageIds, in der Reihenfolge des Sicherns
 const _redoFolge = [];
+let _letzterAbwurf = null;  // was der letzte neue Schritt an „Wiederholen“ verworfen hat
 
 /**
  * Sichert den aktuellen Zustand einer Seite, bevor sie verändert wird.
@@ -449,6 +450,12 @@ function pushPageHistory(page, gruppe) {
   snap.gruppe = (gruppe === undefined) ? ++_schrittZaehler : gruppe;
   entry.undo.push(snap);
   _schrittFolge.push(page.id);
+
+  // Fürs Zurücknehmen dieses Schritts – siehe popPageHistory
+  _letzterAbwurf = {
+    seite: page.id, schnapp: snap, folge: [..._redoFolge],
+    je: new Map([page.id, ..._redoFolge].map(id => [id, [...((S.history[id] && S.history[id].redo) || [])]]))
+  };
 
   /* Neuer Zweig – Wiederholen ist hinfällig, und zwar auf ALLEN Seiten,
      die noch etwas darin liegen hatten. Nur die eigene zu leeren liesse
@@ -478,7 +485,24 @@ function pushPageHistory(page, gruppe) {
 function popPageHistory(pageId) {
   const entry = pageId ? S.history[pageId] : null;
   if (!entry || !entry.undo.length) return;
-  entry.undo.pop();
+  const weg = entry.undo.pop();
+
+  /* Auch aus der Reihenfolge. Blieb die Kennung dort stehen, zeigte der
+     nächste Strg+Z auf einen Schritt, den es nicht mehr gibt, und nahm einen
+     auf einer anderen Seite zurück, samt Sprung dorthin. */
+  const stelle = _schrittFolge.lastIndexOf(pageId);
+  if (stelle !== -1) _schrittFolge.splice(stelle, 1);
+
+  /* Was dieser Schritt an „Wiederholen“ verworfen hat, kommt zurück: es hat ja
+     gar keine Änderung stattgefunden. */
+  if (_letzterAbwurf && _letzterAbwurf.schnapp === weg) {
+    for (const [id, liste] of _letzterAbwurf.je) {
+      const e = S.history[id];
+      if (e) e.redo.push(...liste);
+    }
+    _redoFolge.push(..._letzterAbwurf.folge);
+  }
+  _letzterAbwurf = null;
   updateUndoRedoUI();
 }
 

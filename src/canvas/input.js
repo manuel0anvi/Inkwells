@@ -1115,6 +1115,15 @@ function attachInput(canvas, textDiv, objLayer, page) {
       radiereBei(c, c, page, canvas);
       return;
     }
+    /* Der Strich-Radierer wirkt schon beim Aufsetzen. Bisher brauchte er eine
+       Bewegung: Antippen löschte nichts, hinterliess aber einen leeren
+       Rückgängig-Schritt. */
+    if (S.mode === 'eraser') {
+      if (!S.strokeHistory[page.id]) S.strokeHistory[page.id] = [];
+      S._strichRadierer = { traf: false };
+      strokeErase(c, page, canvas);
+      return;
+    }
     if (S.mode !== 'eraser') {
       if (!S.strokeHistory[page.id]) S.strokeHistory[page.id] = [];
       const stroke = buildStroke(c);
@@ -1659,7 +1668,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
        zum Rückgängigmachen – sonst täte das nächste Strg+Z scheinbar
        nichts. Hier oben gelesen: strichVerdichten weiter unten nimmt alle
        Hilfsfelder weg, _radiert eingeschlossen. */
-    const leerRadiert = !!finished && finished.isEraser && !finished._radiert;
+    const leerRadiert = (!!finished && finished.isEraser && !finished._radiert)
+      || (!!S._strichRadierer && !S._strichRadierer.traf);
+    S._strichRadierer = null;
 
     /* ══════════════════════════════════════════════════════════════
        WAR DAS EINE SCHLINGE?
@@ -1758,6 +1769,10 @@ function attachInput(canvas, textDiv, objLayer, page) {
     stopLineTimer(S._cur);
     stopVorschau();
     const abgebrochen = S._cur;
+    if (S._strichRadierer) {
+      if (!S._strichRadierer.traf && typeof popPageHistory === 'function') popPageHistory(page.id);
+      S._strichRadierer = null;
+    }
     S.isDrawing = false; S._cur = null; S._drawPointerId = null; S._strichAbheben = null;
     S._rulerKlebt = false;
     clearLiveCanvas();
@@ -2647,8 +2662,28 @@ function strokeErase(c, page, canvas) {
     return true;
   });
   if (S.strokeHistory[page.id].length < before) {
+    if (S._strichRadierer) S._strichRadierer.traf = true;
     redrawStrokes(canvas, S.strokeHistory[page.id]);
     page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[page.id]));
+    if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
+  }
+
+  /* Eine Form sieht aus wie ein Strich, ist aber ein Objekt auf der Seite: der
+     Radierer fuhr bisher einfach darüber hinweg. Eine gesperrte Form ist eine
+     Unterlage und bleibt liegen (canvas/objects.js, objGesperrt). */
+  const formen = (page.objects || []).filter(o => o && o.kind === 'shape' && !o.gesperrt
+    && c.x >= (o.x || 0) - r && c.x <= (o.x || 0) + (o.w || 0) + r
+    && c.y >= (o.y || 0) - r && c.y <= (o.y || 0) + (o.h || 0) + r);
+  if (formen.length) {
+    if (S._strichRadierer) S._strichRadierer.traf = true;
+    const pgEl = canvas.closest('.j-page');
+    const weg = new Set(formen.map(o => String(o.id)));
+    page.objects = page.objects.filter(o => !weg.has(String(o && o.id)));
+    for (const o of formen) {
+      const huelle = pgEl && pgEl.querySelector('.obj-wrap[data-objid="' + CSS.escape(String(o.id)) + '"]');
+      if (huelle) huelle.remove();
+    }
+    if (typeof noteObjectChanged === 'function') noteObjectChanged();
     if (window.markCurrentNotebookDirty) window.markCurrentNotebookDirty();
   }
 }
