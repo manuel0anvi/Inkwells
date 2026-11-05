@@ -479,6 +479,7 @@ service cloud.firestore {
                     && m().get('gegenBesitzer', false) == false
                     && request.resource.data.diff(m()).affectedKeys()
                          .hasOnly(['erledigt', 'massnahme'])
+                    && request.resource.data.erledigt is bool
                     && (!('massnahme' in request.resource.data)
                         || request.resource.data.massnahme in ['verbannt', 'nichts']);
 
@@ -510,25 +511,38 @@ service cloud.firestore {
     /* ── Freigegebene Hefte ───────────────────────────────────────────
        Lesen darf jeder, der den Link kennt – das ist der Zweck. Die
        Kennung im Link ist 22 Zeichen lang und zufällig, also nicht
-       erratbar. Eine Liste aller Freigaben gibt es nicht: ohne die
-       Kennung kommt man an nichts heran (Firestore erlaubt kein
-       Auflisten, wenn die Regel den Dokumentnamen nicht kennt).
+       erratbar.
+
+       >>> Warum get und list getrennt stehen <<<
+       Hier stand `allow read: if true`, und read umfasst auch list. Die
+       Annahme, Firestore erlaube ohne bekannte Kennung kein Auflisten, war
+       falsch: jeder konnte die ganze Sammlung abfragen, samt ownerEmail und
+       danach dem Inhalt jeder Freigabe. Gebraucht wird nur get.
 
        Anlegen darf jedes anonym angemeldete Gerät, aber nur mit sich
        selbst als Besitzer. Ändern und Löschen darf ausschließlich der
        eingetragene Besitzer.
        ───────────────────────────────────────────────────────────────── */
     match /shared_notebooks/{shareId} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
 
+      function gueltigeFreigabe() {
+        return request.resource.data.mode in ['frozen', 'live']
+               && request.resource.data.title is string
+               && request.resource.data.title.size() <= 200
+               && request.resource.data.chunkCount is int
+               && request.resource.data.chunkCount > 0
+               && request.resource.data.chunkCount <= 500;
+      }
+
+      /* Die Sperre gilt auch hier: wer nicht teilen darf, stellte sonst über
+         diesen zweiten Weg weiter Hefte ins Netz. Eine anonyme Kennung hat
+         keine Adresse und fällt deshalb nicht darunter. */
       allow create: if request.auth != null
                     && request.resource.data.owner == request.auth.uid
-                    && request.resource.data.mode in ['frozen', 'live']
-                    && request.resource.data.title is string
-                    && request.resource.data.title.size() <= 200
-                    && request.resource.data.chunkCount is int
-                    && request.resource.data.chunkCount > 0
-                    && request.resource.data.chunkCount <= 500;
+                    && gueltigeFreigabe()
+                    && !gesperrtFuer('selbstTeilen');
 
       /* Ändern darf der eingetragene Besitzer – oder wer nachweislich zu
          der hinterlegten E-Mail-Adresse gehört. Der zweite Fall ist der
@@ -538,6 +552,7 @@ service cloud.firestore {
          Der Besitzer kann dabei nur auf einen selbst umgeschrieben werden. */
       allow update: if request.auth != null
                     && request.resource.data.owner == request.auth.uid
+                    && gueltigeFreigabe()
                     && (
                          resource.data.owner == request.auth.uid
                          || (
@@ -697,12 +712,15 @@ service cloud.firestore {
                /* Wer nicht teilen darf, darf auch niemanden dazuholen –
                   sonst wäre die Sperre mit zwei Klicks umgangen. Das
                   Wegnehmen bleibt erlaubt, und am eigenen Inhalt ändert
-                  sie ohnehin nichts: die Liste darf nur nicht wachsen. */
+                  sie ohnehin nichts.
+
+                  hasOnly statt eines Vergleichs der Anzahl: sonst liess sich
+                  eine Adresse gegen eine neue tauschen, die Liste wuchs ja
+                  nicht. */
                && (
                     !gesperrtFuer('selbstTeilen')
                     || (
-                         request.resource.data.memberEmails.size()
-                           <= head().memberEmails.size()
+                         request.resource.data.memberEmails.hasOnly(head().memberEmails)
                          && request.resource.data.linkMode == 'off'
                        )
                   );

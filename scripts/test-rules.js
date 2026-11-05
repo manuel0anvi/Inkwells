@@ -1349,6 +1349,101 @@ function headData(overrides = {}) {
   await denied('Der Bearbeiter kommt an den leeren Raum nicht mehr heran',
     get(ref(rtOf(EDITOR), 'ops/dok1')));
 
+  section('Eingefrorene Freigaben: lesen ja, auflisten nein');
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'shared_notebooks/frei1'), {
+      owner: OWNER.uid, ownerEmail: OWNER.mail, mode: 'frozen', title: 'Heft', chunkCount: 1
+    });
+    await setDoc(doc(db, 'shared_notebooks/frei1/chunks/0'), { i: 0, data: 'x' });
+  });
+  const ohneKonto = () => env.unauthenticatedContext().firestore();
+
+  await ok('Mit der Kennung lässt sich der Kopf lesen',
+    getDoc(doc(ohneKonto(), 'shared_notebooks/frei1')));
+  await ok('Und der Inhalt',
+    getDocs(collection(ohneKonto(), 'shared_notebooks/frei1/chunks')));
+  await denied('Ohne Anmeldung gibt es keine Liste aller Freigaben',
+    getDocs(collection(ohneKonto(), 'shared_notebooks')));
+  await denied('Auch angemeldet nicht',
+    getDocs(collection(fsOf(STRANGER), 'shared_notebooks')));
+  await ok('Eine eigene Freigabe anlegen',
+    setDoc(doc(fsOf(STRANGER), 'shared_notebooks/frei2'),
+      { owner: STRANGER.uid, mode: 'frozen', title: 'Meins', chunkCount: 2 }));
+  await denied('Der Besitzer darf die Grenzen beim Ändern nicht umgehen',
+    updateDoc(doc(fsOf(STRANGER), 'shared_notebooks/frei2'), { chunkCount: 9999 }));
+  await denied('Auch nicht beim Titel',
+    updateDoc(doc(fsOf(STRANGER), 'shared_notebooks/frei2'), { title: 'x'.repeat(201) }));
+  await ok('Innerhalb der Grenzen schon',
+    updateDoc(doc(fsOf(STRANGER), 'shared_notebooks/frei2'), { chunkCount: 3 }));
+
+  section('Die Teilen-Sperre gilt auf allen Wegen');
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'sperren/' + GESPERRT.mail), {
+      email: GESPERRT.mail, bis: null, grund: 'Test',
+      umfang: { neueFreigaben: false, selbstTeilen: true, laufendeRaus: false }
+    });
+    await setDoc(doc(db, 'docs/dokt'), headData({
+      owner: GESPERRT.uid, ownerEmail: GESPERRT.mail, linkMode: 'off', linkId: '',
+      memberEmails: [READER.mail], members: { [READER.mail]: 'view' },
+      memberVia: { [READER.mail]: 'invite' }, blockedEmails: []
+    }));
+  });
+
+  await denied('Keine neue eingefrorene Freigabe',
+    setDoc(doc(fsOf(GESPERRT), 'shared_notebooks/frei3'),
+      { owner: GESPERRT.uid, mode: 'frozen', title: 'Heft', chunkCount: 1 }));
+  await denied('Kein Austausch eines Mitglieds gegen ein neues',
+    updateDoc(doc(fsOf(GESPERRT), 'docs/dokt'), {
+      memberEmails: [STRANGER.mail], members: { [STRANGER.mail]: 'edit' }
+    }));
+  await ok('Jemanden herausnehmen geht weiterhin',
+    updateDoc(doc(fsOf(GESPERRT), 'docs/dokt'), { memberEmails: [], members: {} }));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await deleteDoc(doc(ctx.firestore(), 'sperren/' + GESPERRT.mail));
+  });
+
+  section('Das Forum nimmt nur erzeugte Kennungen');
+
+  const beitrag = {
+    type: 'question', title: 'Frage', author: 'Gast', content: 'Text', created_at: serverTimestamp()
+  };
+  const antwort = { author: 'Gast', content: 'Text', created_at: serverTimestamp() };
+  const auto = 'AbCdEfGhIj0123456789';
+
+  await ok('Ein Beitrag mit erzeugter Kennung',
+    setDoc(doc(ohneKonto(), 'community_posts/' + auto), beitrag));
+  await denied('Einer mit eingeschleustem HTML in der Kennung',
+    setDoc(doc(ohneKonto(), 'community_posts/<img src=x onerror=alert(1)>'), beitrag));
+  await denied('Einer mit Anführungszeichen in der Kennung',
+    setDoc(doc(ohneKonto(), "community_posts/x');alert(1);('xxxxxxx"), beitrag));
+  await ok('Eine Antwort mit erzeugter Kennung',
+    setDoc(doc(ohneKonto(), 'community_posts/' + auto + '/replies/' + auto), antwort));
+  await denied('Eine Antwort mit eingeschleustem HTML',
+    setDoc(doc(ohneKonto(), 'community_posts/' + auto + '/replies/<img onerror=x>'), antwort));
+
+  section('Realtime Database: Zeitstempel aus der Zukunft');
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await set(ref(ctx.database(), 'roles/dokz'), {
+      owner: OWNER.uid, r: { [EDITOR.uid]: true }, w: { [EDITOR.uid]: true }
+    });
+  });
+  const inEinemJahr = Date.now() + 365 * 864e5;
+
+  await ok('Ein Eintrag von jetzt',
+    set(ref(rtOf(EDITOR), 'ops/dokz/o1'), { k: 'y', p: 'p1', by: EDITOR.uid, at: Date.now(), u: 'AAAA' }));
+  await denied('Einer aus der Zukunft bliebe für immer liegen',
+    set(ref(rtOf(EDITOR), 'ops/dokz/o2'), { k: 'y', p: 'p1', by: EDITOR.uid, at: inEinemJahr, u: 'AAAA' }));
+  await ok('Eine Nachricht von jetzt',
+    set(ref(rtOf(EDITOR), 'chat/dokz/m/m1'), { by: EDITOR.uid, at: Date.now(), tx: 'Hallo' }));
+  await denied('Eine aus der Zukunft nicht',
+    set(ref(rtOf(EDITOR), 'chat/dokz/m/m2'), { by: EDITOR.uid, at: inEinemJahr, tx: 'Hallo' }));
+
   section('Realtime Database: alles Übrige bleibt zu');
 
   await denied('Nichts an anderer Stelle',

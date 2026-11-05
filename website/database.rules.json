@@ -78,6 +78,10 @@
    erlaubt jedem das Löschen von wirklich Altem, sonst bliebe es liegen,
    sobald der Verfasser nicht mehr da ist.
 
+   `at` darf höchstens fünf Minuten in der Zukunft liegen (die Uhren der
+   Geräte gehen nicht genau): ein weit vorgestellter Eintrag wäre sonst nie
+   alt genug und bliebe für immer liegen.
+
    Die EIGENE Nachricht darf man jederzeit zurücknehmen: dafür steht in
    derselben Regel `data.child('by').val() === auth.uid`. Fremdes bleibt
    bis zum Ablauf der Frist – „löschen, was ein anderer gesagt hat"
@@ -198,7 +202,7 @@
             ".validate": "newData.val() === auth.uid"
           },
           "at": {
-            ".validate": "newData.isNumber()"
+            ".validate": "newData.isNumber() && newData.val() <= now + 300000"
           },
           "u": {
             ".validate": "newData.isString() && newData.val().length <= 200000"
@@ -236,7 +240,7 @@
               ".validate": "newData.val() === auth.uid"
             },
             "at": {
-              ".validate": "newData.isNumber()"
+              ".validate": "newData.isNumber() && newData.val() <= now + 300000"
             },
             "tx": {
               ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 800"
