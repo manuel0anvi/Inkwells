@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, Notification, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, Notification, session, safeStorage } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const zlib = require('zlib');
@@ -68,6 +68,54 @@ function nachAussen(adresse) {
   return true;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   EIN UPDATE MUSS VON UNS STAMMEN
+
+   Der Installierer läuft still und mit den Rechten des Nutzers. Bisher
+   genügte es, dass er in unserem GitHub-Release lag: wer diesen Zugang
+   kapert, hätte auf einen Schlag jeden Rechner mit Inkwells.
+
+   Deshalb liegt neben der .exe eine .exe.sig, unterschrieben mit einem
+   Schlüssel, der nur auf dem Rechner liegt, der die Fassung baut
+   (scripts/update-signatur.js). Hier steht der öffentliche Teil – er ist kein
+   Geheimnis. Unterschrieben sind Fassung und Prüfsumme zusammen, damit sich
+   auch keine ältere, echte Fassung als neue ausgeben lässt.
+
+   Das ersetzt keine Windows-Signatur: SmartScreen warnt weiterhin. Aber was
+   hier gestartet wird, kommt nachweislich von uns.
+   ══════════════════════════════════════════════════════════════════════ */
+const UPDATE_SCHLUESSEL = 'MCowBQYDK2VwAyEAALq7+PROwk8vzOPMAjQpppu7bpuGb77x2czgvd3T7uM=';
+
+function updateText(version, sha256) {
+  return `inkwells-update\n${version}\n${sha256}`;
+}
+
+function updateSignaturStimmt(angabe, version, sha256, schluessel = UPDATE_SCHLUESSEL) {
+  try {
+    if (!angabe || angabe.version !== version || angabe.sha256 !== sha256) return false;
+    const oeffentlich = crypto.createPublicKey({
+      key: Buffer.from(schluessel, 'base64'), format: 'der', type: 'spki'
+    });
+    return crypto.verify(null, Buffer.from(updateText(version, sha256)), oeffentlich,
+      Buffer.from(String(angabe.signatur), 'base64'));
+  } catch (err) {
+    console.warn('[Update] Signatur nicht prüfbar:', err.message);
+    return false;
+  }
+}
+
+function pruefsummeVon(datei) {
+  return new Promise((fertig, fehler) => {
+    const hash = crypto.createHash('sha256');
+    fs.createReadStream(datei)
+      .on('data', teil => hash.update(teil))
+      .on('error', fehler)
+      .on('end', () => fertig(hash.digest('hex')));
+  });
+}
+
+let geprueftesUpdate = null;   // { pfad, sha256 } – was unterschrieben und angekommen ist
+
 let releaseInfo = null;
 let downloadedUpdatePath = null;
 let activeDownloadRes = null;
@@ -107,6 +155,7 @@ const MAX_REDIRECTS = 5;
 /* Ohne Zeitgrenze wartet eine haengende Leitung fuer immer, und der Knopf
    stuende bis zum Programmende auf "wird geprueft". */
 const FETCH_TIMEOUT_MS = 15000;
+const DOWNLOAD_STILLE_MS = 60000;
 
 function fetchJson(url, rest = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
@@ -152,7 +201,7 @@ function downloadFile(url, dest, rest = MAX_REDIRECTS) {
   return new Promise((resolve, reject) => {
     const tmp = `${dest}.part`;
 
-    https.get(url, res => {
+    const anfrage = https.get(url, res => {
       if (res.statusCode === 301 || res.statusCode === 302) {
         res.resume();
         if (rest <= 0) return reject(new Error('Zu viele Weiterleitungen'));
@@ -217,6 +266,12 @@ function downloadFile(url, dest, rest = MAX_REDIRECTS) {
       activeDownloadRes = null;
       fs.unlink(tmp, () => {}); reject(err);
     });
+
+    /* Eine haengende Leitung darf den Knopf nicht ewig auf „laedt“ lassen.
+       Wer selbst angehalten hat, wartet dagegen mit Absicht. */
+    anfrage.setTimeout(DOWNLOAD_STILLE_MS, () => {
+      if (!isDownloadPaused) anfrage.destroy(new Error('Die Leitung steht still'));
+    });
   });
 }
 /**
@@ -235,7 +290,11 @@ async function getLatestGitHubRelease() {
   if (!data || !data.tag_name) return null;
   const exeAsset = data.assets && data.assets.find(a => a.name.endsWith('.exe'));
   if (!exeAsset) return null;
-  return { version: normalizeVersion(data.tag_name), url: exeAsset.browser_download_url, name: exeAsset.name };
+  const sigAsset = data.assets.find(a => a.name.endsWith('.exe.sig'));
+  return {
+    version: normalizeVersion(data.tag_name), url: exeAsset.browser_download_url, name: exeAsset.name,
+    sigUrl: sigAsset ? sigAsset.browser_download_url : null
+  };
 }
 
 let win;
@@ -994,10 +1053,25 @@ ipcMain.handle('check-for-updates', async () => {
 ipcMain.handle('download-update', async () => {
   if (STOREFASSUNG) return { ok: false, err: 'Store-Fassung: Updates kommen ueber den Store' };
   if (!releaseInfo) return { ok: false, err: 'No update available to download' };
+  // Ohne Unterschrift wird gar nicht erst geladen
+  if (!releaseInfo.sigUrl) {
+    console.error('[Update] Das Release trägt keine Signatur');
+    return { ok: false, err: 'UNSIGNIERT' };
+  }
   try {
-    const tempDir = app.getPath('temp');
-    downloadedUpdatePath = path.join(tempDir, releaseInfo.name);
-    await downloadFile(releaseInfo.url, downloadedUpdatePath);
+    const angabe = await fetchJson(releaseInfo.sigUrl);
+    // basename: der Name kommt aus dem Netz und wird hier zum Pfad
+    const ziel = path.join(app.getPath('temp'), path.basename(releaseInfo.name));
+    await downloadFile(releaseInfo.url, ziel);
+
+    const sha256 = await pruefsummeVon(ziel);
+    if (!updateSignaturStimmt(angabe, releaseInfo.version, sha256)) {
+      console.error('[Sicherheit] Update-Signatur stimmt nicht – Datei verworfen');
+      fs.unlink(ziel, () => {});
+      return { ok: false, err: 'SIGNATUR' };
+    }
+    geprueftesUpdate = { pfad: ziel, sha256 };
+    downloadedUpdatePath = ziel;
     try { win.webContents.send('update-downloaded', { version: releaseInfo.version }); } catch (e) {}
     return { ok: true };
   } catch (err) {
@@ -1067,6 +1141,14 @@ ipcMain.handle('install-and-restart', async () => {
   // Er würde ohnehin abgewiesen – dann nicht erst beenden (siehe oben)
   if (smartAppControlAn()) return { ok: false, err: 'SAC' };
   try {
+    /* Noch einmal nachrechnen: die Datei lag seit dem Laden im Temp-Ordner,
+       und dort kann jedes Programm des Nutzers schreiben. */
+    if (!geprueftesUpdate || geprueftesUpdate.pfad !== downloadedUpdatePath
+        || await pruefsummeVon(downloadedUpdatePath) !== geprueftesUpdate.sha256) {
+      console.error('[Sicherheit] Update wurde seit der Prüfung verändert');
+      return { ok: false, err: 'SIGNATUR' };
+    }
+
     /* >>> Erst sichern, DANN den Installierer starten <<<
        Hier stand nur allowClose = true und app.quit() – der close-
        Handler stieg damit sofort aus, ohne die Oberfläche zu fragen. Wer
@@ -2077,12 +2159,64 @@ ipcMain.handle('get-default-save-path', () => {
   return inkwellsPath;
 });
 
+/* ══════════════════════════════════════════════════════════════════════
+   ANMELDEDATEN NICHT IM KLARTEXT
+
+   Mit dem Refresh-Token kommt man an die ganze Cloud-Ablage. Es stand lesbar
+   in der Einstellungsdatei, für jedes Programm des Nutzers und in jeder
+   Sicherungskopie. Jetzt verschlüsselt es das Betriebssystem (unter Windows
+   DPAPI, gebunden an das Benutzerkonto).
+
+   Die Oberfläche merkt davon nichts: sie bekommt die Werte wie bisher. Ein
+   alter Klartext-Wert bleibt lesbar und wird beim Laden umgestellt. Lässt
+   sich ein Wert nicht entschlüsseln (andere Maschine, wiederhergestellte
+   Sicherung), ist er leer, und die App bittet um eine neue Anmeldung – nichts
+   Schlimmeres. Ohne Verschlüsselung im System bleibt es beim Klartext: sonst
+   ginge unter manchem Linux gar keine dauerhafte Anmeldung mehr.
+   ══════════════════════════════════════════════════════════════════════ */
+const VERSCHLUESSELT = 'enc:v1:';
+const istGeheimerSchluessel = (schluessel) => /token|secret|refresh|nonce/i.test(schluessel);
+
+function geheimnisseVerschluesseln(settings) {
+  if (!settings || typeof settings !== 'object' || !safeStorage.isEncryptionAvailable()) return settings;
+  const aus = { ...settings };
+  for (const [schluessel, wert] of Object.entries(aus)) {
+    if (!istGeheimerSchluessel(schluessel) || typeof wert !== 'string' || !wert) continue;
+    if (wert.startsWith(VERSCHLUESSELT)) continue;
+    aus[schluessel] = VERSCHLUESSELT + safeStorage.encryptString(wert).toString('base64');
+  }
+  return aus;
+}
+
+function geheimnisseEntschluesseln(settings) {
+  if (!settings || typeof settings !== 'object') return settings;
+  const aus = { ...settings };
+  for (const [schluessel, wert] of Object.entries(aus)) {
+    if (typeof wert !== 'string' || !wert.startsWith(VERSCHLUESSELT)) continue;
+    try {
+      aus[schluessel] = safeStorage.decryptString(Buffer.from(wert.slice(VERSCHLUESSELT.length), 'base64'));
+    } catch (err) {
+      console.warn('[Settings] Nicht entschlüsselbar, neue Anmeldung nötig:', schluessel);
+      aus[schluessel] = '';
+    }
+  }
+  return aus;
+}
+
 ipcMain.handle('load-settings', () => {
   console.log('[Settings] Loading settings...');
   try {
     if (fs.existsSync(settingsPath)) {
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const roh = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const settings = geheimnisseEntschluesseln(roh);
       console.log('[Settings] Loaded:', redactSettings(settings));
+
+      // Wer von einer älteren Fassung kommt, hat die Werte noch im Klartext
+      const gesichert = geheimnisseVerschluesseln(roh);
+      if (JSON.stringify(gesichert) !== JSON.stringify(roh)) {
+        try { fs.writeFileSync(settingsPath, JSON.stringify(gesichert, null, 2)); }
+        catch (err) { console.warn('[Settings] Umstellen nicht möglich:', err.message); }
+      }
       return settings;
     }
     console.log('[Settings] No settings file found');
@@ -2095,7 +2229,7 @@ ipcMain.handle('load-settings', () => {
 ipcMain.handle('save-settings', (_, data) => {
   console.log('[Settings] Saving settings:', redactSettings(data));
   try {
-    fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2));
+    fs.writeFileSync(settingsPath, JSON.stringify(geheimnisseVerschluesseln(data), null, 2));
     console.log('[Settings] ✓ Settings saved');
     return true;
   } catch (err) {

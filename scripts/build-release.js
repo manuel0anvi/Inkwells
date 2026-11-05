@@ -97,13 +97,20 @@ const artifacts = STORE
   ? [`Inkwells ${packageJson.version}.appx`]
   : [
       `Inkwells Setup ${packageJson.version}.exe`,
-      `Inkwells Setup ${packageJson.version}.exe.blockmap`
+      `Inkwells Setup ${packageJson.version}.exe.blockmap`,
+      // Ohne sie nimmt die installierte App das Update nicht an (main.js)
+      `Inkwells Setup ${packageJson.version}.exe.sig`
     ];
 
 execFileSync(process.execPath, [electronBuilderCli, '--config', 'electron-builder.config.js', '--win', '--x64'], {
   cwd: rootDir,
   stdio: 'inherit'
 });
+
+if (!STORE) {
+  require('./update-signatur.js').unterschreibe(
+    path.join(sourceDir, `Inkwells Setup ${packageJson.version}.exe`), packageJson.version);
+}
 
 fs.mkdirSync(targetDir, { recursive: true });
 
