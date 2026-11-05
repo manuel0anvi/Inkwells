@@ -2242,15 +2242,51 @@ function erlaubeOrdner(ordner) {
    Speicherfehler. Der Doppelklick war trotzdem angeboten: das Format ist
    beim Betriebssystem angemeldet.
 
-   Erlaubt wird deshalb GENAU DIESE Datei, nicht ihr Ordner. Sie ist
-   nur für diesen Lauf freigegeben und steht in keiner Datei.
+   Erlaubt wird deshalb GENAU DIESE Datei, nicht ihr Ordner.
+
+   >>> Warum das über den Neustart hinaus gilt <<<
+   Die Erlaubnis galt nur für den laufenden Start. Das Heft stand danach in
+   der Übersicht, beim nächsten Start antwortete file-exists aber „gibt es
+   nicht“ – und der Eintrag flog hinaus. Die Liste gehört wie die Orte dem
+   Hauptprozess, siehe IST_NUR_FUER_DEN_HAUPTPROZESS.
    ══════════════════════════════════════════════════════════════════════ */
-const erlaubteDateien = new Set();
+const dateienPfad = path.join(app.getPath('userData'), 'inkwells-dateien.json');
+let _erlaubteDateien = null;
+
+function erlaubteDateienSet() {
+  if (_erlaubteDateien) return _erlaubteDateien;
+  _erlaubteDateien = new Set();
+  try {
+    if (fs.existsSync(dateienPfad)) {
+      const roh = JSON.parse(fs.readFileSync(dateienPfad, 'utf-8'));
+      if (Array.isArray(roh)) for (const d of roh) if (typeof d === 'string' && d) _erlaubteDateien.add(d);
+    }
+  } catch (err) {
+    console.warn('[Sicherheit] Datei-Liste nicht lesbar:', err.message);
+  }
+  return _erlaubteDateien;
+}
 
 function erlaubeDatei(datei) {
   if (typeof datei !== 'string' || !datei) return;
-  erlaubteDateien.add(pfadSchluessel(datei));
-  console.log('[Sicherheit] Datei einmalig erlaubt:', datei);
+  const liste = erlaubteDateienSet();
+  const schluessel = pfadSchluessel(datei);
+  if (liste.has(schluessel)) return;
+  liste.add(schluessel);
+  try {
+    fs.writeFileSync(dateienPfad, JSON.stringify([...liste], null, 2));
+  } catch (err) {
+    console.error('[Sicherheit] Datei-Liste nicht schreibbar:', err.message);
+  }
+  console.log('[Sicherheit] Datei erlaubt:', datei);
+}
+
+/* Beide Listen liegen im Datenordner, und der ist für die Oberfläche offen.
+   Dürfte sie dort schreiben, könnte fremder Code sich jeden Ordner selbst
+   erlauben – die Grenze wäre keine mehr. */
+function istNurFuerDenHauptprozess(datei) {
+  const s = pfadSchluessel(datei);
+  return s === pfadSchluessel(ortePfad) || s === pfadSchluessel(dateienPfad);
 }
 
 /** Der eingestellte Speicherort – aus der Liste, die nur hier wächst. */
@@ -2274,7 +2310,8 @@ function erlaubteOrdner() {
 
 function pfadErlaubt(filePath) {
   if (typeof filePath !== 'string' || !filePath) return false;
-  if (erlaubteDateien.has(pfadSchluessel(filePath))) return true;
+  if (istNurFuerDenHauptprozess(filePath)) return false;
+  if (erlaubteDateienSet().has(pfadSchluessel(filePath))) return true;
   return erlaubteOrdner().some(o => liegtUnter(filePath, o));
 }
 
@@ -2685,6 +2722,55 @@ ipcMain.handle('delete-file', async (_, filePath) => {
   }
 });
 
+/* Ein Name, unter dem noch nichts liegt: „Heft.jrnl“, „Heft (2).jrnl“ … */
+function freierDateiPfad(wunsch) {
+  if (!fs.existsSync(wunsch)) return wunsch;
+  const { dir, name, ext } = path.parse(wunsch);
+  for (let n = 2; n < 1000; n++) {
+    const kandidat = path.join(dir, `${name} (${n})${ext}`);
+    if (!fs.existsSync(kandidat)) return kandidat;
+  }
+  throw new Error('Kein freier Dateiname: ' + wunsch);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   EINE DATEI VERSCHIEBEN, OHNE EINE ANDERE ZU VERLIEREN
+
+   renameSync allein hatte zwei Haken:
+     · zwischen zwei Laufwerken scheitert es immer (EXDEV) – „Alle
+       übertragen“ auf einen USB-Stick ging deshalb nie,
+     · unter Windows ersetzt es eine vorhandene Zieldatei ohne Rückfrage.
+       Ein gleichnamiges Heft am Ziel war damit weg.
+
+   Das Ziel kann deshalb anders heissen als gewünscht. Der Aufrufer bekommt
+   den tatsächlichen Pfad zurück. Die Quelle wird erst gelöscht, wenn die
+   Kopie vollständig angekommen ist.
+   ══════════════════════════════════════════════════════════════════════ */
+function verschiebeDatei(alt, wunsch) {
+  // Nur die Schreibung ändert sich: dieselbe Datei, kein fremdes Ziel
+  const ziel = pfadSchluessel(alt) === pfadSchluessel(wunsch) ? wunsch : freierDateiPfad(wunsch);
+  fs.mkdirSync(path.dirname(ziel), { recursive: true });
+  try {
+    fs.renameSync(alt, ziel);
+    return ziel;
+  } catch (err) {
+    if (err.code !== 'EXDEV') throw err;
+  }
+  const zwischen = ziel + '.tmp';
+  try {
+    fs.copyFileSync(alt, zwischen);
+    if (fs.statSync(zwischen).size !== fs.statSync(alt).size) {
+      throw new Error('Die Kopie ist unvollständig');
+    }
+    fs.renameSync(zwischen, ziel);
+  } catch (err) {
+    try { fs.unlinkSync(zwischen); } catch (e) { /* war noch nicht da */ }
+    throw err;
+  }
+  fs.unlinkSync(alt);
+  return ziel;
+}
+
 ipcMain.handle('move-file', async (_, oldPath, newPath) => {
   if (!pfadErlaubt(oldPath)) return pfadAbgelehnt('Verschieben (Quelle)', oldPath);
   if (!pfadErlaubt(newPath)) return pfadAbgelehnt('Verschieben (Ziel)', newPath);
@@ -2693,13 +2779,9 @@ ipcMain.handle('move-file', async (_, oldPath, newPath) => {
     if (!fs.existsSync(oldPath)) {
       return { success: false, error: 'Source file not found' };
     }
-    const newDir = path.dirname(newPath);
-    if (!fs.existsSync(newDir)) {
-      fs.mkdirSync(newDir, { recursive: true });
-    }
-    fs.renameSync(oldPath, newPath);
+    const ziel = verschiebeDatei(oldPath, newPath);
     console.log('[Move] ✓ File moved');
-    return { success: true };
+    return { success: true, path: ziel };
   } catch (err) {
     console.error('[Move] ✗ Error:', err);
     return { success: false, error: err.message };

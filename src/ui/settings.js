@@ -70,6 +70,13 @@
     E('ov-migration').style.display = 'flex';
   });
   
+  /* Das Feld zeigt den neuen Ordner schon, während gefragt wird. Bleibt er nach
+     einem Abbruch stehen, stellt „OK“ ihn trotzdem ein (saveSettingsFromUI) –
+     die Übersicht zeigte dann auf einen Ort, an dem die Hefte gar nicht liegen. */
+  const speicherortZuruecksetzen = () => {
+    saveLocationDisplay.value = Settings.get('saveLocation') || '';
+  };
+
   // Migration dialog handlers
   E('migration-keep').addEventListener('click', async () => {
     E('ov-migration').style.display = 'none';
@@ -160,8 +167,8 @@
         // Move the file
         const result = await window.api.moveFile(currentPath, newPath);
         if (result.success) {
-          // Update registry with new path
-          await Registry.add(nb, newPath);
+          // Lag dort schon eine gleichnamige Datei, heisst das Heft jetzt anders
+          await Registry.add(nb, result.path || newPath);
           transferred++;
           console.log('[Settings] ✓ Moved:', fileName);
         } else {
@@ -176,6 +183,7 @@
         console.error('[Settings] Umzug unvollständig:', misslungen.join(', '));
         toast((t('transferFailed') || 'Nicht übertragen: {namen}. Der Speicherort bleibt unverändert.')
           .replace('{namen}', misslungen.join(', ')), true);
+        speicherortZuruecksetzen();
         return;
       }
 
@@ -186,6 +194,7 @@
       toast(t('transferComplete'));
     } catch (err) {
       console.error('[Settings] Transfer error:', err);
+      speicherortZuruecksetzen();
       toast(t('saveError'), true);
     }
   });
@@ -195,6 +204,7 @@
     if (e.target.id === 'ov-migration') {
       E('ov-migration').style.display = 'none';
       _pendingNewLocation = null;
+      speicherortZuruecksetzen();
     }
   });
 

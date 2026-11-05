@@ -334,6 +334,10 @@ function registriereBeendenHandler() {
           .replace('{hefte}', namen)
           .replace('{grund}', speicherFehler || '');
 
+        /* Die Anzeige des Beendens liegt über allem – auch über dieser Frage.
+           Man sah „Wird gesichert …“ und konnte nichts mehr anklicken. */
+        if (schliesst) schliesst.classList.remove('an');
+
         let trotzdem = false;
         try {
           trotzdem = await showConfirm(frage);
@@ -352,6 +356,7 @@ function registriereBeendenHandler() {
              seiner Zeitgrenze, aber wenigstens nicht auf unser Wort hin. */
           return;
         }
+        if (schliesst) schliesst.classList.add('an');
       }
 
       try {
@@ -429,8 +434,18 @@ async function loadNotebooksFromRegistry() {
   const entries = await Registry.load();
   console.log('[Init] Registry has', entries.length, 'entries');
   
-  const toRemove = [];
-  
+  /* ══════════════════════════════════════════════════════════════════
+     KEIN HEFT FLIEGT VON SELBST AUS DER ÜBERSICHT
+
+     Fehlte die Datei beim Start oder liess sie sich nicht lesen, wurde der
+     Eintrag gelöscht. Ein abgezogener USB-Stick, ein Netzlaufwerk, das noch
+     nicht verbunden ist, eine von OneDrive gesperrte Datei – und das Heft
+     war still und dauerhaft weg aus der Liste. Jetzt bleibt der Eintrag,
+     die Übersicht zeigt ihn als nicht erreichbar, und entfernt wird er nur,
+     wenn der Nutzer das sagt.
+     ══════════════════════════════════════════════════════════════════ */
+  const fehlend = [];
+
   for (const entry of entries) {
     try {
       console.log('[Init] Checking entry:', entry.name, 'at', entry.path);
@@ -438,8 +453,8 @@ async function loadNotebooksFromRegistry() {
       // Check if file still exists
       const exists = await window.api.fileExists(entry.path);
       if (!exists) {
-        console.log('[Init] File not found, will remove:', entry.path);
-        toRemove.push(entry.id);
+        console.log('[Init] File not found:', entry.path);
+        fehlend.push(entry);
         continue;
       }
       
@@ -457,18 +472,20 @@ async function loadNotebooksFromRegistry() {
           console.log('[Init] ✓ Loaded notebook:', nb.name);
         }
       } else {
-        console.log('[Init] Failed to load notebook data, removing:', entry.path);
-        toRemove.push(entry.id);
+        console.log('[Init] Failed to load notebook data:', entry.path);
+        fehlend.push(entry);
       }
     } catch (err) {
       console.error('[Init] Error loading notebook:', entry.path, err);
-      toRemove.push(entry.id);
+      fehlend.push(entry);
     }
   }
-  
-  // Remove entries for missing/invalid files
-  for (const id of toRemove) {
-    await Registry.remove(id);
+
+  // Inzwischen aus der Cloud gekommen? Dann fehlt es nicht mehr.
+  S.fehlendeHefte = fehlend.filter(e => !S.notebooks.some(n => n.id === e.id));
+  if (S.fehlendeHefte.length) {
+    toast((t('notebooksUnreachable') || 'Nicht erreichbar: {namen}')
+      .replace('{namen}', S.fehlendeHefte.map(e => e.name).join(', ')), true);
   }
 
   /* Hefte, die schon vor dieser Fassung hochgeladen wurden, tragen noch
@@ -505,10 +522,33 @@ async function openNotebookFromFile(filePath) {
     const existingIdx = S.notebooks.findIndex(nb => nb.id === loadedNb.id);
     
     if (existingIdx !== -1) {
-      // Update existing notebook
+      /* Dasselbe Heft noch einmal geöffnet? Dann gilt, was schon offen ist –
+         sonst wären ungesicherte Änderungen weg. Liegt unter derselben
+         Kennung eine ANDERE Datei vor (eine Kopie, eine ältere Fassung),
+         entscheidet der Nutzer. Das Vorhandene wird vorher gesichert und
+         bleibt als Datei liegen. */
+      const vorhanden = S.notebooks[existingIdx];
+      const eintrag = Registry.find(loadedNb.id);
+      const gleicheDatei = eintrag && String(eintrag.path).toLowerCase() === String(filePath).toLowerCase();
+
+      if (gleicheDatei) {
+        openNotebook(vorhanden.id);
+        return;
+      }
+
+      const ersetzen = await showConfirm((t('notebookReplaceConfirm')
+        || 'Das Heft „{name}“ ist schon in Inkwells. Soll die geöffnete Datei es ersetzen? Die bisherige Datei bleibt liegen.')
+        .replace('{name}', vorhanden.name));
+      if (!ersetzen) {
+        openNotebook(vorhanden.id);
+        return;
+      }
+
+      if (typeof FileManager_ !== 'undefined') await FileManager_.saveNotebook(vorhanden);
+      normalizeNotebook(loadedNb);
       S.notebooks[existingIdx] = loadedNb;
       console.log('[Init] Updated existing notebook');
-      
+
       // Update registry with new path if changed
       await Registry.add(loadedNb, filePath);
     } else {

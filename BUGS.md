@@ -8,22 +8,6 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
 
 ## 1. Kann Daten oder Hefte kosten
 
-- [ ] ✔ **„Alle übertragen“ auf ein anderes Laufwerk scheitert immer und überschreibt gleichnamige Hefte.**
-  `main.js:2594` (`move-file`) nutzt nur `fs.renameSync` → EXDEV zwischen Laufwerken; unter Windows
-  ersetzt rename eine vorhandene Zieldatei. Lösung: bei EXDEV copyFileSync+unlinkSync; vorher prüfen,
-  ob das Ziel existiert, dann freier Name (wie `_freierPfad`).
-- [ ] ✔ **Ein Heft verschwindet still und dauerhaft, wenn seine Datei beim Start kurz fehlt** (USB, Netzlaufwerk).
-  `src/core/init.js:430-461` ruft `Registry.remove`. Lösung: als „nicht erreichbar“ markieren und anzeigen,
-  mindestens ein Toast mit den Namen.
-- [ ] ✔ **Speicherort: nach abgebrochenem oder misslungenem Umzug stellt „OK“ den neuen Ordner trotzdem ein.**
-  `src/ui/settings.js:57, 173-180, 195-198, 309` – das Feld behält den neuen Ordner, `saveSettingsFromUI`
-  schreibt `saveLocation` aus dem Feld. Lösung: Feld bei Abbruch auf `Settings.get('saveLocation')` zurück.
-- [ ] ✔ **Ein misslungener Dokument-Import legt trotzdem ein leeres Heft an.**
-  `src/ui/homeGrid.js:284-295` fängt den Fehler selbst ab, der Aufrufer (`:691`) merkt nichts.
-  Lösung: im inneren catch nach der Meldung `throw err`.
-- [ ] ✔ **Beenden mit Speicherfehler: App hängt unter „Wird gesichert …“.**
-  `src/core/init.js:256, 326, 339, 348` – die Rückfrage (z-index 950) liegt unter `.quitting` (99999,
-  `src/css/modals.css:2088`); nach Abbruch wird die Klasse `an` nie entfernt. Lösung wie `update.js:136`.
 
 ## 2. Rückgängig macht das Falsche
 

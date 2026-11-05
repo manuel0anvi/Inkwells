@@ -440,6 +440,41 @@ body.read-only .toolbar #btn-doc-share {
    oder als hinge die App. Jetzt wird sie blass, nimmt keine Klicks mehr
    an und dreht einen Kreisel, bis sie wirklich weg ist.
    ─────────────────────────────────────────────────────────────────── */
+/* Ein Heft, dessen Datei gerade nicht erreichbar ist (ui/homeGrid.js) */
+.nb-fehlt-karte {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed var(--border, rgba(128, 128, 128, .5));
+  border-radius: 8px;
+  opacity: .8
+}
+
+.nb-fehlt-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.nb-fehlt-hinweis {
+  font-size: 12px;
+  opacity: .75
+}
+
+.nb-fehlt-knopf {
+  align-self: flex-start;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  cursor: pointer
+}
+
 .nb-card-busy {
   pointer-events: none
 }

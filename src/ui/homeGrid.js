@@ -64,6 +64,39 @@ function renderHomeGrid() {
     grid.appendChild(card);
   }
   
+  /* Hefte, deren Datei gerade nicht da ist (core/init.js). Eine eigene Art
+     Karte: sie lässt sich nicht öffnen und nicht einsortieren. */
+  for (const f of (S.fehlendeHefte || [])) {
+    if (own.some(nb => nb.id === f.id)) continue;
+    const karte = document.createElement('div');
+    karte.className = 'nb-fehlt-karte';
+    karte.title = f.path || '';
+    const name = document.createElement('div');
+    name.className = 'nb-fehlt-name';
+    name.textContent = f.name || '';
+    const hinweis = document.createElement('div');
+    hinweis.className = 'nb-fehlt-hinweis';
+    hinweis.textContent = t('notebookUnreachable') || 'Nicht erreichbar';
+    const nochmal = document.createElement('button');
+    nochmal.className = 'nb-fehlt-knopf';
+    nochmal.textContent = t('tryAgain') || 'Erneut versuchen';
+    nochmal.addEventListener('click', () => loadNotebooksFromRegistry());
+    const weg = document.createElement('button');
+    weg.className = 'nb-fehlt-knopf';
+    weg.textContent = t('removeFromList') || 'Aus der Liste entfernen';
+    weg.addEventListener('click', async () => {
+      const ja = await showConfirm((t('removeFromListConfirm')
+        || '„{name}“ aus der Liste entfernen? Die Datei selbst bleibt, falls sie noch existiert.')
+        .replace('{name}', f.name || ''));
+      if (!ja) return;
+      await Registry.remove(f.id);
+      S.fehlendeHefte = S.fehlendeHefte.filter(e => e.id !== f.id);
+      renderHomeGrid();
+    });
+    karte.append(name, hinweis, nochmal, weg);
+    grid.appendChild(karte);
+  }
+
   // Add placeholder element (hidden by default)
   const placeholder = document.createElement('div');
   placeholder.className = 'nb-drop-placeholder';
@@ -298,6 +331,9 @@ E('btn-open-doc').addEventListener('click', async () => {
           .replace('{msg}', err.message || String(err));
         if (typeof showAlert === 'function') await showAlert(msg);
         else toast(msg, true);
+        // Der Aufrufer legt das Heft erst danach an – ohne das entstünde ein leeres
+        err.schonGemeldet = true;
+        throw err;
       }
     }
   });
@@ -781,6 +817,7 @@ E('nb-modal-ok').addEventListener('click', async () => {
         await fuellen(nb);
       } catch (err) {
         console.error('[HomeGrid] Dokument einlesen fehlgeschlagen:', err);
+        if (err && err.schonGemeldet) return;
         toast((t('openDocFailed') || 'Das Dokument liess sich nicht oeffnen: {msg}')
           .replace('{msg}', err && err.message ? err.message : String(err)), true);
         return;

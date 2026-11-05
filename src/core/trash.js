@@ -298,6 +298,7 @@ const Trash = {
         console.error('[Trash] Verschieben fehlgeschlagen:', moved?.error);
         return false;
       }
+      trashPath = moved.path || trashPath;
     }
 
     const entry = {
