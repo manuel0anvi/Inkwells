@@ -948,12 +948,14 @@ function appendPageDOM(page, index) {
     + shareMarkHTML(shareMarkFor(nb)) + '</span>'
     + '<span class="j-page-date">' + fmt(page.date) + '</span>'
     + '<span class="j-page-actions">'
-    + '<button class="pg-sec-btn" title="' + (sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection')) + '">'
+    + '<button class="pg-sec-btn">'
     + '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
     + '<path d="M2.5 3.5h11M2.5 8h11M2.5 12.5h7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
     + '</svg></button>'
     + '<button class="pg-menu-btn" title="Seitenoptionen">⋯</button>'
     + '</span>';
+  // Als Eigenschaft: der Abschnittsname ist fremder Text (siehe sidebar.js)
+  hdr.querySelector('.pg-sec-btn').title = sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection');
   hdr.querySelector('.pg-menu-btn').addEventListener('click', e => {
     e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect();
     showPgCtxMenu(r.left, r.bottom + 4, page, div);

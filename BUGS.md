@@ -41,8 +41,6 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
 
 ## 3. Deutlich sichtbar
 
-- [ ] ✔ **Namen mit `<` oder `&` zerschießen Heftkarte und Navigation – bei geteilten Dokumenten HTML-Einschleusung.**
-  `src/ui/homeGrid.js:44`, `src/ui/sidebar.js:76-77` setzen Namen per `innerHTML`. Lösung: `textContent`.
 - [ ] ✔ **Nur-Lese-Dokument: Stifttipp stellt auf „Stift“, danach kein Markieren und kein Zurück.**
   `src/canvas/input.js:1370` wechselt vor dem readOnly-Ausstieg; `src/ui/toolbar.js` `applyMode` setzt
   `contentEditable` ohne `S.readOnly`. Beim Öffnen eines Nur-Lese-Dokuments auf `cursor` schalten.

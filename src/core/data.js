@@ -493,8 +493,24 @@ function stricheVerdichten(nb) {
   return nb;
 }
 
+/* Eine Farbe und sonst nichts. Heft und Abschnitte kommen auch aus fremden
+   Dateien und geteilten Dokumenten – dieselbe Regel wie in core/sanitize.js. */
+const IST_HEFTFARBE = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%/]+\)|hsla?\([\d\s.,%/]+\)|[a-z]{3,20})$/i;
+
+function heftAngabenPruefen(nb) {
+  if (typeof nb.name !== 'string') nb.name = String(nb.name ?? '');
+  if (typeof nb.color !== 'string' || !IST_HEFTFARBE.test(nb.color.trim())) nb.color = '#c8a96e';
+  for (const sec of (Array.isArray(nb.sections) ? nb.sections : [])) {
+    if (!sec) continue;
+    if (typeof sec.name !== 'string') sec.name = String(sec.name ?? '');
+    if (sec.color && (typeof sec.color !== 'string' || !IST_HEFTFARBE.test(sec.color.trim()))) sec.color = '';
+  }
+}
+
 function normalizeNotebook(nb) {
   if (!nb || !Array.isArray(nb.pages)) return nb;
+
+  heftAngabenPruefen(nb);
 
   // Alte Radierstriche verschwinden, die Löcher bleiben (siehe oben)
   for (const page of nb.pages) {

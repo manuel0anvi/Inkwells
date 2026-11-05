@@ -619,7 +619,7 @@ function placeObject(objLayer, obj, page) {
   else if (obj.kind === 'shape') { body.innerHTML = renderShapeBody(obj); }
   else if (obj.kind === 'formula') { body.innerHTML = renderFormulaBody(obj); }
   else if (obj.kind === 'code') { body.innerHTML = renderCodeBody(obj); }
-  else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 ' + (obj.name || 'Datei') + '</div>'; }
+  else { body.innerHTML = '<div style="background:#ede8dc;border:1px solid #cfc5b0;border-radius:6px;padding:8px 14px;font-size:13px;color:#4a3d2e;height:100%;display:flex;align-items:center;gap:8px">📎 </div>'; body.firstChild.append(String(obj.name || 'Datei')); }
   wrap.appendChild(body);
 
   /* Die Bedienteile. Der Rahmen selbst lässt Klicks durch, sonst läge er

@@ -2081,6 +2081,48 @@ app.on('ready', async () => {
        Die Bruecke 'open-external' liegt in main.js und ist von der
        Oberflaeche aus nicht zu befragen. Geprueft wird deshalb hier, im
        Hauptprozess: welche Schemata stehen dort auf der Liste. */
+    abschnitt('Fremde Namen führen nichts aus');
+    {
+      /* Name, Farbe, Abschnitt und Anhang stammen aus einer fremden Datei oder
+         einem geteilten Dokument. Beim blossen Zeichnen darf nichts laufen. */
+      const ergebnis = await js(`(async () => {
+        window.__eingeschleust = 0;
+        const gift = '<img src=x onerror="window.__eingeschleust=1">';
+        const seite = makePage('ruled');
+        seite.secId = 'giftig';
+        seite.objects = [{ id: 'anhang', kind: 'datei', name: gift, x: 10, y: 10, w: 100, h: 40 }];
+        const nb = { id: 'gift', name: gift, color: '"><img src=x onerror="window.__eingeschleust=2">',
+                     defaultBg: 'ruled', pages: [seite], schemaVersion: 2, created: Date.now(),
+                     sections: [{ id: 'giftig', name: gift, color: 'url(x)', pgIds: [seite.id] }] };
+        normalizeNotebook(nb);
+        const vorher = S.notebooks;
+        S.notebooks = [nb];
+        renderHomeGrid();
+        openNotebook('gift');
+        renderSideTree();
+        await new Promise(r => setTimeout(r, 600));
+        const namen = [...document.querySelectorAll('.nb-card-name, .sec-name')].map(n => n.textContent);
+        const antwort = {
+          lief: window.__eingeschleust,
+          alsText: namen.some(n => n.includes('<img')),
+          farbe: nb.color,
+          abschnittsfarbe: nb.sections[0].color,
+          bilder: document.querySelectorAll('#nb-grid img, #side-tree img, .j-page-hdr img, .obj-body img').length
+        };
+        S.notebooks = vorher;
+        openNotebook(vorher[0].id);
+        renderHomeGrid();
+        return antwort;
+      })()`);
+      await warte(300);
+      await js('window.__fehler.splice(0)');
+      pruefe('Kein eingeschleuster Code läuft', ergebnis.lief === 0, 'lief: ' + ergebnis.lief);
+      pruefe('Der Name steht als Text da', ergebnis.alsText === true, JSON.stringify(ergebnis));
+      pruefe('Es entsteht kein Bild aus dem Namen', ergebnis.bilder === 0, 'Bilder: ' + ergebnis.bilder);
+      pruefe('Eine falsche Farbe fällt auf die Vorgabe zurück',
+        ergebnis.farbe === '#c8a96e' && ergebnis.abschnittsfarbe === '', JSON.stringify(ergebnis));
+    }
+
     abschnitt('Was nach draussen darf');
     {
       const quelle = require('fs').readFileSync(path.join(ROOT, 'main.js'), 'utf8');

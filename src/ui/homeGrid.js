@@ -38,14 +38,20 @@ function renderHomeGrid() {
       + (_deleting.has(nb.id) ? ' nb-card-busy' : '');
     card.dataset.nbId = nb.id;
     card.style.setProperty('--nb-color', nb.color);
-    card.innerHTML = `<div class="nb-card-spine" style="background:${nb.color}"></div>`
+    /* Name und Farbe stehen in der Heftdatei, und die kann von jemand anderem
+       stammen. Deshalb gehen sie als Eigenschaft hinein und nicht als HTML:
+       ein <img onerror> im Namen liefe sonst im Fenster mit window.api. */
+    card.innerHTML = `<div class="nb-card-spine"></div>`
       + `<div class="nb-card-body">`
       + `<button class="nb-card-edit-btn" title="${t('edit')}">⋯</button>`
-      + `<div class="nb-card-name">${nb.name}</div>`
-      + `<div class="nb-card-bg" style="${BG_STYLE[nb.defaultBg]}"></div>`
+      + `<div class="nb-card-name"></div>`
+      + `<div class="nb-card-bg"></div>`
       + `<div class="nb-card-meta"><span>${pageCount} ${pageLabel}<span class="nb-card-groesse"></span></span>`
       + `${typeof shareMarkHTML === 'function' ? shareMarkHTML(shareMarkFor(nb), 'nb-card-share') : ''}</div>`
       + `</div>`;
+    card.querySelector('.nb-card-spine').style.background = nb.color || '';
+    card.querySelector('.nb-card-name').textContent = nb.name || '';
+    card.querySelector('.nb-card-bg').style.cssText = BG_STYLE[nb.defaultBg] || '';
     card.querySelector('.nb-card-edit-btn').addEventListener('click', e => { e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, nb.id); });
     // Die Dateigrösse erst beim Überfahren – und jedes Mal frisch (zeigeDateigroesse)
     card.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') zeigeDateigroesse(card, nb.id); });

@@ -1842,7 +1842,16 @@ ipcMain.handle('export-pdf', async (_, html, defaultName) => {
   const w = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
 
   try {
-    fs.writeFileSync(tmpHtml, html, 'utf-8');
+    /* Die Datei liegt auf der Platte und wird von dort geladen, und ihr Inhalt
+       stammt auch aus fremden Heften. Skripte braucht sie nicht, und vom Netz
+       nur die Schriften, die buildPdf einbindet. Bilder stecken als data: darin,
+       ein eingeschleustes <img src=file:…> bleibt damit draussen.
+       executeJavaScript unten ist davon nicht betroffen. */
+    const EXPORT_CSP = "default-src 'none'; img-src data: blob:; font-src data: https://fonts.gstatic.com; "
+      + "style-src 'unsafe-inline' https://fonts.googleapis.com";
+    const gesichert = String(html).replace(/<head([^>]*)>/i,
+      (treffer) => `${treffer}<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`);
+    fs.writeFileSync(tmpHtml, gesichert, 'utf-8');
     await w.loadFile(tmpHtml);
 
     // Warten, bis Bilder und Schriften wirklich da sind – sonst fehlen im

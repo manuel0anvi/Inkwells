@@ -133,10 +133,18 @@ service cloud.firestore {
     match /community_posts/{postId} {
       allow read: if true;
 
+      /* Die Kennung selbst ist Eingabe: wer die Datenbank direkt anspricht,
+         sucht sie sich aus, auch mit < und Anführungszeichen. Die Forumsseite
+         setzt sie in Attribute und onclick. Erlaubt ist nur, was addDoc erzeugt. */
+      function istAutoKennung(id) {
+        return id.matches('^[A-Za-z0-9]{20}$');
+      }
+
       /* Anlegen darf jeder – aber niemand unter einem geschützten Namen.
          Der Admin ist ausgenommen, sonst könnte ausgerechnet er nicht als
          „Inkwells Team" antworten. */
-      allow create: if request.resource.data.keys()
+      allow create: if istAutoKennung(postId)
+                    && request.resource.data.keys()
                           .hasOnly(['type', 'title', 'author', 'content', 'created_at'])
                     && request.resource.data.type in ['question', 'bug']
                     && validText(request.resource.data.title, 120)
@@ -154,7 +162,8 @@ service cloud.firestore {
       match /replies/{replyId} {
         allow read: if true;
 
-        allow create: if request.resource.data.keys()
+        allow create: if istAutoKennung(replyId)
+                      && request.resource.data.keys()
                             .hasOnly(['author', 'content', 'created_at'])
                       && validAuthor(request.resource.data.author)
                       && validText(request.resource.data.content, 500)

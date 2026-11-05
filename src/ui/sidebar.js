@@ -75,9 +75,12 @@ function renderSideTree() {
     const anzahl = pagesOfSec(sec, nb).length;
     const row = document.createElement('div');
     row.className = 'sec-hdr filter-row' + (isActiveSec ? ' active' : '');
+    /* Der Name als Text und nie als HTML: er kommt auch aus geteilten
+       Dokumenten und aus fremden .jrnl-Dateien. */
     row.innerHTML = '<span class="sec-dot"></span>'
-      + '<span class="sec-name">' + getSectionDisplayName(sec) + '</span>'
+      + '<span class="sec-name"></span>'
       + '<span class="sec-pg-count">' + anzahl + '</span>';
+    row.querySelector('.sec-name').textContent = getSectionDisplayName(sec);
     row.querySelector('.sec-dot').style.background = colorForSection(sec);
     row.querySelector('.sec-name').addEventListener('dblclick', e => {
       e.stopPropagation();

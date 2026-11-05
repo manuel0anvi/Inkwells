@@ -261,8 +261,10 @@
         /* Der Block wird angehängt und dann gemessen. Angehängt wird an
            den ECHTEN Messplatz und nicht an eine Kopie: nur so wirken
            Ränder und Abstände zu dem, was schon darauf steht. */
+        /* Bereinigt: die Blöcke stammen aus einer fremden Datei, und hier
+           landen sie im lebendigen Dokument. */
         const halter = document.createElement('div');
-        halter.innerHTML = block.html;
+        halter.innerHTML = typeof sanitizePageHtml === 'function' ? sanitizePageHtml(block.html) : block.html;
         const neue = [...halter.children];
         if (!neue.length) continue;
 
@@ -362,9 +364,10 @@
     const kinder = [...feld.children];
 
     if (q.passtSichAn) {
-      const halter = document.createElement('div');
+      // Nur gezählt – deshalb reicht ein Halter, der nichts ausführt
+      const halter = document.createElement('template');
       halter.innerHTML = block.html;
-      const anzahl = Math.max(1, halter.children.length);
+      const anzahl = Math.max(1, halter.content.children.length);
       const erste = kinder[kinder.length - anzahl] || kinder[kinder.length - 1];
       const letzte = kinder[kinder.length - 1];
       if (!erste || !letzte) return { ...q, x: TEXT_LEFT, y: TEXT_TOP };

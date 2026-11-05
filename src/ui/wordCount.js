@@ -44,8 +44,12 @@
   const txt = (key, ersatz) => (typeof t === 'function' && t(key)) || ersatz;
 
   /* Ein einziges Element zum Auspacken des HTML. Ein neues je Seite wäre
-     bei hundert Seiten hundert Mal Aufräumarbeit für nichts. */
-  const auspacker = document.createElement('div');
+     bei hundert Seiten hundert Mal Aufräumarbeit für nichts.
+
+     Aus einem eigenen, leeren Dokument: ein loses div in DIESEM Dokument ist
+     lebendig – der Browser lädt darin Bilder und feuert onerror, und der
+     Text hier ist noch nicht bereinigt. */
+  const auspacker = document.implementation.createHTMLDocument('').createElement('div');
 
   /**
    * Der reine Text einer Seite.
