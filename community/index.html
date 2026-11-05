@@ -405,7 +405,14 @@ function whenForumDbReady() {
 async function loadPosts() {
   try {
     const db = await whenForumDbReady();
-    posts = await db.listPosts();
+    /* Nur Kennungen, wie addDoc sie erzeugt. Sie stehen unten in Attributen und
+       onclick, und über die Datenbank-Schnittstelle kann sich jeder eine
+       eigene aussuchen – auch eine mit Anführungszeichen. Die Regeln weisen
+       das inzwischen ab; dies hier schützt auch vor Altbestand. */
+    const istKennung = (id) => /^[A-Za-z0-9]{20}$/.test(String(id));
+    posts = (await db.listPosts())
+      .filter(p => istKennung(p.id))
+      .map(p => ({ ...p, replies: (p.replies || []).filter(r => istKennung(r.id)) }));
     renderFeed();
   } catch (err) {
     console.error('Forum load error:', err);

@@ -244,7 +244,7 @@ async function loadNotebookStubs() {
   if (!folders.length) return { notebooks: [], folderFound: false, ownBytes: 0 };
 
   const notebooks = [];
-  const seenIds = new Set();
+  const seenIds = new Map();   // Heftkennung -> Eintrag in notebooks
   let ownBytes = 0;
 
   // Bewusst über ALLE gefundenen Ordner: falls durch den früheren Fehler
@@ -254,8 +254,15 @@ async function loadNotebookStubs() {
     const files = await provider.listNotebookFiles(cloudJson, folderId);
     for (const file of files) {
       const id = file.inkwellsId || file.id;
-      if (seenIds.has(id)) continue;
-      seenIds.add(id);
+      /* >>> Liegt ein Heft doppelt da, gilt die NEUESTE Datei <<<
+         Bisher gewann, was zuerst gefunden wurde. Bei zwei Inkwells-Ordnern
+         konnte das eine alte Fassung sein – samt alter Seitenreihenfolge. */
+      const schonDa = seenIds.get(id);
+      if (schonDa) {
+        if (String(file.modifiedTime || '') <= String(schonDa.updatedAt || '')) continue;
+        ownBytes -= (schonDa.__datei && schonDa.__datei.size) || 0;
+        notebooks.splice(notebooks.indexOf(schonDa), 1);
+      }
       ownBytes += file.size || 0;
       const seiten = parseInt(file.inkwellsPages, 10);
       const gemerkt = kartenMerkzettel()[file.id] || {};
@@ -268,6 +275,7 @@ async function loadNotebookStubs() {
         __seiten: Number.isFinite(seiten) ? seiten : (Number.isFinite(gemerkt.s) ? gemerkt.s : null),
         updatedAt: file.modifiedTime || '', __datei: file, __laden: null, __fertig: false
       });
+      seenIds.set(id, notebooks[notebooks.length - 1]);
     }
   }
 
@@ -698,7 +706,11 @@ async function showDashboard() {
       redirectToLogin();
       return;
     }
-    grid.innerHTML = `<p style="color:#d9534f">${t('dash_err') || 'Fehler:'} ${err.message}</p>`;
+    grid.innerHTML = '';
+    const fehlerText = document.createElement('p');
+    fehlerText.style.color = '#d9534f';
+    fehlerText.textContent = `${t('dash_err') || 'Fehler:'} ${err.message}`;
+    grid.appendChild(fehlerText);
   }
 }
 

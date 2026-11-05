@@ -114,7 +114,10 @@ function getNotebookPages(notebook) {
      zu gehen waere hier sogar falsch – deren pgIds sind nur noch
      abgeleitet und wuerden die Seiten nach Abschnitten gruppieren.
      Gegenstueck: notebookPages() in src/core/data.js. */
-  if (notebook.schemaVersion === 2) return allPages;
+  /* Auch ohne die Angabe: eine Seite mit secId gibt es nur im neuen Aufbau.
+     Vor dem Umbau kannte keine Seite dieses Feld, die Probe trifft also nie
+     ein altes Heft – und ein gemischtes Heft bleibt gemischt. */
+  if (notebook.schemaVersion === 2 || allPages.some(p => p && p.secId)) return allPages;
 
   const ordered = [];
   const seen = new Set();
