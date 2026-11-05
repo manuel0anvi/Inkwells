@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, Notification, session } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const zlib = require('zlib');
@@ -6,6 +6,67 @@ const https = require('https');
 const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 const crypto = require('crypto');
+
+/* ══════════════════════════════════════════════════════════════════════
+   WER MIT DEM HAUPTPROZESS REDEN DARF
+
+   Über die Kanäle unten geht alles, was die App auf der Platte und im Konto
+   tun kann. Bisher zählte nur, DASS eine Nachricht kam. Jetzt muss sie vom
+   Hauptrahmen der eigenen Oberfläche stammen – nicht aus dem Anmeldefenster,
+   nicht aus einem eingebetteten Rahmen und nicht von einer fremden Seite,
+   sollte das Fenster je dorthin geraten.
+
+   Bewusst hier oben und um ipcMain herum: so gilt es für jeden Kanal, auch
+   für den nächsten, den jemand ergänzt.
+   ══════════════════════════════════════════════════════════════════════ */
+function istEigeneAdresse(adresse) {
+  try { return !!uiOrigin && new URL(String(adresse)).origin === uiOrigin; }
+  catch (err) { return false; }
+}
+
+function absenderIstOberflaeche(event) {
+  const rahmen = event.senderFrame;
+  return !!rahmen && rahmen === event.sender.mainFrame && istEigeneAdresse(rahmen.url);
+}
+
+for (const art of ['handle', 'on']) {
+  const original = ipcMain[art].bind(ipcMain);
+  ipcMain[art] = (kanal, tu) => original(kanal, (event, ...angaben) => {
+    if (!absenderIstOberflaeche(event)) {
+      console.error('[Sicherheit] Fremder Absender abgewiesen:', kanal);
+      if (art === 'handle') throw new Error('Nicht erlaubt');
+      return undefined;
+    }
+    return tu(event, ...angaben);
+  });
+}
+
+/* Welche Berechtigungen die Oberfläche bekommt. Sonst fragt niemand: Chromium
+   liesse ohne Handler auch Kamera, Mikrofon und Standort durch. Die
+   Zwischenablage gehört dazu, weil Bilder über navigator.clipboard kommen
+   (core/importExport.js). */
+const ERLAUBTE_RECHTE = new Set(['clipboard-read', 'clipboard-sanitized-write', 'fullscreen']);
+
+function setzeRechte() {
+  session.defaultSession.setPermissionRequestHandler((inhalt, recht, antwort, angaben) => {
+    const von = (angaben && angaben.requestingUrl) || inhalt.getURL();
+    antwort(ERLAUBTE_RECHTE.has(recht) && istEigeneAdresse(von));
+  });
+}
+
+/* Dieselbe Prüfung wie im Kanal open-external. Ohne sie ging alles, was ein
+   window.open nannte, ungesehen ans Betriebssystem – auch file: oder ein
+   Protokoll, das ein Programm startet. */
+function nachAussen(adresse) {
+  let ziel;
+  try { ziel = new URL(String(adresse)); } catch (err) { return false; }
+  if (!EXTERN_ERLAUBT.has(ziel.protocol)) {
+    console.error('[Sicherheit] Nach aussen abgelehnt:', ziel.protocol);
+    return false;
+  }
+  shell.openExternal(ziel.href).catch(() => {});
+  return true;
+}
 
 let releaseInfo = null;
 let downloadedUpdatePath = null;
@@ -631,6 +692,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -680,9 +742,21 @@ function createWindow() {
       };
     }
     // Alles andere gehört in den Standardbrowser, nicht in die App
-    shell.openExternal(url).catch(() => {});
+    nachAussen(url);
     return { action: 'deny' };
   });
+
+  /* Das Hauptfenster bleibt auf der eigenen Oberfläche. Es trägt window.api –
+     eine fremde Seite darin bekäme alles, was die App kann. Auch eine auf das
+     Fenster gezogene Datei oder ein durchgerutschter Verweis wären so ein
+     Seitenwechsel. Verweise gehen in den Browser, alles andere fällt weg. */
+  const nurEigeneSeiten = (event, ziel) => {
+    if (istEigeneAdresse(ziel)) return;
+    event.preventDefault();
+    nachAussen(ziel);
+  };
+  win.webContents.on('will-navigate', nurEigeneSeiten);
+  win.webContents.on('will-redirect', nurEigeneSeiten);
 
   /* Mit show:false muss jemand das Fenster zeigen – das ist hier. Der
      Titel wird festgehalten: die Anmeldeseiten setzen unterwegs ihre
@@ -697,6 +771,11 @@ function createWindow() {
      unsichtbares Fenster, das auf eine Eingabe wartet, kann niemand
      bedienen. */
   win.webContents.on('did-create-window', (child) => {
+    // Was die Anmeldeseite selbst öffnet (Nutzungsbedingungen …), geht in den Browser
+    child.webContents.setWindowOpenHandler(({ url }) => {
+      nachAussen(url);
+      return { action: 'deny' };
+    });
     if (stilleAnmeldungBis > Date.now()) {
       setTimeout(() => { if (!child.isDestroyed()) child.close(); }, SILENT_AUTH_MS);
       return;
@@ -1283,7 +1362,9 @@ async function handleTokenRequest(url, bodyObj) {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body
+      body,
+      // Ohne Grenze wartet die Anmeldung auf einer toten Leitung für immer
+      signal: AbortSignal.timeout(30000)
     });
 
     const data = await res.json().catch(() => ({}));
@@ -1339,6 +1420,8 @@ function classifyDeepLink(urlStr) {
 
   let linkId = match[1];
   try { linkId = decodeURIComponent(linkId); } catch (e) { /* roh nehmen */ }
+  // Den Aufruf kann jede Webseite auslösen – nur eine echte Kennung geht weiter
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(linkId)) return { kind: 'ungueltig' };
   return { kind: 'share', linkId };
 }
 
@@ -1357,8 +1440,14 @@ function routeDeepLink(urlStr, { buffer = true } = {}) {
      hatte. */
   const delivered = !!(win && win.webContents && !win.webContents.isLoading());
 
+  if (info.kind === 'ungueltig') {
+    console.warn('[Sicherheit] Freigabe-Link ohne gültige Kennung abgewiesen');
+    return info;
+  }
+
   if (info.kind === 'share') {
-    console.log('[main] Freigabe-Link erhalten:', info.linkId);
+    // Die Kennung selbst nicht ins Protokoll: sie ist der Schlüssel zum Dokument
+    console.log('[main] Freigabe-Link erhalten');
     if (buffer && !delivered) pendingShareLink = info.linkId;
     if (win) {
       try { win.webContents.send('open-share', info.linkId); }
@@ -1605,6 +1694,7 @@ app.whenReady().then(async () => {
     return;
   }
 
+  setzeRechte();
   createWindow();
   
   /* ══════════════════════════════════════════════════════════════════

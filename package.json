@@ -37,6 +37,7 @@
     "test:schreiben": "electron scripts/test-schreiben",
     "test:rundgang": "electron scripts/test-rundgang",
     "test:web": "electron scripts/test-website",
+    "test:fenster": "electron scripts/test-fensterschutz",
     "werbebilder": "electron scripts/werbebilder",
     "werbefilm": "electron scripts/werbefilm"
   },
