@@ -363,6 +363,7 @@
       profileIconSvg.style.display = 'none';
       profileIconAvatar.style.display = 'flex';
       profileIconAvatar.textContent = (name[0] || '?').toUpperCase();
+      profileIconAvatar.style.background = '';
       profileIconAvatar.title = email;
       profileBtn.title = email;
       return;
