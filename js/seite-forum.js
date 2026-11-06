@@ -1,0 +1,567 @@
+/* Die Anmeldung läuft weiterhin über Google bzw. Microsoft (js/common.js).
+   Firestore dient hier nur als Datenbank für Beiträge und Antworten:
+
+     community_posts/{postId}
+     community_posts/{postId}/replies/{replyId}
+
+   Alle Datenbankaufrufe stecken in js/firebase.js und sind über
+   window.InkwellsForum erreichbar. */
+
+let posts = [];
+let currentFilter = 'all';
+let forumIdentity = {
+  loaded: false,
+  loggedIn: false,
+  displayName: '',
+  email: ''
+};
+let forumIdentityPromise = null;
+
+/* Ist das Adminkonto angemeldet? Steuert nur, ob Löschknöpfe und das Feld
+   "Als Inkwells Team antworten" auftauchen. Ob das Löschen dann auch
+   gelingt, entscheidet Firestore (website/firestore.rules) – hier eine
+   Variable umzustellen bringt niemandem etwas. */
+let forumIsAdmin = false;
+
+function togglePostForm() {
+  const card = document.getElementById('post-form-card');
+  card.classList.toggle('open');
+  if (card.classList.contains('open')) {
+    syncForumAuthorField('post');
+  }
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.forum-filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('filter-' + filter).classList.add('active');
+  renderFeed();
+}
+
+function toggleReplyForm(postId) {
+  const form = document.getElementById('reply-form-' + postId);
+  if (form) {
+    form.classList.toggle('open');
+    if (form.classList.contains('open')) {
+      syncForumAuthorField('reply-' + postId);
+    }
+  }
+}
+
+function getForumAnonymousName() {
+  return t('community_anonymous_name') || 'Anonym';
+}
+
+function getForumGuestName() {
+  return t('community_guest_name') || 'Gast';
+}
+
+// session stammt aus getInkwellsSession() (Google-Profil)
+function extractForumAuthorName(session) {
+  const candidates = [
+    session && session.name,
+    session && session.email ? session.email.split('@')[0] : ''
+  ];
+  const resolved = candidates.find(value => typeof value === 'string' && value.trim());
+  return resolved ? resolved.trim() : getForumGuestName();
+}
+
+function getForumStoredAuthorName() {
+  return localStorage.getItem('inkwells_forum_author_name') || localStorage.getItem('inkwells_forum_name') || '';
+}
+
+function getForumPreferredAuthorName() {
+  const storedName = getForumStoredAuthorName();
+  if (storedName && storedName !== getForumAnonymousName()) return storedName;
+  if (forumIdentity.loggedIn && forumIdentity.displayName) return forumIdentity.displayName;
+  return '';
+}
+
+function getForumActiveAuthorName() {
+  if (isForumAnonymous()) return getForumAnonymousName();
+  if (forumIdentity.loggedIn) return forumIdentity.displayName || getForumPreferredAuthorName() || '';
+  return getForumPreferredAuthorName();
+}
+
+function isForumAnonymous() {
+  return localStorage.getItem('inkwells_forum_author_anonymous') === 'true';
+}
+
+function syncForumAuthorField(kind) {
+  const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
+  const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
+  if (!input || !checkbox) return;
+
+  // Als Admin steht der Name fest und lässt sich nicht ändern.
+  if (forumIsAdmin) {
+    checkbox.checked = false;
+    const toggle = checkbox.closest('.forum-author-toggle');
+    if (toggle) toggle.style.display = 'none';
+    input.value = ADMIN_DISPLAY_NAME;
+    input.disabled = true;
+    input.required = false;
+    updateForumAuthorState(kind, false);
+    return;
+  }
+
+  const anonymous = isForumAnonymous();
+  checkbox.checked = anonymous;
+  if (anonymous) {
+    input.dataset.previousValue = getForumStoredAuthorName() || forumIdentity.displayName || '';
+    input.value = getForumAnonymousName();
+    input.disabled = true;
+    input.required = false;
+    updateForumAuthorState(kind, true);
+    return;
+  }
+
+  if (forumIdentity.loggedIn) {
+    input.value = forumIdentity.displayName || getForumPreferredAuthorName();
+    input.disabled = true;
+    input.required = false;
+    updateForumAuthorState(kind, false);
+    return;
+  }
+
+  input.disabled = false;
+  input.required = true;
+  input.value = getForumPreferredAuthorName();
+  updateForumAuthorState(kind, false);
+}
+
+function syncForumAuthorDraft(kind) {
+  const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
+  const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
+  if (!input || !checkbox || input.disabled || checkbox.checked) return;
+
+  const trimmed = input.value.trim();
+  if (trimmed) {
+    localStorage.setItem('inkwells_forum_author_name', trimmed);
+    localStorage.setItem('inkwells_forum_name', trimmed);
+    localStorage.setItem('inkwells_forum_author_anonymous', 'false');
+  }
+}
+
+function toggleForumAnonymous(kind) {
+  const input = document.getElementById(kind === 'post' ? 'post-author' : `reply-author-${kind.split('-').slice(1).join('-')}`);
+  const checkbox = document.getElementById(kind === 'post' ? 'post-author-anonymous' : `reply-author-anonymous-${kind.split('-').slice(1).join('-')}`);
+  if (!input || !checkbox) return;
+
+  if (checkbox.checked) {
+    input.dataset.previousValue = input.value.trim() || getForumStoredAuthorName() || forumIdentity.displayName || '';
+    input.value = getForumAnonymousName();
+    input.disabled = true;
+    input.required = false;
+    localStorage.setItem('inkwells_forum_author_anonymous', 'true');
+    return;
+  }
+
+  input.disabled = false;
+  localStorage.setItem('inkwells_forum_author_anonymous', 'false');
+
+  const restored = input.dataset.previousValue || getForumPreferredAuthorName();
+  input.value = forumIdentity.loggedIn ? (forumIdentity.displayName || restored) : restored;
+  input.disabled = forumIdentity.loggedIn;
+  input.required = !forumIdentity.loggedIn;
+  if (!forumIdentity.loggedIn && restored && restored !== getForumAnonymousName()) {
+    localStorage.setItem('inkwells_forum_author_name', restored);
+    localStorage.setItem('inkwells_forum_name', restored);
+  }
+}
+
+function updateForumAuthorState(kind, anonymous) {
+  const stateEl = document.getElementById(kind === 'post' ? 'post-author-state' : `reply-author-state-${kind.split('-').slice(1).join('-')}`);
+  if (!stateEl) return;
+}
+
+function updateForumCounter(inputId, max) {
+  const input = document.getElementById(inputId);
+  const counter = document.getElementById(inputId + '-counter');
+  if (!input || !counter) return;
+
+  const remaining = Math.max(0, max - (input.value || '').length);
+  counter.textContent = tf('community_chars_left_of', { left: remaining, max });
+}
+
+function updateForumReplyCounters(postId) {
+  updateForumCounter(`reply-content-${postId}`, 500);
+}
+
+// Identität kommt aus der Google-Session im localStorage – kein Netzwerkaufruf nötig.
+async function ensureForumIdentity() {
+  if (forumIdentityPromise) return forumIdentityPromise;
+
+  forumIdentityPromise = (async () => {
+    const session = getInkwellsSession();
+
+    forumIdentity = session
+      ? {
+          loaded: true,
+          loggedIn: true,
+          displayName: extractForumAuthorName(session),
+          email: session.email || ''
+        }
+      : {
+          loaded: true,
+          loggedIn: false,
+          displayName: '',
+          email: ''
+        };
+
+    return forumIdentity;
+  })();
+
+  return forumIdentityPromise;
+}
+
+function toggleRepliesList(postId) {
+  const list = document.getElementById('replies-list-' + postId);
+  const icon = document.getElementById('replies-icon-' + postId);
+  if (list) {
+    if (list.style.display === 'none') {
+      list.style.display = 'flex';
+      if (icon) icon.textContent = '▲';
+    } else {
+      list.style.display = 'none';
+      if (icon) icon.textContent = '▼';
+    }
+  }
+}
+
+// Nimmt jetzt ein Date entgegen (aus dem Firestore-Timestamp umgewandelt),
+// verkraftet aber weiterhin ISO-Zeichenketten aus dem Altbestand.
+function getFormattedDate(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  // Ohne diese Prüfung stand bei fehlerhaften Zeitstempeln "Invalid Date"
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = lang === 'de' ? 'de-DE' : lang === 'it' ? 'it-IT' : 'en-GB';
+  return date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// --- Firestore ---
+
+// Das Modul js/firebase.js läuft erst nach diesem Script. Bis dahin gibt es
+// window.InkwellsForum noch nicht – hier wird darauf gewartet, statt beim
+// ersten Aufruf ins Leere zu greifen.
+function whenForumDbReady() {
+  if (window.InkwellsForum) return Promise.resolve(window.InkwellsForum);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Die Verbindung zur Forums-Datenbank konnte nicht aufgebaut werden.'));
+    }, 15000);
+
+    document.addEventListener('inkwells-forum-ready', () => {
+      clearTimeout(timer);
+      if (window.InkwellsForum) resolve(window.InkwellsForum);
+      else reject(new Error('Die Forums-Datenbank ist nicht verfügbar.'));
+    }, { once: true });
+  });
+}
+
+async function loadPosts() {
+  try {
+    const db = await whenForumDbReady();
+    /* Nur Kennungen, wie addDoc sie erzeugt. Sie stehen unten in Attributen und
+       onclick, und über die Datenbank-Schnittstelle kann sich jeder eine
+       eigene aussuchen – auch eine mit Anführungszeichen. Die Regeln weisen
+       das inzwischen ab; dies hier schützt auch vor Altbestand. */
+    const istKennung = (id) => /^[A-Za-z0-9]{20}$/.test(String(id));
+    posts = (await db.listPosts())
+      .filter(p => istKennung(p.id))
+      .map(p => ({ ...p, replies: (p.replies || []).filter(r => istKennung(r.id)) }));
+    renderFeed();
+  } catch (err) {
+    console.error('Forum load error:', err);
+    document.getElementById('forum-feed-list').innerHTML =
+      `<div class="forum-error">${escapeHtml(err.message || 'Fehler beim Laden der Beiträge')}</div>`;
+  }
+}
+
+async function handleCreatePost(event) {
+  event.preventDefault();
+
+  const title = document.getElementById('post-title').value.trim();
+  const type = document.getElementById('post-type').value;
+  const authorInput = document.getElementById('post-author');
+  const anonymous = document.getElementById('post-author-anonymous').checked;
+  const author = forumIsAdmin
+    ? ADMIN_DISPLAY_NAME
+    : (anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName())));
+  const content = document.getElementById('post-content').value.trim();
+
+  if (!title || !content) return;
+
+  // Geschützte Namen abfangen, bevor die Datenbank sie ablehnt: sonst käme
+  // nur ein "permission-denied" zurück, mit dem niemand etwas anfangen kann.
+  const nameError = checkAuthorName(author, forumIsAdmin);
+  if (nameError) {
+    alert(nameError);
+    return;
+  }
+
+  localStorage.setItem('inkwells_forum_author_anonymous', anonymous ? 'true' : 'false');
+  // Der Adminname wird nicht gemerkt – sonst stünde er nach dem Abmelden
+  // noch im Formular des nächsten Besuchers an diesem Gerät.
+  if (!anonymous && !forumIsAdmin) {
+    localStorage.setItem('inkwells_forum_author_name', author);
+    localStorage.setItem('inkwells_forum_name', author);
+  }
+
+  const submitBtn = event.target.querySelector('[type="submit"]');
+  submitBtn.disabled = true;
+
+  try {
+    const db = await whenForumDbReady();
+    await db.createPost({ type, title, author, content });
+
+    document.getElementById('new-post-form').reset();
+    syncForumAuthorField('post');
+    updateForumCounter('post-title', 120);
+    updateForumCounter('post-content', 2000);
+    togglePostForm();
+    await loadPosts();
+  } catch (err) {
+    console.error('Forum create post error:', err);
+    alert(err.message || 'Beitrag konnte nicht gespeichert werden.');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function handleCreateReply(event, postId) {
+  event.preventDefault();
+
+  const form = event.target;
+  const authorInput = form.querySelector('.reply-author-input');
+  const anonymous = form.querySelector('.reply-author-anonymous').checked;
+  const author = forumIsAdmin
+    ? ADMIN_DISPLAY_NAME
+    : (anonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? (forumIdentity.displayName || getForumPreferredAuthorName()) : (authorInput.value.trim() || getForumPreferredAuthorName() || getForumGuestName())));
+  const content = form.querySelector('.reply-content-input').value.trim();
+  if (!content) return;
+
+  const nameError = checkAuthorName(author, forumIsAdmin);
+  if (nameError) {
+    alert(nameError);
+    return;
+  }
+
+  localStorage.setItem('inkwells_forum_author_anonymous', anonymous ? 'true' : 'false');
+  // Der Adminname wird nicht gemerkt – sonst stünde er nach dem Abmelden
+  // noch im Formular des nächsten Besuchers an diesem Gerät.
+  if (!anonymous && !forumIsAdmin) {
+    localStorage.setItem('inkwells_forum_author_name', author);
+    localStorage.setItem('inkwells_forum_name', author);
+  }
+
+  const submitBtn = form.querySelector('.reply-submit-btn');
+  submitBtn.disabled = true;
+
+  try {
+    const db = await whenForumDbReady();
+    // Kein post_id mehr: die Antwort landet in der Unter-Sammlung des Beitrags.
+    await db.createReply(postId, { author, content });
+
+    await loadPosts();
+  } catch (err) {
+    console.error('Forum create reply error:', err);
+    alert(err.message || 'Antwort konnte nicht gespeichert werden.');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+/* ── Moderation ─────────────────────────────────────────────────────
+   Erscheint nur, wenn das Adminkonto angemeldet ist. Die Knöpfe rufen
+   diese Funktionen aus data-tu-click="…" auf, deshalb stehen sie hier im
+   globalen Gültigkeitsbereich.
+
+   Dass hier gelöscht werden darf, entscheidet nicht diese Seite, sondern
+   Firestore anhand der angemeldeten Kennung. Wer die Knöpfe im Browser
+   selbst einblendet, bekommt beim Klick ein "permission-denied". */
+
+async function adminDeletePost(postId) {
+  const post = posts.find(p => p.id === postId);
+  const ok = await askConfirm({
+    title: t('admin_del_post_title'),
+    body: post ? `„${post.title}“ — ${t('admin_del_post_body')}` : t('admin_del_post_body'),
+    confirm: t('admin_del_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    const db = await whenForumDbReady();
+    await db.deletePost(postId);
+    await loadPosts();
+  } catch (err) {
+    console.error('Forum delete post error:', err);
+    alert(describeAdminError(err));
+  }
+}
+
+async function adminDeleteReply(postId, replyId) {
+  const ok = await askConfirm({
+    title: t('admin_del_reply_title'),
+    body: t('admin_del_reply_body'),
+    confirm: t('admin_del_confirm'),
+    danger: true
+  });
+  if (!ok) return;
+
+  try {
+    const db = await whenForumDbReady();
+    await db.deleteReply(postId, replyId);
+    await loadPosts();
+  } catch (err) {
+    console.error('Forum delete reply error:', err);
+    alert(describeAdminError(err));
+  }
+}
+
+// --- Rendering ---
+
+function renderFeed() {
+  const container = document.getElementById('forum-feed-list');
+  container.innerHTML = '';
+
+  const filtered = posts.filter(p => currentFilter === 'all' || p.type === currentFilter);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="v-loading" style="border:0.5px solid var(--navy-border); background:var(--navy-card);" data-i18n="community_no_posts">${t('community_no_posts')}</div>`;
+    return;
+  }
+
+  const savedName = getForumPreferredAuthorName();
+  const savedAnonymous = isForumAnonymous();
+  const activeAuthorName = getForumActiveAuthorName();
+
+  filtered.forEach(post => {
+    const card = document.createElement('div');
+    card.className = `post-item-card ${post.type}`;
+
+    const badgeText = post.type === 'question' ? t('community_type_question') : t('community_type_bug');
+    const replyCount = post.replies ? post.replies.length : 0;
+    const isAnonPost = ['Anonym', 'Anonymous', 'Anonimo'].includes(post.author);
+
+    let html = `
+      <div class="post-meta-line">
+        <span class="post-badge ${post.type}">${badgeText}</span>
+        <span class="post-author-time">${isAnonPost ? '' : `von <strong>${escapeHtml(post.author)}</strong> `}${getFormattedDate(post.created_at) ? 'am ' + getFormattedDate(post.created_at) : ''}</span>
+        ${forumIsAdmin ? `<button type="button" class="forum-del-btn" data-tu-click="adminDeletePost('${post.id}')">${escapeHtml(t('admin_mod_delete_post'))}</button>` : ''}
+      </div>
+      <h3>${escapeHtml(post.title)}</h3>
+      <div class="post-body-text">${escapeHtml(post.content)}</div>
+      <div class="replies-section">
+        <div class="replies-header">
+          <span class="replies-title" style="cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:4px;" data-tu-click="toggleRepliesList('${post.id}')">
+            ${replyCount} ${t('community_replies')}
+            ${replyCount > 0 ? `<span id="replies-icon-${post.id}">▼</span>` : ''}
+          </span>
+          <button type="button" class="reply-toggle-btn" data-tu-click="toggleReplyForm('${post.id}')">
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            ${t('community_reply_btn')}
+          </button>
+        </div>`;
+
+    /* >>> Erst das Formular, dann die Antworten <<<
+       Vorher stand es hinter der Liste. Bei einem Beitrag mit vielen
+       Antworten sprang der Klick auf „Antworten" damit ans Ende der Liste
+       – das Feld war außerhalb des Bildes und sah aus, als sei nichts
+       passiert. Es gehört direkt unter den Kopf der Antworten. */
+    html += `
+        <form id="reply-form-${post.id}" class="reply-form" data-tu-submit="handleCreateReply(event, '${post.id}')">
+          <div class="reply-form-row">
+            <input type="text" id="reply-author-${post.id}" class="reply-author-input" maxlength="60" ${forumIsAdmin || savedAnonymous || forumIdentity.loggedIn ? '' : 'required'} placeholder="${t('community_post_author')}" value="${escapeHtml(forumIsAdmin ? ADMIN_DISPLAY_NAME : (savedAnonymous ? getForumAnonymousName() : (forumIdentity.loggedIn ? activeAuthorName : savedName)))}" ${forumIsAdmin || savedAnonymous || forumIdentity.loggedIn ? 'disabled' : ''} data-tu-input="syncForumAuthorDraft('reply-${post.id}')">
+            <!-- Als Admin steht der Name fest; das Kästchen bleibt im
+                 Dokument (der Absende-Code liest es aus), aber unsichtbar. -->
+            <label class="forum-author-toggle" for="reply-author-anonymous-${post.id}" style="align-self:center; white-space:nowrap;${forumIsAdmin ? ' display:none;' : ''}">
+              <input type="checkbox" class="reply-author-anonymous" id="reply-author-anonymous-${post.id}" ${!forumIsAdmin && savedAnonymous ? 'checked' : ''} data-tu-change="toggleForumAnonymous('reply-${post.id}')">
+              <span data-i18n="community_author_anonymous">Anonym posten</span>
+            </label>
+            <div class="forum-input-group" style="margin:0; width:100%;">
+              <div class="forum-input-header">
+                <label for="reply-content-${post.id}" data-i18n="community_add_reply">Antwort verfassen...</label>
+                <span class="forum-char-counter" id="reply-content-${post.id}-counter">${tf('community_chars_left_of', { left: 500, max: 500 })}</span>
+              </div>
+              <textarea id="reply-content-${post.id}" class="reply-content-input" rows="2" maxlength="500" required placeholder="${t('community_add_reply')}" data-tu-input="updateForumCounter('reply-content-${post.id}', 500)"></textarea>
+            </div>
+          </div>
+          <button type="submit" class="reply-submit-btn">${t('community_reply_btn')}</button>
+        </form>`;
+
+    if (replyCount > 0) {
+      html += `<div id="replies-list-${post.id}" style="display:none; flex-direction:column; gap:8px; margin-top:14px;">`;
+      post.replies.forEach(reply => {
+        const isAnonReply = ['Anonym', 'Anonymous', 'Anonimo'].includes(reply.author);
+        /* Angeheftet steht sie ohnehin schon oben (js/firebase.js). Der
+           Streifen sagt, WARUM sie oben steht – sonst sähe die
+           Reihenfolge nach Zufall aus. */
+        const vomTeam = ['inkwells team', 'inkwell team']
+          .includes(String(reply.author || '').trim().toLowerCase());
+        html += `
+          <div class="reply-item${vomTeam ? ' vom-team' : ''}">
+            <div class="reply-meta">
+              ${isAnonReply ? '' : `<strong>${escapeHtml(reply.author)}</strong>`}
+              <span>${getFormattedDate(reply.created_at)}</span>
+              ${forumIsAdmin ? `<button type="button" class="forum-del-btn" data-tu-click="adminDeleteReply('${post.id}', '${reply.id}')">${escapeHtml(t('admin_mod_delete_reply'))}</button>` : ''}
+            </div>
+            <div class="reply-text">${escapeHtml(reply.content)}</div>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+
+    card.innerHTML = html;
+    container.appendChild(card);
+  });
+}
+
+// Muss auch Anführungszeichen maskieren: der Rückgabewert landet teils in
+// Attributen wie value="...". Ohne das könnte ein Name mit " aus dem
+// Attribut ausbrechen und eigene Attribute einschleusen.
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// --- Init ---
+
+document.addEventListener('DOMContentLoaded', () => {
+  (async () => {
+    await ensureForumIdentity();
+
+    /* Die Adminsitzung endet, sobald man die Verwaltung verlässt – hier
+       wird das erledigt (js/common.js). Erst danach fragen, sonst sähe
+       man die Löschen-Knöpfe genau so lange aufblitzen, wie das Abmelden
+       dauert. */
+    await (window.inkwellsAdminSessionEnded || Promise.resolve());
+
+    // Vor dem ersten Zeichnen klären, ob moderiert werden darf – sonst
+    // erschiene der Feed zweimal, einmal ohne und einmal mit Knöpfen.
+    forumIsAdmin = await isAdminSignedIn();
+
+    syncForumAuthorField('post');
+    updateForumCounter('post-title', 120);
+    updateForumCounter('post-content', 2000);
+
+    if (typeof addLangChangeListener === 'function') {
+      addLangChangeListener(() => {
+        syncForumAuthorField('post');
+        updateForumCounter('post-title', 120);
+        updateForumCounter('post-content', 2000);
+        renderFeed();
+      });
+    }
+
+    loadPosts();
+  })();
+});

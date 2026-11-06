@@ -14,14 +14,14 @@
    (statische Seiten auf GitHub Pages), deshalb kommt das SDK als ES-Modul
    direkt von Googles CDN. Weil ein <script type="module"> seinen eigenen
    Gültigkeitsbereich hat, die Forenseite ihre Funktionen aber aus
-   onclick="…"-Attributen aufruft, wird hier eine kleine Fassade unter
+   data-tu-click="…"-Attributen aufruft, wird hier eine kleine Fassade unter
    window.InkwellsForum bereitgestellt.
 
-   Version des SDK bewusst festgenagelt – so ändert sich nichts unter der
-   Hand. Zum Aktualisieren nur die Nummer in beiden Import-Zeilen tauschen.
+   Das SDK liegt gebündelt unter lib/firebase/ – so ändert sich nichts unter
+   der Hand. Zum Aktualisieren: scripts/build-firebase.js im App-Branch.
    ══════════════════════════════════════════════════════════════════════ */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+import { initializeApp } from '../lib/firebase/kern.js';
 import {
   getFirestore,
   collection,
@@ -37,7 +37,7 @@ import {
   onSnapshot,
   serverTimestamp,
   limit
-} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+} from '../lib/firebase/kern.js';
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -46,7 +46,7 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider
-} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+} from '../lib/firebase/kern.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
    Diese Werte sind KEIN Geheimnis. Der Firebase-"apiKey" ist nur eine
@@ -714,7 +714,7 @@ function watchPosts(onChange, onError) {
 
 /* ── Fassade für die Forenseite ─────────────────────────────────────
    community/index.html ist ein klassisches Script (die Bedienelemente
-   rufen ihre Funktionen aus onclick="…" auf und brauchen deshalb den
+   rufen ihre Funktionen aus data-tu-click="…" auf und brauchen deshalb den
    globalen Gültigkeitsbereich). Über window kommen beide Welten zusammen.
    ─────────────────────────────────────────────────────────────────── */
 

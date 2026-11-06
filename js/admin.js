@@ -2,7 +2,7 @@
    ADMIN – gemeinsame Helfer für alle Seiten
 
    Diese Datei ist ein klassisches Script (kein Modul), damit die Seiten
-   ihre Funktionen wie gewohnt aus onclick="…" aufrufen können. Die
+   ihre Funktionen wie gewohnt aus data-tu-click="…" aufrufen können. Die
    eigentliche Anbindung an Firebase steckt in js/firebase.js und kommt
    über window.InkwellsForum herein.
 

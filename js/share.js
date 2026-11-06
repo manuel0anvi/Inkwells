@@ -41,17 +41,17 @@
    Passendes Regelwerk: website/firestore.rules
    ══════════════════════════════════════════════════════════════════════ */
 
-import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+import { initializeApp, getApps, getApp } from '../lib/firebase/kern.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion,
   arrayRemove, deleteField, FieldPath, getCountFromServer
-} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+} from '../lib/firebase/kern.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
   GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut,
   signInWithPopup
-} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+} from '../lib/firebase/kern.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
    Kein Geheimnis – siehe die ausführliche Begründung in js/firebase.js.
@@ -1265,6 +1265,38 @@ function pagesInOrder(notebook) {
     if (!seen.has(String(page.id))) out.push(page);
   }
   return out;
+}
+
+/**
+ * Steht oben noch die nach Abschnitten gruppierte Reihenfolge aus der Zeit, als
+ * pagesInOrder über die pgIds ging?
+ *
+ * Korrigiert wird NUR dieses Schadensbild. Weicht die Reihenfolge anders ab, hat
+ * womöglich ein Bearbeiter Seiten verschoben, und das darf der Stand auf diesem
+ * Gerät nicht überschreiben.
+ *
+ * @returns {string[]|null} die richtige Reihenfolge, oder null: nichts zu tun
+ */
+function gruppierteSeitenfolge(notebook, obenReihenfolge) {
+  if (notebook?.schemaVersion !== 2 || !Array.isArray(obenReihenfolge)) return null;
+  const richtig = pagesInOrder(notebook).map(p => String(p.id));
+  const gruppiert = [];
+  for (const sec of (notebook.sections || [])) {
+    for (const pgId of (sec?.pgIds || [])) gruppiert.push(String(pgId));
+  }
+  const drin = new Set(gruppiert);
+  for (const id of richtig) if (!drin.has(id)) gruppiert.push(id);
+
+  const oben = JSON.stringify(obenReihenfolge.map(String));
+  return oben === JSON.stringify(gruppiert) && oben !== JSON.stringify(richtig) ? richtig : null;
+}
+
+/** Bringt ein schon geteiltes Heft auf die richtige Reihenfolge, nur den Kopf. */
+async function seitenfolgeAbgleichen(docId, notebook, kopf) {
+  const richtig = gruppierteSeitenfolge(notebook, kopf && kopf.pageOrder);
+  if (!richtig) return false;
+  await schreibeKopfFort(docId, { pageOrder: richtig }, (kopf.revision || 0) + 1);
+  return true;
 }
 
 /**
@@ -3378,7 +3410,7 @@ let _rtdbPromise = null;
 function loadRealtime() {
   if (_rtdbPromise) return _rtdbPromise;
 
-  _rtdbPromise = import('https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js')
+  _rtdbPromise = import('../lib/firebase/echtzeit.js')
     .then((mod) => ({ mod, db: mod.getDatabase(app, RTDB_URL) }))
     .catch((err) => {
       _rtdbPromise = null;
@@ -4056,7 +4088,7 @@ async function joinDocRoom(docId, options = {}) {
     const stop = () => {
       beendet = true;
       clearTimeout(uhr);
-      if (aus) { try { aus(); } catch (e) {} }
+      if (aus) { try { aus(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
       aus = null;
     };
     stops.push(stop);
@@ -4321,7 +4353,7 @@ const CHAT_QUOTE_LEN = 140;
     if (chatAus) return true;
     chatAus = 'RULES';
     console.warn('[Share] Der Chat ist abgewiesen worden. ' + CHAT_HILFE);
-    for (const cb of chatHoerer) { try { cb(chatAus); } catch (e) {} }
+    for (const cb of chatHoerer) { try { cb(chatAus); } catch (e) { console.warn('[Sync]', e.message); } }
     return true;
   }
 
@@ -4339,7 +4371,7 @@ const CHAT_QUOTE_LEN = 140;
    */
   function onChatStatus(cb) {
     chatHoerer.add(cb);
-    try { cb(chatAus); } catch (e) {}
+    try { cb(chatAus); } catch (e) { console.warn('[Sync]', e.message); }
     return () => chatHoerer.delete(cb);
   }
 
@@ -4469,7 +4501,7 @@ const CHAT_QUOTE_LEN = 140;
   function onChatRemoved(callback) {
     return beharrlich((gut, weg) => onChildRemoved(
       rtQuery(chatRef, limitToLast(CHAT_BACKLOG)),
-      (snap) => { gut(); try { callback(snap.key); } catch (e) {} },
+      (snap) => { gut(); try { callback(snap.key); } catch (e) { console.warn('[Sync]', e.message); } },
       (err) => weg(err)
     ), 'Chat-Ruecknahme', chatEndgueltig);
   }
@@ -4574,14 +4606,14 @@ const CHAT_QUOTE_LEN = 140;
     clearInterval(chatPruneTimer);
     clearInterval(rollenTakt);
     clearInterval(pulsTakt);
-    for (const stop of stops) { try { stop(); } catch (e) {} }
-    try { await onDisconnect(meRef).cancel(); } catch (e) {}
-    try { await remove(meRef); } catch (e) {}
+    for (const stop of stops) { try { stop(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
+    try { await onDisconnect(meRef).cancel(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ }
+    try { await remove(meRef); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ }
 
     /* Die Tipp-Anzeige mitnehmen. Sie verfiele zwar von selbst
        (CHAT_TYPING_TTL_MS), aber „X schreibt gerade" von jemandem, der
        das Dokument eben zugemacht hat, sind sechs Sekunden zu viel. */
-    try { await remove(child(tippRef, me.uid)); } catch (e) {}
+    try { await remove(child(tippRef, me.uid)); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ }
 
     /* ══════════════════════════════════════════════════════════════════
        DER BESITZER NIMMT NUR DAS SCHREIBRECHT MIT, NICHT DIE GANZE LISTE
@@ -4612,7 +4644,7 @@ const CHAT_QUOTE_LEN = 140;
       /* Den Auftrag zuerst aufheben: er würde gleich darauf dasselbe tun,
          aber beim NÄCHSTEN Betreten womöglich zu spät kommen und dort das
          frisch geschriebene Schreibrecht wieder wegnehmen. */
-      try { await onDisconnect(child(rolesRef, 'w')).cancel(); } catch (e) {}
+      try { await onDisconnect(child(rolesRef, 'w')).cancel(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ }
       try { await set(child(rolesRef, 'w'), { [me.uid]: true }); }
       catch (e) { /* dann beim nächsten Mal */ }
     }
@@ -5128,6 +5160,7 @@ const InkwellsShare = {
   unshareDocument,
   loadDocumentHead,
   inhaltUnvollstaendig,
+  seitenfolgeAbgleichen,
   setLinkMode,
   rotateLink,
   setMember,
