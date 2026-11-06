@@ -755,7 +755,7 @@ function placeObject(objLayer, obj, page) {
          Ziehen danach GAR NICHT mehr aufsetzen: der Wurf kam vor dem
          Anmelden der Bewegung, und der Griff tat schlicht nichts.
          Ueberall sonst in dieser Datei steht der Fang schon so. */
-      try { h.setPointerCapture(e.pointerId); } catch (err) { }
+      try { h.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
       const sx = e.clientX, sy = e.clientY, ow = obj.w, oh = obj.h, ox = obj.x, oy = obj.y, ratio = oh / ow;
       const others = (page.objects || []).filter(o => o.id !== obj.id);
       let xs = [], ys = [], ws = [], hs = [];
@@ -867,7 +867,7 @@ function placeObject(objLayer, obj, page) {
          Ohne das blieb die Form fuer alle anderen gesperrt – der Anspruch
          wird im Live-Raum aufgefrischt, solange er gehalten gilt
          (ui/collab.js). */
-      const up = (ev) => { hideSnaps(); if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { h.releasePointerCapture(ev.pointerId); } catch (err) { } h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
+      const up = (ev) => { hideSnaps(); if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { h.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ } h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
       h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
     });
   });
@@ -886,7 +886,7 @@ function placeObject(objLayer, obj, page) {
       if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
     }
     e.stopPropagation(); e.preventDefault();
-    try { rotH.setPointerCapture(e.pointerId); } catch (err) { }
+    try { rotH.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
     const r = wrap.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const sa = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI, sr = obj.rot || 0;
     let _hasMutated = false;
@@ -897,7 +897,7 @@ function placeObject(objLayer, obj, page) {
       obj.rot = newRot; applyRotation();
     };
     // pointercancel wie beim Ziehgriff – siehe dort
-    const up = (ev) => { if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { rotH.releasePointerCapture(ev.pointerId); } catch (err) { } rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); rotH.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
+    const up = (ev) => { if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei(); try { rotH.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ } rotH.removeEventListener('pointermove', mv); rotH.removeEventListener('pointerup', up); rotH.removeEventListener('pointercancel', up); if (_hasMutated) noteObjectChanged(); };
     rotH.addEventListener('pointermove', mv); rotH.addEventListener('pointerup', up); rotH.addEventListener('pointercancel', up);
   });
   }
@@ -939,7 +939,7 @@ function placeObject(objLayer, obj, page) {
         if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
       }
         e.stopPropagation(); e.preventDefault();
-        try { g.setPointerCapture(e.pointerId); } catch (err) { }
+        try { g.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
 
         const start = shapeEnden(obj);
         // Beide Enden in Seiten-Koordinaten
@@ -994,7 +994,7 @@ function placeObject(objLayer, obj, page) {
         };
         const up = ev => {
           if (window.Collab && window.Collab.gibObjektFrei) window.Collab.gibObjektFrei();
-          try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
+          try { g.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
           g.removeEventListener('pointermove', mv);
           g.removeEventListener('pointerup', up);
           g.removeEventListener('pointercancel', up);
@@ -1477,7 +1477,7 @@ function placeObject(objLayer, obj, page) {
       const pgEl = wrap.closest('[data-pgid]');
       if (pgEl) window.Collab.beansprucheObjekt(pgEl.dataset.pgid, wrap.dataset.objid);
     }
-    try { body.setPointerCapture(e.pointerId); } catch (err) { }
+    try { body.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
     // Waehrend des Zugs darf das Bild ueber den Seitenrand hinausragen
     let aktPgEl = wrap.closest('.j-page');
     let aktPage = page, aktLayer = objLayer;
@@ -1575,7 +1575,7 @@ function placeObject(objLayer, obj, page) {
          deshalb oben kleben – gemeldet als „es geht ganz oben hin und
          nicht dahin, wo ich den Finger gelassen habe".
          ══════════════════════════════════════════════════════════════ */
-      try { body.setPointerCapture(ev.pointerId); } catch (err) { }
+      try { body.setPointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
       aktPgEl.classList.remove('obj-dragging');
       zielEl.classList.add('obj-dragging');
 
@@ -1622,7 +1622,7 @@ function placeObject(objLayer, obj, page) {
       if (window.Collab && typeof window.Collab.gibObjektFrei === 'function') {
         window.Collab.gibObjektFrei();
       }
-      try { body.releasePointerCapture(ev.pointerId); } catch (err) { }
+      try { body.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
       body.removeEventListener('pointermove', mv);
       body.removeEventListener('pointerup', up);
       body.removeEventListener('pointercancel', up);

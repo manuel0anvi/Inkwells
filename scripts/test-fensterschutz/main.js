@@ -14,6 +14,7 @@
 process.env.INKWELLS_PROFILE = 'test-fensterschutz';
 
 const electron = require('electron');
+require('../stabile-fenster.js');
 const { app, BrowserWindow, dialog, shell } = electron;
 const path = require('path');
 

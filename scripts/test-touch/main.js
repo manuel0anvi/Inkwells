@@ -33,6 +33,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const { app, BrowserWindow, ipcMain } = require('electron');
+require('../stabile-fenster.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -333,7 +334,7 @@ app.on('ready', async () => {
            sammelt nichts mehr in einem „⋯"-Menue. Hier standen deshalb
            zwei Abfragen auf Elemente, die es nicht mehr gibt – die zweite
            warf, und die ganze Pruefung brach an dieser Stelle ab. */
-        const m = await js(`(() => { const tb = document.querySelector('.toolbar');
+        const miss = () => js(`(() => { const tb = document.querySelector('.toolbar');
           const weiter = document.getElementById('btn-tb-next');
           const grp = [...tb.querySelectorAll('.tb-grp')];
           return { platz: Math.round(tb.clientWidth), noetig: Math.round(tb.scrollWidth),
@@ -341,6 +342,12 @@ app.on('ready', async () => {
                    weg: grp.filter(g => g.style.display === 'none').length,
                    da: grp.filter(g => g.style.display !== 'none').length,
                    knopf: weiter ? getComputedStyle(weiter).display : 'none' }; })()`);
+        // Blättern und Aufklappen laufen als Bewegung: nachsehen, bis sie durch sind
+        let m = await miss();
+        for (let i = 0; i < 8 && m.noetig > m.platz; i++) {
+          await new Promise(r => setTimeout(r, 250));
+          m = await miss();
+        }
         pruefe((lage + (navOffen ? ' + Navigation' : '')).padEnd(24)
           + m.noetig + ' von ' + m.platz + ' px'
           + (m.imMenue ? '  (geblättert)' : ''),
@@ -651,6 +658,8 @@ app.on('ready', async () => {
     await new Promise(r => setTimeout(r, 500));
     const stelleImText = await mitte('.j-comment-mark');
     if (stelleImText) await tippe('.j-comment-mark');
+    // Die Leiste füllt sich, wenn sie aufgegangen ist (ui/comments.js, 220 ms)
+    await new Promise(r => setTimeout(r, 400));
     const nachTipp = await js(`(() => ({
       offen: document.getElementById('comment-panel').classList.contains('open'),
       hervor: document.querySelectorAll('#comment-panel-list .comment-card.aktiv').length }))()`);

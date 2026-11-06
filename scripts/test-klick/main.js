@@ -22,6 +22,7 @@
    `npm run test:klick`; das Fenster muss sichtbar bleiben.
    ══════════════════════════════════════════════════════════════════════ */
 const { app, BrowserWindow, ipcMain } = require('electron');
+require('../stabile-fenster.js');
 const path = require('path');
 const os = require('os');
 const ROOT = path.resolve(__dirname, '..', '..');

@@ -1131,7 +1131,7 @@ document.addEventListener('pointerdown', e => {
 
     e.preventDefault();
     e.stopPropagation();
-    try { zGriff.setPointerCapture(e.pointerId); } catch (err) { }
+    try { zGriff.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
     zGriff.classList.add('j-zieht');
 
     const textDiv = table.closest('.j-text');
@@ -1161,7 +1161,7 @@ document.addEventListener('pointerdown', e => {
 
   e.preventDefault();
   e.stopPropagation();
-  try { griff.setPointerCapture(e.pointerId); } catch (err) { }
+  try { griff.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
   griff.classList.add('j-zieht');
 
   const textDiv = table.closest('.j-text');

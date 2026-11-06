@@ -1509,7 +1509,7 @@
          der Stand nach Firestore, bevor die anderen ihn überhaupt gesehen
          haben – und wer gerade dazukäme, sähe zwei verschiedene Fassungen. */
       if (window.Collab && typeof Collab.syncNow === 'function') {
-        try { Collab.syncNow(); } catch (e) {}
+        try { Collab.syncNow(); } catch (e) { console.warn('[Sync]', e.message); }
       }
 
       // Der Editor-Stand muss erst ins Datenmodell, sonst fehlt genau das,

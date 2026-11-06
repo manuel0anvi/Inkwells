@@ -12,7 +12,6 @@ contextBridge.exposeInMainWorld('api', {
   // Fertige Binärdatei speichern (Word-Export)
   saveBinary: (payload) => ipcRenderer.invoke('save-binary', payload),
   save:      (d) => ipcRenderer.invoke('save', d),
-  load:      ()  => ipcRenderer.invoke('load'),
   
   // Settings
   getDefaultSavePath: () => ipcRenderer.invoke('get-default-save-path'),

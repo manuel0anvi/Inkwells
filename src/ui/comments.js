@@ -246,7 +246,10 @@
   function zeichne() {
     if (!ebene.isConnected) return;
 
-    const pgId = S.activePgId;
+    /* Wer eine Stelle angetippt hat, will deren Karte sehen. Beim Aufgehen rechnet
+       der Zoom nach, das Blatt rollt ein Stück, und die aktive Seite kann auf den
+       Nachbarn wechseln – die Leiste zeigte dann dessen Kommentare. */
+    const pgId = _hervorSeite || S.activePgId;
     const kommentare = (pgId && typeof getPageComments === 'function')
       ? getPageComments(pgId) : [];
 
@@ -368,6 +371,7 @@
      Element: die Liste wird nach jedem Öffnen neu aufgebaut, und eine
      Klasse allein hätte diesen Neubau nicht überlebt. */
   let _hervor = null;
+  let _hervorSeite = null;   // die Seite der angetippten Stelle, solange die Leiste offen ist
 
   function setzeLeiste(offen) {
     const p = leiste();
@@ -393,7 +397,7 @@
       return;
     }
 
-    if (!offen) _hervor = null;
+    if (!offen) { _hervor = null; _hervorSeite = null; }
     p.classList.toggle('open', offen);
     if (typeof window.griffReiterNeu === 'function') window.griffReiterNeu();
     // Die Spalte wird schmaler: der Zoom passt die Seite neu ein
@@ -474,6 +478,8 @@
   document.addEventListener('pointerdown', e => {
     const mark = e.target.closest && e.target.closest('.j-comment-mark[data-cid]');
     if (!mark || randBreite() >= MIN_RAND) return;
+    const seite = mark.closest('[data-pgid]');
+    _hervorSeite = seite ? seite.dataset.pgid : null;
     zeigeInLeiste(mark.dataset.cid);
   }, true);
 

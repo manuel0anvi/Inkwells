@@ -33,7 +33,7 @@ function extract(name) {
 
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(extract('pagesInOrder'), ctx);
+vm.runInContext(extract('pagesInOrder') + extract('gruppierteSeitenfolge'), ctx);
 
 let fehler = 0;
 function pruefe(titel, ist, soll) {
@@ -56,6 +56,19 @@ pruefe('Altes Heft folgt weiter den Abschnitten',
   ids({ pages: [{ id: 'x' }, { id: 'y' }, { id: 'z' }], sections: [{ id: 's', pgIds: ['z', 'x'] }] }),
   ['z', 'x', 'y']);
 pruefe('Kein Heft: keine Seiten', ids(null), []);
+
+console.log('Schon geteilte Hefte');
+const heft = { schemaVersion: 2, pages: seiten, sections: abschnitte };
+const korrektur = (oben) => {
+  const r = ctx.gruppierteSeitenfolge(heft, oben);
+  return r ? Array.from(r) : null;
+};
+pruefe('Die alte gruppierte Reihenfolge wird korrigiert', korrektur(['a', 'c', 'b', 'd']), ['a', 'b', 'c', 'd']);
+pruefe('Stimmt sie schon, geschieht nichts', korrektur(['a', 'b', 'c', 'd']), null);
+pruefe('Hat ein Bearbeiter umsortiert, bleibt es dabei', korrektur(['d', 'a', 'b', 'c']), null);
+pruefe('Fehlt die Angabe, geschieht nichts', korrektur(undefined), null);
+pruefe('Ein altes Heft wird nicht angefasst',
+  ctx.gruppierteSeitenfolge({ pages: seiten, sections: abschnitte }, ['a', 'c', 'b', 'd']), null);
 
 if (fehler) { console.error(`${fehler} Pruefung(en) fehlgeschlagen.`); process.exit(1); }
 console.log('Alle Pruefungen bestanden.');

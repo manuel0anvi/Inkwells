@@ -825,10 +825,10 @@
     melde(false);
     clearTimeout(tippEnde);
 
-    if (typeof stopChat === 'function') { try { stopChat(); } catch (e) {} }
-    if (typeof stopWeg === 'function') { try { stopWeg(); } catch (e) {} }
-    if (typeof stopTipp === 'function') { try { stopTipp(); } catch (e) {} }
-    if (typeof stopStatus === 'function') { try { stopStatus(); } catch (e) {} }
+    if (typeof stopChat === 'function') { try { stopChat(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
+    if (typeof stopWeg === 'function') { try { stopWeg(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
+    if (typeof stopTipp === 'function') { try { stopTipp(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
+    if (typeof stopStatus === 'function') { try { stopStatus(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
     stopChat = null;
     stopWeg = null;
     stopTipp = null;

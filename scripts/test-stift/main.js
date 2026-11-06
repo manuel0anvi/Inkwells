@@ -26,6 +26,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const { app, BrowserWindow, ipcMain } = require('electron');
+require('../stabile-fenster.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -1022,7 +1023,7 @@ app.on('ready', async () => {
     pruefe('Ein aufliegender Handballen zoomt nicht (' + JSON.stringify(gewackelt) + ')',
       gewackelt.zoom === vorHand.zoom && Math.abs(gewackelt.oben - vorHand.oben) < 2,
       'vorher ' + JSON.stringify(vorHand));
-    pruefe('Und malt keinen Punkt', gewackelt.striche === 0, gewackelt.striche + ' Striche');
+    pruefe('Und malt keinen Punkt', gewackelt.striche === vorHand.striche, gewackelt.striche + ' Striche');
 
     // Die Hand rollt ab – weit genug, dass es wie ein Zoomen aussieht
     for (let i = 1; i <= 6; i++) await handZiehe(ballen(-i * 12, 0));
@@ -1068,7 +1069,7 @@ app.on('ready', async () => {
     await warte(150);
     const schwebend = await ansicht();
     pruefe('Schwebt der Stift, malt die Hand nicht (' + schwebend.striche + ' Striche)',
-      schwebend.striche === 0 && Math.abs(schwebend.oben - vorHand.oben) < 3,
+      schwebend.striche === vorHand.striche && Math.abs(schwebend.oben - vorHand.oben) < 3,
       JSON.stringify(schwebend));
 
     /* ══════════════════════════════════════════════════════════════════

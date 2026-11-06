@@ -345,7 +345,7 @@
           stelleLeiste();
         };
         const up = ev => {
-          try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
+          try { g.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
           g.removeEventListener('pointermove', mv);
           g.removeEventListener('pointerup', up);
           g.removeEventListener('pointercancel', up);
@@ -444,7 +444,7 @@
             zeichneHuelle();
           };
           const up = ev => {
-            try { g.releasePointerCapture(ev.pointerId); } catch (err) { }
+            try { g.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
             g.removeEventListener('pointermove', mv);
             g.removeEventListener('pointerup', up);
             g.removeEventListener('pointercancel', up);
@@ -582,7 +582,7 @@
         zielEl.appendChild(huelle);
         /* Ein umgehängtes Element verliert den gefangenen Zeiger; ohne
            das Nachfangen bliebe die Auswahl beim Übertritt stehen. */
-        try { huelle.setPointerCapture(ev.pointerId); } catch (err) { }
+        try { huelle.setPointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
 
         aktId = zielId; aktEl = zielEl;
         _sel.pageId = zielId; _sel.pageEl = zielEl;
@@ -621,7 +621,7 @@
         stelleLeiste();
       };
       const up = ev => {
-        try { huelle.releasePointerCapture(ev.pointerId); } catch (err) { }
+        try { huelle.releasePointerCapture(ev.pointerId); } catch (err) { /* Zeiger schon weg */ }
         huelle.removeEventListener('pointermove', mv);
         huelle.removeEventListener('pointerup', up);
         huelle.removeEventListener('pointercancel', up);

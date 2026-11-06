@@ -1117,7 +1117,7 @@ function bindeFarbZiehen(el, ausPunkt, schliesstBeimAbheben) {
     ev.preventDefault();
     ev.stopPropagation();
     zieht = true;
-    try { el.setPointerCapture(ev.pointerId); } catch (e) { }
+    try { el.setPointerCapture(ev.pointerId); } catch (e) { /* Zeiger schon weg */ }
     setze(ev, false);
   });
   el.addEventListener('pointermove', ev => {
@@ -1128,7 +1128,7 @@ function bindeFarbZiehen(el, ausPunkt, schliesstBeimAbheben) {
   const fertig = (ev, abgebrochen) => {
     if (!zieht) return;
     zieht = false;
-    try { el.releasePointerCapture(ev.pointerId); } catch (e) { }
+    try { el.releasePointerCapture(ev.pointerId); } catch (e) { /* Zeiger schon weg */ }
     // Die Farbe steht auch nach einem Abbruch – gewaehlt ist gewaehlt
     setze(ev, true);
     if (!abgebrochen && schliesstBeimAbheben && ev.pointerType !== 'mouse') {

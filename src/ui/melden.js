@@ -403,7 +403,7 @@
        Jetzt ein Strom. Er liefert sofort den bestehenden Stand mit –
        der Fall „beim Start liegt etwas vor" ist damit derselbe Weg und
        kein zweiter. */
-    if (abbestellen) { try { abbestellen(); } catch (e) { } }
+    if (abbestellen) { try { abbestellen(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
 
     if (!S_.beobachteMeldungenFuerMich) {
       const liste = await S_.ladeMeldungenFuerMich();

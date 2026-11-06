@@ -34,6 +34,11 @@ function dateien(ordner, liste = []) {
 let fehler = 0, geprueft = 0;
 for (const datei of ['main.js', 'preload.js', ...dateien('src')]) {
   const code = fs.readFileSync(path.join(ROOT, datei), 'utf8');
+  const stumm = code.split(/\r?\n/).findIndex(z => /catch\s*(\([^)]*\))?\s*\{\s*\}/.test(z));
+  if (stumm !== -1) {
+    fehler++;
+    console.log(`  ✗ ${datei}:${stumm + 1}: leerer catch-Block. Melden oder in einem Kommentar sagen, warum nicht.`);
+  }
   if (/^\s*import\s/m.test(code)) continue;
   geprueft++;
   try {
@@ -44,6 +49,6 @@ for (const datei of ['main.js', 'preload.js', ...dateien('src')]) {
   }
 }
 
-if (fehler) { console.error(fehler + ' Datei(en) mit Syntaxfehler.'); process.exit(1); }
+if (fehler) { console.error(fehler + ' Stelle(n) zu beheben.'); process.exit(1); }
 console.log(`  ✓ ${geprueft} Dateien lassen sich lesen`);
 console.log('Alle Pruefungen bestanden.');

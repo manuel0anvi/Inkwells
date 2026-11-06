@@ -390,7 +390,7 @@
   function horcheAufDirektpost() {
     const S = window.InkwellsShare;
     if (!S || !S.beobachteDirektpost) return;
-    if (direktAbbestellen) { try { direktAbbestellen(); } catch (err) { } }
+    if (direktAbbestellen) { try { direktAbbestellen(); } catch (err) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
     direktAbbestellen = S.beobachteDirektpost(async (liste) => {
       direkt = liste;
       nachrichten = alleNachrichten();

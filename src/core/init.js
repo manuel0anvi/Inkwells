@@ -323,7 +323,7 @@ function registriereBeendenHandler() {
 
       if (AutoSave.dirtyNotebooks.size > 0) {
         // Die Uhr im Hauptprozess anhalten, solange gefragt wird
-        try { if (window.api.holdQuit) window.api.holdQuit(); } catch (e) {}
+        try { if (window.api.holdQuit) window.api.holdQuit(); } catch (e) { /* die Anzeige darf das Beenden nicht aufhalten */ }
 
         const namen = Array.from(AutoSave.dirtyNotebooks).map(id => {
           const nb = typeof getNb === 'function' ? getNb(id) : null;
@@ -349,7 +349,7 @@ function registriereBeendenHandler() {
         }
 
         if (!trotzdem) {
-          try { sageStand('quittingCancelled', 'Abgebrochen — Inkwells bleibt offen.'); } catch (e) {}
+          try { sageStand('quittingCancelled', 'Abgebrochen — Inkwells bleibt offen.'); } catch (e) { /* die Anzeige darf das Beenden nicht aufhalten */ }
           if (window.api.cancelQuit) { window.api.cancelQuit(); return; }
           /* Eine ältere Brücke kennt cancelQuit noch nicht. Dann bleibt
              nur, gar nichts zu melden – der Hauptprozess schliesst nach

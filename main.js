@@ -234,7 +234,7 @@ function downloadFile(url, dest, rest = MAX_REDIRECTS) {
       res.on('data', chunk => {
         downloaded += chunk.length;
         if (total > 0 && win && !win.isDestroyed()) {
-          try { win.webContents.send('download-progress', { percent: (downloaded / total) * 100, paused: isDownloadPaused }); } catch (e) {}
+          try { win.webContents.send('download-progress', { percent: (downloaded / total) * 100, paused: isDownloadPaused }); } catch (e) { /* Fenster schon zu */ }
         }
       });
       res.on('error', abbrechen);
@@ -1041,7 +1041,7 @@ ipcMain.handle('check-for-updates', async () => {
     const currentStatus = normalizeVersion(app.getVersion());
     if (compareVersions(release.version, currentStatus) > 0) {
       releaseInfo = release;
-      try { win.webContents.send('update-available', { version: release.version }); } catch (e) {}
+      try { win.webContents.send('update-available', { version: release.version }); } catch (e) { /* Fenster schon zu */ }
       return { ok: true, updateInfo: { version: release.version } };
     }
     return { ok: true, updateInfo: null };
@@ -1072,7 +1072,7 @@ ipcMain.handle('download-update', async () => {
     }
     geprueftesUpdate = { pfad: ziel, sha256 };
     downloadedUpdatePath = ziel;
-    try { win.webContents.send('update-downloaded', { version: releaseInfo.version }); } catch (e) {}
+    try { win.webContents.send('update-downloaded', { version: releaseInfo.version }); } catch (e) { /* Fenster schon zu */ }
     return { ok: true };
   } catch (err) {
     return { ok: false, err: String(err) };
@@ -2036,7 +2036,7 @@ ipcMain.handle('export-pdf', async (_, html, defaultName) => {
         await Promise.all(imgs.map(img => img.complete
           ? Promise.resolve()
           : new Promise(res => { img.onload = res; img.onerror = res; })));
-        try { await document.fonts.ready; } catch (e) {}
+        try { await document.fonts.ready; } catch (e) { /* dann eben mit der Ersatzschrift */ }
       })();
     `);
     await new Promise(res => setTimeout(res, 200));
@@ -2098,34 +2098,6 @@ ipcMain.handle('save', async (_, data) => {
   if (r.canceled) return null;
   fs.writeFileSync(r.filePath, JSON.stringify(data));
   return r.filePath;
-});
-
-ipcMain.handle('load', async () => {
-  const r = await dialog.showOpenDialog(win, {
-    filters: [{name:'Inkwells', extensions:['jrnl']}],
-    properties: ['openFile']
-  });
-  if (r.canceled) return null;
-  
-  try {
-    const data = JSON.parse(await leseHeftDatei(r.filePaths[0]));
-    console.log('[Load] Loaded file:', r.filePaths[0]);
-    
-    // Handle both old format {notebooks: [...]} and new format (single notebook)
-    if (data.notebooks) {
-      // Old format
-      return { ...data, sourcePath: r.filePaths[0] };
-    } else if (data.id && data.sections) {
-      // New format - single notebook
-      return { notebooks: [data], loadedSingle: true, sourcePath: r.filePaths[0] };
-    } else {
-      console.error('[Load] Unknown file format');
-      return null;
-    }
-  } catch (err) {
-    console.error('[Load] Error:', err);
-    return null;
-  }
 });
 
 // Settings management
@@ -2431,7 +2403,7 @@ function erlaubteOrdner() {
   const ordner = [app.getPath('userData')];
   for (const o of ladeOrte()) ordner.push(o);
   // Der Vorgabeort gilt immer, auch bevor er zum ersten Mal gespeichert ist
-  try { ordner.push(path.join(app.getPath('documents'), 'Inkwells')); } catch (err) {}
+  try { ordner.push(path.join(app.getPath('documents'), 'Inkwells')); } catch (err) { /* kein Dokumente-Ordner auf diesem System */ }
 
   /* Und der Vorgabeort der Fassungen bis 1.1.1, als die App noch Inkwell
      hiess. Dort liegen die Hefte bestehender Nutzer weiterhin - dieser
@@ -2441,7 +2413,7 @@ function erlaubteOrdner() {
      Wer nie einen Speicherort gesichert hat, haette ihn sonst nicht mehr
      in der Liste und bekaeme beim Speichern des eigenen Hefts eine
      Absage. */
-  try { ordner.push(path.join(app.getPath('documents'), 'Inkwell')); } catch (err) {}
+  try { ordner.push(path.join(app.getPath('documents'), 'Inkwell')); } catch (err) { /* kein Dokumente-Ordner auf diesem System */ }
   return ordner;
 }
 

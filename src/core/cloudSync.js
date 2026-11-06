@@ -640,11 +640,11 @@ class CloudSyncManager {
        Abfrage auf den Prüfwert – im Implicit-Flow gibt es gar keinen
        Prüfwert, und ohne diese Trennung wäre die Anmeldung genau dort
        ungeschützt geblieben, wo sie es am nötigsten hat. */
-    try { sessionStorage.setItem('inkwells_auth_state', state); } catch (e) {}
-    try { sessionStorage.setItem('inkwells_pkce_redirect', redirectUri); } catch (e) {}
+    try { sessionStorage.setItem('inkwells_auth_state', state); } catch (e) { /* gesperrter Speicher: die Anmeldung prüft das beim Rückweg */ }
+    try { sessionStorage.setItem('inkwells_pkce_redirect', redirectUri); } catch (e) { /* gesperrter Speicher: die Anmeldung prüft das beim Rückweg */ }
     if (request.verifier) {
-      try { sessionStorage.setItem('inkwells_pkce_verifier', request.verifier); } catch (e) {}
-      try { sessionStorage.setItem('inkwells_auth_nonce', request.nonce || ''); } catch (e) {}
+      try { sessionStorage.setItem('inkwells_pkce_verifier', request.verifier); } catch (e) { /* gesperrter Speicher: die Anmeldung prüft das beim Rückweg */ }
+      try { sessionStorage.setItem('inkwells_auth_nonce', request.nonce || ''); } catch (e) { /* gesperrter Speicher: die Anmeldung prüft das beim Rückweg */ }
     }
 
     window.location.href = request.url;
@@ -798,7 +798,7 @@ class CloudSyncManager {
         sessionStorage.removeItem('inkwells_pkce_redirect');
         sessionStorage.removeItem('inkwells_auth_nonce');
         sessionStorage.removeItem('inkwells_auth_state');
-      } catch (e) {}
+      } catch (e) { /* gesperrter Speicher: die Anmeldung prüft das beim Rückweg */ }
 
       await this._applyTokens(tokens);
     } catch (err) {

@@ -24,6 +24,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const { app, BrowserWindow, ipcMain } = require('electron');
+require('../stabile-fenster.js');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');

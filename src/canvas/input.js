@@ -1079,7 +1079,7 @@ function attachInput(canvas, textDiv, objLayer, page) {
        stellen wir gleich darauf auf pointer-events: none – ein Fang daran
        waere heikel. Die Seite traegt ohnehin die Hoerer fuer Bewegung und
        Abheben. */
-    try { div.setPointerCapture(e.pointerId); } catch (err) { }
+    try { div.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
     textDiv.style.pointerEvents = 'none';
     textDiv.dataset.ph = '';
     setActivePg(page.id);

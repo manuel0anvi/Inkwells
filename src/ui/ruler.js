@@ -496,7 +496,7 @@
     canvasEl.addEventListener('pointerdown', e => {
       e.preventDefault();
       e.stopPropagation();
-      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { }
+      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
       zeiger.set(e.pointerId, { x: e.clientX, y: e.clientY });
       // Der zweite Finger setzt die Geste neu auf, statt sie fortzusetzen
       letzte = messe();
@@ -539,7 +539,7 @@
 
     const beenden = e => {
       if (!zeiger.has(e.pointerId)) return;
-      try { canvasEl.releasePointerCapture(e.pointerId); } catch (err) { }
+      try { canvasEl.releasePointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
       zeiger.delete(e.pointerId);
       /* Bleibt einer liegen, faengt fuer ihn eine neue Messung an –
          sonst schoebe der Sprung von zwei auf einen Finger das Lineal

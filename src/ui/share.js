@@ -905,6 +905,13 @@
       throw err;
     }
 
+    /* Die Reihenfolge darf daran nicht hängen: scheitert sie, bleibt es beim
+       Alten, und der Inhalt wird trotzdem geprüft. */
+    if (typeof api.seitenfolgeAbgleichen === 'function') {
+      await api.seitenfolgeAbgleichen(docId, nb, kopf)
+        .catch(err => console.warn('[Freigabe] Reihenfolge nicht korrigiert:', err.message));
+    }
+
     const fehlt = await api.inhaltUnvollstaendig(docId, nb);
     if (!fehlt || (nurWennLeer && !fehlt.leer)) return false;
     if (laufendeFreigaben.has(String(nb.id))) return false;

@@ -1135,7 +1135,7 @@ function startSecMgrDrag(e, pgId, item, body) {
 
   /* Ohne Fangen verliert man den Zug, sobald der Finger die Zeile
      verlaesst – und das tut er sofort, es geht ja gerade darum. */
-  try { body.setPointerCapture(e.pointerId); } catch (err) {}
+  try { body.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
   setzeMarke(zielStelle(body, e.clientY));
 }
 

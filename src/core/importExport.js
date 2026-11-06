@@ -1592,8 +1592,8 @@ window.fillNotebookFromPdfText = fillNotebookFromPdfText;
    sondern abgeschrieben:
 
    >>> Warum eine Kopie und nicht die Datei selbst <<<
-   Dafür gibt es „Laden" (doLoad). Dort bleibt die Datei, wo sie liegt,
-   und das Heft merkt sich ihren Pfad. Das ist richtig für ein eigenes
+   Dafür gibt es „Öffnen mit Inkwells" (openNotebookFromFile). Dort bleibt die
+   Datei, wo sie liegt, und das Heft merkt sich ihren Pfad. Das ist richtig für ein eigenes
    Heft, das nur gerade woanders liegt – und falsch für eines, das man
    geschickt bekommen hat: es läge dann weiter im Download-Ordner, und
    jede Änderung ginge dorthin. Hier entsteht deshalb ein neues Heft im
@@ -2250,47 +2250,8 @@ window.fuegeDateienEin = fuegeDateienEin;
    reisen Greifstreifen und der Zustand kommentierter Stellen mit – die
    Begründung steht dort (app.js). */
 function syncAll() { QA('.j-page').forEach(pgEl => { const info = getPage(pgEl.dataset.pgid); if (!info) return; const txt = pgEl.querySelector('.j-text'); if (txt) info.page.textContent = typeof ohneGriffe === 'function' ? ohneGriffe(txt) : txt.innerHTML; info.page.inkStrokes = JSON.parse(JSON.stringify(S.strokeHistory[info.page.id] || [])); }); }
-async function doLoad() { 
-  if (!window.api) { toast(t('electronOnly'), true); return; } 
-  const data = await window.api.load(); 
-  if (!data) { toast(t('cancelled'), true); return; } 
-  
-  // Treat either an explicit "loadedSingle" flag OR a file that contains
-  // exactly one notebook in the `notebooks` array as a single-notebook load.
-  if ((data.loadedSingle && data.notebooks && data.notebooks.length === 1) || (data.notebooks && data.notebooks.length === 1 && !data.loadedSingle)) {
-    // Single notebook loaded - add to existing notebooks if not already present
-    const loadedNb = data.notebooks[0];
-    const existing = S.notebooks.find(nb => nb.id === loadedNb.id);
-    if (existing) {
-      // Replace existing notebook with loaded one
-      const idx = S.notebooks.indexOf(existing);
-      S.notebooks[idx] = loadedNb;
-      toast(t('notebookUpdated'));
-    } else {
-      // Check if name already exists
-      const nameExists = S.notebooks.find(nb => nb.name === loadedNb.name);
-      if (nameExists) {
-        toast(t('nameExists'), true);
-        return;
-      }
-      S.notebooks.push(loadedNb);
-      toast(t('notebookLoaded'));
-    }
 
-    // Persist the loaded notebook in the overview registry so it comes back after restart
-    if (data.sourcePath) {
-      await Registry.add(loadedNb, data.sourcePath);
-    }
-  } else {
-    // Old format - replace all
-    S.notebooks = data.notebooks || []; 
-  }
-  S.activeNbId = null; 
-  showHome(); 
-}
 // Der Knopf in der Übersicht ist weg; der im Heft bleibt.
-if (E('btn-load')) E('btn-load').addEventListener('click', doLoad);
-if (E('btn-load-home')) E('btn-load-home').addEventListener('click', doLoad);
 /* ══════════════════════════════════════════════════════════════════
    PDF-EXPORT
    Die Seiten werden genauso aufgebaut wie in der App: Papierhintergrund,

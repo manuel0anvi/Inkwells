@@ -1818,7 +1818,7 @@
 
     aufraeumen(lockEls, gebraucht);
     // Objekte haengen an denselben Meldungen wie die Zeilenbaender
-    try { renderObjLocks(); } catch (err) { }
+    try { renderObjLocks(); } catch (err) { /* nur Anzeige, der nächste Takt zeichnet sie neu */ }
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -4030,7 +4030,7 @@
     inkSeen.delete(pageId);
     fremdeStriche.delete(pageId);
     const entry = docs.get(pageId);
-    if (entry) { try { entry.ydoc.destroy(); } catch (e) {} docs.delete(pageId); }
+    if (entry) { try { entry.ydoc.destroy(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ } docs.delete(pageId); }
 
     scheduleRerender();
   }
@@ -4440,7 +4440,7 @@
          sitzungNr. Ordentlich wieder verlassen, sonst bleibt die eigene
          Anwesenheit bei allen anderen stehen. */
       if (meineSitzung !== sitzungNr) {
-        try { await betreten.leave(); } catch (e) {}
+        try { await betreten.leave(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ }
         return;
       }
 
@@ -4625,13 +4625,13 @@
 
     // Was noch wartet, gehört noch hinaus – sonst fehlt es beim anderen
     // und in dem Stand, der gleich gesichert wird.
-    try { flushAllPending(); } catch (e) {}
-    try { syncStructure(); } catch (e) {}
+    try { flushAllPending(); } catch (e) { console.warn('[Sync]', e.message); }
+    try { syncStructure(); } catch (e) { console.warn('[Sync]', e.message); }
 
     /* Den Chat als Erstes abhängen: er hält eigene Beobachter am Raum,
        und der wird gleich verlassen. */
     if (window.ChatUI && typeof window.ChatUI.detach === 'function') {
-      try { window.ChatUI.detach(); } catch (e) {}
+      try { window.ChatUI.detach(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ }
     }
 
     clearInterval(staleTimer);
@@ -4647,7 +4647,7 @@
     fetchPending.clear();
 
     // Die Beobachtung der Leitung ebenfalls abbestellen
-    if (typeof stopVerbindung === 'function') { try { stopVerbindung(); } catch (e) {} }
+    if (typeof stopVerbindung === 'function') { try { stopVerbindung(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
     stopVerbindung = null;
     verbindungSteht = null;
     reloading.clear();
@@ -4657,7 +4657,7 @@
     liveNb = null;
     snapshot = null;
 
-    for (const undo of stops) { try { undo(); } catch (e) {} }
+    for (const undo of stops) { try { undo(); } catch (e) { /* Abbestellen darf das Aufräumen nicht aufhalten */ } }
     stops = [];
 
     /* Vor dem Verlassen: solange der Raum noch steht, kommt die
@@ -4666,13 +4666,13 @@
     gibObjektFrei();
     teilnehmer = null;
 
-    if (room) { try { await room.leave(); } catch (e) {} }
+    if (room) { try { await room.leave(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ } }
     room = null;
     docId = null;
     ownerUidJetzt = '';
     others = [];
 
-    for (const entry of docs.values()) { try { entry.ydoc.destroy(); } catch (e) {} }
+    for (const entry of docs.values()) { try { entry.ydoc.destroy(); } catch (e) { /* beim Verlassen zählt nur, dass es weitergeht */ } }
     docs.clear();
     inkSeen.clear();
     fremdeStriche.clear();
@@ -5217,7 +5217,7 @@
     /* Sofort neu zeichnen: sonst bliebe der Name stehen, bis der
        naechste Anwesenheitstakt kommt. */
     try { renderPresenceBar(); renderMarkers(); renderCarets(); renderLocks(); }
-    catch (err) { }
+    catch (err) { /* nur Anzeige, der nächste Takt zeichnet sie neu */ }
   }
 
   function gehoertDazu(person) {

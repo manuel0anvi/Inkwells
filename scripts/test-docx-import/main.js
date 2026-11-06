@@ -27,6 +27,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const { app, BrowserWindow } = require('electron');
+require('../stabile-fenster.js');
 const path = require('path');
 
 app.disableHardwareAcceleration();
