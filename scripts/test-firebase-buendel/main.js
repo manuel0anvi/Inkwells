@@ -64,6 +64,30 @@ const PROBE = `
   aus.schritte.websocket = await rtdb('ws' + Date.now(), false);
   aus.schritte.longPolling = await rtdb('lp' + Date.now(), true);
 
+  /* Der Weg jedes neuen Geräts: erst anonym, dann mit Google verknüpft. Danach muss
+     die Sicherheitsregel das Konto als bestätigt erkennen. */
+  {
+    const dritt = k.initializeApp({ apiKey: 'probe', projectId: 'inkwell-rules-test', appId: 'probe' }, 'verknuepft');
+    const a3 = k.getAuth(dritt);
+    k.connectAuthEmulator(a3, 'http://localhost:9099', { disableWarnings: true });
+    const d3 = k.getFirestore(dritt);
+    k.connectFirestoreEmulator(d3, 'localhost', 8089);
+    const anon = await k.signInAnonymously(a3);
+    const mail = 'probe' + Date.now() + '@example.com';
+    const nachweis = k.GoogleAuthProvider.credential(JSON.stringify({ sub: 'g' + Date.now(), email: mail, email_verified: true }));
+    await k.linkWithCredential(anon.user, nachweis);
+    const token = await a3.currentUser.getIdTokenResult(true);
+    aus.verknuepftAnspruch = {
+      provider: token.claims.firebase && token.claims.firebase.sign_in_provider,
+      identitaeten: Object.keys((token.claims.firebase && token.claims.firebase.identities) || {}),
+      bestaetigt: token.claims.email_verified
+    };
+    aus.schritte.verknuepftLiest = await k.getDoc(k.doc(d3, 'sperren', mail)).then(() => true, e => e.code);
+    aus.schritte.verknuepftTeilt = await k.setDoc(k.doc(d3, 'docs', 'v' + Date.now()), {
+      owner: a3.currentUser.uid, ownerEmail: mail, linkMode: 'off', title: 'Probe', pageCount: 0, memberEmails: [], members: {}, memberVia: {}, blockedEmails: []
+    }).then(() => true, e => e.code);
+  }
+
   // Inline-Code muss abgewiesen werden
   const b = document.createElement('img');
   b.setAttribute('onerror', 'window.__lief = 1');
@@ -132,6 +156,9 @@ app.whenReady().then(async () => {
   pruefe('Firestore schreiben und lesen', r.schritte.firestore === true, JSON.stringify(r));
   pruefe('Realtime Database über WebSocket', r.schritte.websocket === true, JSON.stringify(r));
   pruefe('Realtime Database über Long-Polling', r.schritte.longPolling === true, JSON.stringify(r));
+  zeilen.push('     Nach dem Verknüpfen: ' + JSON.stringify(r.verknuepftAnspruch));
+  pruefe('Ein verknüpftes Google-Konto liest seinen Eintrag', r.schritte.verknuepftLiest === true, String(r.schritte.verknuepftLiest));
+  pruefe('Und darf ein Heft freigeben', r.schritte.verknuepftTeilt === true, String(r.schritte.verknuepftTeilt));
   pruefe('Eingeschleuster Inline-Code läuft nicht', r.schritte.inlineLaeuftNicht === true, JSON.stringify(r));
   pruefe('Der Lader der Microsoft-Anmeldung kommt hoch (' + r.gapi + ')',
     r.gapi === 'geladen' || r.gapi === 'kein Netz', String(r.gapi));

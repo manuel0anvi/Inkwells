@@ -260,10 +260,29 @@ service cloud.firestore {
        Bestaetigungspflicht an dieser Funktion und wird in einer einzigen
        Regel dutzendfach ausgerechnet. Firestore bricht bei 1000
        Ausdruecken ab und weist dann ab, ohne dass etwas falsch waere. */
+    /* >>> Gefragt wird, womit das Konto VERKNÜPFT ist <<<
+       Jedes neue Gerät meldet sich erst anonym an und hebt diese Kennung dann auf
+       das Google-Konto (linkWithCredential in core/share.js). sign_in_provider sagt
+       aber nur, wie die Sitzung begann – zählte allein das, stünde ein so verknüpftes
+       Konto vor verschlossener Tür: keine eigenen Freigaben, keine geteilten Dokumente.
+
+       Eine Identität allein genügt nicht: wer sich mit Passwort und fremder Adresse
+       anmeldet und danach sein eigenes Google-Konto verknüpft, hätte sie auch. Dessen
+       Adresse ist aber unbestätigt. Google bestätigt immer, also wird das verlangt.
+
+       Microsoft setzt die Bestätigung nicht zuverlässig (siehe oben). Dort zählt
+       deshalb weiter die Anmeldung über den Anbieter selbst: die läuft über Firebases
+       eigenen Ablauf (signInWithPopup) und nicht über eine Verknüpfung. */
     function isVerifiedUser() {
       return request.auth != null
         && request.auth.token.email is string
-        && request.auth.token.firebase.sign_in_provider in ['google.com', 'microsoft.com'];
+        && (
+             request.auth.token.firebase.sign_in_provider == 'microsoft.com'
+             || (
+                  request.auth.token.email_verified == true
+                  && request.auth.token.firebase.identities.keys().hasAny(['google.com', 'microsoft.com'])
+                )
+           );
     }
 
     /* ══════════════════════════════════════════════════════════════════

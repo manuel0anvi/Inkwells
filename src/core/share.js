@@ -644,6 +644,26 @@ function onIdentityChanged(callback) {
  * Laden aus dem lokalen Speicher wieder her – das dauert einen Moment,
  * und vorher ist auth.currentUser noch null.
  */
+/* Was Firebase über die Anmeldung sagt – einmal je Kennung, ohne Token und ohne
+   Adresse. Weisen die Regeln ein echtes Konto ab, steht hier, warum: gefragt wird
+   nach genau diesen Angaben (isVerifiedUser in website/firestore.rules). */
+let _anmeldungGemeldet = null;
+onAuthStateChanged(auth, async (user) => {
+  if (!user || user.isAnonymous || _anmeldungGemeldet === user.uid) return;
+  _anmeldungGemeldet = user.uid;
+  try {
+    const { claims } = await user.getIdTokenResult();
+    console.log('[Share] Anmeldung bei Firebase:', JSON.stringify({
+      beginn: claims.firebase && claims.firebase.sign_in_provider,
+      identitaeten: Object.keys((claims.firebase && claims.firebase.identities) || {}),
+      bestaetigt: claims.email_verified === true,
+      adresse: typeof claims.email === 'string'
+    }));
+  } catch (err) {
+    console.warn('[Share] Anmeldung nicht lesbar:', err.message);
+  }
+});
+
 function whenIdentityReady() {
   if (auth.currentUser) return Promise.resolve(currentIdentity());
   return new Promise((resolve) => {

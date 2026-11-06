@@ -93,7 +93,7 @@ function person(env, uid, email, extra = {}) {
   return env.authenticatedContext(uid, {
     email,
     email_verified: true,
-    firebase: { sign_in_provider: 'google.com' },
+    firebase: { sign_in_provider: 'google.com', identities: { 'google.com': ['g-' + uid], email: [email] } },
     ...extra
   });
 }
@@ -1179,7 +1179,7 @@ function headData(overrides = {}) {
   // Fremde Kennung, aber die Adresse des Bearbeiters, ueber Passwort
   const ANGEMASST = person(env, 'uid-angemasst', EDITOR.mail, {
     email_verified: false,
-    firebase: { sign_in_provider: 'password' }
+    firebase: { sign_in_provider: 'password', identities: { email: [EDITOR.mail] } }
   }).firestore();
 
   await denied('Er findet die privaten Hefte nicht ueber die Mitgliedschaft',
@@ -1197,6 +1197,43 @@ function headData(overrides = {}) {
 
   await denied('Und die Direktpost bleibt zu',
     getDoc(doc(ANGEMASST, 'direktpost/' + GESPERRT.mail)));
+
+  /* Der Weg jedes neuen Geräts: anonym begonnen, dann mit Google verknüpft */
+  const VERKNUEPFT = person(env, 'uid-verknuepft', EDITOR.mail, {
+    firebase: { sign_in_provider: 'anonymous', identities: { 'google.com': ['g1'], email: [EDITOR.mail] } }
+  }).firestore();
+  await ok('Ein verknüpftes Google-Konto zählt, auch wenn die Sitzung anonym begann',
+    getDoc(doc(VERKNUEPFT, 'sperren/' + EDITOR.mail)));
+
+  // Rein anonym: gar keine Adresse und keine Identität
+  const NUR_ANONYM = env.authenticatedContext('uid-anonym', {
+    firebase: { sign_in_provider: 'anonymous', identities: {} }
+  }).firestore();
+  await denied('Eine rein anonyme Kennung nicht',
+    getDoc(doc(NUR_ANONYM, 'sperren/' + EDITOR.mail)));
+
+  // Die Umgehung: Passwort mit fremder Adresse, danach das eigene Google-Konto verknüpft
+  const UMGEHUNG = person(env, 'uid-umgehung', EDITOR.mail, {
+    email_verified: false,
+    firebase: { sign_in_provider: 'password', identities: { 'google.com': ['g2'], email: [EDITOR.mail] } }
+  }).firestore();
+  await denied('Eine verknüpfte Identität hilft einer unbestätigten Adresse nicht',
+    getDoc(doc(UMGEHUNG, 'sperren/' + EDITOR.mail)));
+
+  // Google-Anmeldung, danach die Adresse auf eine fremde geändert
+  const UMGESCHRIEBEN = person(env, 'uid-umgeschrieben', EDITOR.mail, {
+    email_verified: false
+  }).firestore();
+  await denied('Eine nachträglich geänderte Adresse auch nicht',
+    getDoc(doc(UMGESCHRIEBEN, 'sperren/' + EDITOR.mail)));
+
+  // Microsoft setzt die Bestätigung nicht immer
+  const MICROSOFT = person(env, 'uid-ms', EDITOR.mail, {
+    email_verified: false,
+    firebase: { sign_in_provider: 'microsoft.com', identities: { 'microsoft.com': ['m1'], email: [EDITOR.mail] } }
+  }).firestore();
+  await ok('Eine Microsoft-Anmeldung zählt auch ohne die Angabe',
+    getDoc(doc(MICROSOFT, 'sperren/' + EDITOR.mail)));
 
   /* Dieselbe Adresse mit bestaetigtem Anbieter kommt weiterhin durch –
      sonst waere der Test auch gruen, wenn die Regel alle abweist. */
