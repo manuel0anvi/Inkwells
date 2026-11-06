@@ -840,8 +840,8 @@ document.addEventListener('keydown', (e) => {
    @param {string} dataUrl   die PDF-Datei
    @returns {Promise<{seiten:number}>}
    ══════════════════════════════════════════════════════════════════════ */
-async function fillNotebookFromPdf(nb, dataUrl, name) {
-  const bilder = await pdfInsHeft(nb, dataUrl, name || nb.name);
+async function fillNotebookFromPdf(nb, dataUrl, name, onFortschritt) {
+  const bilder = await pdfInsHeft(nb, dataUrl, name || nb.name, onFortschritt);
   if (!bilder.length) throw new Error(t('pdfNoPages') || 'Das PDF hat keine Seiten.');
 
   /* Die leere Startseite faellt weg – sie stuende sonst vor der ersten
@@ -1511,7 +1511,7 @@ async function fillNotebookFromPdfText(nb, dataUrl, onFortschritt) {
          der Text der Seite steht laengst und bleibt. */
       console.warn('[PDF] Bilder einer Seite uebersprungen:', err && err.message || err);
     }
-    if (onFortschritt) onFortschritt(i + 1, pdf.numPages);
+    // Hier nicht noch einmal melden: die Anzeige zählte sonst zweimal von vorn
   }
 
   const bloecke = [];

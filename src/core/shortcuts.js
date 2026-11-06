@@ -93,9 +93,16 @@ function comboToKeys(combo, labels = {}) {
   if (parsed.ctrl) out.push(labels.ctrl || 'Strg');
   if (parsed.alt) out.push(labels.alt || 'Alt');
   if (parsed.shift) out.push(labels.shift || 'Shift');
-  out.push(labels[parsed.key] || KEY_LABELS[parsed.key] || parsed.key);
+  const sprache = typeof getLanguage === 'function' ? getLanguage() : 'de';
+  out.push(labels[parsed.key] || (KEY_LABELS_JE_SPRACHE[sprache] || {})[parsed.key] || KEY_LABELS[parsed.key] || parsed.key);
   return out;
 }
+
+/* Was auf den Tasten steht, hängt an der Sprache. Die Vorgabe unten ist deutsch. */
+const KEY_LABELS_JE_SPRACHE = {
+  en: { PageUp: 'PgUp', PageDown: 'PgDn', Home: 'Home', End: 'End', Space: 'Space', Delete: 'Del', Insert: 'Ins' },
+  it: { PageUp: 'PagSu', PageDown: 'PagGiù', Home: 'Home', End: 'Fine', Space: 'Spazio', Delete: 'Canc', Insert: 'Ins' }
+};
 
 const KEY_LABELS = {
   PageUp: 'Bild ↑',

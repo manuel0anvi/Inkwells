@@ -15,13 +15,6 @@
   const chatNotifyChk = E('chat-notify-on');
   const textFlussSel = E('text-fluss');
   const textFlussHinweis = E('text-fluss-hinweis');
-  // Cloud UI elements
-  const cloudEnabledChk = E('cloud-enabled');
-  const cloudConfigRow = E('cloud-config-row');
-  const cloudGoogleBtn = E('cloud-google-signin');
-  const cloudSignOutBtn = E('cloud-signout');
-  const cloudStatus = E('cloud-status');
-  const cloudSignupForm = E('cloud-signup-form');
 
   let _pendingNewLocation = null;
 
@@ -36,7 +29,12 @@
     settingsOverlay.style.display = 'none';
   };
 
-  settingsClose.addEventListener('click', closeSettings);
+  settingsClose.addEventListener('click', () => {
+    // Die Sprache wird schon beim Wählen vorgeführt – ✕ heisst: doch nicht
+    const gespeichert = Settings.get('language');
+    if (gespeichert && typeof getLanguage === 'function' && getLanguage() !== gespeichert) setLanguage(gespeichert);
+    closeSettings();
+  });
   settingsOk.addEventListener('click', async () => {
     await saveSettingsFromUI();
     closeSettings();
@@ -208,31 +206,8 @@
     }
   });
 
-  // Cloud toggle
-  if (cloudEnabledChk) {
-    cloudEnabledChk.addEventListener('change', () => {
-      cloudConfigRow.style.display = cloudEnabledChk.checked ? 'flex' : 'none';
-    });
-  }
 
-  if (cloudGoogleBtn) {
-    cloudGoogleBtn.addEventListener('click', async () => {
-      try {
-        await window.CloudSync_.signInWithOAuth('google');
-        toast('Anmeldung im Browser gestartet...');
-      } catch (err) {
-        toast('Fehler beim Starten der Google-Anmeldung: ' + err.message);
-      }
-    });
-  }
 
-  if (cloudSignOutBtn) {
-    cloudSignOutBtn.addEventListener('click', async () => {
-      await window.CloudSync_.signOut();
-      refreshCloudUI();
-      toast('Abgemeldet');
-    });
-  }
 
   // Language change - apply immediately for preview
   languageSelect.addEventListener('change', () => {
@@ -256,10 +231,7 @@
       zeigeFlussHinweis();
     }
 
-    if (cloudEnabledChk) cloudEnabledChk.checked = !!settings.cloudEnabled;
-    if (cloudConfigRow) cloudConfigRow.style.display = settings.cloudEnabled ? 'flex' : 'none';
     
-    refreshCloudUI();
 
     if (settingsVersion && window.api?.getAppVersion) {
       window.api.getAppVersion().then((version) => {
@@ -291,26 +263,6 @@
 
   textFlussSel?.addEventListener('change', zeigeFlussHinweis);
 
-  function refreshCloudUI() {
-    if (!cloudSignupForm || !cloudSignOutBtn || !cloudStatus || !window.CloudSync_) return;
-    const isAuth = window.CloudSync_.isAuthenticated();
-    if (isAuth) {
-      cloudSignupForm.style.display = 'none';
-      if (cloudGoogleBtn) cloudGoogleBtn.style.display = 'none';
-      cloudSignOutBtn.style.display = 'block';
-      
-      const session = window.CloudSync_.getSession();
-      const mail = session?.userEmail || Settings.get('cloudEmail') || 'Nutzer';
-      cloudStatus.textContent = `Mit Google angemeldet als: ${mail}`;
-      // Let it try to sync now that we are looking
-      window.CloudSync_.refreshRemote().catch(()=>{});
-    } else {
-      cloudSignupForm.style.display = 'flex';
-      if (cloudGoogleBtn) cloudGoogleBtn.style.display = 'block';
-      cloudSignOutBtn.style.display = 'none';
-      cloudStatus.textContent = 'Nicht angemeldet.';
-    }
-  }
 
   // Save settings from UI
   async function saveSettingsFromUI() {
@@ -320,7 +272,6 @@
     };
     
     // Cloud settings
-    if (cloudEnabledChk) updates.cloudEnabled = !!cloudEnabledChk.checked;
     if (chatNotifyChk) updates.chatNotifyOff = !chatNotifyChk.checked;
     if (textFlussSel) updates.textFluss = textFlussSel.value;
 
@@ -343,32 +294,7 @@
     }
   }
 
-  // Sign in/out handlers (bound once)
-  if (cloudGoogleBtn) {
-    cloudGoogleBtn.addEventListener('click', async () => {
-      try {
-        cloudStatus.textContent = 'Öffne Google-Anmeldung…';
-        await Settings.update({ cloudEnabled: true });
-        await CloudSync_.init();
-        await CloudSync_.signInWithOAuth('google');
-        cloudStatus.textContent = 'Ein neues Fenster wurde geöffnet. Schließe das Login ab und kehre zurück.';
-      } catch (err) {
-        console.error('[Settings] Google sign in failed:', err);
-        cloudStatus.textContent = 'Google-Anmeldung fehlgeschlagen';
-      }
-    });
-  }
 
-  if (cloudSignOutBtn) {
-    cloudSignOutBtn.addEventListener('click', async () => {
-      try {
-        await CloudSync_.signOut();
-        cloudStatus.textContent = 'Abgemeldet';
-        cloudSignOutBtn.style.display = 'none';
-        cloudGoogleBtn.style.display = 'inline-block';
-      } catch (err) { console.error('[Settings] Cloud sign out failed:', err); }
-    });
-  }
 
   // Toggle settings button visibility based on view
   function updateSettingsButtonVisibility() {

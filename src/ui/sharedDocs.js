@@ -277,7 +277,7 @@
 
   function fmtDate(date) {
     if (!(date instanceof Date)) return '';
-    return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    return date.toLocaleDateString((typeof getLanguage === 'function' && getLanguage()) || 'de', { day: '2-digit', month: '2-digit', year: '2-digit' });
   }
 
   /* Bei Microsoft fehlt die Firebase-Kennung nicht aus Versehen; warum sie

@@ -645,6 +645,10 @@
     if (!bar) return;
     if (!antwortAuf) { bar.style.display = 'none'; return; }
 
+    // Die Leiste nimmt der Liste Höhe weg – wer unten war, bleibt unten
+    const liste = el('chat-list');
+    const warUnten = !!liste && liste.scrollHeight - liste.scrollTop - liste.clientHeight < 40;
+
     const wer = el('chat-antwort-wer');
     const was = el('chat-antwort-text');
     if (wer) wer.textContent = m.selbst
@@ -652,6 +656,8 @@
       : (antwortAuf.name || txt('chatSomeone', 'Jemand'));
     if (was) was.textContent = antwortAuf.text;
     bar.style.display = 'flex';
+
+    if (warUnten) nachUnten();
 
     // Wer auf Antworten drückt, will danach tippen
     el('chat-input')?.focus();

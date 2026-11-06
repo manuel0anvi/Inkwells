@@ -4782,6 +4782,16 @@ function alsIso(wert) {
  *          grund: string, notiz?: string}} m
  * @returns {Promise<{ok: boolean, fehler?: string}>}
  */
+/* Firestore wartet ohne Netz einfach weiter, und zwar ohne Ende. Für einen Knopf,
+   der solange gesperrt ist, ist das zu lang. */
+function spaetestens(versprechen, ms) {
+  let uhr;
+  return Promise.race([
+    versprechen,
+    new Promise((_, nein) => { uhr = setTimeout(() => nein(new Error('unavailable')), ms); })
+  ]).finally(() => clearTimeout(uhr));
+}
+
 async function meldeNutzer(m) {
   const ich = currentIdentity();
   const melderEmail = normalizeEmail(ich && ich.email);
@@ -4825,11 +4835,11 @@ async function meldeNutzer(m) {
        wer die Meldung ueberhaupt lesen darf, und sie aus der
        Anwesenheitsliste zu nehmen hiesse, dem Melder zu glauben.
        ══════════════════════════════════════════════════════════════ */
-    const kopf = await loadDocumentHead(String(m.docId));
+    const kopf = await spaetestens(loadDocumentHead(String(m.docId)), 12000);
     const gemeldet = normalizeEmail(m.gemeldetEmail);
     const gegenBesitzer = gemeldet === normalizeEmail(kopf.ownerEmail);
 
-    await addDoc(collection(db, 'meldungen'), {
+    await spaetestens(addDoc(collection(db, 'meldungen'), {
       erstellt: serverTimestamp(),
       melderEmail,
       gemeldetEmail: gemeldet,
@@ -4841,7 +4851,7 @@ async function meldeNutzer(m) {
       grund: m.grund,
       notiz: String(m.notiz || '').slice(0, 300),
       erledigt: false
-    });
+    }), 12000);
     return { ok: true };
   } catch (err) {
     console.warn('[Melden] Nicht abgeschickt:', err.message);

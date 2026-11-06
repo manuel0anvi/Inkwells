@@ -1,0 +1,49 @@
+# Läuft bei jedem Push auf den Arbeitsbranch, damit ein Fehler nicht erst beim
+# anderen auffällt, wenn er zieht. Die Electron-Prüfstände laufen hier nicht:
+# sie brauchen ein Fenster und schwanken schon auf einem echten Desktop.
+name: Tests
+
+on:
+  push:
+    branches: [app]
+  pull_request:
+    branches: [app]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhängigkeiten
+        run: npm ci --ignore-scripts
+
+      # Das Repo ist öffentlich. Nur echte Werte: die Vorlagen enthalten „GOCSPX-…“.
+      - name: Keine Geheimnisse im Stand
+        run: |
+          if git grep -nIE 'GOCSPX-[A-Za-z0-9_-]{10,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' -- . ':!scripts/test-update-signatur.js' ':!.github'; then
+            echo "Es steht ein Geheimnis im Stand."
+            exit 1
+          fi
+
+      # website/ steht in .gitignore und liegt auf dem Branch website. Die
+      # erzeugten Kopien darin kommen aus src/, deshalb danach sync-share.
+      - name: Website-Ordner holen
+        run: |
+          git fetch -q origin website
+          mkdir -p website
+          git archive FETCH_HEAD | tar -x -C website
+          node scripts/sync-share.js
+
+      - run: npm test

@@ -139,7 +139,7 @@
       </svg>
     </button>
     <div class="window-controls-divider"></div>
-    <button class="wbtn" id="btn-min">–</button>
+    <button class="wbtn" id="btn-min" data-i18n-title="windowMinimize">–</button>
     <!-- Ein Quadrat zum Maximieren, zwei versetzte zum Wiederherstellen –
          wie bei jedem Windows-Fenster. Welches gilt, setzt ui/titlebar.js. -->
     <button class="wbtn" id="btn-max">
@@ -151,7 +151,7 @@
         <path d="M3 3V2a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H8"/>
       </svg>
     </button>
-    <button class="wbtn x" id="btn-close">✕</button>
+    <button class="wbtn x" id="btn-close" data-i18n-title="windowClose">✕</button>
   </div>
 </div>
 
@@ -180,7 +180,7 @@
       </svg>
       <input type="search" id="home-search-input" data-i18n-ph="searchPlaceholder"
              placeholder="In allen Heften suchen…" autocomplete="off" spellcheck="false">
-      <button class="home-search-clear" id="home-search-clear" title="Leeren" style="display:none">✕</button>
+      <button class="home-search-clear" id="home-search-clear" title="Leeren" data-i18n-title="clearField" style="display:none">✕</button>
     </div>
 
     <!-- Eigene Hefte und geteilte Dokumente. Der Zähler am zweiten Reiter
@@ -882,7 +882,7 @@
       </div>
       <div class="sec-mgr-bar" id="sec-mgr-bar-pick" style="display:none">
         <span class="sec-mgr-pick-count" id="sec-mgr-pick-count"></span>
-        <button id="sec-mgr-pick-all" class="mgr-btn" data-i18n="transferAll">Alle</button>
+        <button id="sec-mgr-pick-all" class="mgr-btn" data-i18n="pickAll">Alle</button>
         <button id="sec-mgr-pick-sec" class="mgr-btn" data-i18n="setSection">Abschnitt festlegen</button>
         <button id="sec-mgr-pick-move" class="mgr-btn" data-i18n="transferOpen">In anderes Heft …</button>
         <button id="sec-mgr-pick-del" class="mgr-btn danger" data-i18n="delete">Löschen</button>
@@ -1011,7 +1011,7 @@
     </div>
 
     <label class="modal-label" style="margin-top:16px" for="melden-notiz" data-i18n="meldenNotizLabel">Dazu sagen (freiwillig)</label>
-    <textarea id="melden-notiz" rows="3" maxlength="300" placeholder="Zwei Sätze genügen"></textarea>
+    <textarea id="melden-notiz" rows="3" maxlength="300" placeholder="Zwei Sätze genügen" data-i18n-ph="meldenNotizPh"></textarea>
     <div class="melden-zaehler" id="melden-zaehler"></div>
 
     <p class="melden-hinweis" data-i18n="meldenHinweis">
@@ -1378,10 +1378,10 @@
 <div class="overlay" id="ov-insert-choice" style="display:none">
   <div class="modal confirm-modal insert-choice-modal">
     <button class="modal-close-x insert-choice-x" id="insert-abbruch" title="✕">✕</button>
-    <p class="confirm-msg" id="insert-msg">Wie möchtest du das Element einfügen?</p>
+    <p class="confirm-msg" id="insert-msg" data-i18n="insertAskHow">Wie möchtest du das Element einfügen?</p>
     <div class="modal-btns" style="justify-content:center;gap:12px">
-      <button id="insert-as-img" class="ok-btn" style="background:var(--sh2);color:var(--text);border:1px solid var(--sb)">Als Bild/Objekt</button>
-      <button id="insert-as-page" class="ok-btn">Als neue Seite(n)</button>
+      <button id="insert-as-img" data-i18n="insertAsImage" class="ok-btn" style="background:var(--sh2);color:var(--text);border:1px solid var(--sb)">Als Bild/Objekt</button>
+      <button id="insert-as-page" class="ok-btn" data-i18n="insertAsPages">Als neue Seite(n)</button>
     </div>
   </div>
 </div>
@@ -1444,7 +1444,7 @@
     <div class="sec-mgr-body" id="pt-list"></div>
 
     <div class="sec-mgr-footer">
-      <button id="pt-all" class="mgr-btn" data-i18n="transferAll">Alle</button>
+      <button id="pt-all" class="mgr-btn" data-i18n="pickAll">Alle</button>
       <button id="pt-none" class="mgr-btn" data-i18n="transferNone">Keine</button>
       <span class="pt-count" id="pt-count"></span>
       <button id="pt-copy" class="mgr-btn" data-i18n="transferCopy">Kopieren</button>
@@ -2317,7 +2317,7 @@
   <!-- Freigabe: Firestore-Zugriff als Modul, Oberfläche als klassisches Script.
        Das Modul läuft nach den klassischen Scripts und meldet sich über
        das Ereignis "inkwells-share-ready". -->
-  <script type="module" src="core/share.js"></script>
+  <script type="module" src="core/share.js" onerror="window._shareModulFehlt = true"></script>
   <script src="ui/share.js"></script>
   <!-- Tab „Geteilte Dokumente": Liste, Öffnen, Zurückschreiben, Hinweise -->
   <script src="ui/sharedDocs.js"></script>

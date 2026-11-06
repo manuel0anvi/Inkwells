@@ -976,7 +976,7 @@ function appendPageDOM(page, index) {
     + '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
     + '<path d="M2.5 3.5h11M2.5 8h11M2.5 12.5h7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
     + '</svg></button>'
-    + '<button class="pg-menu-btn" title="Seitenoptionen">⋯</button>'
+    + '<button class="pg-menu-btn" title="' + t('pageOptions') + '">⋯</button>'
     + '</span>';
   // Als Eigenschaft: der Abschnittsname ist fremder Text (siehe sidebar.js)
   hdr.querySelector('.pg-sec-btn').title = sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection');

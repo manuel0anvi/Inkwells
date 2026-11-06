@@ -243,6 +243,11 @@ function zeigeImportBericht(bericht) {
    core/importExport.js.
 
    @returns {Promise<'bild'|'text'|null>} null = abgebrochen */
+function zeigeFortschritt(getan, gesamt) {
+  toastFortschritt((t('openDocProgress') || 'Seite {n} von {m} …')
+    .replace('{n}', getan).replace('{m}', gesamt));
+}
+
 function fragePdfArt() {
   const ov = E('ov-pdf-mode');
   ov.style.display = 'flex';
@@ -299,10 +304,7 @@ E('btn-open-doc').addEventListener('click', async () => {
         }
 
         if (datei.kind === 'pdf' && pdfArt === 'text') {
-          const bericht = await fillNotebookFromPdfText(nb, datei.dataUrl, (getan, gesamt) => {
-            toast((t('openDocProgress') || 'Seite {n} von {m} …')
-              .replace('{n}', getan).replace('{m}', gesamt));
-          });
+          const bericht = await fillNotebookFromPdfText(nb, datei.dataUrl, zeigeFortschritt);
 
           /* Ein eingescanntes Blatt hat keine Textebene. Ohne diesen
              Hinweis entstünde ein leeres Heft, und niemand wüsste warum. */
@@ -310,7 +312,7 @@ E('btn-open-doc').addEventListener('click', async () => {
             if (typeof showAlert === 'function') await showAlert(t('pdfNoText'));
             else toast(t('pdfNoText'), true);
             // Dann eben doch als Bild – besser als ein leeres Heft
-            const ersatz = await fillNotebookFromPdf(nb, datei.dataUrl, datei.name);
+            const ersatz = await fillNotebookFromPdf(nb, datei.dataUrl, datei.name, zeigeFortschritt);
             toast((t('openDocDonePdf') || '{n} Seiten übernommen.').replace('{n}', ersatz.seiten));
             return;
           }
@@ -327,18 +329,15 @@ E('btn-open-doc').addEventListener('click', async () => {
         }
 
         if (datei.kind === 'pdf') {
-          const bericht = await fillNotebookFromPdf(nb, datei.dataUrl, datei.name);
+          const bericht = await fillNotebookFromPdf(nb, datei.dataUrl, datei.name, zeigeFortschritt);
           toast((t('openDocDonePdf') || '{n} Seiten übernommen.')
             .replace('{n}', bericht.seiten));
           return;
         }
 
-        const bericht = await fillNotebookFromDocx(nb, datei.dataUrl, (getan, gesamt) => {
-          /* Ein langes Dokument braucht spürbar Zeit – das Messen ist der
-             teure Schritt. Ohne Zeichen steht die App scheinbar still. */
-          toast((t('openDocProgress') || 'Seite {n} von {m} …')
-            .replace('{n}', getan).replace('{m}', gesamt));
-        });
+        /* Ein langes Dokument braucht spürbar Zeit – das Messen ist der teure
+           Schritt. Ohne Zeichen steht die App scheinbar still. */
+        const bericht = await fillNotebookFromDocx(nb, datei.dataUrl, zeigeFortschritt);
         zeigeImportBericht(bericht);
       } catch (err) {
         /* Vorher fiel ein Fehler hier ins Leere: das Heft war angelegt,
@@ -760,12 +759,22 @@ E('nb-modal-cancel').addEventListener('click', () => {
   _nbOnCreate = null;
   E('ov-nb').style.display = 'none'; if (typeof closeCustomColorPopover === 'function') closeCustomColorPopover();
 });
+let _nbSpeichertGerade = false;
 E('nb-modal-ok').addEventListener('click', async () => {
+  // Zweimal Enter hintereinander legte sonst zwei Hefte an: gesichert wird hier asynchron
+  if (_nbSpeichertGerade) return;
+  _nbSpeichertGerade = true;
+  try { await nbModalBestaetigt(); } finally { _nbSpeichertGerade = false; }
+});
+
+async function nbModalBestaetigt() {
   const name = E('nb-name-in').value.trim(); 
   if (!name) { toast(t('enterName'), true); return; }
   
   // Check for duplicate names in memory
-  const duplicate = S.notebooks.find(nb => nb.name.toLowerCase() === name.toLowerCase() && nb.id !== _nbEditId);
+  // Nur die eigenen: ein gerade offenes geteiltes Dokument belegt keinen Namen
+  const eigene = typeof ownNotebooks === 'function' ? ownNotebooks() : S.notebooks;
+  const duplicate = eigene.find(nb => nb.name.toLowerCase() === name.toLowerCase() && nb.id !== _nbEditId);
   if (duplicate) { toast(t('nameExists'), true); return; }
   
   if (_nbEditId) { 
@@ -859,7 +868,7 @@ E('nb-modal-ok').addEventListener('click', async () => {
     
     openNotebook(nb.id); 
   }
-});
+}
 document.addEventListener('keydown', e => { if (E('ov-nb').style.display !== 'none' && e.key === 'Enter') E('nb-modal-ok').click(); if (E('ov-nb').style.display !== 'none' && e.key === 'Escape') E('nb-modal-cancel').click(); });
 
 /* ── Scroll-Erkennung für Karten-Knöpfe ──────────────────────────────

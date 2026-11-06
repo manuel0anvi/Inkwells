@@ -2242,6 +2242,7 @@ ipcMain.handle('save-settings', (_, data) => {
 
 ipcMain.handle('pick-folder', async (_, defaultPath) => {
   const options = {
+    title: 'Inkwells',
     properties: ['openDirectory', 'createDirectory']
   };
   if (defaultPath) options.defaultPath = defaultPath;

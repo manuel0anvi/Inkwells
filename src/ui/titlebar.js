@@ -8,7 +8,10 @@ E('btn-close').addEventListener('click', () => window.api?.close());
 /* Ein Quadrat, solange das Fenster nicht maximiert ist, zwei versetzte,
    wenn es maximiert ist. Der Hauptprozess meldet jeden Wechsel, auch den
    über Windows selbst (Doppelklick, Snap). */
+let _fensterMaximiert = true;
+window.addEventListener('language-changed', () => zeigeFensterzustand(_fensterMaximiert));
 function zeigeFensterzustand(maximiert) {
+  _fensterMaximiert = maximiert;
   const knopf = E('btn-max');
   if (!knopf) return;
   knopf.classList.toggle('maximiert', maximiert);

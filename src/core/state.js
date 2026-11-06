@@ -173,4 +173,4 @@ const S = {
 const E = id => document.getElementById(id);
 const QA = sel => [...document.querySelectorAll(sel)];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const fmt = iso => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+const fmt = iso => new Date(iso).toLocaleDateString((typeof getLanguage === 'function' && getLanguage()) || 'de', { day: '2-digit', month: '2-digit', year: '2-digit' });

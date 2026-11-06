@@ -301,6 +301,20 @@
         if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     }
+
+    /* Ragt der Stapel unter das letzte Blatt, entstünde dort leerer Rollraum.
+       Also von unten her zusammenschieben, solange die Karten nicht passen. */
+    const letzte = [...document.querySelectorAll('.j-page')].pop();
+    if (letzte) {
+      let frei = letzte.getBoundingClientRect().bottom - sr.top + scroll.scrollTop;
+      for (const k of [...ebene.querySelectorAll('.comment-card')].reverse()) {
+        const hoehe = k.offsetHeight, top = parseFloat(k.style.top) || 0;
+        if (top + hoehe <= frei) break;
+        const neu = Math.max(0, frei - hoehe);
+        k.style.top = Math.round(neu) + 'px';
+        frei = neu - 8;
+      }
+    }
   }
 
   let _geplant = false;

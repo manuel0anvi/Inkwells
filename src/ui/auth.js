@@ -503,6 +503,10 @@
   };
 
   signoutBtn.addEventListener('click', async () => {
+    /* Ein fremdes Dokument gehört zur Anmeldung. Blieb es offen, lief die
+       Live-Sitzung nach dem Abmelden weiter. showHome beendet sie (ui/sharedDocs.js). */
+    const offen = typeof getNb === 'function' ? getNb() : null;
+    if (offen && offen.origin === 'shared' && typeof showHome === 'function') showHome();
     await CloudSync_.signOut();
     toast(t('authSignoutSuccess'));
     refreshUI();

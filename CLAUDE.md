@@ -63,7 +63,7 @@ Vor einem Push, der neue Konfigurationswerte enthält: kurz prüfen, dass kein
 npm test
 ```
 
-Läuft die Aufteilung der Hefte, den Textabgleich, die Schreibmarken und das
+Prüft auch, dass sich jede Datei lesen lässt, und läuft die Aufteilung der Hefte, den Textabgleich, die Schreibmarken und das
 gemeinsame Speichern durch. Schlägt etwas fehl: nicht committen, sondern die
 Ursache suchen. Die Tests sind der einzige Schutz davor, dass eine Änderung an
 der Live-Zusammenarbeit still etwas kaputt macht.
@@ -124,6 +124,26 @@ Behoben am 20. 10. 2026:
 | Freigabe aufgehoben, Auge bleibt, Fenster sagt „gibt es nicht mehr“ | Woanders aufgehoben: Merkzettel wird beim Start und im Fenster geprüft und geleert; Meldung „Freigabe aufgehoben“; Neu-Freigeben geht sofort | `vergissAufgehobene`, `src/ui/share.js`; `loadShareHead`, `website/dashboard/dashboard.js` |
 | Stift zieht beim Schweben einen kurzen Schwanz | Stiftpunkte ohne Druck werden nie gezeichnet | `src/canvas/input.js` (pointermove) |
 | Geteilte Dokumente: „niemand hat etwas geteilt“ beim Laden; Link mit Microsoft fragt „anmelden?“; ohne Netz „Live-Datenbank blockiert“ | Ladezustand, fehlender zweiter Schritt samt Knopf, „Kein Internet“ | `src/ui/sharedDocs.js`, `src/ui/collab.js` |
+
+Behoben am 6. 11. 2026:
+
+| Meldung | Ursache und Behebung | Wo |
+| --- | --- | --- |
+| Website zeigt Seiten nach Abschnitten sortiert | `pagesInOrder` ging über die abgeleiteten `pgIds`; die Website nahm bei doppelten Dateien die zuerst gefundene | `src/core/share.js`, `website/js/viewer.js`, `website/dashboard/dashboard.js`; Test `test-seitenfolge.js` |
+| Fremder Name führt Code aus | Name, Farbe, Abschnitt und Anhang gehen nur noch als Text in die Oberfläche | Rundgang „Fremde Namen führen nichts aus“; Test `test-fremde-namen.js` |
+| Heft weg nach Neustart / bei kurz fehlender Datei | Einträge bleiben und zeigen „Nicht erreichbar“; geöffnete Dateien bleiben erlaubt | `loadNotebooksFromRegistry`, `S.fehlendeHefte`, `erlaubeDatei`; Test `test-datenverlust.js` |
+| Update wird abgelehnt | Die App verlangt eine `.exe.sig` neben der `.exe` im Release | `updateSignaturStimmt`, `main.js`; `scripts/update-signatur.js` |
+
+**Fassung bauen:** `npm run build` unterschreibt das Update. Der private Schlüssel liegt unter
+`~/.inkwells/update-signatur.pem` (nie ins Repo). Ohne ihn bricht der Bau ab. Die `.exe.sig` gehört mit ins
+GitHub-Release, sonst nehmen installierte Fassungen ab dieser das Update nicht an.
+
+**Vor `npm run deploy-web` immer erst `npm run pull-web -- --apply`:** `website/` reist nicht über Git. Am
+5. 11. war der Ordner hier zwei Monate älter als die veröffentlichte Seite, ein Deploy hätte den Stand des
+anderen gelöscht.
+
+**Regeln im Emulator:** `npx -y firebase-tools@13 emulators:exec --project inkwell-rules-test --only
+firestore,database "node scripts/test-rules.js"`. Danach bleiben oft Java-Prozesse auf 8089/9009 liegen.
 
 **Formatstand 2 (20. 10. 2026):** Eine App mit Stand 1 kann Dokumente mit
 Stand 2 nicht öffnen und wird zum Aktualisieren aufgefordert. Die neuere

@@ -201,7 +201,7 @@ E('pg-bg-ok').addEventListener('click', () => {
 E('pgctx-clear').addEventListener('click', async () => {
   hidePgCtxMenu();
   if (!_pgCtxPage || !_pgCtxEl) return;
-  if (!await showConfirm('Seite wirklich leeren?')) return;
+  if (!await showConfirm(t('pageClearConfirm'))) return;
   _pgCtxPage.textContent = ''; _pgCtxPage.inkStrokes = []; _pgCtxPage.objects = [];
   delete S.strokeHistory[_pgCtxPage.id];
   const t = _pgCtxEl.querySelector('.j-text'); if (t) t.innerHTML = '';

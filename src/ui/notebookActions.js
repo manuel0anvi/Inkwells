@@ -157,7 +157,10 @@
         konflikt: t('versionReasonConflict') || 'eigene Fassung beim Konflikt',
         fremd: t('versionReasonRemote') || 'Fassung aus der Cloud beim Konflikt'
       }[stand.grund] || (t('versionReasonAuto') || 'beim Arbeiten');
-      meta.textContent = `${(t('versionPages') || '{n} Seiten').replace('{n}', stand.seiten)} · ${grundText}`;
+      const seitenText = stand.seiten === 1
+        ? (t('versionOnePage') || '1 Seite')
+        : (t('versionPages') || '{n} Seiten').replace('{n}', stand.seiten);
+      meta.textContent = `${seitenText} · ${grundText}`;
 
       info.append(when, meta);
       row.appendChild(info);
@@ -190,9 +193,10 @@
   async function openVersions(nb) {
     versionsOverlay.style.display = 'flex';
     versionsList.innerHTML = '';
-    versionsList.appendChild(infoRow(t('versionLoading') || 'Fassungen werden geladen…'));
+    const ladezeile = () => infoRow(t('versionLoading') || 'Fassungen werden geladen…');
+    const ladeOrt = ladezeile();
+    versionsList.appendChild(ladeOrt);
 
-    versionsList.innerHTML = '';
     try {
       await zeigeOertliche(nb);
     } catch (err) {
@@ -200,14 +204,20 @@
         .replace('{msg}', err.message)));
     }
 
+    ladeOrt.remove();
+
     if (!CloudSync_.isConfigured() || !CloudSync_.isAuthenticated()) {
       versionsList.appendChild(gruppenkopf(t('versionCloudTitle') || 'In der Cloud'));
       versionsList.appendChild(infoRow(t('versionNeedsLogin')));
       return;
     }
 
+    const ladeCloud = ladezeile();
+    versionsList.appendChild(ladeCloud);
+
     try {
       const versions = await CloudSync_.listVersions(nb.id);
+      ladeCloud.remove();
       versionsList.appendChild(gruppenkopf(t('versionCloudTitle') || 'In der Cloud'));
 
       if (!versions.length) {
@@ -252,7 +262,10 @@
         versionsList.appendChild(row);
       });
     } catch (err) {
-      versionsList.innerHTML = '';
+      /* Nur die Cloud-Zeile weg. Hier stand innerHTML = '': ohne Netz
+         verschwanden auch die Fassungen auf diesem Gerät, und gerade die
+         hätte man jetzt gebraucht. */
+      ladeCloud.remove();
       versionsList.appendChild(infoRow((t('versionFailed') || 'Fassungen konnten nicht geladen werden: {msg}')
         .replace('{msg}', err.message)));
     }
@@ -426,7 +439,9 @@
       expiry.style.cssText = `font-size:11px;color:${left <= 3 ? '#d9534f' : 'var(--lo)'};`;
       expiry.textContent = left === 0
         ? (t('trashExpiresToday') || 'Wird heute endgültig gelöscht')
-        : (t('trashExpiresIn') || 'Wird in {n} Tagen endgültig gelöscht').replace('{n}', left);
+        : left === 1
+          ? (t('trashExpiresTomorrow') || 'Wird morgen endgültig gelöscht')
+          : (t('trashExpiresIn') || 'Wird in {n} Tagen endgültig gelöscht').replace('{n}', left);
 
       info.append(name, meta, expiry);
 

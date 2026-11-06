@@ -253,6 +253,20 @@ function toast(msg, err = false) {
   setTimeout(() => t.remove(), 3200);
 }
 
+/* Ein Hinweis, der sich aktualisiert. Beim Einlesen eines langen Dokuments
+   stapelten sich sonst Dutzende Toasts. */
+let _fortschrittToast = null, _fortschrittUhr = 0;
+function toastFortschritt(msg) {
+  if (!_fortschrittToast || !_fortschrittToast.isConnected) {
+    _fortschrittToast = document.createElement('div');
+    _fortschrittToast.className = 'toast';
+    E('toasts').appendChild(_fortschrittToast);
+  }
+  _fortschrittToast.textContent = msg;
+  clearTimeout(_fortschrittUhr);
+  _fortschrittUhr = setTimeout(() => { if (_fortschrittToast) _fortschrittToast.remove(); }, 3200);
+}
+
 function txtModal(title, val = '') {
   E('txt-modal-h').textContent = title;
   E('txt-modal-in').value = val;
@@ -272,7 +286,7 @@ function buildBgRow(cont, cur, onChange) {
   for (const bg of BG_TYPES) {
     const b = document.createElement('button');
     b.className = 'bg-sw' + (cur === bg.id ? ' active' : '');
-    b.title = bg.label;
+    b.title = t('bgName_' + bg.id) || bg.label;
     b.style.cssText = BG_STYLE[bg.id];
     b.dataset.id = bg.id;
     b.addEventListener('click', () => {

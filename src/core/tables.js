@@ -414,6 +414,11 @@ const TBL_ICONS = {
 
 let tblBar = null;
 
+// Die Knöpfe tragen ihre Beschriftung fest: nach einem Sprachwechsel neu bauen
+window.addEventListener('language-changed', () => {
+  if (tblBar) { tblBar.remove(); tblBar = null; }
+});
+
 function tableBar() {
   if (tblBar) return tblBar;
 

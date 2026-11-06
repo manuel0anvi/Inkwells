@@ -174,7 +174,10 @@ class CloudSyncManager {
     this._loadSyncHistory();
     this.isOnline = await this._checkConnectivity();
 
-    window.addEventListener('online', () => this._onConnectivityChange(true));
+    /* Erst nachsehen: „online“ heisst nur, dass ein Netzwerk anliegt. In einem
+       WLAN ohne Internet ging es sofort los, scheiterte dreimal und meldete
+       danach „Alles gesichert“, obwohl nichts angekommen war. */
+    window.addEventListener('online', () => this._checkConnectivity());
     window.addEventListener('offline', () => this._onConnectivityChange(false));
     setInterval(() => this._checkConnectivity(), 30000);
     setInterval(() => this._processQueue(), 5000);
@@ -1381,7 +1384,9 @@ class CloudSyncManager {
     if (!Array.isArray(stored) || !stored.length) return;
 
     this._persistedQueue = [];
-    this._hadOfflineBacklog = true;
+    /* Hier stand _hadOfflineBacklog = true. Eine gemerkte Warteschlange heisst
+       aber nur, dass beim letzten Beenden etwas offen war – die Meldung
+       „Offline-Änderungen hochgeladen“ kam dann, ohne dass jemand offline war. */
 
     for (const item of stored) {
       // Abwärtskompatibel: alte Einträge sind reine Strings (nbId),
@@ -1939,6 +1944,23 @@ class CloudSyncManager {
         this.retryCounts[nbId] = (this.retryCounts[nbId] || 0) + 1;
         const count = this.retryCounts[nbId];
         const msg = err.message || '';
+
+        /* Keine Leitung ist kein Fehlschlag des Auftrags. Er bleibt liegen, und
+           gezählt wird auch nicht: drei Versuche in einem toten WLAN warfen ihn
+           sonst aus der Warteschlange. Dasselbe gilt für ein 401, das nur
+           entsteht, weil sich das Token ohne Netz nicht erneuern lässt. */
+        if (/failed to fetch|networkerror|network request|timeout|timed out|ENOTFOUND|ETIMEDOUT|ECONNRE/i.test(msg)
+            || this._erneuernScheitertAmNetz) {
+          delete this.retryCounts[nbId];
+          this._checkConnectivity().catch(() => {});
+          if (!this._nachNetzfehler) {
+            this._nachNetzfehler = setTimeout(() => {
+              this._nachNetzfehler = null;
+              this._processQueue();
+            }, 60000);
+          }
+          break;
+        }
 
         const isFatal = msg.includes('401') || msg.includes('403')
           || msg.includes('abgelaufen') || msg.includes('Speicherplatz')
@@ -2910,7 +2932,7 @@ class CloudSyncManager {
         const name = typeof first === 'object' ? first.nbName : '';
         if (count === 1 && name) {
           toast(typeof t === 'function'
-            ? t('syncBackOnlineNamed').replace('{name}', name).replace('{n}', '0')
+            ? t('syncBackOnlineOne').replace('{name}', name)
             : `Wieder online – „${name}" wird hochgeladen…`);
         } else if (count > 1 && name) {
           toast(typeof t === 'function'

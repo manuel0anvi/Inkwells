@@ -1768,6 +1768,8 @@ function attachInput(canvas, textDiv, objLayer, page) {
      dazwischenging, ist kein Grund, die Arbeit wegzuwerfen.
      ══════════════════════════════════════════════════════════════════ */
   div.addEventListener('pointercancel', () => {
+    // Begonnen auf einer anderen Seite: die beendet ihn (document, unten)
+    if (S._strichAbheben && S._strichAbheben !== strichAbheben) return;
     beendeFormZug();
     stopLineTimer(S._cur);
     stopVorschau();
