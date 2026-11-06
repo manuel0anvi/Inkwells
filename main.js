@@ -2615,16 +2615,18 @@ ipcMain.handle('clipboard-image', async () => {
    Anmeldung weggeworfen, weil ein gescheitertes Erneuern dann wie ein
    Nein des Anbieters aussah (src/core/cloudSync.js, _refreshSession).
 
-   Jetzt wird bei beiden Anbietern kurz angeklopft: dieselben Adressen, mit
-   denen Windows und Android selbst ihre Verbindung prüfen. Eine Antwort
-   genügt. Das Ergebnis gilt ein paar Sekunden – mehrere Fragen kurz
+   Jetzt wird bei beiden Anbietern kurz angeklopft. Eine Antwort genügt. Das Ergebnis gilt ein paar Sekunden – mehrere Fragen kurz
    hintereinander (Start, Erneuern, Abmelde-Prüfung) teilen sich eine.
    ══════════════════════════════════════════════════════════════════════ */
 /* Eine Anmeldeseite antwortet auf alles mit 200 und ihrer eigenen Seite.
    Google verlangt deshalb genau 204 – das schickt kein Hotelportal. */
 const NETZ_PROBEN = [
   { url: 'https://www.google.com/generate_204', passt: r => r.status === 204 },
-  { url: 'https://www.msftconnecttest.com/connecttest.txt', passt: r => r.ok }
+  /* Der Anmeldedienst und nicht msftconnecttest.com: den gibt es nur über http, über
+     https scheiterte er immer am Zertifikat (handshake failed, net_error -200). Wer
+     den Dienst über https erreicht, ist im Netz: eine Anmeldeseite im Hotel kann sich
+     nicht als er ausgeben. Deshalb zählt hier jede Antwort. */
+  { url: 'https://login.microsoftonline.com/', passt: () => true }
 ];
 let _netzAntwort = null, _netzZeit = 0;
 

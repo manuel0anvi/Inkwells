@@ -132,6 +132,8 @@ Behoben am 6. 11. 2026:
 | Website zeigt Seiten nach Abschnitten sortiert | `pagesInOrder` ging über die abgeleiteten `pgIds`; die Website nahm bei doppelten Dateien die zuerst gefundene | `src/core/share.js`, `website/js/viewer.js`, `website/dashboard/dashboard.js`; Test `test-seitenfolge.js` |
 | Fremder Name führt Code aus | Name, Farbe, Abschnitt und Anhang gehen nur noch als Text in die Oberfläche | Rundgang „Fremde Namen führen nichts aus“; Test `test-fremde-namen.js` |
 | Heft weg nach Neustart / bei kurz fehlender Datei | Einträge bleiben und zeigen „Nicht erreichbar“; geöffnete Dateien bleiben erlaubt | `loadNotebooksFromRegistry`, `S.fehlendeHefte`, `erlaubeDatei`; Test `test-datenverlust.js` |
+| Mit Google angemeldet, trotzdem „Missing or insufficient permissions“ überall | Die Regel fragte, wie die Sitzung begann; neue Geräte beginnen anonym. Jetzt zählen verknüpfte Identität und bestätigte Adresse. Das Terminal zeigt `[Share] Anmeldung bei Firebase` | `isVerifiedUser`, `website/firestore.rules`; `scripts/test-rules.js` |
+| Im Terminal `handshake failed … net_error -200` | Die Internet-Prüfung fragte msftconnecttest.com über https, das es nur über http gibt | `NETZ_PROBEN`, `main.js` |
 | Update wird abgelehnt | Die App verlangt eine `.exe.sig` neben der `.exe` im Release | `updateSignaturStimmt`, `main.js`; `scripts/update-signatur.js` |
 
 **Fassung bauen:** `npm run build` unterschreibt das Update. Der private Schlüssel liegt unter
