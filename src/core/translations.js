@@ -1027,7 +1027,6 @@ const TRANSLATIONS = {
     syncOfflineToastCount: 'Ohne Internet: {n} Änderungen warten auf Internet.',
     syncBackOnlineNamed: 'Wieder online – „{name}" und {n} weitere werden hochgeladen…',
     syncBackOnlineOne: 'Wieder online – „{name}" wird hochgeladen…',
-    shareRestartNeeded: 'Zum Teilen muss Inkwells einmal neu laden, weil es ohne Internet gestartet wurde. Jetzt neu laden?',
     syncPanelNeedsAuth: 'Melde dich an, um den Sync-Status zu sehen.',
 
     /* Das Sync-Fenster (ui/syncPanel.js). Der Streifen oben beantwortet
@@ -2148,7 +2147,6 @@ const TRANSLATIONS = {
     syncOfflineToastCount: 'Offline: {n} changes waiting for internet.',
     syncBackOnlineNamed: 'Back online — "{name}" and {n} more uploading…',
     syncBackOnlineOne: 'Back online — "{name}" uploading…',
-    shareRestartNeeded: 'To share, Inkwells has to reload once because it started without internet. Reload now?',
     syncPanelNeedsAuth: 'Sign in to see sync status.',
 
     syncWindowTitle: 'Sync',
@@ -3261,7 +3259,6 @@ const TRANSLATIONS = {
     syncOfflineToastCount: 'Offline: {n} modifiche in attesa di internet.',
     syncBackOnlineNamed: 'Di nuovo online — "{name}" e {n} altri in caricamento…',
     syncBackOnlineOne: 'Di nuovo online — "{name}" in caricamento…',
-    shareRestartNeeded: 'Per condividere, Inkwells deve ricaricarsi una volta perché è partito senza internet. Ricaricare ora?',
     syncPanelNeedsAuth: 'Accedi per vedere lo stato di sincronizzazione.',
 
     syncWindowTitle: 'Sincronizzazione',

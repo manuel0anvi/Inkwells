@@ -11,6 +11,7 @@
     "rules": "website/database.rules.json"
   },
   "emulators": {
+    "auth": { "port": 9099 },
     "firestore": { "port": 8089 },
     "database": { "port": 9009 },
     "ui": { "enabled": false },

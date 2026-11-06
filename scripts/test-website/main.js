@@ -89,7 +89,7 @@ const ERWARTET = [
   /auth\/network-request-failed/i, /Firebase/i, /firestore/i,
   /googleapis|gstatic|firebaseio|firebasedatabase/i,
   /offline/i, /Access to (fetch|XMLHttpRequest)/i,
-  /favicon/i, /content security policy/i
+  /favicon/i
 ];
 const istErwartet = (text) => ERWARTET.some(r => r.test(text));
 
@@ -166,6 +166,35 @@ app.on('ready', () => {
             fehler: (window.__fehler || [])
           });
         })()`).then(JSON.parse).catch(e => ({ fehler: ['Abfrage: ' + e.message], laenge: 0, felder: 0, leer: [], roh: [] }));
+
+        /* ── Die Knöpfe ohne Inline-Code (js/tu.js) ────────────────────────
+           Ein Name, den es nicht gibt, fiele erst beim Klick auf. Geprüft wird
+           auch, was die Seite erst später baut: das steht in ihrer Skriptdatei. */
+        {
+          const fs = require('fs');
+          const seitenOrdner = path.join(ROOT, 'website', pfad === '/' ? '' : pfad);
+          const html = fs.readFileSync(path.join(seitenOrdner, 'index.html'), 'utf8');
+          let text = html;
+          for (const m of html.matchAll(/<script src="[^"]*(seite-[a-z]+\.js)"/g)) {
+            text += fs.readFileSync(path.join(ROOT, 'website', 'js', m[1]), 'utf8');
+          }
+          const namen = new Set();
+          for (const m of text.matchAll(/data-tu-[a-z]+="([^"]*)"/g)) {
+            for (const a of m[1].matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) namen.add(a[1]);
+          }
+          const fehlend = await win.webContents.executeJavaScript(
+            `${JSON.stringify([...namen])}.filter(n => typeof window[n] !== 'function')`);
+          pruefe('Jeder Knopf findet seine Funktion (' + namen.size + ')', fehlend.length === 0, fehlend.join(', '));
+
+          const geklickt = await win.webContents.executeJavaScript(`(() => {
+            const k = document.querySelector('[data-tu-click^="setLang"]');
+            if (!k) return null;
+            k.click();
+            return document.documentElement.lang || true;
+          })()`);
+          if (geklickt !== null) pruefe('Ein Knopf tut etwas, ohne Fehler', true, '');
+          await warte(200);
+        }
 
         pruefe('Sie hat einen Titel', !!lage.titel, 'kein <title>');
         pruefe('Es steht Text darauf', lage.laenge > 60, `nur ${lage.laenge} Zeichen sichtbar`);

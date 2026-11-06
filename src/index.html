@@ -7,11 +7,11 @@
      strengere gewinnt. Was hier neu freigegeben wird, muss deshalb auch
      dort stehen. Warum apis.google.com dabei ist: ausfuehrlich in main.js
      ueber UI_CSP. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>Inkwells</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="dns-prefetch" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400&family=Cormorant+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet"></noscript>
 <!-- CSS Modules (ordered by cascade importance) -->
 <link rel="stylesheet" href="css/base.css">
@@ -2203,9 +2203,7 @@
 </div>
 
 <script src="lib/pdf.min.js"></script>
-<script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
-</script>
+<script src="core/pdfArbeiter.js"></script>
 <!-- Core state, dialogs, data -->
 <script src="core/webAPI.js"></script>
 <!-- Bereinigt fremden Seitentext, bevor er ins DOM geht. Muss vor
@@ -2317,7 +2315,7 @@
   <!-- Freigabe: Firestore-Zugriff als Modul, Oberfläche als klassisches Script.
        Das Modul läuft nach den klassischen Scripts und meldet sich über
        das Ereignis "inkwells-share-ready". -->
-  <script type="module" src="core/share.js" onerror="window._shareModulFehlt = true"></script>
+  <script type="module" src="core/share.js"></script>
   <script src="ui/share.js"></script>
   <!-- Tab „Geteilte Dokumente": Liste, Öffnen, Zurückschreiben, Hinweise -->
   <script src="ui/sharedDocs.js"></script>

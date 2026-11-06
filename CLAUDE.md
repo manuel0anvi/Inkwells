@@ -142,6 +142,13 @@ GitHub-Release, sonst nehmen installierte Fassungen ab dieser das Update nicht a
 5. 11. war der Ordner hier zwei Monate älter als die veröffentlichte Seite, ein Deploy hätte den Stand des
 anderen gelöscht.
 
+**Firebase liegt gebündelt unter `src/lib/firebase/`** und kommt nicht mehr von gstatic. Nach einem Update:
+`npm run build-firebase`, dann `npm run sync-share`. Geprüft wird es unter der echten CSP mit `npm run test:firebase`.
+
+**Kein Inline-Code:** App und Website laufen ohne `'unsafe-inline'` bei Skripten. In der App heisst das: keine
+`onclick`-Attribute und keine `<script>`-Blöcke. Auf der Website steht statt `onclick="f('a')"` ein
+`data-tu-click="f('a')"` (`website/js/tu.js`), das nur globale Funktionen mit Text, Zahl oder `event` aufrufen kann.
+
 **Regeln im Emulator:** `npx -y firebase-tools@13 emulators:exec --project inkwell-rules-test --only
 firestore,database "node scripts/test-rules.js"`. Danach bleiben oft Java-Prozesse auf 8089/9009 liegen.
 

@@ -99,20 +99,6 @@
   function whenShareReady() {
     if (window.InkwellsShare) return Promise.resolve(window.InkwellsShare);
 
-    /* Ohne Internet gestartet: das Modul konnte Firebase nicht laden, und der
-       Browser merkt sich das bis zum nächsten Laden der Seite. Warten bringt
-       dann nichts. Ist die Leitung inzwischen da, hilft einmal neu laden. */
-    if (window._shareModulFehlt) {
-      return (async () => {
-        const daDraussen = navigator.onLine && (await window.api?.checkInternet?.()) !== false;
-        if (daDraussen && await showConfirm(t('shareRestartNeeded'))) {
-          if (typeof AutoSave !== 'undefined' && AutoSave) await AutoSave.saveNow();
-          location.reload();
-        }
-        throw new Error('SHARE_OFFLINE');
-      })();
-    }
-
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('SHARE_OFFLINE')), 15000);
       document.addEventListener('inkwells-share-ready', () => {

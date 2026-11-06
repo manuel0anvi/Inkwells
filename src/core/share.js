@@ -29,17 +29,17 @@
    Passendes Regelwerk: website/firestore.rules
    ══════════════════════════════════════════════════════════════════════ */
 
-import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js';
+import { initializeApp, getApps, getApp } from '../lib/firebase/kern.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   addDoc, query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, arrayUnion,
   arrayRemove, deleteField, FieldPath, getCountFromServer
-} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js';
+} from '../lib/firebase/kern.js';
 import {
   getAuth, signInAnonymously, signInWithCredential, linkWithCredential,
   GoogleAuthProvider, OAuthProvider, onAuthStateChanged, signOut as fbSignOut,
   signInWithPopup
-} from 'https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js';
+} from '../lib/firebase/kern.js';
 
 /* ── Zugangsdaten ───────────────────────────────────────────────────
    Kein Geheimnis – siehe die ausführliche Begründung in js/firebase.js.
@@ -3398,7 +3398,7 @@ let _rtdbPromise = null;
 function loadRealtime() {
   if (_rtdbPromise) return _rtdbPromise;
 
-  _rtdbPromise = import('https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js')
+  _rtdbPromise = import('../lib/firebase/echtzeit.js')
     .then((mod) => ({ mod, db: mod.getDatabase(app, RTDB_URL) }))
     .catch((err) => {
       _rtdbPromise = null;

@@ -166,6 +166,10 @@ app.on('ready', async () => {
         [, level, message, line, sourceId] = args;
       }
       const schwer = level === 3 || level === 'error' || level === 'warning' && false;
+      /* Chromium meldet einen Handler in fremdem Text schon beim Einlesen in die
+         Bereinigung. Ausgeführt wird er nicht: das prüft „Fremde Namen führen nichts
+         aus“ weiter unten, und eigener Inline-Code fällt in test-syntax.js auf. */
+      if (/Executing inline event handler violates/.test(String(message + '  (' + String(sourceId || '').split('/').pop() + ':' + line + ')'))) return;
       if (schwer) konsole.push(message + '  (' + String(sourceId || '').split('/').pop() + ':' + line + ')');
     });
 

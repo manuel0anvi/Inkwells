@@ -609,6 +609,11 @@ const UI_MIME = {
 
    scripts/test-csp-rtdb.js haelt beide Stellen gegen die Adresse aus
    share.js.
+   >>> Kein 'unsafe-inline' mehr <<<
+   Die Oberfläche hat keinen Inline-Code, und Firebase kommt aus lib/firebase/.
+   Ein eingeschleustes <img onerror> liefe damit selbst dann nicht, wenn die
+   Bereinigung eine Lücke hätte. Geprüft in scripts/test-firebase-buendel.
+
    Zweite Schicht unter der Bereinigung des Seitentextes
    (src/core/sanitize.js). Die Bereinigung ist die eigentliche
    Absicherung; hier steht, was selbst dann noch nicht geht, wenn sie
@@ -640,7 +645,7 @@ const UI_MIME = {
    ueber api.js und danach auth/internal-error: der Fehler nennt Google,
    obwohl es um die Anmeldung bei MICROSOFT geht. Beides wird gebraucht,
    script-src fuer api.js und frame-src fuer den Rahmen, den es setzt. */
-const UI_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'";
+const UI_CSP = "default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://*.firebasedatabase.app https://*.firebaseio.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://login.microsoftonline.com https://*.firebasedatabase.app; object-src 'none'; base-uri 'self'; form-action 'none'";
 
 function startUiServer() {
   return new Promise((resolve, reject) => {

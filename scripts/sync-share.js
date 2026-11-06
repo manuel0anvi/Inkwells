@@ -83,6 +83,7 @@ const LIBS = [
   { source: ['src', 'lib', 'katex.min.js'], target: ['website', 'lib', 'katex.min.js'] },
   { source: ['src', 'lib', 'katex.min.css'], target: ['website', 'lib', 'katex.min.css'] },
   { source: ['src', 'lib', 'fonts'], target: ['website', 'lib', 'fonts'] },
+  { source: ['src', 'lib', 'firebase'], target: ['website', 'lib', 'firebase'] },
   { source: ['src', 'lib', 'pdf.min.js'], target: ['website', 'lib', 'pdf.min.js'] },
   { source: ['src', 'lib', 'pdf.worker.min.js'], target: ['website', 'lib', 'pdf.worker.min.js'] }
 ];

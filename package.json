@@ -13,6 +13,7 @@
     "sync-share": "node scripts/sync-share.js",
     "check-share": "node scripts/sync-share.js --check",
     "build-yjs": "node scripts/build-yjs.js",
+    "build-firebase": "node scripts/build-firebase.js",
     "render-icon": "electron scripts/render-icon.js",
     "make-icons": "node scripts/make-icons.js",
     "deploy-web": "node scripts/sync-share.js && node scripts/deploy-website.js",
@@ -37,6 +38,7 @@
     "test:schreiben": "electron scripts/test-schreiben",
     "test:rundgang": "electron scripts/test-rundgang",
     "test:web": "electron scripts/test-website",
+    "test:firebase": "firebase emulators:exec --project inkwell-rules-test --only auth,firestore,database \"electron scripts/test-firebase-buendel\"",
     "test:fenster": "electron scripts/test-fensterschutz",
     "werbebilder": "electron scripts/werbebilder",
     "werbefilm": "electron scripts/werbefilm"
