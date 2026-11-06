@@ -2173,6 +2173,13 @@ app.on('ready', async () => {
         esc(); await warte(50);
         aus.menueZu = E('ctx-menu').style.display === 'none';
 
+        // Der Anfangsbuchstabe in der Titelleiste ist Gold auf der dunklen Leiste
+        const avatar = E('profile-icon-avatar');
+        const anzeige = avatar.style.display;
+        avatar.style.display = 'flex';
+        aus.buchstabe = getComputedStyle(avatar).color;
+        avatar.style.display = anzeige;
+
         // Die vier Farbnamen sind gesetzt
         const stil = getComputedStyle(document.documentElement);
         aus.farben = ['--accent', '--bg', '--text', '--text-muted'].every(n => stil.getPropertyValue(n).trim());
@@ -2195,6 +2202,7 @@ app.on('ready', async () => {
       pruefe('Ein Menü am Rand bleibt im Fenster', r.imFenster === true, JSON.stringify(r));
       pruefe('Escape schliesst auch ein Menü', r.menueZu === true, JSON.stringify(r));
       pruefe('Die Farbnamen sind gesetzt', r.farben === true, JSON.stringify(r));
+      pruefe('Der Anfangsbuchstabe ist golden', r.buchstabe === 'rgb(200, 169, 110)', r.buchstabe);
       pruefe('Die leere Übersicht zeigt, wie es losgeht', r.leer === true, JSON.stringify(r));
     }
 
