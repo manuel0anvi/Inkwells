@@ -51,9 +51,9 @@ for (const datei of ['main.js', 'preload.js', ...dateien('src')]) {
 
 /* Die Oberfläche läuft ohne 'unsafe-inline' (UI_CSP in main.js). Ein onclick oder
    ein Skriptblock in index.html täte dort einfach nichts, ohne dass es auffiele. */
-const seite = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8').replace(/<!--[sS]*?-->/g, '');
-const handler = seite.match(/son[a-z]+="/g) || [];
-const bloecke = seite.match(/<script(?![^>]*src=)[^>]*>/g) || [];
+const seite = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+const handler = seite.match(/\son[a-z]+="/g) || [];
+const bloecke = seite.match(/<script(?![^>]*\bsrc=)[^>]*>/g) || [];
 if (handler.length || bloecke.length) {
   fehler++;
   console.log(`  ✗ src/index.html: Inline-Code (${handler.length} Handler, ${bloecke.length} Skriptblöcke)`);
