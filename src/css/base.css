@@ -8,6 +8,12 @@
   --sb: #2a2a3e;
   --sb2: #383858;
   --gold: #c8a96e;
+  /* Vier Namen, die im Haus benutzt, aber nirgends gesetzt waren. Der
+     Speicherbalken war dadurch unsichtbar, die Avatare ohne Kreis. */
+  --accent: var(--gold);
+  --bg: var(--sh);
+  --text: var(--hi);
+  --text-muted: var(--md);
   --gd: #7a6340;
   --gb: #e0c07a;
   --hi: #ede8e0;

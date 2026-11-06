@@ -14,49 +14,6 @@ dann in der Commit-Nachricht. Sicherheit: ✔ sicher · ~ wahrscheinlich · ? Ve
 
 ## 3. Deutlich sichtbar
 
-- [ ] ✔ **Nur-Lese-Dokument: Stifttipp stellt auf „Stift“, danach kein Markieren und kein Zurück.**
-  `src/canvas/input.js:1370` wechselt vor dem readOnly-Ausstieg; `src/ui/toolbar.js` `applyMode` setzt
-  `contentEditable` ohne `S.readOnly`. Beim Öffnen eines Nur-Lese-Dokuments auf `cursor` schalten.
-- [ ] ✔ **Gedrehte Bilder/Formen: Griffe ziehen falsch herum, Objekt wandert.**
-  `src/canvas/objects.js:761, 810-811, 1031-1037`; `objectAt` (`:426-437`) prüft das ungedrehte Rechteck.
-- [ ] ✔ **Hineingezoomt ist der linke Teil des Blatts mit Maus/Rollleiste nicht erreichbar.**
-  `src/core/zoom.js` (`transformOrigin: 'top center'`) – der Überstand links ist negativ.
-- [ ] ~ **Über 121 % springt das verschobene Blatt zurück, sobald der Zoom neu gerechnet wird.**
-  `_applyZoom()` überschreibt das `translate` aus `setPan` (app.js).
-- [ ] ✔ **Im Hochformat springt die Lesestelle beim Öffnen von Navigation/Kommentaren/Chat.**
-  `src/app.js:1568-1576`, `src/ui/comments.js:366`, `src/ui/chat.js:117-120` rufen `_applyZoom()` statt
-  `zoomNachrechnenAnDerStelle()`.
-- [ ] ✔ **Chat geht neben dem offenen PDF auf** – `src/ui/chat.js:89-101` schließt die Unterlage nicht.
-- [ ] ✔ **PDF-Reiter liegen über offener Kommentar-/Chatleiste** – `src/ui/griffbereit.js:492-494`.
-- [ ] ✔ **Kommentar-Griff überdeckt Reiter und Rollleiste** – `src/css/pages.css:1894-1903`.
-- [ ] ✔ **Kommentarkarten ziehen beim Zoomen/Navigation nicht nach** – `src/ui/comments.js:306-313`
-  hört nicht auf `inkwells:zoom`.
-- [ ] ~ **Kommentarkarten richten sich nach der ersten statt der aktiven Seite** – `comments.js:239, 271-274`.
-- [ ] ~ **Schwebende Kommentar-Einzelkarte bleibt stehen** – `comments.js:548-558, 257, 262-268`.
-- [ ] ~ **Kommentar-Griff/Einzelkarte bleiben auf der Startseite** – `showHome` (`src/core/dialogs.js:273`).
-- [ ] ~ **Leisten legen sich über die Werkzeugleiste**: feste 60-px-Annahme in `src/core/tables.js:617`,
-  `src/canvas/strokeSelect.js:902-905`, `src/ui/comments.js:519, 626`. Seit die Werkzeugleiste umbrechen
-  kann (Stufe 7) noch häufiger. Lösung: Oberkante von `#pg-scroll` messen.
-- [ ] ~ **Schwebende Kommentarkarte (z 1290) liegt über ihrem eigenen Lösch-Dialog (950).** `pages.css:1937`.
-- [ ] ~ **PDF-Ansicht darf so breit werden, dass vom Heft fast nichts bleibt** – `griffbereit.js:723` `grenze()`
-  rechnet Navigation und Ordnen-Leiste nicht ab.
-- [ ] ✔ **Lineal lässt sich auf die eigene Rollleiste legen** – `src/ui/ruler.js:330` misst 0.
-- [ ] ✔ **Escape schließt fast keinen Dialog/kein Popup** (Einstellungen, Export, Freigabe, Papierkorb,
-  Fassungen, Konto, Kontextmenüs, alle Aufklapper der Werkzeugleiste). Lösung: ein zentraler Hörer.
-- [ ] ~ **Enter in einer Rückfrage öffnet sie gleich noch einmal** – `src/core/dialogs.js:8, 20, 236`
-  ohne `preventDefault`, kein Fokus auf OK.
-- [ ] ✔ **Speicherplatz-Balken unsichtbar, Avatare ohne Kreis** – `--accent`, `--bg`, `--text`,
-  `--text-muted` sind nirgends definiert (`index.html:132, 1900, 1941, 1952`, `auth.js:296`,
-  `layout.css:170, 230`, `pages.css:2876`).
-- [ ] ✔ **Textfarben-Menü markiert den Regenbogen statt der gewählten Farbe** – `toolbar.js:1674-1679`.
-- [ ] ~ **„Eigene Farbe“-Fenster springt beim Rollen in die Ecke** – `toolbar.js:1314` (Anker unsichtbar).
-- [ ] ✔ **„⋯“ an Seite/Heftkarte schließt das Menü nicht, es geht sofort wieder auf** –
-  `app.js:957`, `contextMenu.js:160`, `homeGrid.js:49, 465`.
-- [ ] ✔ **Kontextmenü der Heftkarte ragt aus dem Fenster** – `homeGrid.js:463`, `sharedDocs.js:398`
-  (Klemmrechnung wie `showPgCtxMenu`).
-- [ ] ✔ **Lange Heftnamen sprengen Karte und Titelleiste** – `layout.css:536-543`, `titlebar.css:24-38`,
-  kein `maxlength` (`index.html:1044`).
-- [ ] ✔ **Leere Startseite ohne Hinweis** – `homeGrid.js:26-66` (CSS `.nb-add-card` existiert, wird nie gebaut).
 
 ## 4. Offline, Anmeldung, Sync
 

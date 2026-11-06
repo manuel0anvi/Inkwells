@@ -99,8 +99,13 @@
     if (auf && typeof window.closeGriffPanel === 'function') {
       window.closeGriffPanel();
     }
+    // Und für eine aufgeschlagene Unterlage: daneben bliebe vom Blatt nur ein Streifen
+    if (auf && typeof window.closeGriffAnsicht === 'function') {
+      window.closeGriffAnsicht();
+    }
 
     p.classList.toggle('open', auf);
+    if (typeof window.griffReiterNeu === 'function') window.griffReiterNeu();
 
     if (auf) {
       ungelesen = 0;
@@ -116,7 +121,7 @@
        Bewegung durch ist, stimmt die Breite. Die Kommentarkarten hängen
        am selben Maß und werden mit neu gesetzt. */
     setTimeout(() => {
-      if (typeof _applyZoom === 'function') _applyZoom();
+      if (typeof zoomNachrechnenAnDerStelle === 'function') zoomNachrechnenAnDerStelle();
       if (typeof window.refreshComments === 'function') window.refreshComments();
     }, 220);
   }

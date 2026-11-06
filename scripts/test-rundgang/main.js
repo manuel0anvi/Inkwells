@@ -2138,6 +2138,66 @@ app.on('ready', async () => {
       pruefe('Eine gesperrte Form bleibt liegen', r.gesperrtBleibt === true, JSON.stringify(r));
     }
 
+    abschnitt('Fenster und Menüs');
+    {
+      const r = await js(`(async () => {
+        const aus = {};
+        const esc = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        const warte = (ms) => new Promise(res => setTimeout(res, ms));
+
+        // Frühere Schritte lassen Fenster offen stehen, und Escape nimmt das oberste
+        QA('.overlay').forEach(el => { el.style.display = 'none'; });
+
+        E('ov-settings').style.display = 'flex';
+        esc(); await warte(50);
+        aus.einstellungen = E('ov-settings').style.display === 'none';
+
+        // Eine offene Rückfrage geht vor: das Fenster dahinter bleibt
+        E('ov-trash').style.display = 'flex';
+        const frage = showConfirm('Probe');
+        esc(); await warte(50);
+        aus.frageZuErst = (await frage) === false && E('ov-trash').style.display === 'flex';
+        esc(); await warte(50);
+        aus.dannDasFenster = E('ov-trash').style.display === 'none';
+
+        // Auch Enter schliesst die Rückfrage nur einmal
+        const zweite = showConfirm('Probe');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        aus.enter = (await zweite) === true && E('ov-confirm').style.display === 'none';
+
+        // Ein Menü unten rechts bleibt im Fenster
+        showCtxMenu(window.innerWidth - 2, window.innerHeight - 2, S.notebooks[0] && S.notebooks[0].id);
+        const k = E('ctx-menu').getBoundingClientRect();
+        aus.imFenster = k.right <= window.innerWidth && k.bottom <= window.innerHeight;
+        await warte(20);
+        esc(); await warte(50);
+        aus.menueZu = E('ctx-menu').style.display === 'none';
+
+        // Die vier Farbnamen sind gesetzt
+        const stil = getComputedStyle(document.documentElement);
+        aus.farben = ['--accent', '--bg', '--text', '--text-muted'].every(n => stil.getPropertyValue(n).trim());
+
+        // Eine leere Übersicht sagt, wie es losgeht
+        const vorher = S.notebooks;
+        S.notebooks = [];
+        renderHomeGrid();
+        aus.leer = !!document.querySelector('#nb-grid .nb-add-card');
+        S.notebooks = vorher;
+        renderHomeGrid();
+        return aus;
+      })()`);
+      await warte(200);
+      await js('window.__fehler.splice(0)');
+      pruefe('Escape schliesst die Einstellungen', r.einstellungen === true, JSON.stringify(r));
+      pruefe('Eine Rückfrage geht zuerst zu, das Fenster dahinter bleibt', r.frageZuErst === true, JSON.stringify(r));
+      pruefe('Beim nächsten Escape dann das Fenster', r.dannDasFenster === true, JSON.stringify(r));
+      pruefe('Enter bestätigt eine Rückfrage genau einmal', r.enter === true, JSON.stringify(r));
+      pruefe('Ein Menü am Rand bleibt im Fenster', r.imFenster === true, JSON.stringify(r));
+      pruefe('Escape schliesst auch ein Menü', r.menueZu === true, JSON.stringify(r));
+      pruefe('Die Farbnamen sind gesetzt', r.farben === true, JSON.stringify(r));
+      pruefe('Die leere Übersicht zeigt, wie es losgeht', r.leer === true, JSON.stringify(r));
+    }
+
     abschnitt('Fremde Namen führen nichts aus');
     {
       /* Name, Farbe, Abschnitt und Anhang stammen aus einer fremden Datei oder

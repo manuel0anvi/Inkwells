@@ -407,7 +407,7 @@
     const menue = E('shared-ctx-menu');
     if (!menue) return;
     menueDoc = head;
-    menue.style.cssText = `display:block;left:${x}px;top:${y}px;position:fixed`;
+    menueInsFenster(menue, x, y);
     setTimeout(() => document.addEventListener('pointerdown', menueDraussen), 0);
   }
 

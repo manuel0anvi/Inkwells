@@ -615,7 +615,7 @@ function positionTableBar(cell) {
   // Rechts nicht hinauslaufen lassen (wie beim Einfügen-Menü)
   const links = Math.max(8, Math.min(window.innerWidth - b - 8, r.left));
   bar.style.left = Math.round(links) + 'px';
-  bar.style.top = Math.round(oben > 60 ? oben : r.bottom + 6) + 'px';
+  bar.style.top = Math.round(oben > obereKante() ? oben : r.bottom + 6) + 'px';
   // Die Leiste steht – der Knopf, der sie holt, hat seine Arbeit getan
   if (knopfTabelle === table) versteckeTabellenKnopf();
 }

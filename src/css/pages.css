@@ -1930,11 +1930,12 @@ body.touch-input .obj-body[data-kind="shape"]::after {
 
 /* Der Griff an der Kante. Fest am Fenster: so kostet er keine
    Blattbreite und bleibt beim Rollen liegen, wo der Daumen ihn sucht. */
+/* Oberhalb der Unterlagen-Reiter, die in der Mitte stehen, und neben dem
+   Rollbalken – nicht auf beiden. */
 .comment-tab {
   position: fixed;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  right: var(--rollbalken, 12px);
+  top: 22%;
   z-index: 1240;
   display: flex;
   flex-direction: column;

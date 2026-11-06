@@ -27,6 +27,7 @@
   justify-content: center;
   gap: 8px;
   flex: 1;
+  min-width: 0;
   text-align: center;
   font-family: 'Cormorant Garamond', 'Crimson Pro', Georgia, serif;
   font-size: 13px;
@@ -37,7 +38,14 @@
   pointer-events: none
 }
 
+#tbar-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
 .tbar-title-accent {
+  flex-shrink: 0;
   width: 8px;
   height: 8px;
   border-radius: 999px;

@@ -433,7 +433,14 @@ function objectAt(pageEl, x, y, band) {
     if (band && wrap.dataset.layer !== band) continue;
     if (typeof wrap._beginObjInteraction !== 'function') continue;
     const r = wrap.getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return wrap;
+    /* Der Rahmen bleibt ungedreht, nur Inhalt und Griffe drehen sich um seine
+       Mitte. Also den Punkt zurückdrehen und dann vergleichen – sonst traf man
+       ein schräges Objekt daneben und verfehlte es auf ihm. */
+    const winkel = -(Number(wrap.dataset.rot) || 0) * Math.PI / 180;
+    const mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
+    const px = mx + (x - mx) * Math.cos(winkel) - (y - my) * Math.sin(winkel);
+    const py = my + (x - mx) * Math.sin(winkel) + (y - my) * Math.cos(winkel);
+    if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) return wrap;
   }
   return null;
 }
@@ -752,13 +759,20 @@ function placeObject(objLayer, obj, page) {
       const sx = e.clientX, sy = e.clientY, ow = obj.w, oh = obj.h, ox = obj.x, oy = obj.y, ratio = oh / ow;
       const others = (page.objects || []).filter(o => o.id !== obj.id);
       let xs = [], ys = [], ws = [], hs = [];
-      others.forEach(o => { xs.push(o.x, o.x + o.w); ys.push(o.y, o.y + o.h); ws.push(o.w); hs.push(o.h); });
+      // Gedreht passt das Einrasten an fremden Kanten nicht: die Kanten laufen schräg
+      if (!obj.rot) others.forEach(o => { xs.push(o.x, o.x + o.w); ys.push(o.y, o.y + o.h); ws.push(o.w); hs.push(o.h); });
 
       let _hasMutated = false;
       const mv = ev => {
         if (!_hasMutated) { _hasMutated = true; pushPageHistory(page); }
         hideSnaps();
-        const dx = (ev.clientX - sx) / objZoom(), dy = (ev.clientY - sy) / objZoom();
+        /* Die Griffe drehen sich mit. Der Zug muss deshalb in die Richtungen des
+           gedrehten Objekts umgerechnet werden: sonst liess ein um 180° gedrehtes
+           Bild beim Ziehen nach aussen schrumpfen statt wachsen. */
+        const roh = { x: (ev.clientX - sx) / objZoom(), y: (ev.clientY - sy) / objZoom() };
+        const dreh = (obj.rot || 0) * Math.PI / 180;
+        const dx = roh.x * Math.cos(dreh) + roh.y * Math.sin(dreh);
+        const dy = -roh.x * Math.sin(dreh) + roh.y * Math.cos(dreh);
         let nw = ow, nh = oh, nx = ox, ny = oy;
 
         // Welche Kanten wandern mit? Eine Ecke bewegt zwei, eine Kante eine
@@ -812,6 +826,14 @@ function placeObject(objLayer, obj, page) {
         // Eine Formel darf kleiner werden als ein Bild – sie ist oft nur
         // ein paar Zeichen breit und waere sonst nicht zu verkleinern
         const mind = obj.kind === 'formula' ? 12 : (obj.kind === 'code' ? 80 : 20);
+        /* Gedreht wird um die Mitte. Ändert sich die Grösse, wandert sie, und
+           mit ihr die gegenüberliegende Ecke, die eigentlich stehen bleiben soll.
+           Deshalb den Versatz der Mitte in die Richtung der Drehung umrechnen. */
+        if (obj.rot) {
+          const mx = (nx + nw / 2) - (ox + ow / 2), my = (ny + nh / 2) - (oy + oh / 2);
+          nx += mx * Math.cos(dreh) - my * Math.sin(dreh) - mx;
+          ny += mx * Math.sin(dreh) + my * Math.cos(dreh) - my;
+        }
         // Auch beim Ziehen an der Oberkante bleibt der Seitenkopf frei
         if (ny < CFG.HDR) { nh -= (CFG.HDR - ny); ny = CFG.HDR; }
         /* Nicht ueber das Blatt hinaus WACHSEN. Nur wachsen: sonst liesse
@@ -1030,6 +1052,7 @@ function placeObject(objLayer, obj, page) {
    */
   function applyRotation() {
     const deg = 'rotate(' + (obj.rot || 0) + 'deg)';
+    wrap.dataset.rot = String(obj.rot || 0);   // für objectAt
     body.style.transform = deg;
     chrome.style.transform = deg;
     // Die Leiste dreht sich gegen: sonst stünde sie auf dem Kopf.

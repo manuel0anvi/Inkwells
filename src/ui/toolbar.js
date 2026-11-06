@@ -578,6 +578,8 @@ function positionCustomColorPopover(anchorEl) {
   const pop = E('custom-color-pop');
   if (!pop || !anchorEl) return;
   const r = anchorEl.getBoundingClientRect();
+  // Der Anker ist weggerollt oder zugeklappt: dann bleibt das Fenster, wo es ist
+  if (!(r.width > 0 && r.height > 0)) return;
   const rand = 8;
 
   /* Gemessen wird, waehrend es steht – der Aufrufer hat es vorher
@@ -1681,8 +1683,15 @@ document.addEventListener('selectionchange', () => {
     if (S._textColorChosen) {
       S.textColor = S._textColorChosen;
       E('txt-color-dot').style.background = S._textColorChosen;
-      QA('.pen-sw[data-tcolor]').forEach(s => s.classList.remove('active'));
-      E('txt-custom-ring').classList.add('active');
+      /* Ist es eine Farbe aus der Reihe, wird sie markiert – der Regenbogen
+         steht nur für eine selbst gemischte. */
+      let inDerReihe = false;
+      QA('.pen-sw[data-tcolor]').forEach(s => {
+        const treffer = String(s.dataset.tcolor).toLowerCase() === String(S._textColorChosen).toLowerCase();
+        s.classList.toggle('active', treffer);
+        if (treffer) inDerReihe = true;
+      });
+      E('txt-custom-ring').classList.toggle('active', !inDerReihe);
     }
   }
 });
@@ -1721,7 +1730,7 @@ function applyMode() {
   QA('.j-canvas:not(.live-canvas)').forEach(c => c.style.pointerEvents = ic ? 'none' : 'auto');
   QA('.j-text').forEach(t => {
     t.style.pointerEvents = 'auto';
-    t.contentEditable = ic ? 'true' : 'false';
+    t.contentEditable = (ic && !S.readOnly) ? 'true' : 'false';
   });
   QA('.j-objects').forEach(o => o.style.pointerEvents = 'none');
   // Nur das Bild schaltet um; die Bedienteile regeln sich über .obj-chrome

@@ -236,7 +236,7 @@
      ══════════════════════════════════════════════════════════════════ */
   function randBreite() {
     const scroll = E('pg-scroll');
-    const seite = document.querySelector('.j-page');
+    const seite = aktiveSeite();
     if (!scroll || !seite) return 0;
     const sr = scroll.getBoundingClientRect();
     const pr = seite.getBoundingClientRect();
@@ -254,7 +254,7 @@
     faerbeMarken();
     fuelleLeiste(kommentare);
 
-    if (!kommentare.length) { ebene.style.display = 'none'; return; }
+    if (!kommentare.length) { ebene.style.display = 'none'; zeigeEinzeln(null); return; }
 
     /* Kein Platz im Rand: dann übernimmt die Leiste (siehe unten). Und
        steht die offen, hat der Rand nichts mehr zu zeigen – zweimal
@@ -268,7 +268,7 @@
     ebene.style.display = '';
     const scroll = E('pg-scroll');
     const sr = scroll.getBoundingClientRect();
-    const seite = document.querySelector('.j-page');
+    const seite = aktiveSeite();
     const pr = seite.getBoundingClientRect();
     // Innerhalb der Ebene wird relativ zum Scroll-Inhalt gerechnet
     const links = (pr.right - sr.left) + scroll.scrollLeft + KARTE_LUFT;
@@ -311,6 +311,25 @@
   }
 
   window.addEventListener('resize', planeNeu, { passive: true });
+  // Der Massstab schiebt das Blatt und damit die Stellen, zu denen die Karten gehören
+  window.addEventListener('inkwells:zoom', planeNeu);
+  // Die Einzelkarte hängt am Text – sie rollt mit
+  E('pg-scroll')?.addEventListener('scroll', () => { if (_einzeln) zeigeEinzeln(_einzeln); }, { passive: true });
+
+  /* Maßgeblich ist die Seite, an der gearbeitet wird. Die erste im Dokument
+     kann schmaler oder breiter sein (Folien, Querformat). */
+  function aktiveSeite() {
+    return (S.activePgId && document.querySelector('.j-page[data-pgid="' + CSS.escape(String(S.activePgId)) + '"]'))
+      || document.querySelector('.j-page');
+  }
+
+  /* Auf der Startseite gibt es keine Kommentare zu zeigen (core/dialogs.js, showHome) */
+  window.kommentareVerstecken = () => {
+    _einzeln = null;
+    zeigeEinzeln(null);
+    const griff = E('comment-tab');
+    if (griff) griff.style.display = 'none';
+  };
 
   /* ══════════════════════════════════════════════════════════════════
      DIE LEISTE AM RECHTEN RAND
@@ -362,8 +381,9 @@
 
     if (!offen) _hervor = null;
     p.classList.toggle('open', offen);
+    if (typeof window.griffReiterNeu === 'function') window.griffReiterNeu();
     // Die Spalte wird schmaler: der Zoom passt die Seite neu ein
-    setTimeout(() => { if (typeof _applyZoom === 'function') _applyZoom(); planeNeu(); }, 220);
+    setTimeout(() => { if (typeof zoomNachrechnenAnDerStelle === 'function') zoomNachrechnenAnDerStelle(); planeNeu(); }, 220);
     stelleGriff();
   }
 
@@ -516,7 +536,7 @@
     const links = Math.max(8, Math.min(window.innerWidth - KARTE_B - 8, mr.left));
     const oben = mr.top - h - 8;
     einzelKarte.style.left = Math.round(links) + 'px';
-    einzelKarte.style.top = Math.round(oben > 60 ? oben : mr.bottom + 8) + 'px';
+    einzelKarte.style.top = Math.round(oben > obereKante() ? oben : mr.bottom + 8) + 'px';
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -623,7 +643,7 @@
     const links = Math.max(8, Math.min(window.innerWidth - b - 8, r.left + r.width / 2 - b / 2));
     const oben = r.top - h - 8;
     wahlKnopf.style.left = Math.round(links) + 'px';
-    wahlKnopf.style.top = Math.round(oben > 60 ? oben : r.bottom + 8) + 'px';
+    wahlKnopf.style.top = Math.round(oben > obereKante() ? oben : r.bottom + 8) + 'px';
   }
 
   let _wahlTimer = 0;

@@ -1416,6 +1416,9 @@ function attachInput(canvas, textDiv, objLayer, page) {
     if (target.closest('.j-page-hdr') || target.closest('.obj-handle') || target.closest('.obj-bar')) return;
 
     if (e.pointerType === 'pen') {
+      /* Nur lesen heisst: der Stift markiert wie die Maus. Vorher stellte der
+         Tipp auf „Stift“ um, und zurück kam man von dort nicht mehr. */
+      if (S.readOnly) return;
       const radiert = istRadierTaste(e), lasso = istLassoTaste(e);
       if (e.button !== 0 && !radiert && !lasso) return;
       /* Aufgesetzt ohne jeden Druck – siehe stiftOhneDruck unten. Die

@@ -268,7 +268,12 @@ function _applyZoom() {
 
   const z = _wirksam, pw = E('pages-wrap');
   if (!pw) return;
-  pw.style.transform = 'scale(' + z + ')';
+  /* Die Verschiebung steht im selben transform (setPan in app.js). Nur den
+     Massstab zu schreiben nahm sie mit weg, und das Blatt sprang zurück, sobald
+     der Zoom aus irgendeinem Grund neu gerechnet wurde. */
+  // Während der Zwei-Finger-Geste rechnet app.js die Verschiebung selbst nach
+  const verschoben = _gesteLaeuft ? null : (pw.style.transform || '').match(/translate\([^)]*\)/);
+  pw.style.transform = 'scale(' + z + ')' + (verschoben ? ' ' + verschoben[0] : '');
   pw.style.transformOrigin = 'top center';
 
   /* ══════════════════════════════════════════════════════════════════

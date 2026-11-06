@@ -52,7 +52,15 @@ function renderHomeGrid() {
     card.querySelector('.nb-card-spine').style.background = nb.color || '';
     card.querySelector('.nb-card-name').textContent = nb.name || '';
     card.querySelector('.nb-card-bg').style.cssText = BG_STYLE[nb.defaultBg] || '';
-    card.querySelector('.nb-card-edit-btn').addEventListener('click', e => { e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, nb.id); });
+    /* Der Druck darf nicht bis zum Dokument: dort schlösse er das offene Menü,
+       und der Klick danach machte es sofort wieder auf. So schaltet der Knopf um. */
+    const punkte = card.querySelector('.nb-card-edit-btn');
+    punkte.addEventListener('pointerdown', e => e.stopPropagation());
+    punkte.addEventListener('click', e => {
+      e.stopPropagation();
+      if (E('ctx-menu').style.display !== 'none' && _ctxNbId === nb.id) { hideCtxMenu(); return; }
+      showCtxMenu(e.clientX, e.clientY, nb.id);
+    });
     // Die Dateigrösse erst beim Überfahren – und jedes Mal frisch (zeigeDateigroesse)
     card.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') zeigeDateigroesse(card, nb.id); });
     card.addEventListener('click', (e) => { if (!_dragState) openNotebook(nb.id); });
@@ -64,6 +72,18 @@ function renderHomeGrid() {
     grid.appendChild(card);
   }
   
+  // Ganz leer: sagen, wie es losgeht (die Karte hat ihren Stil schon lange)
+  if (!own.length && !(S.fehlendeHefte || []).length) {
+    const neu = document.createElement('button');
+    neu.type = 'button';
+    neu.className = 'nb-add-card';
+    const plus = document.createElement('span');
+    plus.textContent = t('createFirstNotebook') || 'Erstes Heft anlegen';
+    neu.appendChild(plus);
+    neu.addEventListener('click', () => openNbModal());
+    grid.appendChild(neu);
+  }
+
   /* Hefte, deren Datei gerade nicht da ist (core/init.js). Eine eigene Art
      Karte: sie lässt sich nicht öffnen und nicht einsortieren. */
   for (const f of (S.fehlendeHefte || [])) {
@@ -586,7 +606,7 @@ if (window.CloudSync_ && typeof CloudSync_.onChange === 'function') {
 
 /* ── CTX MENU ── */
 let _ctxNbId = null;
-function showCtxMenu(x, y, id) { _ctxNbId = id; E('ctx-menu').style.cssText = `display:block;left:${x}px;top:${y}px;position:fixed`; setTimeout(() => document.addEventListener('pointerdown', hideCtxOut), 0); }
+function showCtxMenu(x, y, id) { _ctxNbId = id; menueInsFenster(E('ctx-menu'), x, y); setTimeout(() => document.addEventListener('pointerdown', hideCtxOut), 0); }
 function hideCtxMenu() { E('ctx-menu').style.display = 'none'; document.removeEventListener('pointerdown', hideCtxOut); }
 function hideCtxOut(e) { if (!e.target.closest('#ctx-menu')) hideCtxMenu(); }
 E('ctx-edit').addEventListener('click', () => { hideCtxMenu(); openNbModal(_ctxNbId); });

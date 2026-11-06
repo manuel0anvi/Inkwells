@@ -350,6 +350,9 @@
      Unterlage zu – dann ist der Weg wieder frei. */
   window.griffBlocksPanels = () => leisteOffen() || ansichtOffen();
   window.closeGriffPanel = () => setzeLeiste(false);
+  window.closeGriffAnsicht = () => { if (ansichtOffen()) schliesse(); };
+  // Kommentare und Chat melden sich, wenn sie auf- oder zugehen
+  window.griffReiterNeu = () => zeichneReiter();
 
   /** Die Blattspalte hat sich geändert: Zoom und Kommentarkarten nachziehen. */
   function nachLayout() {
@@ -489,8 +492,10 @@
        Sie liegt dann rechts daneben und trägt ihren Namen in der
        Kopfzeile. Ein Rechteck davor wäre derselbe Name ein zweites Mal –
        und es läge auf ihrem Rand. Zumachen bringt sie zurück. */
+    // Auch neben Kommentaren und Chat: die sitzen an derselben Kante
+    const andereLeiste = !!document.querySelector('.comment-panel.open, .chat-panel.open');
     const zeigen = !!(!_stand.versteckt && _stand.dateien.length
-      && !leisteOffen() && !ansichtOffen());
+      && !leisteOffen() && !ansichtOffen() && !andereLeiste);
     streifen.style.display = zeigen ? 'flex' : 'none';
 
     /* Der Rollbalken der Blattspalte bleibt an der Fensterkante; das
@@ -721,7 +726,9 @@
 
   /** Breiter als das halbe Fenster geht es nicht – sonst bleibt vom Heft nichts. */
   function grenze() {
-    return Math.max(MIN_BREITE, Math.round(window.innerWidth / 2));
+    // Die Hälfte dessen, was rechts der Navigation frei ist – nicht des Fensters
+    const links = E('pg-scroll') ? Math.max(0, E('pg-scroll').getBoundingClientRect().left) : 0;
+    return Math.max(MIN_BREITE, Math.round((window.innerWidth - links) / 2));
   }
 
   function setzeBreite(px, sofort) {

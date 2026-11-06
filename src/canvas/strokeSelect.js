@@ -906,9 +906,9 @@
        danach ins Fenster geklemmt: eine Form ganz unten schob die Leiste
        sonst unter den unteren Rand, wo niemand mehr hinkommt.
 
-       Die 60 Pixel oben sind die Werkzeugleiste - darunter darf sie
-       nicht rutschen, sonst steht sie hinter den Knoepfen. */
-    const OBEN_FREI = 60, RAND = 8;
+       Oben steht die Werkzeugleiste - darunter darf sie nicht rutschen,
+       sonst steht sie hinter den Knoepfen. */
+    const OBEN_FREI = obereKante(), RAND = 8;
     const darueber = r.top - h - 6;
     let y = darueber > OBEN_FREI ? darueber : r.bottom + 6;
     y = Math.max(OBEN_FREI, Math.min(window.innerHeight - h - RAND, y));

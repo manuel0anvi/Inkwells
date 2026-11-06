@@ -507,6 +507,7 @@ const TRANSLATIONS = {
     // Toasts
     notebookSaved: 'Gespeichert',
     notebookLoaded: 'Heft geladen',
+    createFirstNotebook: "Erstes Heft anlegen",
     notebooksUnreachable: "Nicht erreichbar: {namen}",
     notebookUnreachable: "Nicht erreichbar",
     tryAgain: "Erneut versuchen",
@@ -1615,6 +1616,7 @@ const TRANSLATIONS = {
     // Toasts
     notebookSaved: 'Saved',
     notebookLoaded: 'Notebook loaded',
+    createFirstNotebook: "Create your first notebook",
     notebooksUnreachable: "Not reachable: {namen}",
     notebookUnreachable: "Not reachable",
     tryAgain: "Try again",
@@ -2710,6 +2712,7 @@ const TRANSLATIONS = {
     // Toasts
     notebookSaved: 'Salvato',
     notebookLoaded: 'Quaderno caricato',
+    createFirstNotebook: "Crea il primo quaderno",
     notebooksUnreachable: "Non raggiungibile: {namen}",
     notebookUnreachable: "Non raggiungibile",
     tryAgain: "Riprova",

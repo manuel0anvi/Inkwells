@@ -980,8 +980,11 @@ function appendPageDOM(page, index) {
     + '</span>';
   // Als Eigenschaft: der Abschnittsname ist fremder Text (siehe sidebar.js)
   hdr.querySelector('.pg-sec-btn').title = sec ? t('sectionOf').replace('{name}', sec.name) : t('setSection');
+  // Umschalten statt wieder aufmachen – siehe die Heftkarte in ui/homeGrid.js
+  hdr.querySelector('.pg-menu-btn').addEventListener('pointerdown', e => e.stopPropagation());
   hdr.querySelector('.pg-menu-btn').addEventListener('click', e => {
     e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect();
+    if (E('pg-ctx-menu').style.display !== 'none' && _pgCtxPage === page) { hidePgCtxMenu(); return; }
     showPgCtxMenu(r.left, r.bottom + 4, page, div);
   });
   hdr.querySelector('.pg-sec-btn').addEventListener('click', e => {
@@ -1595,7 +1598,8 @@ function setSidePanel(offen) {
   const nachrechnen = () => {
     if (erledigt) return;
     erledigt = true;
-    _applyZoom();
+    // Im Hochformat ändert sich der Massstab – die Lesestelle bleibt, wo sie ist
+    zoomNachrechnenAnDerStelle();
   };
   if (inhalt) inhalt.addEventListener('transitionend', nachrechnen, { once: true });
   setTimeout(nachrechnen, 400);

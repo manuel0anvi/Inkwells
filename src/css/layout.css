@@ -574,7 +574,12 @@ body.read-only .toolbar #btn-doc-share {
   font-style: italic;
   color: var(--hi);
   margin-bottom: auto;
-  word-break: break-word
+  word-break: break-word;
+  /* Drei Zeilen, dann Schluss: ein langer Name sprengte sonst die Karte */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden
 }
 
 /* Die Dateigrösse steht nur beim Überfahren da (ui/homeGrid.js) */

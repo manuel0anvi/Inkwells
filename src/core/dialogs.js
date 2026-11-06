@@ -1,11 +1,32 @@
 'use strict';
 
+/* Wo die Fläche unter den Leisten anfängt. Die Werkzeugleiste kann umbrechen,
+   eine feste Zahl läge dann hinter ihren Knöpfen. */
+function obereKante() {
+  const flaeche = typeof E === 'function' ? E('pg-scroll') : null;
+  const oben = flaeche ? flaeche.getBoundingClientRect().top : 0;
+  return oben > 0 ? oben + 4 : 60;
+}
+
+/* Ein Menü an diese Stelle – aber ganz im Fenster. */
+function menueInsFenster(el, x, y) {
+  const rand = 8;
+  el.style.cssText = 'display:block;position:fixed;left:0;top:0;visibility:hidden';
+  const breite = el.offsetWidth || 220, hoehe = el.offsetHeight || 120;
+  el.style.left = Math.max(rand, Math.min(x, window.innerWidth - breite - rand)) + 'px';
+  el.style.top = Math.max(rand, Math.min(y, window.innerHeight - hoehe - rand)) + 'px';
+  el.style.visibility = 'visible';
+}
+
 function showAlert(msg) {
   E('alert-msg').textContent = msg;
   E('ov-alert').style.display = 'flex';
   return new Promise(res => {
     const ok = () => { E('ov-alert').style.display = 'none'; res(); off(); };
-    const kd = e => { if (e.key === 'Enter' || e.key === 'Escape') ok(); };
+    /* preventDefault: sonst löst derselbe Tastendruck auch noch den Knopf aus,
+       der den Fokus hat – und das Fenster ginge gleich wieder auf. */
+    const kd = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); ok(); } };
+    setTimeout(() => E('alert-ok').focus(), 0);
     function off() { E('alert-ok').onclick = null; document.removeEventListener('keydown', kd); }
     E('alert-ok').onclick = ok; document.addEventListener('keydown', kd);
   });
@@ -17,7 +38,11 @@ function showConfirm(msg) {
   return new Promise(res => {
     const ok = () => { E('ov-confirm').style.display = 'none'; res(true); off(); };
     const cancel = () => { E('ov-confirm').style.display = 'none'; res(false); off(); };
-    const kd = e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') cancel(); };
+    const kd = e => {
+      if (e.key === 'Enter') { e.preventDefault(); ok(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    };
+    setTimeout(() => E('confirm-ok').focus(), 0);
     function off() { E('confirm-ok').onclick = null; E('confirm-cancel').onclick = null; document.removeEventListener('keydown', kd); }
     E('confirm-ok').onclick = ok; E('confirm-cancel').onclick = cancel;
     document.addEventListener('keydown', kd);
@@ -32,7 +57,10 @@ function showMsHint() {
   return new Promise(res => {
     const ok = () => { E('ov-ms-hint').style.display = 'none'; res(true); off(); };
     const cancel = () => { E('ov-ms-hint').style.display = 'none'; res(false); off(); };
-    const kd = e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') cancel(); };
+    const kd = e => {
+      if (e.key === 'Enter') { e.preventDefault(); ok(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    };
     function off() { E('ms-hint-ok').onclick = null; E('ms-hint-cancel').onclick = null; document.removeEventListener('keydown', kd); }
     E('ms-hint-ok').onclick = ok; E('ms-hint-cancel').onclick = cancel;
     document.addEventListener('keydown', kd);
@@ -271,6 +299,7 @@ function setTitleBar(name, color) {
 }
 
 function showHome() {
+  if (typeof window.kommentareVerstecken === 'function') window.kommentareVerstecken();
   // Seite und Ausschnitt festhalten, bevor das Heft aus dem Blick gerät
   if (typeof flushNotebookView === 'function') flushNotebookView();
 
@@ -395,6 +424,8 @@ function applyEditableToPages(readOnly) {
 function applyReadOnlyChrome(readOnly, sharedDoc) {
   S.readOnly = !!readOnly;
   S.sharedDoc = sharedDoc || null;
+  // Lesen geht nur mit dem Zeiger – ein Zeichenwerkzeug täte hier gar nichts
+  if (readOnly && S.mode !== 'cursor' && typeof switchMode === 'function') switchMode('cursor');
 
   document.body.classList.toggle('read-only', !!readOnly);
   applyEditableToPages(!!readOnly);
@@ -435,3 +466,54 @@ function applyReadOnlyChrome(readOnly, sharedDoc) {
   }
 
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ESCAPE SCHLIESST, WAS OBEN LIEGT
+
+   Die meisten Fenster und Aufklapper kannten die Taste gar nicht. Statt in
+   jedem einzelnen einen Hörer zu pflegen, drückt dieser hier den Knopf, den
+   der Nutzer auch nehmen würde. So läuft dieselbe Arbeit wie beim Klick,
+   etwa das Zurücknehmen der Sprache in den Einstellungen.
+
+   Wer selbst auf Escape hört, steht in FENSTER_MIT_EIGENER_TASTE. Ist so ein
+   Fenster offen, hält sich dieser Hörer heraus: sonst ginge das Fenster
+   dahinter gleich mit zu.
+   ══════════════════════════════════════════════════════════════════════ */
+const FENSTER_MIT_EIGENER_TASTE = ['ov-confirm', 'ov-alert', 'ov-ms-hint', 'ov-txt', 'ov-nb', 'ov-hilfe',
+  'ov-page-transfer', 'ov-insert-choice', 'ov-pdf-mode', 'ov-link'];
+
+const ESC_KNOPF = {
+  'ov-sec-edit': 'sec-edit-cancel', 'ov-sec-mgr': 'sec-mgr-close', 'ov-nachricht': 'nachricht-ok',
+  'ov-postfach': 'postfach-zu', 'ov-melden': 'melden-abbruch', 'ov-meldungen': 'meldungen-zu',
+  'ov-pg-bg': 'pg-bg-cancel', 'ov-trash': 'trash-close', 'ov-sync': 'sync-close',
+  'ov-versions': 'versions-close', 'ov-conflict': 'conflict-close', 'ov-settings': 'settings-close',
+  'ov-ersthinweis': 'hinweis-ok', 'ov-account': 'account-close', 'ov-share': 'share-close',
+  'ov-export': 'export-close', 'ov-signed-out': 'signed-out-close'
+};
+
+const AUFKLAPPER = ['ctx-menu', 'pg-ctx-menu', 'shared-ctx-menu', 'style-pop', 'list-style-pop',
+  'txt-color-dropdown', 'custom-color-pop', 'eraser-fold-pop', 'pen-fold-pop', 'fmt-char-fold-pop',
+  'insert-pop', 'insert-all-pop', 'shape-pop', 'chat-msg-menu'];
+
+const istOffen = (el) => !!el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none';
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  if (FENSTER_MIT_EIGENER_TASTE.some(id => istOffen(E(id)))) return;
+
+  /* Erst die Aufklapper: sie liegen über den Fenstern. Sie gehen zu, wenn
+     daneben gedrückt wird – genau das geschieht hier. */
+  if (AUFKLAPPER.some(id => istOffen(E(id)))) {
+    e.preventDefault();
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    return;
+  }
+
+  const offen = QA('.overlay').reverse().find(el => istOffen(el) && (ESC_KNOPF[el.id] || el.id === 'ov-migration'));
+  if (!offen) return;
+  e.preventDefault();
+  // Der Umzug hat keinen Abbrechen-Knopf: er geht durch den Klick daneben zu
+  if (offen.id === 'ov-migration') offen.click();
+  else E(ESC_KNOPF[offen.id])?.click();
+});

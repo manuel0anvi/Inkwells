@@ -637,8 +637,11 @@ app.on('ready', async () => {
     /* Die Stelle ins Bild holen – und die Seite dazu als die aktive
        setzen: gezeigt werden immer die Kommentare der aktiven Seite, und
        das Rollen kann sie beim Nachbarn gelassen haben. */
+    /* Erst wenn die Leiste zu ist: beim Zugehen rechnet der Zoom nach und hält
+       dabei die Lesestelle, ein Rollen mitten in die Bewegung ginge verloren. */
+    await js(`document.getElementById('comment-panel-close').click(); true`);
+    await new Promise(r => setTimeout(r, 400));
     await js(`(() => {
-      document.getElementById('comment-panel-close').click();
       const m = document.querySelector('.j-comment-mark[data-cid]');
       m.scrollIntoView({ block: 'center' });
       const pg = m.closest('[data-pgid]');

@@ -2111,6 +2111,13 @@
    Absicht. Was jetzt laeuft, laesst sich nicht mehr abbrechen.
    ══════════════════════════════════════════════════════════════════════ */
 
+/* Rückfragen liegen über allem, was sonst schwebt – auch über der Kommentarkarte,
+   deren Löschen sie gerade bestätigen. */
+#ov-confirm,
+#ov-alert {
+  z-index: 1400
+}
+
 .quitting {
   position: fixed;
   inset: 0;
