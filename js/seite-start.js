@@ -397,7 +397,11 @@ const adminError = document.getElementById('admin-modal-error');
 let adminApiPromise = null;
 function loadAdminApi() {
   if (!adminApiPromise) {
-    adminApiPromise = import('./js/firebase.js').then(() => whenAdminApiReady());
+    /* Über die Adresse der Skripte (js/common.js), nicht './js/firebase.js':
+       Chromium löste das gegen DIESE Datei auf, die schon in js/ liegt, und
+       lud /js/js/firebase.js – „Failed to fetch dynamically imported module“
+       beim Anmelden im Adminbereich. */
+    adminApiPromise = import(INKWELLS_SCRIPT_DIR + 'firebase.js').then(() => whenAdminApiReady());
   }
   return adminApiPromise;
 }
