@@ -717,12 +717,27 @@ function startUiServer() {
       uiServer.listen(port, 'localhost');
     };
 
-    listen(preferredUiPort(), (err) => {
-      if (err?.code !== 'EADDRINUSE') return reject(err);
-      console.warn('[UI] Bevorzugter Port belegt – es wird ein freier genommen. Die '
-        + 'Microsoft-Anmeldung für geteilte Dokumente gilt dann nur für diesen Start.');
-      listen(0, reject);
+    /* >>> Gemeldet: „npm start geht nicht mehr“ – listen EACCES <<<
+       Windows hält Portbereiche für sich zurück (Hyper-V, WSL, Docker),
+       und zwar bei jedem Neustart andere – zu sehen mit
+       `netsh interface ipv4 show excludedportrange protocol=tcp`. Fällt
+       der bevorzugte Port hinein, meldet Windows nicht „belegt“
+       (EADDRINUSE), sondern „verboten“ (EACCES). Ausgewichen wurde nur
+       beim ersten – die App startete gar nicht.
+
+       Jetzt beides, und zuerst auf einen zweiten FESTEN Port unterhalb
+       des Bereichs, aus dem Windows solche Blöcke nimmt (ab 49152). Erst
+       wenn auch der nicht geht, ein beliebiger freier – nur dann ist die
+       Microsoft-Anmeldung wieder bloss für diesen einen Start gemerkt. */
+    const AUSWEICHEN = new Set(['EADDRINUSE', 'EACCES']);
+    const versuche = (ports) => listen(ports[0], (err) => {
+      if (!AUSWEICHEN.has(err?.code) || ports.length < 2) return reject(err);
+      console.warn('[UI] Port ' + ports[0] + ' nicht nutzbar (' + err.code + ') – nehme '
+        + (ports[1] ? ports[1] : 'einen freien. Die Microsoft-Anmeldung für geteilte '
+        + 'Dokumente gilt dann nur für diesen Start.'));
+      versuche(ports.slice(1));
     });
+    versuche([preferredUiPort(), ausweichUiPort(), 0]);
   });
 }
 
@@ -734,12 +749,22 @@ function startUiServer() {
  * es geht nur darum, dass zwei Profile nicht denselben Port wollen.
  */
 function preferredUiPort() {
+  return 49200 + (uiPortStreuung() % 600);
+}
+
+/** Der zweite feste Port, falls Windows den ersten zurückhält (siehe startUiServer):
+ *  unterhalb von 49152, wo Hyper-V und WSL ihre Blöcke nicht hinlegen. */
+function ausweichUiPort() {
+  return 40000 + (uiPortStreuung() % 600);
+}
+
+function uiPortStreuung() {
   let hash = 0x811c9dc5;
   for (const ch of `inkwells-ui:${PROFILE || ''}`) {
     hash ^= ch.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return 49200 + (hash % 600);
+  return hash;
 }
 
 function createWindow() {
