@@ -6,7 +6,12 @@
   min-height: 1123px;
   box-shadow: var(--shad);
   flex-shrink: 0;
-  overflow: hidden
+  overflow: hidden;
+  /* Ein Papier, das diese Fassung nicht kennt (etwa ein neueres aus
+     Inkwells 2), hatte gar keinen Grund: die Seite war durchsichtig, und
+     der dunkle Tisch schien durch. Dann eben weisses Papier – die Regeln
+     darunter überschreiben das für jedes bekannte. */
+  background: #fff
 }
 
 .j-page.bg-ruled {
