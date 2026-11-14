@@ -725,6 +725,8 @@ function redoPage() { return _stepHistory('redo', 'undo', 'redoNothing'); }
  *   notfalls wird dafür der Ausschnitt gewechselt.
  */
 function openNotebook(id, opts = {}) {
+  // Ein geteiltes Dokument, das noch lädt, soll danach nicht hierher springen
+  if (typeof window.brichGeteiltesOeffnenAb === 'function') window.brichGeteiltesOeffnenAb();
   S.activeNbId = id; const nb = getNb();
   /* Die PDFs des vorigen Hefts freigeben – sonst hängen die Dokumente
      samt Puffern am Speicher, bis die App zugemacht wird. */

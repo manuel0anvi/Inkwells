@@ -655,8 +655,38 @@
     return true;
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     WER WEGKLICKT, BRICHT DAS ÖFFNEN AB
+
+     >>> Gemeldet: „bei schlechtem Internet ein geteiltes Dokument
+     geöffnet, dann ein anderes Heft – das Laden lief weiter“ <<<
+     loadDocument kann bei einer wackligen Leitung lange brauchen. Wer
+     inzwischen ein anderes Heft aufschlug oder zur Übersicht zurückging,
+     wurde am Ende doch noch in das geteilte Dokument gerissen – mitten
+     aus dem, woran er gerade schrieb.
+
+     Jeder Versuch bekommt eine Nummer. openNotebook (app.js) und
+     showHome (core/dialogs.js) zählen weiter; kommt das Laden danach
+     zurück, gehört es zu einem verworfenen Versuch und wird nicht mehr
+     angezeigt. Das Netz selbst lässt sich nicht zurückrufen – die
+     Antwort wird nur nicht mehr gebraucht.
+
+     Der eigene openNotebook-Aufruf am Ende zählt ebenfalls weiter. Das
+     schadet nicht: geprüft wird nur VOR ihm.
+     ══════════════════════════════════════════════════════════════════ */
+  let oeffnenNr = 0;
+  window.brichGeteiltesOeffnenAb = function brichGeteiltesOeffnenAb() { oeffnenNr++; };
+
   async function openSharedDocument(head) {
+    const versuch = ++oeffnenNr;
+    const verworfen = () => {
+      if (versuch === oeffnenNr) return false;
+      console.log('[SharedDocs] Öffnen abgebrochen – inzwischen woanders hin');
+      return true;
+    };
+
     if (await versionsSperre(head)) return;
+    if (verworfen()) return;
 
     const api = await whenShareReady();
 
@@ -668,8 +698,12 @@
       || (head.linkMode === 'view' || head.linkMode === 'edit' ? 'view' : null);
     if (!role) throw new Error('SHARE_NOT_FOUND');
 
+    if (verworfen()) return;
+
     toast(t('sharedOpening'));
     const { notebook, head: fresh, fingerprint, crdt } = await api.loadDocument(head.docId);
+    // Siehe oben: wer inzwischen woanders ist, bleibt dort
+    if (verworfen()) return;
 
     // Merkzettel vom geladenen Stand. Daran erkennt das Speichern später,
     // WELCHE Seite sich geändert hat – geschrieben wird nur die.

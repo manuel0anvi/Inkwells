@@ -313,6 +313,8 @@ function setTitleBar(name, color) {
 }
 
 function showHome() {
+  // Wer zurückgeht, will das noch ladende geteilte Dokument nicht mehr (ui/sharedDocs.js)
+  if (typeof window.brichGeteiltesOeffnenAb === 'function') window.brichGeteiltesOeffnenAb();
   if (typeof window.kommentareVerstecken === 'function') window.kommentareVerstecken();
   // Seite und Ausschnitt festhalten, bevor das Heft aus dem Blick gerät
   if (typeof flushNotebookView === 'function') flushNotebookView();
